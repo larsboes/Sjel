@@ -134,22 +134,9 @@ pub async fn save(coords: PlaceCoords) -> Result<(), String> {
     .map_err(|e| format!("Save resolved places: {e}"))
 }
 
-/// The wire answer shared by both sources: `POST /places/api/geocode` replies
-/// `{status, cached, place:{latitude, longitude, …}}` and `place` is null when nothing matched.
-#[derive(Debug, Deserialize)]
-struct Reply {
-    place: Option<Point>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Point {
-    latitude: Option<f64>,
-    longitude: Option<f64>,
-}
-
-fn coordinate(reply: Reply) -> Option<Coordinate> {
-    let point = reply.place?;
-    Coordinate::new(point.latitude?, point.longitude?)
+fn coordinate(reply: places_api::GeocodeResponse) -> Option<Coordinate> {
+    let place = reply.place?;
+    Coordinate::new(place.latitude?, place.longitude?)
 }
 
 impl Source {
@@ -174,9 +161,13 @@ impl Source {
             // The phone cannot start a capability; it asks the paired Mac, which proxies
             // the same route.
             Self::Device(client) => {
-                let body = serde_json::to_vec(&serde_json::json!({ "query": query }))
-                    .map_err(|e| e.to_string())?;
-                let reply: Reply = client.post("/places/api/geocode", &body).await?;
+                let req = places_api::GeocodeRequest {
+                    query: Some(query.to_string()),
+                    ..Default::default()
+                };
+                let body = serde_json::to_vec(&req).map_err(|e| e.to_string())?;
+                let reply: places_api::GeocodeResponse =
+                    client.post(places_api::ROUTE_PLACES_GEOCODE, &body).await?;
                 Ok(coordinate(reply))
             }
         }
@@ -215,6 +206,7 @@ mod tests {
             address: address.map(str::to_owned),
             latitude: None,
             longitude: None,
+            ..Default::default()
         }
     }
 
@@ -256,19 +248,21 @@ mod tests {
 
     #[test]
     fn an_answer_without_a_place_or_coordinate_is_no_coordinate() {
-        assert!(coordinate(Reply { place: None }).is_none());
-        assert!(coordinate(Reply {
-            place: Some(Point {
+        assert!(coordinate(places_api::GeocodeResponse { place: None }).is_none());
+        assert!(coordinate(places_api::GeocodeResponse {
+            place: Some(places_api::Place {
                 latitude: None,
-                longitude: None
+                longitude: None,
+                ..Default::default()
             })
         })
         .is_none());
         assert_eq!(
-            coordinate(Reply {
-                place: Some(Point {
+            coordinate(places_api::GeocodeResponse {
+                place: Some(places_api::Place {
                     latitude: Some(52.5),
-                    longitude: Some(13.4)
+                    longitude: Some(13.4),
+                    ..Default::default()
                 })
             }),
             Coordinate::new(52.5, 13.4)

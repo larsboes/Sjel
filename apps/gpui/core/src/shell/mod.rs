@@ -16,7 +16,7 @@ use reqwest::{header, Method, StatusCode, Url};
 use crate::capture::{self, Capture, Route};
 use crate::mail::{BulkResult, MailAction, MailProposal};
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use futures::channel::mpsc::UnboundedReceiver;
 
@@ -82,24 +82,13 @@ pub use status_api::{BackupRun, BackupStatus, Backups};
 
 /// `GET /projects/api/projects` (`ProjectSummary` in `crates/projects/src/server.rs`).
 pub use projects_api::{
-    decode_item_ref, inventory_reference, project_ref, status_closes, GlobalTask,
+    decode_item_ref, inventory_reference, project_ref, status_closes, GlobalNote, GlobalTask,
     InventoryIdentity, ProjectInventoryLink, ProjectKind, ProjectLinkRecord, ProjectMailDecision,
     ProjectMailPage, ProjectMailProposal, ProjectMailTarget, ProjectRecord, ProjectSummary,
     RenamedRecord, TASK_STATUSES,
 };
 
 pub use status_api::ServerHit;
-
-/// One note across projects (`GET /projects/api/records`).
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub struct GlobalNote {
-    pub path: String,
-    #[serde(default)]
-    pub kind: String,
-    pub title: String,
-    #[serde(default)]
-    pub project: String,
-}
 
 pub use documents_api::{
     ClassificationProposal, DocumentBoundaryEvidence, DocumentDetail, DocumentExtractedPage,
@@ -142,55 +131,7 @@ enum Payload {
     Bytes(Vec<u8>),
 }
 
-/// Metadata returned by `POST /music/api/probe`.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-pub struct MusicProbe {
-    pub title: String,
-    pub uploader: String,
-    pub duration_hms: String,
-    #[serde(default)]
-    pub chapters: Vec<MusicChapter>,
-    #[serde(default)]
-    pub tracklist_from_chapters: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct MusicChapter {
-    pub start: u64,
-    pub title: String,
-}
-
-/// Request and response contract for a music build.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MusicJob {
-    pub id: String,
-    pub album: String,
-    pub state: String,
-    #[serde(default)]
-    pub log: Vec<String>,
-    #[serde(default)]
-    pub started_at: Option<String>,
-    #[serde(default)]
-    pub finished_at: Option<String>,
-    #[serde(default)]
-    pub outdir: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct MusicBuild {
-    pub url: String,
-    /// `"song"` imports one track; empty or `"album"` cuts a tracklist.
-    pub mode: String,
-    pub album: String,
-    pub artist: String,
-    pub year: String,
-    pub tracklist: String,
-    /// Song mode only: the track title and an optional `M:SS` range.
-    pub title: String,
-    pub start: String,
-    pub end: String,
-}
+pub use media_api::{MusicBuild, MusicChapter, MusicJob, MusicProbe};
 
 /// The soundscape playback state (`GET /soundscape/api/soundscape/state`).
 pub use soundscape_api::{

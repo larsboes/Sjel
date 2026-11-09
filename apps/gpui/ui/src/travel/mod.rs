@@ -10,7 +10,9 @@ use gpui_kit::component::button::Button;
 use sjel_gpui_core::{
     calendar::{TripDraft, TripDrafts, TripMaterialization},
     shell::{self, ShellError},
-    travel::{self, Coordinate, Place, PlaceCoords, Plan, Source, Tile, TravelRoute, TripSection},
+    travel::{
+        self, Coordinate, Place, PlaceCoords, Plan, PlanExt, Source, Tile, TravelRoute, TripSection,
+    },
 };
 
 use crate::{Density, Palette};
@@ -21,6 +23,7 @@ mod forms;
 mod itinerary;
 mod library;
 mod map;
+mod markers;
 #[cfg(all(feature = "native-maps", target_os = "macos"))]
 mod native_renderer;
 mod overview;
@@ -28,6 +31,8 @@ mod pages;
 mod saved;
 #[cfg(all(feature = "native-maps", target_os = "macos"))]
 mod vector;
+
+pub use markers::{LocationMarker, PlaceCategory};
 
 pub struct Travel {
     pub(super) focus: FocusHandle,
@@ -61,7 +66,6 @@ pub struct Travel {
     drag: Option<Point<gpui::Pixels>>,
     palette: Palette,
     show_all: bool,
-    show_all_locations: bool,
     map_options_open: bool,
     saved_at: Option<u64>,
     fit_pending: bool,
@@ -115,73 +119,7 @@ pub struct Travel {
     vector_enabled: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlaceCategory {
-    Stay,
-    Station,
-    Airport,
-    Place,
-}
-
-impl PlaceCategory {
-    pub fn from_name_and_type(name: &str, item_type: Option<&str>) -> Self {
-        if item_type == Some("stay") || item_type == Some("accommodation") {
-            return Self::Stay;
-        }
-        let lower = name.to_lowercase();
-        if lower.contains("airport")
-            || lower.contains("flughafen")
-            || lower.contains("aéroport")
-            || lower.contains("aeropuerto")
-            || lower.contains("airfield")
-        {
-            Self::Airport
-        } else if lower.contains("hbf")
-            || lower.contains("bahnhof")
-            || lower.contains("station")
-            || lower.contains("gare ")
-            || lower.ends_with("gare")
-            || lower.contains("estación")
-            || lower.contains("terminal")
-        {
-            Self::Station
-        } else if lower.contains("hotel") || lower.contains("hostel") || lower.contains("airbnb") {
-            Self::Stay
-        } else {
-            Self::Place
-        }
-    }
-
-    pub fn icon(&self) -> &'static str {
-        match self {
-            Self::Stay => "⌂",
-            Self::Station => "⇄",
-            Self::Airport => "✈",
-            Self::Place => "◎",
-        }
-    }
-
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Stay => "Stay",
-            Self::Station => "Station",
-            Self::Airport => "Airport",
-            Self::Place => "Place",
-        }
-    }
-}
-
 pub(crate) use sjel_gpui_core::travel::urlencode;
-
-#[derive(Clone)]
-pub struct LocationMarker {
-    pub plan_id: String,
-    pub place: Place,
-    pub from: String,
-    pub to: String,
-    pub label: String,
-    pub category: PlaceCategory,
-}
 
 impl Travel {
     pub fn new(source: Option<Source>, density: Density, cx: &mut Context<Self>) -> Self {
@@ -210,7 +148,6 @@ impl Travel {
             drag: None,
             palette: Palette::light(),
             show_all: false,
-            show_all_locations: false,
             map_options_open: false,
             saved_at: None,
             fit_pending: true,
@@ -734,169 +671,18 @@ impl Travel {
     }
 
     fn location_markers(&self) -> Vec<LocationMarker> {
-        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let horizon = (chrono::Local::now().date_naive() + chrono::Duration::days(180))
-            .format("%Y-%m-%d")
-            .to_string();
-        let mut markers = Vec::new();
-        for plan in self
-            .plans
-            .iter()
-            .filter(|plan| plan.date_end >= today && plan.date_start <= horizon)
-            .take(8)
-        {
-            let from = plan.date_start.clone();
-            let to = plan.date_end.clone();
-            for place in plan.places() {
-                markers.push(LocationMarker {
-                    plan_id: plan.id.clone(),
-                    place: place.clone(),
-                    from: from.clone(),
-                    to: to.clone(),
-                    label: format!("{} · {}–{}", plan.title, from, to),
-                    category: PlaceCategory::from_name_and_type(&place.name, None),
-                });
-            }
-            if let Some(details) = self
-                .details
-                .get(&plan.id)
-                .and_then(|slot| slot.value.as_ref())
-            {
-                for item in &details.details.items {
-                    if item.item_type != "stay" {
-                        continue;
-                    }
-                    let Some(latitude) = item
-                        .payload
-                        .get("latitude")
-                        .and_then(serde_json::Value::as_f64)
-                    else {
-                        continue;
-                    };
-                    let Some(longitude) = item
-                        .payload
-                        .get("longitude")
-                        .and_then(serde_json::Value::as_f64)
-                    else {
-                        continue;
-                    };
-                    let at = Coordinate {
-                        latitude,
-                        longitude,
-                    };
-                    let Some(day) = item
-                        .payload
-                        .get("check_in")
-                        .and_then(serde_json::Value::as_str)
-                        .or(item.day.as_deref())
-                    else {
-                        continue;
-                    };
-                    let to = item
-                        .payload
-                        .get("check_out")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or(day)
-                        .to_owned();
-                    let place = Place {
-                        name: item.title.clone(),
-                        address: item
-                            .payload
-                            .get("address")
-                            .and_then(serde_json::Value::as_str)
-                            .map(str::to_owned),
-                        latitude: Some(at.latitude),
-                        longitude: Some(at.longitude),
-                    };
-                    markers.push(LocationMarker {
-                        plan_id: plan.id.clone(),
-                        place,
-                        from: day.to_owned(),
-                        to,
-                        label: format!("{} · stay", plan.title),
-                        category: PlaceCategory::Stay,
-                    });
-                }
-            }
-        }
-        if let Some(cat) = self.selected_category_filter {
-            markers.retain(|m| m.category == cat);
-        }
-        markers
+        markers::build_location_markers(&self.plans, &self.details, self.selected_category_filter)
     }
 
     pub fn current_plan_markers(&self) -> Vec<LocationMarker> {
         let Some(plan) = self.current() else {
             return Vec::new();
         };
-        let mut markers = Vec::new();
-        for place in plan.places() {
-            markers.push(LocationMarker {
-                plan_id: plan.id.clone(),
-                place: place.clone(),
-                from: plan.date_start.clone(),
-                to: plan.date_end.clone(),
-                label: plan.title.clone(),
-                category: PlaceCategory::from_name_and_type(&place.name, None),
-            });
-        }
-        if let Some(details) = self
-            .details
-            .get(&plan.id)
-            .and_then(|slot| slot.value.as_ref())
-        {
-            for item in &details.details.items {
-                if item.item_type != "stay" {
-                    continue;
-                }
-                let Some(latitude) = item
-                    .payload
-                    .get("latitude")
-                    .and_then(serde_json::Value::as_f64)
-                else {
-                    continue;
-                };
-                let Some(longitude) = item
-                    .payload
-                    .get("longitude")
-                    .and_then(serde_json::Value::as_f64)
-                else {
-                    continue;
-                };
-                let day = item
-                    .payload
-                    .get("check_in")
-                    .and_then(serde_json::Value::as_str)
-                    .or(item.day.as_deref())
-                    .unwrap_or(&plan.date_start);
-                let to = item
-                    .payload
-                    .get("check_out")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or(day);
-                markers.push(LocationMarker {
-                    plan_id: plan.id.clone(),
-                    place: Place {
-                        name: item.title.clone(),
-                        address: item
-                            .payload
-                            .get("address")
-                            .and_then(serde_json::Value::as_str)
-                            .map(str::to_owned),
-                        latitude: Some(latitude),
-                        longitude: Some(longitude),
-                    },
-                    from: day.to_owned(),
-                    to: to.to_owned(),
-                    label: format!("{} · stay", plan.title),
-                    category: PlaceCategory::Stay,
-                });
-            }
-        }
-        if let Some(cat) = self.selected_category_filter {
-            markers.retain(|m| m.category == cat);
-        }
-        markers
+        markers::build_current_plan_markers(
+            plan,
+            self.details.get(&plan.id),
+            self.selected_category_filter,
+        )
     }
 
     /// Explicit request (from map or trip page) to resolve missing coordinates or refresh all.
@@ -969,18 +755,14 @@ impl Travel {
                     for r in report.resolved {
                         let key = travel::places::key(&Place {
                             name: r.name,
-                            address: None,
-                            latitude: None,
-                            longitude: None,
+                            ..Default::default()
                         });
                         ans.push((key, Ok(Coordinate::new(r.latitude, r.longitude))));
                     }
                     for u in report.unresolved {
                         let key = travel::places::key(&Place {
                             name: u.name,
-                            address: None,
-                            latitude: None,
-                            longitude: None,
+                            ..Default::default()
                         });
                         ans.push((key, Ok(None)));
                     }

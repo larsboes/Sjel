@@ -161,18 +161,17 @@ mod tests {
     fn people_near_the_leg_nearest_first_with_hosts_by_sleeping_option() {
         let place = |lat: Option<f64>| Place {
             name: "Bonn".into(),
-            address: None,
             latitude: lat,
             longitude: lat.map(|_| 7.0982),
+            ..Default::default()
         };
         let stage = |lat| Stage {
             id: "stage:1".into(),
             sequence: 1,
             origin: place(None),
             destination: place(lat),
-            date: None,
-            status: "planned".into(),
-            transport_modes: vec![],
+            status: crate::travel::StageStatus::Planning,
+            ..Default::default()
         };
         let person = |id: &str, name: &str, at: Option<(f64, f64)>, sleep: &str| Located {
             entity_id: id.into(),

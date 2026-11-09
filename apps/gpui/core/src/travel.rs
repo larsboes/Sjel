@@ -21,86 +21,29 @@ pub use punctuality_api;
 pub use traveler_api;
 
 pub use trips_api::{
-    cost::CostRollup, urlencode, ResolvePlacesRequest, ResolvePlacesResult, ResolvedPlace,
-    Retrospective, UnresolvedPlace,
+    cost::CostRollup, urlencode, PlaceKind, PlaceRef as Place, ResolvePlacesRequest,
+    ResolvePlacesResult, ResolvedPlace, Retrospective, StageStatus, TransportMode,
+    TripPlan as Plan, TripStage as Stage, UnresolvedPlace,
 };
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Place {
-    pub name: String,
-    #[serde(default)]
-    pub address: Option<String>,
-    pub latitude: Option<f64>,
-    pub longitude: Option<f64>,
-}
-
-impl Place {
-    pub fn coordinate(&self) -> Option<Coordinate> {
-        Coordinate::new(self.latitude?, self.longitude?)
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Stage {
-    /// `stage:<n>`; empty in a snapshot saved before the app could edit stages.
-    #[serde(default)]
-    pub id: String,
-    pub sequence: usize,
-    pub origin: Place,
-    pub destination: Place,
-    pub date: Option<String>,
-    pub status: String,
-    #[serde(default)]
-    pub transport_modes: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Plan {
-    pub id: String,
-    pub title: String,
-    pub origin: Place,
-    pub destinations: Vec<Place>,
-    pub date_start: String,
-    pub date_end: String,
-    pub status: String,
-    #[serde(default)]
-    pub stages: Vec<Stage>,
-    #[serde(default)]
-    pub budget_cents: Option<i64>,
-    #[serde(default)]
-    pub currency: Option<String>,
-}
-
-impl Plan {
-    /// Connections follow explicitly saved stages; they are not turn-by-turn routes.
-    pub fn connections(&self) -> Vec<(Coordinate, Coordinate)> {
-        self.stages
-            .iter()
-            .filter_map(|stage| Some((stage.origin.coordinate()?, stage.destination.coordinate()?)))
-            .collect()
-    }
-
-    pub fn places(&self) -> impl Iterator<Item = &Place> {
-        let mut seen = std::collections::HashSet::new();
-        std::iter::once(&self.origin)
-            .chain(self.destinations.iter())
-            .chain(self.stages.iter().flat_map(|s| [&s.origin, &s.destination]))
-            .filter(move |place| {
-                seen.insert((
-                    place.name.as_str(),
-                    place.latitude.map(f64::to_bits),
-                    place.longitude.map(f64::to_bits),
-                ))
-            })
-    }
-
+pub trait PlanExt {
     /// Fills every place that has no coordinate from `coords`, leaving a saved one alone.
     ///
     /// A coordinate that arrives with the record always wins: this is the fallback for a plan
     /// whose places were stored as typed, not a correction of one that already knows where it
     /// is going. Returns how many places were filled, so a caller can tell whether the map has
     /// anything new to draw.
-    pub fn fill_coordinates(&mut self, coords: &PlaceCoords) -> usize {
+    fn fill_coordinates(&mut self, coords: &PlaceCoords) -> usize;
+
+    /// The map tiles that cover every stop of this plan from coarse overview through city detail.
+    fn offline_tiles(&self) -> Vec<Tile>;
+
+    /// Checks local disk storage for this trip's offline assets.
+    fn check_offline_readiness(&self) -> OfflineStatus;
+}
+
+impl PlanExt for Plan {
+    fn fill_coordinates(&mut self, coords: &PlaceCoords) -> usize {
         let mut filled = 0;
         let mut fill = |place: &mut Place| {
             if place.coordinate().is_some() {
@@ -123,8 +66,7 @@ impl Plan {
         filled
     }
 
-    /// The map tiles that cover every stop of this plan from coarse overview through city detail.
-    pub fn offline_tiles(&self) -> Vec<Tile> {
+    fn offline_tiles(&self) -> Vec<Tile> {
         let mut tiles = std::collections::BTreeSet::new();
         let coords: Vec<_> = self.places().filter_map(|p| p.coordinate()).collect();
         if coords.is_empty() {
@@ -153,8 +95,7 @@ impl Plan {
         tiles.into_iter().collect()
     }
 
-    /// Checks local disk storage for this trip's offline assets.
-    pub fn check_offline_readiness(&self) -> OfflineStatus {
+    fn check_offline_readiness(&self) -> OfflineStatus {
         let details_cached = details_cached(&self.id);
         let needed_tiles = self.offline_tiles();
         let total_tiles = needed_tiles.len();
@@ -1044,12 +985,14 @@ mod tests {
                 address: None,
                 latitude: Some(52.52),
                 longitude: Some(13.405),
+                ..Default::default()
             },
             destinations: vec![Place {
                 name: "Paris".into(),
                 address: None,
                 latitude: Some(48.856),
                 longitude: Some(2.352),
+                ..Default::default()
             }],
             date_start: "2026-12-01".into(),
             date_end: "2026-12-05".into(),
@@ -1057,6 +1000,7 @@ mod tests {
             stages: Vec::new(),
             budget_cents: None,
             currency: None,
+            ..Default::default()
         };
 
         let tiles = plan.offline_tiles();
@@ -1082,6 +1026,7 @@ mod tests {
                 address: None,
                 latitude: None,
                 longitude: None,
+                ..Default::default()
             },
             destinations: Vec::new(),
             date_start: "".into(),
@@ -1090,6 +1035,7 @@ mod tests {
             stages: Vec::new(),
             budget_cents: None,
             currency: None,
+            ..Default::default()
         };
         assert!(empty_plan.offline_tiles().is_empty());
     }

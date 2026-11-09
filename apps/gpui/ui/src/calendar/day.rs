@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use chrono::{Datelike, Duration, Local, NaiveDate, Timelike};
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, EventEmitter, MouseButton, Render,
-    SharedString, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, EventEmitter, FontWeight, MouseButton,
+    Render, SharedString, Window,
 };
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{
@@ -640,44 +640,69 @@ impl Calendar {
         );
         if self.writable() {
             sheet = sheet.child(self.row_actions(entry, cx));
+
+            let mut day_shifts = div().flex().flex_wrap().gap_1p5().items_center().child(
+                div()
+                    .text_xs()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(rgb(palette.muted))
+                    .child("Reschedule:"),
+            );
+            for (label, days) in [
+                ("Tomorrow (+1d)", 1),
+                ("+2 days", 2),
+                ("+1 week", 7),
+                ("Yesterday (-1d)", -1),
+            ] {
+                let entry_clone = entry.clone();
+                day_shifts = day_shifts.child(
+                    Button::new(SharedString::from(format!("calendar-sheet-day-{days}")))
+                        .small()
+                        .ghost()
+                        .label(label)
+                        .disabled(self.saving)
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            if let Ok(after) = calendar::timeline::shift_days(&entry_clone, days) {
+                                view.write_time(entry_clone.clone(), after, false, window, cx);
+                            }
+                        })),
+                );
+            }
+            sheet = sheet.child(day_shifts);
         }
         if !entry.all_day && self.writable() {
-            let mut actions = div().flex().flex_wrap().gap_2();
+            let mut time_shifts = div().flex().flex_wrap().gap_1p5().items_center().child(
+                div()
+                    .text_xs()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(rgb(palette.muted))
+                    .child("Time:"),
+            );
             for (label, delta, resize) in [
-                ("15 min earlier", -15, false),
-                ("15 min later", 15, false),
-                ("Shorten 15 min", -15, true),
-                ("Extend 15 min", 15, true),
+                ("-15m", -15, false),
+                ("+15m", 15, false),
+                ("-1h", -60, false),
+                ("+1h", 60, false),
+                ("-15m len", -15, true),
+                ("+15m len", 15, true),
             ] {
-                let id = entry.id.clone();
-                let time = if resize {
-                    &entry.ends_at
-                } else {
-                    &entry.starts_at
-                };
-                if let Ok(time) = chrono::NaiveDateTime::parse_from_str(time, "%Y-%m-%dT%H:%M:%S") {
-                    if let Some(target) = time.checked_add_signed(Duration::minutes(delta)) {
-                        actions = actions.child(
-                            Button::new(SharedString::from(format!("calendar-sheet-{label}")))
-                                .small()
-                                .ghost()
-                                .label(label)
-                                .disabled(self.saving)
-                                .on_click(cx.listener(move |view, _, window, cx| {
-                                    view.change_time(
-                                        &id,
-                                        target.date(),
-                                        (target.hour() * 60 + target.minute()) as u16,
-                                        resize,
-                                        window,
-                                        cx,
-                                    )
-                                })),
-                        );
-                    }
-                }
+                let entry_clone = entry.clone();
+                time_shifts = time_shifts.child(
+                    Button::new(SharedString::from(format!("calendar-sheet-time-{label}")))
+                        .small()
+                        .ghost()
+                        .label(label)
+                        .disabled(self.saving)
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            if let Ok(after) =
+                                calendar::timeline::shift_minutes(&entry_clone, delta, resize)
+                            {
+                                view.write_time(entry_clone.clone(), after, false, window, cx);
+                            }
+                        })),
+                );
             }
-            sheet = sheet.child(actions);
+            sheet = sheet.child(time_shifts);
         }
         sheet.into_any_element()
     }

@@ -17,55 +17,198 @@ use sjel_gpui_core::finance::{
 };
 use sjel_gpui_core::shell::{self, FinanceCandidate, ShellError};
 
-use crate::primitives::{resizable_table_header, tabular_cell, SortOrder, SortableColumn};
+use gpui_kit::component::table::TableState;
+
+use crate::primitives::{
+    data_table, mono_num, new_table_state, set_table_rows, tabular_cell, RowTable, SortOrder,
+    TableColumn,
+};
 use crate::theme::{Density, Palette};
 
 use super::FinancePage;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum CandidateSort {
-    #[default]
-    BookedAt,
-    Description,
-    Account,
-    Amount,
-}
+pub(crate) type CandidateTable = RowTable<FinanceCandidate>;
 
-impl CandidateSort {
-    pub(crate) fn default_order(self) -> SortOrder {
-        match self {
-            Self::BookedAt | Self::Amount => SortOrder::Descending,
-            Self::Description | Self::Account => SortOrder::Ascending,
-        }
-    }
-}
+pub(crate) fn candidate_table(page_entity: Entity<FinancePage>) -> CandidateTable {
+    RowTable::new(vec![
+        TableColumn::new(
+            "cand_date",
+            "DATE",
+            96.,
+            |c: &FinanceCandidate, palette, _, _| {
+                mono_num(c.booked_at.clone(), palette.muted)
+                    .text_xs()
+                    .into_any_element()
+            },
+        )
+        .min_width(80.)
+        .label_text(|c| c.booked_at.clone())
+        .sort_by(|a, b| a.booked_at.cmp(&b.booked_at)),
+        TableColumn::new(
+            "cand_description",
+            "DESCRIPTION",
+            280.,
+            |c: &FinanceCandidate, palette, _, _| {
+                div()
+                    .truncate()
+                    .text_sm()
+                    .text_color(rgb(palette.text))
+                    .child(c.description.clone())
+                    .into_any_element()
+            },
+        )
+        .min_width(180.)
+        .label_text(|c| c.description.clone())
+        .sort_by(|a, b| {
+            a.description
+                .to_lowercase()
+                .cmp(&b.description.to_lowercase())
+        }),
+        TableColumn::new(
+            "cand_account",
+            "PROPOSED ACCOUNT",
+            180.,
+            |c: &FinanceCandidate, palette, _, _| {
+                div()
+                    .truncate()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(c.proposed_account.clone())
+                    .into_any_element()
+            },
+        )
+        .min_width(120.)
+        .label_text(|c| c.proposed_account.clone())
+        .sort_by(|a, b| {
+            a.proposed_account
+                .to_lowercase()
+                .cmp(&b.proposed_account.to_lowercase())
+        }),
+        TableColumn::new(
+            "cand_amount",
+            "AMOUNT",
+            110.,
+            |c: &FinanceCandidate, palette, _, _| {
+                let amount_color = if c.amount_cents < 0 {
+                    palette.red
+                } else {
+                    palette.green
+                };
+                mono_num(format_money(c.amount_cents, &c.currency), amount_color)
+                    .text_xs()
+                    .truncate()
+                    .into_any_element()
+            },
+        )
+        .min_width(80.)
+        .right()
+        .label_text(|c| format_money(c.amount_cents, &c.currency))
+        .sort_by(|a, b| a.amount_cents.cmp(&b.amount_cents)),
+        TableColumn::new(
+            "cand_actions",
+            "",
+            220.,
+            move |c: &FinanceCandidate, _, _, cx| {
+                let id = c.id.clone();
+                let reject_id = id.clone();
+                let exact_transfer = c.transfer_match_ids.len() == 1;
+                let transfer = exact_transfer.then(|| c.transfer_match_ids[0].clone());
+                let is_mail = c
+                    .source_reference
+                    .as_deref()
+                    .is_some_and(|reference| reference.starts_with("gmail:"));
+                let mail_source = page_entity
+                    .read(cx)
+                    .csv_mappings
+                    .value
+                    .as_ref()
+                    .and_then(|profiles| profiles.get(page_entity.read(cx).selected_mapping))
+                    .and_then(|profile| profile.mapping.get("source_account"))
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|account| {
+                        account.starts_with("assets:") || account.starts_with("liabilities:")
+                    })
+                    .map(str::to_owned);
 
-pub(crate) fn compare_candidates(
-    left: &FinanceCandidate,
-    right: &FinanceCandidate,
-    sort: CandidateSort,
-    order: SortOrder,
-) -> std::cmp::Ordering {
-    let primary = match sort {
-        CandidateSort::BookedAt => left.booked_at.cmp(&right.booked_at),
-        CandidateSort::Description => left
-            .description
-            .to_lowercase()
-            .cmp(&right.description.to_lowercase()),
-        CandidateSort::Account => left
-            .proposed_account
-            .to_lowercase()
-            .cmp(&right.proposed_account.to_lowercase()),
-        CandidateSort::Amount => left.amount_cents.cmp(&right.amount_cents),
-    };
-    let primary = if order.is_ascending() {
-        primary
-    } else {
-        primary.reverse()
-    };
-    primary
-        .then_with(|| right.booked_at.cmp(&left.booked_at))
-        .then_with(|| left.id.cmp(&right.id))
+                let mut actions = div().w(px(220.)).flex_none().flex().justify_end().gap_1();
+                if let Some(counterpart) = transfer {
+                    let reconcile_id = id.clone();
+                    let page = page_entity.clone();
+                    actions = actions.child(
+                        Button::new(SharedString::from(format!("finance-transfer-{}", c.id)))
+                            .small()
+                            .ghost()
+                            .label("Reconcile transfer")
+                            .on_click(move |_, _, cx| {
+                                page.update(cx, |page, cx| {
+                                    page.reconcile_candidate(
+                                        reconcile_id.clone(),
+                                        counterpart.clone(),
+                                        cx,
+                                    );
+                                });
+                            }),
+                    );
+                }
+                if !exact_transfer && !is_mail {
+                    let confirm_id = id.clone();
+                    let page = page_entity.clone();
+                    actions = actions.child(
+                        Button::new(SharedString::from(format!("finance-confirm-{}", c.id)))
+                            .small()
+                            .primary()
+                            .label("Confirm proposed account")
+                            .on_click(move |_, _, cx| {
+                                page.update(cx, |page, cx| {
+                                    page.review_candidate(confirm_id.clone(), "confirm", None, cx);
+                                });
+                            }),
+                    );
+                } else if !exact_transfer && is_mail {
+                    if let Some(source_account) = mail_source {
+                        let confirm_id = id.clone();
+                        let page = page_entity.clone();
+                        actions = actions.child(
+                            Button::new(SharedString::from(format!(
+                                "finance-confirm-mail-{}",
+                                c.id
+                            )))
+                            .small()
+                            .primary()
+                            .label(format!("Confirm from {source_account}"))
+                            .on_click(move |_, _, cx| {
+                                page.update(cx, |page, cx| {
+                                    page.review_candidate(
+                                        confirm_id.clone(),
+                                        "confirm",
+                                        Some(source_account.clone()),
+                                        cx,
+                                    );
+                                });
+                            }),
+                        );
+                    }
+                }
+                let page = page_entity.clone();
+                actions = actions.child(
+                    Button::new(SharedString::from(format!("finance-reject-{}", c.id)))
+                        .small()
+                        .ghost()
+                        .label("Reject")
+                        .on_click(move |_, _, cx| {
+                            page.update(cx, |page, cx| {
+                                page.review_candidate(reject_id.clone(), "reject", None, cx);
+                            });
+                        }),
+                );
+                actions.into_any_element()
+            },
+        )
+        .min_width(180.),
+    ])
+    .sorted("cand_date", SortOrder::Descending)
+    .tie_break(|a, b| b.booked_at.cmp(&a.booked_at).then_with(|| a.id.cmp(&b.id)))
+    .empty_text("No pending import candidates to review.")
 }
 
 pub(crate) struct CsvMappingField {
@@ -116,13 +259,40 @@ pub(crate) fn default_csv_mapping() -> serde_json::Value {
 }
 
 impl FinancePage {
-    pub(super) fn set_import_sort(&mut self, column: CandidateSort, cx: &mut Context<Self>) {
-        self.import_sort = match self.import_sort {
-            (current, order) if current == column => (column, order.flip()),
-            _ => (column, column.default_order()),
-        };
-        self.review_rev = self.review_rev.wrapping_add(1);
-        cx.notify();
+    pub(super) fn sync_import_table(
+        &mut self,
+        window: &mut Window,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> Entity<TableState<CandidateTable>> {
+        let entity = cx.entity();
+        let table = self
+            .import_table
+            .get_or_insert_with(|| new_table_state(candidate_table(entity), window, cx))
+            .clone();
+        let key = (
+            self.candidates.loaded_at,
+            self.review_rev,
+            self.pending_limit,
+        );
+        if self.import_rows_key != Some(key) {
+            self.import_rows_key = Some(key);
+            self.sync_import_derived();
+            let candidates = self.candidates.value.as_deref().unwrap_or_default();
+            let pending: Vec<FinanceCandidate> = self
+                .import_derived
+                .pending_indices
+                .iter()
+                .take(self.pending_limit)
+                .filter_map(|&ix| candidates.get(ix).cloned())
+                .collect();
+            set_table_rows(&table, pending, cx);
+        }
+        let palette = self.palette.unwrap_or(palette);
+        table.update(cx, |state, _| {
+            state.delegate_mut().set_palette(Some(palette))
+        });
+        table
     }
 
     pub(super) fn sync_import_derived(&mut self) {
@@ -136,20 +306,11 @@ impl FinancePage {
             return;
         }
         let candidates = self.candidates.value.as_deref().unwrap_or_default();
-        let (sort_col, sort_order) = self.import_sort;
-        let mut pending_indices: Vec<usize> = candidates
+        let pending_indices: Vec<usize> = candidates
             .iter()
             .enumerate()
             .filter_map(|(ix, c)| (c.state == "pending").then_some(ix))
             .collect();
-        pending_indices.sort_by(|left, right| {
-            compare_candidates(
-                &candidates[*left],
-                &candidates[*right],
-                sort_col,
-                sort_order,
-            )
-        });
         let mut uncategorized: Vec<_> = candidates
             .iter()
             .filter(|candidate| {
@@ -162,7 +323,7 @@ impl FinancePage {
             })
             .cloned()
             .collect();
-        uncategorized.sort_by(|left, right| compare_candidates(left, right, sort_col, sort_order));
+        uncategorized.sort_by(|a, b| b.booked_at.cmp(&a.booked_at).then_with(|| a.id.cmp(&b.id)));
         let transactions = self
             .dashboard
             .value
@@ -452,186 +613,14 @@ impl FinancePage {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        self.sync_import_derived();
-        let candidates = self.candidates.value.as_deref().unwrap_or_default();
+        let table = self.sync_import_table(window, palette, cx);
         let pending_count = self.import_derived.pending_indices.len();
-        let pending: Vec<FinanceCandidate> = self
-            .import_derived
-            .pending_indices
-            .iter()
-            .take(self.pending_limit)
-            .filter_map(|&ix| candidates.get(ix).cloned())
-            .collect();
-        let cand_date_w = self.col_width("cand_date", 96.);
-        let cand_acct_w = self.col_width("cand_account", 180.);
-        let cand_amt_w = self.col_width("cand_amount", 110.);
-        let (sort_col, sort_order) = self.import_sort;
-        let sort_state = |column: CandidateSort| (sort_col == column).then_some(sort_order);
-        let sort_entity = cx.entity();
-        let resize_entity = cx.entity();
-        let cand_header = resizable_table_header(
-            "finance-candidates",
-            vec![
-                SortableColumn::fixed("cand_date", "DATE", px(cand_date_w))
-                    .sorted(sort_state(CandidateSort::BookedAt)),
-                SortableColumn::flex("cand_description", "DESCRIPTION")
-                    .sorted(sort_state(CandidateSort::Description)),
-                SortableColumn::fixed("cand_account", "PROPOSED ACCOUNT", px(cand_acct_w))
-                    .sorted(sort_state(CandidateSort::Account)),
-                SortableColumn::fixed("cand_amount", "AMOUNT", px(cand_amt_w))
-                    .right_align()
-                    .sorted(sort_state(CandidateSort::Amount)),
-                SortableColumn::spacer(px(210.)),
-            ],
-            Density::Desktop,
-            palette,
-            move |col_id, _, cx| {
-                let column = match col_id {
-                    "cand_date" => CandidateSort::BookedAt,
-                    "cand_description" => CandidateSort::Description,
-                    "cand_account" => CandidateSort::Account,
-                    "cand_amount" => CandidateSort::Amount,
-                    _ => return,
-                };
-                sort_entity.update(cx, |page, cx| page.set_import_sort(column, cx));
-            },
-            move |col_id, _, cx| {
-                resize_entity.update(cx, |page, cx| page.resize_column(col_id, cx));
-            },
-        );
-        let mut queue = div().flex().flex_col().gap_1p5().child(cand_header);
-        for candidate in &pending {
-            let id = candidate.id.clone();
-            let reject_id = id.clone();
-            let exact_transfer = candidate.transfer_match_ids.len() == 1;
-            let transfer = exact_transfer.then(|| candidate.transfer_match_ids[0].clone());
-            let is_mail = candidate
-                .source_reference
-                .as_deref()
-                .is_some_and(|reference| reference.starts_with("gmail:"));
-            let mail_source = self
-                .csv_mappings
-                .value
-                .as_ref()
-                .and_then(|profiles| profiles.get(self.selected_mapping))
-                .and_then(|profile| profile.mapping.get("source_account"))
-                .and_then(serde_json::Value::as_str)
-                .filter(|account| {
-                    account.starts_with("assets:") || account.starts_with("liabilities:")
-                })
-                .map(str::to_owned);
-            let amount_color = if candidate.amount_cents < 0 {
-                palette.red
-            } else {
-                palette.green
-            };
-            let mut actions = div().w(px(210.)).flex_none().flex().justify_end().gap_1();
-            if let Some(counterpart) = transfer {
-                let reconcile_id = id.clone();
-                actions = actions.child(
-                    Button::new(SharedString::from(format!(
-                        "finance-transfer-{}",
-                        candidate.id
-                    )))
-                    .small()
-                    .ghost()
-                    .label("Reconcile transfer")
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        page.reconcile_candidate(reconcile_id.clone(), counterpart.clone(), cx)
-                    })),
-                );
-            }
-            if !exact_transfer && !is_mail {
-                let confirm_id = id.clone();
-                actions = actions.child(
-                    Button::new(SharedString::from(format!(
-                        "finance-confirm-{}",
-                        candidate.id
-                    )))
-                    .small()
-                    .primary()
-                    .label("Confirm proposed account")
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        page.review_candidate(confirm_id.clone(), "confirm", None, cx)
-                    })),
-                );
-            } else if !exact_transfer && is_mail {
-                if let Some(source_account) = mail_source {
-                    let confirm_id = id.clone();
-                    actions = actions.child(
-                        Button::new(SharedString::from(format!(
-                            "finance-confirm-mail-{}",
-                            candidate.id
-                        )))
-                        .small()
-                        .primary()
-                        .label(format!("Confirm from {source_account}"))
-                        .on_click(cx.listener(move |page, _, _, cx| {
-                            page.review_candidate(
-                                confirm_id.clone(),
-                                "confirm",
-                                Some(source_account.clone()),
-                                cx,
-                            )
-                        })),
-                    );
-                }
-            }
-            actions = actions.child(
-                Button::new(SharedString::from(format!(
-                    "finance-reject-{}",
-                    candidate.id
-                )))
-                .small()
-                .ghost()
-                .label("Reject")
-                .on_click(cx.listener(move |page, _, _, cx| {
-                    page.review_candidate(reject_id.clone(), "reject", None, cx)
-                })),
-            );
-            let row = div()
-                .flex()
-                .items_center()
-                .gap_3()
-                .px_3()
-                .py_2()
-                .rounded(px(7.))
-                .border_1()
-                .border_color(rgba(palette.border))
-                .bg(rgba(palette.surface))
-                .child(tabular_cell(
-                    candidate.booked_at.clone(),
-                    px(cand_date_w),
-                    palette.muted,
-                ))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .text_sm()
-                        .text_color(rgb(palette.text))
-                        .child(candidate.description.clone()),
-                )
-                .child(
-                    div()
-                        .w(px(cand_acct_w))
-                        .flex_none()
-                        .truncate()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(candidate.proposed_account.clone()),
-                )
-                .child(tabular_cell(
-                    format_money(candidate.amount_cents, &candidate.currency),
-                    px(cand_amt_w),
-                    amount_color,
-                ))
-                .child(actions);
-            queue = queue.child(row);
-        }
-        if pending_count > self.pending_limit {
-            queue = queue.child(
+        let queue = div()
+            .flex()
+            .flex_col()
+            .gap_1p5()
+            .child(data_table(&table, "Pending Candidates", Density::Desktop))
+            .children((pending_count > self.pending_limit).then(|| {
                 Button::new("finance-pending-more")
                     .small()
                     .ghost()
@@ -639,9 +628,8 @@ impl FinancePage {
                     .on_click(cx.listener(|page, _, _, cx| {
                         page.pending_limit += 24;
                         cx.notify();
-                    })),
-            );
-        }
+                    }))
+            }));
 
         let uncategorized_len = self.import_derived.uncategorized.len();
         let uncategorized_slice: Vec<FinanceCandidate> = self
@@ -663,7 +651,7 @@ impl FinancePage {
                     .rounded(px(5.))
                     .child(tabular_cell(
                         candidate.booked_at.clone(),
-                        px(cand_date_w),
+                        px(96.),
                         palette.muted,
                     ))
                     .child(
@@ -677,7 +665,7 @@ impl FinancePage {
                     )
                     .child(tabular_cell(
                         format_money(candidate.amount_cents, &candidate.currency),
-                        px(cand_amt_w),
+                        px(110.),
                         palette.red,
                     ))
                     .child(

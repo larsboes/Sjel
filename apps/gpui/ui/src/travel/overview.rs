@@ -109,15 +109,53 @@ impl Travel {
         page.into_any_element()
     }
 
-    /// People within reach of each dated leg, the hosts among them, and the plan's meetups.
+    /// People within reach of each dated leg, the hosts among them, plan companions, and the meetups.
     pub(super) fn who_is_around(&self, plan: &Plan, items: &[Item]) -> AnyElement {
         use sjel_gpui_core::travel::around;
         let palette = self.palette;
-        let line = |text: String, color: u32| div().text_xs().text_color(rgb(color)).child(text);
-        let mut section = div().flex().flex_col().gap_1();
         let mut any = false;
+
+        let mut content = div().flex().flex_col().gap_3();
+
+        // 1. Companions on the trip
+        if !plan.travelers.is_empty() {
+            any = true;
+            let mut travelers_row = div().flex().flex_wrap().items_center().gap_2();
+            travelers_row = travelers_row.child(
+                div()
+                    .text_xs()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(rgb(palette.muted))
+                    .child("Trip Companions:"),
+            );
+            for traveler in &plan.travelers {
+                travelers_row = travelers_row.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .px_2()
+                        .py(px(2.))
+                        .rounded(px(6.))
+                        .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
+                        .border_1()
+                        .border_color(rgba(crate::theme::tint(palette.accent, 0x35)))
+                        .text_xs()
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(rgb(palette.accent))
+                        .child(format!("👤 {traveler}")),
+                );
+            }
+            content = content.child(travelers_row);
+        }
+
+        // 2. People near each stage stop
         let mut stages: Vec<_> = plan.stages.iter().collect();
         stages.sort_by_key(|stage| stage.sequence);
+
+        let mut nearby_stops = div().flex().flex_col().gap_2();
+        let mut has_nearby = false;
+
         for stage in stages {
             let Some(Some(located)) = stage.date.as_ref().and_then(|day| self.located.get(day))
             else {
@@ -128,63 +166,203 @@ impl Travel {
                 continue;
             }
             any = true;
-            let people = near
-                .iter()
-                .map(|p| {
-                    let mut text = format!("{} ({:.0} km)", p.person, p.distance_km);
-                    if p.host {
-                        text.push_str(" · can host");
-                        if let Some(note) = p.note.as_deref().filter(|n| !n.is_empty()) {
-                            text.push_str(&format!(": {note}"));
-                        }
-                    }
-                    text
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            section = section.child(line(
-                format!(
-                    "{} · {}: {people}",
-                    stage.date.as_deref().unwrap_or_default(),
-                    stage.destination.name
-                ),
-                palette.text,
-            ));
-        }
-        let meetups = around::meetups(items);
-        for meetup in &meetups {
-            any = true;
-            let mut text = format!(
-                "Meetup · {} with {} · {}",
-                meetup.title,
-                meetup.people.join(", "),
-                meetup.status
+            has_nearby = true;
+
+            let stop_header = format!(
+                "{} · {}",
+                stage.date.as_deref().unwrap_or("Undated"),
+                stage.destination.name
             );
-            if let Some(day) = &meetup.day {
-                text.push_str(&format!(" · {day}"));
+
+            let mut people_grid = div().flex().flex_wrap().gap_2();
+            for p in &near {
+                let mut card = div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .p_2()
+                    .rounded(px(6.))
+                    .bg(rgba(palette.surface))
+                    .border_1()
+                    .border_color(rgba(palette.border))
+                    .min_w(px(140.));
+
+                let header_line = div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(rgb(palette.text))
+                            .child(p.person.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!("{:.0} km", p.distance_km)),
+                    );
+                card = card.child(header_line);
+
+                if p.host {
+                    let mut host_badge = "🛏 Can host".to_string();
+                    if let Some(note) = p.note.as_deref().filter(|n| !n.is_empty()) {
+                        host_badge = format!("🛏 {note}");
+                    }
+                    card = card.child(
+                        div()
+                            .px(px(4.))
+                            .py(px(1.))
+                            .rounded(px(4.))
+                            .bg(rgba(crate::theme::tint(palette.green, 0x22)))
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(rgb(palette.green))
+                            .child(host_badge),
+                    );
+                } else if !p.place.is_empty() && p.place != stage.destination.name {
+                    card = card.child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!("in {}", p.place)),
+                    );
+                }
+                people_grid = people_grid.child(card);
             }
-            if let Some(place) = &meetup.place {
-                text.push_str(&format!(" · {place}"));
-            }
-            section = section.child(line(text, palette.muted));
+
+            nearby_stops = nearby_stops.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(rgb(palette.muted))
+                            .child(stop_header),
+                    )
+                    .child(people_grid),
+            );
         }
+
+        if has_nearby {
+            content = content.child(nearby_stops);
+        }
+
+        // 3. Meetups on the plan
+        let meetups = around::meetups(items);
+        if !meetups.is_empty() {
+            any = true;
+            let mut meetups_col = div().flex().flex_col().gap_1();
+            meetups_col = meetups_col.child(
+                div()
+                    .text_xs()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(rgb(palette.muted))
+                    .child("Trip Meetups:"),
+            );
+
+            let mut meetups_row = div().flex().flex_wrap().gap_2();
+            for meetup in &meetups {
+                let status_color = match meetup.status.to_lowercase().as_str() {
+                    "confirmed" => palette.green,
+                    "planned" => palette.accent,
+                    _ => palette.muted,
+                };
+
+                let mut details_str = format!("with {}", meetup.people.join(", "));
+                if let Some(day) = &meetup.day {
+                    details_str.push_str(&format!(" · {day}"));
+                }
+                if let Some(place) = &meetup.place {
+                    details_str.push_str(&format!(" · {place}"));
+                }
+
+                meetups_row = meetups_row.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .p_2()
+                        .rounded(px(6.))
+                        .bg(rgba(palette.surface))
+                        .border_1()
+                        .border_color(rgba(palette.border))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(rgb(palette.text))
+                                        .child(format!("☕ {}", meetup.title)),
+                                )
+                                .child(
+                                    div()
+                                        .px(px(4.))
+                                        .py(px(1.))
+                                        .rounded(px(4.))
+                                        .bg(rgba(crate::theme::tint(status_color, 0x22)))
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .text_color(rgb(status_color))
+                                        .child(meetup.status.clone()),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(details_str),
+                        ),
+                );
+            }
+            meetups_col = meetups_col.child(meetups_row);
+            content = content.child(meetups_col);
+        }
+
         if !any {
             return div().into_any_element();
         }
+
         div()
             .flex()
             .flex_col()
-            .gap_1()
+            .gap_2()
+            .p_3()
+            .rounded(px(8.))
+            .bg(rgba(palette.raised))
+            .border_1()
+            .border_color(rgba(palette.border))
             .child(
                 div()
-                    .text_sm()
-                    .font_weight(gpui_kit::FontWeight::MEDIUM)
-                    .child(format!(
-                        "Who is around (within {:.0} km)",
-                        around::AROUND_RADIUS_KM
-                    )),
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(rgb(palette.muted))
+                            .child("COMPANIONS & WHO IS AROUND"),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!("Radius: {:.0} km", around::AROUND_RADIUS_KM)),
+                    ),
             )
-            .child(section)
+            .child(content)
             .into_any_element()
     }
 
@@ -203,7 +381,11 @@ impl Travel {
                 ty.contains("lodging") || ty.contains("stay") || ty.contains("hotel")
             })
             .count();
-        let unbooked_stages = plan.stages.iter().filter(|s| s.status != "booked").count();
+        let unbooked_stages = plan
+            .stages
+            .iter()
+            .filter(|s| s.status.as_str() != "booked")
+            .count();
         let missing_codes = items
             .iter()
             .filter(|it| it.booking_code().is_none())
@@ -347,9 +529,42 @@ impl Travel {
         let mut card = div()
             .flex()
             .flex_col()
-            .gap_2()
+            .gap_3()
             .p_3()
-            .child(div().text_sm().child("Trip cost"));
+            .rounded(px(8.))
+            .bg(rgba(crate::theme::tint(palette.surface, 0x55)))
+            .border_1()
+            .border_color(rgba(crate::theme::tint(palette.border, 0x44)))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .child("Trip cost & spend"),
+                    )
+                    .when_some(
+                        slot.and_then(|s| s.cost.as_ref())
+                            .and_then(|c| c.actuals.posting_count)
+                            .filter(|&c| c > 0),
+                        |header, count| {
+                            header.child(
+                                div()
+                                    .px_2()
+                                    .py(px(2.))
+                                    .rounded(px(4.))
+                                    .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
+                                    .text_xs()
+                                    .text_color(rgb(palette.accent))
+                                    .child(format!("{count} ledger postings")),
+                            )
+                        },
+                    ),
+            );
+
         if let Some(cost) = slot.and_then(|slot| slot.cost.as_ref()) {
             let mut values = div().flex().flex_wrap().gap_4();
             for (label, amount) in cost_rows(cost) {
@@ -363,6 +578,105 @@ impl Travel {
                 );
             }
             card = card.child(values);
+
+            if cost.by_currency.len() > 1 {
+                let mut curr_row = div().flex().flex_wrap().items_center().gap_2();
+                curr_row = curr_row.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child("By currency:"),
+                );
+                for c in &cost.by_currency {
+                    curr_row = curr_row.child(
+                        div()
+                            .px_2()
+                            .py(px(2.))
+                            .rounded(px(4.))
+                            .bg(rgba(crate::theme::tint(palette.surface, 0x77)))
+                            .text_xs()
+                            .child(format!(
+                                "{}: {} ({} {})",
+                                c.currency,
+                                cost_amount(Some(c.booked_cents), Some(&c.currency)),
+                                c.item_count,
+                                if c.item_count == 1 {
+                                    "booking"
+                                } else {
+                                    "bookings"
+                                }
+                            )),
+                    );
+                }
+                card = card.child(curr_row);
+            }
+
+            if !cost.by_stage.is_empty() {
+                let mut stages_container = div()
+                    .flex()
+                    .flex_col()
+                    .gap_1_5()
+                    .pt_2()
+                    .border_t_1()
+                    .border_color(rgba(crate::theme::tint(palette.border, 0x33)))
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(rgb(palette.muted))
+                            .child("Spend by stage"),
+                    );
+
+                let mut stages_list = div().flex().flex_col().gap_1();
+                for stage in &cost.by_stage {
+                    let amount_str = cost_amount(stage.booked_cents, stage.currency.as_deref());
+                    stages_list = stages_list.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .py(px(2.))
+                            .px_2()
+                            .rounded(px(4.))
+                            .bg(rgba(crate::theme::tint(palette.surface, 0x44)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                            .child(format!(
+                                                "{} → {}",
+                                                stage.origin, stage.destination
+                                            )),
+                                    )
+                                    .child(div().text_xs().text_color(rgb(palette.muted)).child(
+                                        format!(
+                                            "({} {})",
+                                            stage.item_count,
+                                            if stage.item_count == 1 {
+                                                "item"
+                                            } else {
+                                                "items"
+                                            }
+                                        ),
+                                    )),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .child(amount_str),
+                            ),
+                    );
+                }
+                stages_container = stages_container.child(stages_list);
+                card = card.child(stages_container);
+            }
+
             for reason in [cost.booked_reason.as_ref(), cost.actuals.reason.as_ref()]
                 .into_iter()
                 .flatten()
@@ -836,5 +1150,69 @@ mod tests {
             assert!(row.1.contains("USD"));
             assert!(!row.1.contains("EUR"));
         }
+    }
+
+    #[test]
+    fn who_is_around_renders_companions_and_meetups() {
+        let plan = Plan {
+            id: "trip-1".into(),
+            title: "Berlin Tour".into(),
+            origin: Place {
+                name: "Bonn".into(),
+                ..Default::default()
+            },
+            destinations: vec![Place {
+                name: "Berlin".into(),
+                ..Default::default()
+            }],
+            travelers: vec!["Ada".into(), "Linus".into()],
+            ..Default::default()
+        };
+        let items = vec![Item {
+            id: "act-1".into(),
+            item_type: "activity".into(),
+            title: "Coffee Chat".into(),
+            day: Some("2026-11-10".into()),
+            payload: serde_json::json!({
+                "with": [{"person": "Ron"}],
+                "status": "confirmed",
+                "place": "Café Einstein"
+            }),
+            ..Default::default()
+        }];
+        let meetups = sjel_gpui_core::travel::around::meetups(&items);
+        assert_eq!(meetups.len(), 1);
+        assert_eq!(meetups[0].title, "Coffee Chat");
+        assert_eq!(meetups[0].people, vec!["Ron"]);
+        assert_eq!(meetups[0].status, "confirmed");
+        assert_eq!(plan.travelers, vec!["Ada", "Linus"]);
+    }
+
+    #[test]
+    fn cost_rollup_supports_by_stage_and_by_currency() {
+        let cost: sjel_gpui_core::travel::CostRollup = serde_json::from_value(serde_json::json!({
+            "plan_id": "trip-2", "currency": null, "planned_cents": 25000,
+            "booked_cents": null, "booked_reason": "Multiple currencies",
+            "actuals": {"ok": true, "reason": null, "currency": "EUR",
+                "personal_cents": 12000, "gross_cash_outflow_cents": 15000,
+                "reimbursed_cents": 3000, "outstanding_cents": 0, "posting_count": 4},
+            "selected_options": {"total": 50.0, "currency": null, "priced_items": 1, "note": "options"},
+            "by_currency": [
+                {"currency": "EUR", "booked_cents": 12000, "item_count": 2},
+                {"currency": "GBP", "booked_cents": 8500, "item_count": 1}
+            ],
+            "by_stage": [
+                {"stage_id": "s1", "sequence": 1, "origin": "Bonn", "destination": "Berlin", "booked_cents": 12000, "currency": "EUR", "reason": null, "item_count": 2},
+                {"stage_id": "s2", "sequence": 2, "origin": "Berlin", "destination": "London", "booked_cents": 8500, "currency": "GBP", "reason": null, "item_count": 1}
+            ],
+            "unattributed": {"booked_cents": null, "currency": null, "reason": null, "item_count": 0},
+            "sources": []
+        })).unwrap();
+
+        assert_eq!(cost.by_currency.len(), 2);
+        assert_eq!(cost.by_stage.len(), 2);
+        assert_eq!(cost.actuals.posting_count, Some(4));
+        assert_eq!(cost.by_stage[0].origin, "Bonn");
+        assert_eq!(cost.by_stage[1].destination, "London");
     }
 }

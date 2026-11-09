@@ -168,6 +168,56 @@ impl Travel {
                 );
             }
         }
+        if item.item_type == "packing" || item.item_type == "gear" {
+            let (status_label, bg_color, border_color, text_color) = if item.is_packed() {
+                (
+                    "✓ Packed",
+                    crate::theme::tint(self.palette.green, 0x18),
+                    crate::theme::tint(self.palette.green, 0x35),
+                    self.palette.green,
+                )
+            } else {
+                (
+                    "☐ To pack",
+                    self.palette.raised,
+                    self.palette.border,
+                    self.palette.amber,
+                )
+            };
+            badges = badges.child(
+                div()
+                    .px_2()
+                    .py(px(1.5))
+                    .rounded(px(4.))
+                    .bg(rgba(bg_color))
+                    .border_1()
+                    .border_color(rgba(border_color))
+                    .text_xs()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(rgb(text_color))
+                    .child(status_label),
+            );
+            if let Some(cat) = item.packing_category() {
+                badges = badges.child(
+                    div()
+                        .px_2()
+                        .py(px(1.5))
+                        .rounded(px(4.))
+                        .bg(rgba(self.palette.raised))
+                        .text_xs()
+                        .text_color(rgb(self.palette.muted))
+                        .child(cat.to_string()),
+                );
+            }
+            if let Some(w) = item.weight_grams() {
+                badges = badges.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(self.palette.muted))
+                        .child(format!("{w} g")),
+                );
+            }
+        }
         if let Some(price) = item.price_label() {
             badges = badges.child(
                 div()

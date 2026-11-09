@@ -236,6 +236,7 @@ mod tests {
             decision: None,
             note: None,
             review: review.map(str::to_owned),
+            ..Default::default()
         }
     }
 

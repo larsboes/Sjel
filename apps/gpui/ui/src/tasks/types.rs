@@ -59,6 +59,19 @@ pub enum TaskSort {
     Priority,
 }
 
+impl TaskSort {
+    pub fn from_col_id(id: &str) -> Option<Self> {
+        match id {
+            "title" => Some(Self::Title),
+            "project" => Some(Self::Project),
+            "status" => Some(Self::Status),
+            "due" => Some(Self::Due),
+            "priority" => Some(Self::Priority),
+            _ => None,
+        }
+    }
+}
+
 /// A column the cross-project notes table sorts by.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NoteSort {
@@ -67,4 +80,15 @@ pub enum NoteSort {
     Title,
     Project,
     Kind,
+}
+
+impl NoteSort {
+    pub fn from_col_id(id: &str) -> Option<Self> {
+        match id {
+            "title" => Some(Self::Title),
+            "project" => Some(Self::Project),
+            "kind" => Some(Self::Kind),
+            _ => None,
+        }
+    }
 }

@@ -551,23 +551,9 @@ impl Projects {
             cols.density,
             palette,
             move |col_id, _, cx| {
-                let column = match col_id {
-                    "title" => TaskSort::Title,
-                    "project" => TaskSort::Project,
-                    "status" => TaskSort::Status,
-                    "due" => TaskSort::Due,
-                    "priority" => TaskSort::Priority,
-                    _ => return,
-                };
-                sort_entity.update(cx, |view, cx| {
-                    // Ascending, then descending, then back to the default order.
-                    view.task_sort = match view.task_sort {
-                        (current, true) if current == column => (column, false),
-                        (current, false) if current == column => (TaskSort::Default, true),
-                        _ => (column, true),
-                    };
-                    cx.notify();
-                });
+                if let Some(column) = TaskSort::from_col_id(col_id) {
+                    sort_entity.update(cx, |view, cx| view.cycle_task_sort(column, cx));
+                }
             },
             move |col_id, _, cx| {
                 resize_entity.update(cx, |view, cx| view.resize_column(col_id, cx));
@@ -916,20 +902,9 @@ impl Projects {
             cols.density,
             palette,
             move |col_id, _, cx| {
-                let column = match col_id {
-                    "title" => NoteSort::Title,
-                    "project" => NoteSort::Project,
-                    "kind" => NoteSort::Kind,
-                    _ => return,
-                };
-                sort_entity.update(cx, |view, cx| {
-                    view.note_sort = match view.note_sort {
-                        (current, true) if current == column => (column, false),
-                        (current, false) if current == column => (NoteSort::Default, true),
-                        _ => (column, true),
-                    };
-                    cx.notify();
-                });
+                if let Some(column) = NoteSort::from_col_id(col_id) {
+                    sort_entity.update(cx, |view, cx| view.cycle_note_sort(column, cx));
+                }
             },
             move |col_id, _, cx| {
                 resize_entity.update(cx, |view, cx| view.resize_column(col_id, cx));

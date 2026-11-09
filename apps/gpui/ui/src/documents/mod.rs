@@ -74,6 +74,69 @@ impl DocSort {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DocColDef {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub default_width: Option<f32>,
+    pub right_align: bool,
+    pub sort: DocSort,
+    pub hide_on_narrow: bool,
+}
+
+pub(crate) const DOC_COLUMNS: &[DocColDef] = &[
+    DocColDef {
+        id: "name",
+        label: "DOCUMENT",
+        default_width: None,
+        right_align: false,
+        sort: DocSort::Name,
+        hide_on_narrow: false,
+    },
+    DocColDef {
+        id: "category",
+        label: "CATEGORY",
+        default_width: Some(110.),
+        right_align: false,
+        sort: DocSort::Category,
+        hide_on_narrow: true,
+    },
+    DocColDef {
+        id: "pages",
+        label: "PAGES",
+        default_width: Some(64.),
+        right_align: true,
+        sort: DocSort::Pages,
+        hide_on_narrow: true,
+    },
+    DocColDef {
+        id: "status",
+        label: "STATUS",
+        default_width: Some(76.),
+        right_align: false,
+        sort: DocSort::Status,
+        hide_on_narrow: false,
+    },
+    DocColDef {
+        id: "added",
+        label: "ADDED",
+        default_width: Some(110.),
+        right_align: true,
+        sort: DocSort::Added,
+        hide_on_narrow: true,
+    },
+];
+
+impl DocColDef {
+    pub fn find(id: &str) -> Option<&'static DocColDef> {
+        DOC_COLUMNS.iter().find(|c| c.id == id)
+    }
+
+    pub fn default_width_for(id: &str) -> Option<f32> {
+        Self::find(id).and_then(|c| c.default_width)
+    }
+}
+
 fn compare_documents(
     left: &DocumentSummary,
     right: &DocumentSummary,
@@ -1004,19 +1067,17 @@ impl Documents {
         self.file_document_as(primary_id, compare_cat, cx);
     }
 
+    fn col_w(&self, id: &'static str) -> f32 {
+        let default = DocColDef::default_width_for(id).unwrap_or(100.);
+        self.col_width(id, default)
+    }
+
     fn col_width(&self, id: &'static str, default: f32) -> f32 {
         column_width(&self.col_widths, id, default)
     }
 
     fn resize_column(&mut self, id: &'static str, cx: &mut Context<Self>) {
-        let default = match id {
-            "category" => Some(110.),
-            "pages" => Some(64.),
-            "status" => Some(76.),
-            "added" => Some(110.),
-            _ => None,
-        };
-        if let Some(default) = default {
+        if let Some(default) = DocColDef::default_width_for(id) {
             cycle_column_width(&mut self.col_widths, id, default);
             cx.notify();
         }
@@ -1078,10 +1139,10 @@ impl Documents {
         } else {
             "—".to_owned()
         };
-        let category_w = self.col_width("category", 110.);
-        let pages_w = self.col_width("pages", 64.);
-        let status_w = self.col_width("status", 76.);
-        let added_w = self.col_width("added", 110.);
+        let category_w = self.col_w("category");
+        let pages_w = self.col_w("pages");
+        let status_w = self.col_w("status");
+        let added_w = self.col_w("added");
         let workflow = workflow_label(&row.workflow_stage);
         let primary_title = row
             .extracted_title
@@ -1454,30 +1515,24 @@ impl Render for Documents {
                 ),
         );
         let sort_state = |column: DocSort| (sort_col == column).then_some(sort_order);
-        let mut header_cols =
-            vec![SortableColumn::flex("name", "DOCUMENT").sorted(sort_state(DocSort::Name))];
-        if !narrow {
-            header_cols.push(
-                SortableColumn::fixed("category", "CATEGORY", px(self.col_width("category", 110.)))
-                    .sorted(sort_state(DocSort::Category)),
-            );
-            header_cols.push(
-                SortableColumn::fixed("pages", "PAGES", px(self.col_width("pages", 64.)))
-                    .right_align()
-                    .sorted(sort_state(DocSort::Pages)),
-            );
-        }
-        header_cols.push(
-            SortableColumn::fixed("status", "STATUS", px(self.col_width("status", 76.)))
-                .sorted(sort_state(DocSort::Status)),
-        );
-        if !narrow {
-            header_cols.push(
-                SortableColumn::fixed("added", "ADDED", px(self.col_width("added", 110.)))
-                    .right_align()
-                    .sorted(sort_state(DocSort::Added)),
-            );
-        }
+        let header_cols: Vec<_> = DOC_COLUMNS
+            .iter()
+            .filter(|col| !narrow || !col.hide_on_narrow)
+            .map(|col| {
+                let mut c = match col.default_width {
+                    Some(default) => SortableColumn::fixed(
+                        col.id,
+                        col.label,
+                        px(self.col_width(col.id, default)),
+                    ),
+                    None => SortableColumn::flex(col.id, col.label),
+                };
+                if col.right_align {
+                    c = c.right_align();
+                }
+                c.sorted(sort_state(col.sort))
+            })
+            .collect();
         let sort_entity = cx.entity();
         let resize_entity = cx.entity();
         table = table.child(resizable_table_header(
@@ -1486,15 +1541,9 @@ impl Render for Documents {
             self.density,
             palette,
             move |col_id, _, cx| {
-                let column = match col_id {
-                    "name" => DocSort::Name,
-                    "category" => DocSort::Category,
-                    "pages" => DocSort::Pages,
-                    "status" => DocSort::Status,
-                    "added" => DocSort::Added,
-                    _ => return,
-                };
-                sort_entity.update(cx, |view, cx| view.set_sort(column, cx));
+                if let Some(col) = DocColDef::find(col_id) {
+                    sort_entity.update(cx, |view, cx| view.set_sort(col.sort, cx));
+                }
             },
             move |col_id, _, cx| {
                 resize_entity.update(cx, |view, cx| view.resize_column(col_id, cx));

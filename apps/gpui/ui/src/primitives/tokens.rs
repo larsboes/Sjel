@@ -2,6 +2,9 @@
 
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, IntoElement, Pixels, SharedString};
 
+/// Standard system font name for tabular/monospace digits.
+pub const FONT_MONO_TABULAR: &str = ".AppleSystemUIFontMonospaced";
+
 /// Small corner radius (`4px`): badges, chips, kbd hints, inline pills.
 pub const RADIUS_SM: Pixels = px(4.);
 /// Medium corner radius (`8px`): inputs, buttons, nested cards, table frames.

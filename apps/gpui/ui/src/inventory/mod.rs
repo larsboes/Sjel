@@ -3,6 +3,7 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
+use gpui_kit::component::table::TableState;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
@@ -11,7 +12,7 @@ use gpui_kit::{
 
 use crate::data::{Remote, Repo};
 use crate::interior::RoomPlanHistory;
-use crate::primitives::{column_width, cycle_column_width, key_bar, sub_tabs, SortOrder};
+use crate::primitives::{key_bar, sub_tabs};
 use crate::theme::{tint, Palette, ThemeContext};
 use sjel_gpui_core::interior::RoomPlanSource;
 use sjel_gpui_core::inventory::{
@@ -25,7 +26,7 @@ mod wish_compare;
 mod wishlist;
 
 use mail_review::MailReviewForm;
-use owned::{InventoryEditForm, InventorySort, OwnedDerived};
+use owned::{InventoryEditForm, OwnedDerived, OwnedTable};
 use wishlist::{GroupForm, WishForm, WishlistDerived};
 
 actions!(
@@ -84,13 +85,12 @@ pub struct InventoryPage {
     pub(super) roomplan_history: Entity<RoomPlanHistory>,
     pub search_query: String,
     pub selected_category: Option<String>,
-    pub(super) owned_sort: (InventorySort, SortOrder),
-    pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
+    pub(super) owned_table: Option<Entity<TableState<OwnedTable>>>,
+    pub(super) owned_rows_key: Option<(Option<std::time::Instant>, u64)>,
     /// The wish group the wishlist is narrowed to, by id. None shows every open wish.
     pub selected_group: Option<String>,
     pub(super) filter_rev: u64,
     pub(super) owned_derived: OwnedDerived,
-    pub(super) owned_list: gpui::ListState,
     pub(super) wishlist_derived: WishlistDerived,
     pub scroll: ScrollHandle,
     pub(super) search_input: Option<(Entity<InputState>, Subscription)>,
@@ -142,12 +142,11 @@ impl InventoryPage {
             roomplan_history,
             search_query: String::new(),
             selected_category: None,
-            owned_sort: (InventorySort::Name, SortOrder::Ascending),
-            col_widths: Default::default(),
+            owned_table: None,
+            owned_rows_key: None,
             selected_group: None,
             filter_rev: 0,
             owned_derived: OwnedDerived::default(),
-            owned_list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
             wishlist_derived: WishlistDerived::default(),
             scroll: ScrollHandle::new(),
             search_input: None,
@@ -171,13 +170,13 @@ impl InventoryPage {
 
     pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
         if self.tab == InventoryTab::Owned {
-            self.sync_owned_derived();
-            let rows = self.owned_derived.filtered.len();
-            let item_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
-            self.owned_list.scroll_to(gpui::ListOffset {
-                item_ix,
-                offset_in_item: px(0.),
-            });
+            if let Some(table) = &self.owned_table {
+                table.update(cx, |state, cx| {
+                    let rows = state.delegate().rows().len();
+                    let row_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
+                    state.scroll_to_row(row_ix, cx);
+                });
+            }
         } else {
             let max = self.scroll.max_offset().y;
             self.scroll
@@ -201,23 +200,6 @@ impl InventoryPage {
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.load(cx);
-    }
-
-    pub(super) fn col_width(&self, id: &'static str, default: f32) -> f32 {
-        column_width(&self.col_widths, id, default)
-    }
-
-    pub(super) fn resize_column(&mut self, id: &'static str, cx: &mut Context<Self>) {
-        let default = match id {
-            "category" => Some(130.),
-            "dimensions" => Some(160.),
-            "price" => Some(110.),
-            _ => None,
-        };
-        if let Some(default) = default {
-            cycle_column_width(&mut self.col_widths, id, default);
-            cx.notify();
-        }
     }
 
     pub fn set_tab(&mut self, tab: InventoryTab, cx: &mut Context<Self>) {
@@ -647,19 +629,52 @@ mod tests {
             assert_eq!(page.tab, InventoryTab::Interior);
             page.set_tab(InventoryTab::MailReview, cx);
             assert_eq!(page.tab, InventoryTab::MailReview);
-            assert_eq!(page.owned_sort, (InventorySort::Name, SortOrder::Ascending));
-            page.set_owned_sort(InventorySort::Price, cx);
-            assert_eq!(
-                page.owned_sort,
-                (InventorySort::Price, SortOrder::Descending)
-            );
-            page.set_owned_sort(InventorySort::Price, cx);
-            assert_eq!(
-                page.owned_sort,
-                (InventorySort::Price, SortOrder::Ascending)
-            );
-            page.resize_column("price", cx);
-            assert_eq!(page.col_width("price", 110.), 149.);
         });
+    }
+
+    #[gpui::test]
+    fn test_owned_table_sorting(cx: &mut gpui::TestAppContext) {
+        let page = cx.new(|cx| {
+            let repo = Repo::new(Err(ShellError::NotSetUp));
+            InventoryPage::new(repo, cx)
+        });
+
+        let mut table = page.update(cx, |_, cx| owned::owned_table(cx.entity()));
+        let item1 = sjel_gpui_core::inventory::InventoryItem {
+            id: "1".into(),
+            label: "Beta".into(),
+            price_cents: Some(5000),
+            ..Default::default()
+        };
+
+        let item2 = sjel_gpui_core::inventory::InventoryItem {
+            id: "2".into(),
+            label: "Alpha".into(),
+            price_cents: Some(10000),
+            ..Default::default()
+        };
+
+        table.set_rows(vec![
+            InventoryRow {
+                item: item1,
+                state: Some("owned".into()),
+            },
+            InventoryRow {
+                item: item2,
+                state: Some("owned".into()),
+            },
+        ]);
+
+        // Default sort is Name Ascending -> Alpha then Beta
+        assert_eq!(table.row(0).unwrap().item.label, "Alpha");
+        assert_eq!(table.row(1).unwrap().item.label, "Beta");
+
+        // Sort by price descending -> Beta (5000) vs Alpha (10000) -> Alpha (10000) then Beta
+        table.set_sort(Some(("price", crate::primitives::SortOrder::Descending)));
+        assert_eq!(table.row(0).unwrap().item.label, "Alpha");
+
+        // Sort by price ascending -> Beta (5000) then Alpha (10000)
+        table.set_sort(Some(("price", crate::primitives::SortOrder::Ascending)));
+        assert_eq!(table.row(0).unwrap().item.label, "Beta");
     }
 }

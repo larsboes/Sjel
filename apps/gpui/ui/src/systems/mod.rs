@@ -21,6 +21,7 @@
 //! stops them when it is not.
 
 mod agent;
+mod explorer;
 mod overview;
 mod storage;
 mod types;
@@ -46,6 +47,7 @@ pub struct SystemsPage {
     pub(super) macmon: Remote<MacmonSample>,
     pub(super) storage: Remote<StorageReport>,
     pub(super) history: Remote<StorageHistory>,
+    explorer: explorer::ExplorerState,
     pub(super) updates: Remote<UpdatesReport>,
     pub(super) findings: Remote<Vec<Finding>>,
     pub(super) agent: Remote<AgentView>,
@@ -65,6 +67,7 @@ impl SystemsPage {
             macmon: Remote::default(),
             storage: Remote::default(),
             history: Remote::default(),
+            explorer: explorer::ExplorerState::default(),
             updates: Remote::default(),
             findings: Remote::default(),
             agent: Remote::default(),
@@ -77,7 +80,11 @@ impl SystemsPage {
 
     pub fn set_tab(&mut self, tab: SystemsTab, cx: &mut Context<Self>) {
         if self.tab != tab {
+            self.explorer.stop();
             self.tab = tab;
+            if tab == SystemsTab::Storage {
+                self.read_explorer(false, cx);
+            }
             cx.notify();
         }
     }
@@ -126,6 +133,7 @@ impl SystemsPage {
     /// Stops the clocks. A page that is no longer drawn must not keep asking the machine.
     pub fn deactivate(&mut self, cx: &mut Context<Self>) {
         self.generation = self.generation.wrapping_add(1);
+        self.explorer.stop();
         cx.notify();
     }
 
@@ -135,7 +143,9 @@ impl SystemsPage {
 
     pub(super) fn load(&mut self, cx: &mut Context<Self>) {
         self.read_macmon(cx);
-        self.read_storage(cx);
+        if self.tab == SystemsTab::Storage {
+            self.read_explorer(false, cx);
+        }
         self.read_history(cx);
         self.read_updates(cx);
         self.read_findings(cx);
@@ -232,7 +242,7 @@ impl Render for SystemsPage {
                 root = root.child(runtime).child(mac).child(findings);
             }
             SystemsTab::Storage => {
-                let storage = self.storage_panel(palette);
+                let storage = self.storage_panel(palette, cx);
                 let updates = self.updates_panel(palette, cx);
                 root = root.child(storage).child(updates);
             }

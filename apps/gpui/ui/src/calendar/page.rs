@@ -290,6 +290,50 @@ impl CalendarPage {
         }
     }
 
+    pub(super) fn quick_shift_days(&mut self, id: &str, days: i64, cx: &mut Context<Self>) {
+        let Some(before) = self
+            .entries
+            .value
+            .as_ref()
+            .and_then(|entries| entries.iter().find(|entry| entry.id == id))
+            .cloned()
+        else {
+            return;
+        };
+        match calendar::timeline::shift_days(&before, days) {
+            Ok(after) => self.write_time(before, after, false, cx),
+            Err(error) => {
+                self.write_error = Some(ShellError::Refused(400, Some(error.into())));
+                cx.notify();
+            }
+        }
+    }
+
+    pub(super) fn quick_shift_minutes(
+        &mut self,
+        id: &str,
+        minutes: i64,
+        resize: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(before) = self
+            .entries
+            .value
+            .as_ref()
+            .and_then(|entries| entries.iter().find(|entry| entry.id == id))
+            .cloned()
+        else {
+            return;
+        };
+        match calendar::timeline::shift_minutes(&before, minutes, resize) {
+            Ok(after) => self.write_time(before, after, false, cx),
+            Err(error) => {
+                self.write_error = Some(ShellError::Refused(400, Some(error.into())));
+                cx.notify();
+            }
+        }
+    }
+
     fn write_time(
         &mut self,
         before: CalendarEntry,
@@ -1050,6 +1094,98 @@ impl CalendarPage {
                                 )
                             },
                         )
+                        .when(chosen, |card| {
+                            let entry_id = entry.id.clone();
+                            let all_day = entry.all_day;
+                            let mut bar = div()
+                                .mt_2()
+                                .pt_2()
+                                .border_t_1()
+                                .border_color(rgba(palette.border))
+                                .flex()
+                                .flex_col()
+                                .gap_1p5();
+
+                            let mut day_row =
+                                div().flex().flex_wrap().gap_1p5().items_center().child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(rgb(palette.muted))
+                                        .child("Reschedule:"),
+                                );
+                            for (label, days) in [("Tomorrow", 1), ("+7d", 7), ("−1d", -1)] {
+                                let eid = entry_id.clone();
+                                day_row = day_row.child(
+                                    Button::new(SharedString::from(format!(
+                                        "calendar-quick-day-{days}-{eid}"
+                                    )))
+                                    .xsmall()
+                                    .ghost()
+                                    .label(label)
+                                    .disabled(self.changing_time)
+                                    .on_click(cx.listener(move |page, _, _, cx| {
+                                        page.quick_shift_days(&eid, days, cx);
+                                    })),
+                                );
+                            }
+                            bar = bar.child(day_row);
+
+                            if !all_day {
+                                let mut time_row =
+                                    div().flex().flex_wrap().gap_1p5().items_center().child(
+                                        div()
+                                            .text_xs()
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(rgb(palette.muted))
+                                            .child("Time:"),
+                                    );
+                                for (label, delta, resize) in [
+                                    ("−15m", -15, false),
+                                    ("+15m", 15, false),
+                                    ("−1h", -60, false),
+                                    ("+1h", 60, false),
+                                    ("−15m len", -15, true),
+                                    ("+15m len", 15, true),
+                                ] {
+                                    let eid = entry_id.clone();
+                                    time_row =
+                                        time_row.child(
+                                            Button::new(SharedString::from(format!(
+                                                "calendar-quick-time-{label}-{eid}"
+                                            )))
+                                            .xsmall()
+                                            .ghost()
+                                            .label(label)
+                                            .disabled(self.changing_time)
+                                            .on_click(cx.listener(move |page, _, _, cx| {
+                                                page.quick_shift_minutes(&eid, delta, resize, cx);
+                                            })),
+                                        );
+                                }
+                                bar = bar.child(time_row);
+                            }
+
+                            if self.undo_time.is_some() {
+                                bar =
+                                    bar.child(
+                                        div().flex().items_center().justify_end().child(
+                                            Button::new(SharedString::from(format!(
+                                                "calendar-quick-undo-{entry_id}"
+                                            )))
+                                            .xsmall()
+                                            .ghost()
+                                            .label("Undo change ⎌")
+                                            .disabled(self.changing_time)
+                                            .on_click(cx.listener(|page, _, _, cx| {
+                                                page.undo_time(cx);
+                                            })),
+                                        ),
+                                    );
+                            }
+
+                            card.child(bar)
+                        })
                         .when(confirming, |el| {
                             let from = match entry.source.as_str() {
                                 "" | "manual" => String::new(),
@@ -1820,5 +1956,33 @@ mod tests {
             gpui::MouseButton::Left,
             gpui::Modifiers::none(),
         );
+    }
+
+    #[gpui::test]
+    fn desktop_quick_reschedule_shifts(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let page = cx.new(|cx| {
+            let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.day = day("2026-11-05");
+            page.entries.value = Some(vec![CalendarEntry {
+                id: "calendar:quick".into(),
+                title: "Standup".into(),
+                starts_at: "2026-11-05T09:00:00".into(),
+                ends_at: "2026-11-05T09:30:00".into(),
+                kind: "event".into(),
+                commitment: "planned".into(),
+                ..Default::default()
+            }]);
+            page.selected_entry = Some("calendar:quick".into());
+            page
+        });
+        page.update(cx, |page, cx| {
+            page.quick_shift_days("calendar:quick", 1, cx);
+            assert!(matches!(page.write_error, Some(ShellError::NotSetUp)));
+            page.write_error = None;
+
+            page.quick_shift_minutes("calendar:quick", 15, false, cx);
+            assert!(matches!(page.write_error, Some(ShellError::NotSetUp)));
+        });
     }
 }

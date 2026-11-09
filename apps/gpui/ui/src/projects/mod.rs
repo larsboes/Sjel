@@ -64,6 +64,18 @@ pub enum ProjectSort {
     Notes,
 }
 
+impl ProjectSort {
+    pub fn from_col_id(id: &str) -> Option<Self> {
+        match id {
+            "name" => Some(Self::Name),
+            "project_tasks" => Some(Self::Tasks),
+            "project_progress" => Some(Self::Progress),
+            "project_notes" => Some(Self::Notes),
+            _ => None,
+        }
+    }
+}
+
 pub(super) struct LinkReview {
     pub(super) record: ProjectLinkRecord,
     pub(super) item_ref: String,
@@ -115,6 +127,21 @@ impl Columns {
                 project_notes: 85.,
                 density,
             },
+        }
+    }
+
+    pub(super) fn get(&self, id: &str) -> Option<f32> {
+        match id {
+            "due" => Some(self.due),
+            "priority" => Some(self.priority),
+            "project" => self.project,
+            "status" => self.status,
+            "kind" => self.kind,
+            "search" => self.search,
+            "project_tasks" => Some(self.project_tasks),
+            "project_progress" => (self.project_progress > 0.).then_some(self.project_progress),
+            "project_notes" => Some(self.project_notes),
+            _ => None,
         }
     }
 
@@ -1011,22 +1038,37 @@ impl Projects {
     }
 
     pub(super) fn resize_column(&mut self, id: &'static str, cx: &mut Context<Self>) {
-        let base = Columns::for_density(self.density);
-        let default = match id {
-            "due" => Some(base.due),
-            "priority" => Some(base.priority),
-            "project" => base.project,
-            "status" => base.status,
-            "kind" => base.kind,
-            "project_tasks" => Some(base.project_tasks),
-            "project_progress" => Some(base.project_progress),
-            "project_notes" => Some(base.project_notes),
-            _ => None,
-        };
-        if let Some(default) = default {
+        if let Some(default) = Columns::for_density(self.density).get(id) {
             cycle_column_width(&mut self.col_widths, id, default);
             cx.notify();
         }
+    }
+
+    pub(super) fn cycle_project_sort(&mut self, column: ProjectSort, cx: &mut Context<Self>) {
+        self.project_sort = match self.project_sort {
+            (current, true) if current == column => (column, false),
+            (current, false) if current == column => (ProjectSort::Name, true),
+            _ => (column, true),
+        };
+        cx.notify();
+    }
+
+    pub(super) fn cycle_task_sort(&mut self, column: TaskSort, cx: &mut Context<Self>) {
+        self.task_sort = match self.task_sort {
+            (current, true) if current == column => (column, false),
+            (current, false) if current == column => (TaskSort::Default, true),
+            _ => (column, true),
+        };
+        cx.notify();
+    }
+
+    pub(super) fn cycle_note_sort(&mut self, column: NoteSort, cx: &mut Context<Self>) {
+        self.note_sort = match self.note_sort {
+            (current, true) if current == column => (column, false),
+            (current, false) if current == column => (NoteSort::Default, true),
+            _ => (column, true),
+        };
+        cx.notify();
     }
 
     /// Reads everything the page shows again, after something outside it changed the records:
@@ -3048,21 +3090,9 @@ impl Projects {
             cols.density,
             palette,
             move |col_id, _, cx| {
-                let column = match col_id {
-                    "name" => ProjectSort::Name,
-                    "project_tasks" => ProjectSort::Tasks,
-                    "project_progress" => ProjectSort::Progress,
-                    "project_notes" => ProjectSort::Notes,
-                    _ => return,
-                };
-                sort_entity.update(cx, |view, cx| {
-                    view.project_sort = match view.project_sort {
-                        (current, true) if current == column => (column, false),
-                        (current, false) if current == column => (ProjectSort::Name, true),
-                        _ => (column, true),
-                    };
-                    cx.notify();
-                });
+                if let Some(column) = ProjectSort::from_col_id(col_id) {
+                    sort_entity.update(cx, |view, cx| view.cycle_project_sort(column, cx));
+                }
             },
             move |col_id, _, cx| {
                 resize_entity.update(cx, |view, cx| view.resize_column(col_id, cx));
@@ -3985,6 +4015,63 @@ mod tests {
         projects.update(cx, |view, cx| {
             view.cancel_task_title(cx);
             assert!(view.task_title_edit.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn test_column_specs_and_sort_cycling(cx: &mut gpui::TestAppContext) {
+        cx.update(gpui_kit::init);
+        let (projects, cx) = cx.add_window_view(|_window, cx| {
+            Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
+        });
+
+        let desk = Columns::for_density(Density::Desktop);
+        assert_eq!(desk.get("due"), Some(120.));
+        assert_eq!(desk.get("priority"), Some(84.));
+        assert_eq!(desk.get("project"), Some(140.));
+        assert_eq!(desk.get("status"), Some(100.));
+        assert_eq!(desk.get("kind"), Some(80.));
+        assert_eq!(desk.get("project_tasks"), Some(110.));
+        assert_eq!(desk.get("project_progress"), Some(140.));
+        assert_eq!(desk.get("project_notes"), Some(85.));
+
+        let mob = Columns::for_density(Density::Mobile);
+        assert_eq!(mob.get("project"), None);
+        assert_eq!(mob.get("status"), None);
+        assert_eq!(mob.get("project_progress"), None);
+
+        assert_eq!(ProjectSort::from_col_id("name"), Some(ProjectSort::Name));
+        assert_eq!(
+            ProjectSort::from_col_id("project_tasks"),
+            Some(ProjectSort::Tasks)
+        );
+        assert_eq!(TaskSort::from_col_id("due"), Some(TaskSort::Due));
+        assert_eq!(NoteSort::from_col_id("kind"), Some(NoteSort::Kind));
+
+        projects.update(cx, |view, cx| {
+            // Task sort cycle
+            view.cycle_task_sort(TaskSort::Title, cx);
+            assert_eq!(view.task_sort, (TaskSort::Title, true));
+            view.cycle_task_sort(TaskSort::Title, cx);
+            assert_eq!(view.task_sort, (TaskSort::Title, false));
+            view.cycle_task_sort(TaskSort::Title, cx);
+            assert_eq!(view.task_sort, (TaskSort::Default, true));
+
+            // Note sort cycle
+            view.cycle_note_sort(NoteSort::Project, cx);
+            assert_eq!(view.note_sort, (NoteSort::Project, true));
+            view.cycle_note_sort(NoteSort::Project, cx);
+            assert_eq!(view.note_sort, (NoteSort::Project, false));
+            view.cycle_note_sort(NoteSort::Project, cx);
+            assert_eq!(view.note_sort, (NoteSort::Default, true));
+
+            // Project sort cycle
+            view.cycle_project_sort(ProjectSort::Tasks, cx);
+            assert_eq!(view.project_sort, (ProjectSort::Tasks, true));
+            view.cycle_project_sort(ProjectSort::Tasks, cx);
+            assert_eq!(view.project_sort, (ProjectSort::Tasks, false));
+            view.cycle_project_sort(ProjectSort::Tasks, cx);
+            assert_eq!(view.project_sort, (ProjectSort::Name, true));
         });
     }
 }

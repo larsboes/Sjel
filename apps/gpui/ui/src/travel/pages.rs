@@ -1,11 +1,100 @@
 //! Travel route dispatcher and section navigation.
+use super::forms::FormKind;
 use super::Travel;
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context};
 use gpui_kit::component::button::ButtonVariants;
-use gpui_kit::component::Disableable;
-use sjel_gpui_core::travel::{TravelRoute, TripSection};
+use gpui_kit::component::{Disableable, Sizable};
+use sjel_gpui_core::travel::{PlanExt, TravelRoute, TripSection};
 
 impl Travel {
+    fn top_nav_bar(&self, cx: &mut Context<Self>) -> AnyElement {
+        let palette = self.palette;
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let upcoming_count = self
+            .plans
+            .iter()
+            .filter(|p| p.date_end >= today && p.status != "cancelled")
+            .count();
+
+        let is_map = matches!(self.route, TravelRoute::Map);
+        let is_trips = matches!(self.route, TravelRoute::Trips);
+        let is_conn = matches!(self.route, TravelRoute::Connections);
+
+        div()
+            .w_full()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .justify_between()
+            .gap_3()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .p(px(2.))
+                    .rounded(px(8.))
+                    .bg(rgba(crate::theme::tint(palette.surface, 0x66)))
+                    .border_1()
+                    .border_color(rgba(crate::theme::tint(palette.border, 0x44)))
+                    .child(
+                        self.button("nav-map-mode")
+                            .small()
+                            .when(is_map, |b| b.primary())
+                            .when(!is_map, |b| b.ghost())
+                            .label("🗺 Map & Places")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.open_route(TravelRoute::Map, cx);
+                            })),
+                    )
+                    .child(
+                        self.button("nav-trips-mode")
+                            .small()
+                            .when(is_trips, |b| b.primary())
+                            .when(!is_trips, |b| b.ghost())
+                            .label(if upcoming_count > 0 {
+                                format!("✈ Trips ({upcoming_count})")
+                            } else {
+                                "✈ Trips".to_string()
+                            })
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.open_route(TravelRoute::Trips, cx);
+                            })),
+                    )
+                    .child(
+                        self.button("nav-connections-mode")
+                            .small()
+                            .when(is_conn, |b| b.primary())
+                            .when(!is_conn, |b| b.ghost())
+                            .label("⇄ Connections")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.open_route(TravelRoute::Connections, cx);
+                            })),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .children(self.form_button(
+                        "nav-plan-trip",
+                        "+ New trip",
+                        FormKind::Trip(None),
+                        cx,
+                    ))
+                    .child(
+                        self.button("nav-refresh-trips")
+                            .small()
+                            .ghost()
+                            .label("Refresh")
+                            .disabled(self.loading)
+                            .on_click(cx.listener(|view, _, _, cx| view.refresh(cx))),
+                    ),
+            )
+            .into_any_element()
+    }
+
     pub(super) fn render_page(&self, cx: &mut Context<Self>) -> AnyElement {
         let palette = self.palette;
         let mut page = div()
@@ -15,7 +104,15 @@ impl Travel {
             .flex_col()
             .gap_3()
             .text_color(rgb(palette.text));
-        if !matches!(self.route, TravelRoute::Trips) {
+
+        let is_top_level = matches!(
+            self.route,
+            TravelRoute::Trips | TravelRoute::Map | TravelRoute::Connections
+        );
+
+        if is_top_level {
+            page = page.child(self.top_nav_bar(cx));
+        } else {
             page = page.child(
                 div()
                     .flex()
@@ -25,9 +122,9 @@ impl Travel {
                     .child(
                         self.button("back-to-trips")
                             .ghost()
-                            .label("← Location overview")
+                            .label("← All trips & locations")
                             .on_click(cx.listener(|view, _, _, cx| {
-                                view.open_route(TravelRoute::Trips, cx)
+                                view.open_route(TravelRoute::Trips, cx);
                             })),
                     )
                     .child(
@@ -44,34 +141,25 @@ impl Travel {
                     ),
             );
         }
+
         if self.route == TravelRoute::Connections {
             return page.child(self.connections_page(cx)).into_any_element();
         }
+
         page = page
             .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .gap_2()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(if self.loading {
-                                "Loading trips…".to_owned()
-                            } else {
-                                self.status.clone()
-                            }),
-                    )
-                    .child(
-                        self.button("refresh-trips")
-                            .label("Refresh")
-                            .disabled(self.loading)
-                            .on_click(cx.listener(|view, _, _, cx| view.refresh(cx))),
-                    ),
+                div().flex().items_center().justify_between().gap_2().child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(if self.loading {
+                            "Loading trips…".to_owned()
+                        } else {
+                            self.status.clone()
+                        }),
+                ),
             )
             .when_some(self.error.clone(), |page, error| {
                 page.child(div().text_sm().text_color(rgb(palette.amber)).child(error))
@@ -79,6 +167,7 @@ impl Travel {
             .when_some(self.write_error.clone(), |page, error| {
                 page.child(div().text_sm().text_color(rgb(palette.red)).child(error))
             });
+
         if matches!(self.route, TravelRoute::Trips) {
             if let Some(stamp) = self
                 .saved_at
@@ -96,17 +185,9 @@ impl Travel {
             }
             return page.child(self.trip_library(cx)).into_any_element();
         }
+
         if matches!(self.route, TravelRoute::Map) {
-            return page
-                .child(div().text_xl().child("Location overview"))
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(rgb(palette.muted))
-                        .child("Current and upcoming trip locations"),
-                )
-                .child(self.map_page(cx))
-                .into_any_element();
+            return page.child(self.map_page(cx)).into_any_element();
         }
         if let Some(slot) = self.selected.as_ref().and_then(|id| self.details.get(id)) {
             page = page

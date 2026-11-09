@@ -130,7 +130,7 @@ if ! /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices
   echo "apps/gpui/install: installed; LaunchServices registration failed" >&2
 fi
 if $was_running; then
-  open "$DEST"
+  open -g --env SJEL_GPUI_NO_ACTIVATE=1 "$DEST"
   echo "apps/gpui/install: installed and restarted $DEST"
 else
   echo "apps/gpui/install: installed $DEST"

@@ -1,7 +1,7 @@
 //! Storage inspection, historical retention trend, and system package updates panels.
 use chrono::Local;
-use gpui_kit::component::button::Button;
-use gpui_kit::component::Sizable;
+use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, SharedString, Window,
 };
@@ -110,15 +110,17 @@ impl SystemsPage {
         .detach();
     }
 
-    pub(super) fn storage_panel(&mut self, palette: Palette) -> AnyElement {
+    pub(super) fn storage_panel(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
         self.settle_derived();
         let body = match self.derived.storage_view.as_ref() {
             None => match &self.storage.error {
                 // The report comes from sjel-status rather than macmon, so it answers even when
                 // macmon is down — which is the state a full disk is hardest to see in anyway.
                 Some(error) => note(error.to_string(), palette.red),
-                // `report` walks every class with `du`, so the first answer takes seconds.
-                None => note("Measuring the disk…", palette.muted),
+                None if self.storage.loading => {
+                    note("Measuring policy-managed paths…", palette.muted)
+                }
+                None => note("Policy sizes are measured only on request.", palette.muted),
             },
             Some(view) => {
                 let mut rows: Vec<AnyElement> = Vec::new();
@@ -153,15 +155,21 @@ impl SystemsPage {
                                 .gap_2()
                                 .text_xs()
                                 .text_color(rgb(palette.muted))
-                                .child(format!("{} used of {}", view.used, view.total))
+                                .child(format!("{} on this volume · {} capacity", view.used, view.total))
                                 .child(format!("{} free", view.free)),
                         )
+                        .children(view.other_allocation_label.as_ref().map(|label| {
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(format!("{label} outside this volume or reserved by filesystem"))
+                        }))
                         .children(view.reconciliation.clone().map(|(named, unattributed)| {
                             div()
                                 .text_xs()
                                 .text_color(rgb(palette.muted))
                                 .child(format!(
-                                    "{named} named by policy · {unattributed} unattributed"
+                                    "Policy comparison only (classes can overlap; not a physical ledger): {named} named · {unattributed} unattributed"
                                 ))
                         }))
                         .into_any_element(),
@@ -184,7 +192,7 @@ impl SystemsPage {
                 } else {
                     let deltas = &self.derived.class_deltas;
                     let largest = view.scale_bytes;
-                    rows.push(heading("Reclaimable by class", palette));
+                    rows.push(heading("Policy-managed storage", palette));
                     let class_rows: Vec<AnyElement> = view
                         .classes
                         .iter()
@@ -250,10 +258,7 @@ impl SystemsPage {
                         div()
                             .text_xs()
                             .text_color(rgb(palette.muted))
-                            .child(format!(
-                                "{} reclaimable — `sjel storage apply`",
-                                view.reclaimable_label
-                            ))
+                            .child("Classes can overlap. Review candidates with `sjel storage reclaim --dry-run`.")
                             .into_any_element(),
                     );
                 }
@@ -397,7 +402,43 @@ impl SystemsPage {
                     .into_any_element()
             }
         };
-        section("Storage", body, palette).into_any_element()
+        let explorer = self.explorer_panel(palette, cx);
+        section(
+            "Storage",
+            div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(explorer)
+                .child(
+                    Button::new("storage-policy-measure")
+                        .small()
+                        .ghost()
+                        .label(if self.storage.loading {
+                            "Measuring policy paths…"
+                        } else {
+                            "Measure policy paths"
+                        })
+                        .disabled(self.storage.loading)
+                        .on_click(cx.listener(|page, _, _, cx| page.read_storage(cx))),
+                )
+                .children(
+                    self.storage
+                        .value
+                        .as_ref()
+                        .and(self.storage.error.as_ref())
+                        .map(|error| {
+                            note(
+                                format!("Policy refresh failed; previous report retained: {error}"),
+                                palette.red,
+                            )
+                        }),
+                )
+                .child(body)
+                .into_any_element(),
+            palette,
+        )
+        .into_any_element()
     }
 
     pub(super) fn updates_panel(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {

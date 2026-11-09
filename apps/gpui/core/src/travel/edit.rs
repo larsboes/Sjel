@@ -506,9 +506,9 @@ impl StageDraft {
             date: stage.date.clone().unwrap_or_default(),
             mode: pick(
                 TRANSPORT_MODES,
-                stage.transport_modes.first().map_or("", String::as_str),
+                stage.transport_modes.first().map_or("", |m| m.as_str()),
             ),
-            status: pick(STAGE_STATUSES, &stage.status),
+            status: pick(STAGE_STATUSES, stage.status.as_str()),
         }
     }
 

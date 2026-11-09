@@ -42,6 +42,27 @@ impl Shell {
             .await
     }
 
+    /// Reads cached allocation discovery without starting a disk walk.
+    pub async fn storage_explorer(
+        &self,
+        root: &str,
+    ) -> ShellResult<crate::systems::StorageExplorer> {
+        let path = with_query(
+            crate::systems::ROUTE_STATUS_STORAGE_EXPLORER,
+            &[("root", root)],
+        );
+        self.json(Method::GET, &path, None, 10).await
+    }
+
+    /// Explicitly starts an allocation scan; the response carries its cached progress.
+    pub async fn scan_storage(&self, root: &str) -> ShellResult<crate::systems::StorageExplorer> {
+        let path = with_query(
+            crate::systems::ROUTE_STATUS_STORAGE_EXPLORER,
+            &[("root", root)],
+        );
+        self.json(Method::POST, &path, None, 10).await
+    }
+
     /// The disk's own hourly readings, kept by sjel-status.
     pub async fn storage_history(&self) -> ShellResult<crate::systems::StorageHistory> {
         self.json(Method::GET, "/api/sjel-status/storage-history", None, 10)

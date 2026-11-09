@@ -1,7 +1,7 @@
 //! The detail HTTP contract and its local read cache. No trip records are written here.
-use super::Plan;
 use serde::{Deserialize, Serialize};
 
+pub use trips_api::PlanDetails as Details;
 pub use trips_api::PlanItem as Item;
 
 /// Orders `stay` items for the candidate ranking board: ranked candidates ascending by rank,
@@ -28,15 +28,6 @@ pub fn sort_stay_candidates(stays: &mut [&Item]) {
             })
             .then_with(|| a.title.cmp(&b.title))
     });
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Details {
-    #[serde(flatten)]
-    pub plan: Plan,
-    pub items: Vec<Item>,
-    #[serde(default)]
-    pub retrospective: Option<trips_api::Retrospective>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

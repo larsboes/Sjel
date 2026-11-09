@@ -16,10 +16,11 @@ pub use status_api::{
     percent, power_label, selection_label, severity, signed_storage_bytes, storage_bytes,
     temperature, version_label, watts, ApplyReceipt, Disk, ExpectedService, Finding, Findings,
     MacmonMemory, MacmonSample, MacmonTemperature, Owner, RuntimeStatus, RuntimeView, Severity,
-    StorageAbsence, StorageClass, StorageClassSample, StorageHistory, StorageProtected,
-    StorageReport, StorageSample, StorageTrend, StorageView, Temperature, UpdateGroup, UpdateRow,
-    UpdateStatus, UpdateSurface, UpdatesReport, UpdatesView, RUNTIME_CATEGORIES,
-    RUNTIME_SELECTIONS, TREND_WINDOW_HOURS,
+    StorageAbsence, StorageClass, StorageClassSample, StorageDirectory, StorageDirectorySnapshot,
+    StorageExplorer, StorageHistory, StorageProtected, StorageReport, StorageSample, StorageTrend,
+    StorageView, Temperature, UpdateGroup, UpdateRow, UpdateStatus, UpdateSurface, UpdatesReport,
+    UpdatesView, ROUTE_STATUS_STORAGE_EXPLORER, RUNTIME_CATEGORIES, RUNTIME_SELECTIONS,
+    TREND_WINDOW_HOURS,
 };
 
 /// The sample's clock time in the reader's own zone. An unparseable stamp prints as itself:
@@ -213,7 +214,6 @@ mod tests {
         assert_eq!(view.unmeasured.len(), 1);
         assert_eq!(view.unmeasured[0].name, "unreadable");
         assert_eq!(view.used_pct, 0.25);
-        assert_eq!(view.reclaimable_label, "910 MB");
         assert_eq!(
             view.scale_bytes,
             900 * MB,

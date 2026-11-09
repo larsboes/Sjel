@@ -4,7 +4,7 @@ use super::{trip_draft_key, Travel};
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 use gpui_kit::component::button::ButtonVariants;
 use gpui_kit::component::{Disableable, Sizable};
-use sjel_gpui_core::travel::{TravelRoute, TripSection};
+use sjel_gpui_core::travel::{PlanExt, TravelRoute, TripSection};
 
 impl Travel {
     /// The nearest trip that has not ended: a saved plan, or a Calendar draft that is not a

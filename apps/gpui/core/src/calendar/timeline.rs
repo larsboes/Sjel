@@ -112,6 +112,81 @@ pub fn reschedule(
     Ok(changed)
 }
 
+/// Shift an entry by a relative number of days (e.g. +1 for tomorrow, +7 for next week).
+///
+/// Preserves start time and duration for timed entries; shifts start and end date for all-day entries.
+pub fn shift_days(entry: &CalendarEntry, days: i64) -> Result<CalendarEntry, &'static str> {
+    if days == 0 {
+        return Ok(entry.clone());
+    }
+    let duration = Duration::days(days);
+    let mut changed = entry.clone();
+    if entry.all_day {
+        let start_str = entry.starts_at.get(..10).unwrap_or(&entry.starts_at);
+        let end_str = entry.ends_at.get(..10).unwrap_or(&entry.ends_at);
+        let start = NaiveDate::parse_from_str(start_str, "%Y-%m-%d")
+            .map_err(|_| "Invalid start date on all-day entry.")?;
+        let end = NaiveDate::parse_from_str(end_str, "%Y-%m-%d")
+            .map_err(|_| "Invalid end date on all-day entry.")?;
+        let new_start = start
+            .checked_add_signed(duration)
+            .ok_or("Date out of range.")?;
+        let new_end = end
+            .checked_add_signed(duration)
+            .ok_or("Date out of range.")?;
+        changed.starts_at = new_start.format("%Y-%m-%d").to_string();
+        changed.ends_at = new_end.format("%Y-%m-%d").to_string();
+        Ok(changed)
+    } else {
+        let start = timestamp(&entry.starts_at).ok_or("The entry has an invalid start time.")?;
+        let end = timestamp(&entry.ends_at).ok_or("The entry has an invalid end time.")?;
+        let new_start = start
+            .checked_add_signed(duration)
+            .ok_or("Date out of range.")?;
+        let new_end = end
+            .checked_add_signed(duration)
+            .ok_or("Date out of range.")?;
+        changed.starts_at = new_start.format("%Y-%m-%dT%H:%M:%S").to_string();
+        changed.ends_at = new_end.format("%Y-%m-%dT%H:%M:%S").to_string();
+        Ok(changed)
+    }
+}
+
+/// Shift a timed entry by minutes (+15, -15, +60, -60) or resize its duration.
+pub fn shift_minutes(
+    entry: &CalendarEntry,
+    minutes: i64,
+    resize: bool,
+) -> Result<CalendarEntry, &'static str> {
+    if entry.all_day {
+        return Err("Cannot adjust minutes on an all-day entry.");
+    }
+    let start = timestamp(&entry.starts_at).ok_or("The entry has an invalid start time.")?;
+    let end = timestamp(&entry.ends_at).ok_or("The entry has an invalid end time.")?;
+    let duration = Duration::minutes(minutes);
+    let (new_start, new_end) = if resize {
+        let new_end = end
+            .checked_add_signed(duration)
+            .ok_or("Time out of range.")?;
+        if new_end <= start {
+            return Err("The end must be after the start.");
+        }
+        (start, new_end)
+    } else {
+        let new_start = start
+            .checked_add_signed(duration)
+            .ok_or("Time out of range.")?;
+        let new_end = end
+            .checked_add_signed(duration)
+            .ok_or("Time out of range.")?;
+        (new_start, new_end)
+    };
+    let mut changed = entry.clone();
+    changed.starts_at = new_start.format("%Y-%m-%dT%H:%M:%S").to_string();
+    changed.ends_at = new_end.format("%Y-%m-%dT%H:%M:%S").to_string();
+    Ok(changed)
+}
+
 /// Place timed entries by duration, with connected overlaps sharing a column count.
 pub fn blocks(entries: &[CalendarEntry], day: NaiveDate) -> Vec<Block> {
     let midnight = day.and_time(NaiveTime::MIN);
@@ -370,5 +445,44 @@ mod tests {
             }
         )
         .is_empty());
+    }
+
+    #[test]
+    fn quick_reschedule_shift_days_and_minutes() {
+        let timed = entry("2026-11-05T09:00:00", "2026-11-05T10:30:00");
+        let shifted = shift_days(&timed, 1).expect("shift +1 day");
+        assert_eq!(shifted.starts_at, "2026-11-06T09:00:00");
+        assert_eq!(shifted.ends_at, "2026-11-06T10:30:00");
+
+        let week = shift_days(&timed, 7).expect("shift +7 days");
+        assert_eq!(week.starts_at, "2026-11-12T09:00:00");
+        assert_eq!(week.ends_at, "2026-11-12T10:30:00");
+
+        let min_shift = shift_minutes(&timed, 15, false).expect("shift +15m");
+        assert_eq!(min_shift.starts_at, "2026-11-05T09:15:00");
+        assert_eq!(min_shift.ends_at, "2026-11-05T10:45:00");
+
+        let extended = shift_minutes(&timed, 30, true).expect("extend +30m");
+        assert_eq!(extended.starts_at, "2026-11-05T09:00:00");
+        assert_eq!(extended.ends_at, "2026-11-05T11:00:00");
+
+        let shortened = shift_minutes(&timed, -30, true).expect("shorten -30m");
+        assert_eq!(shortened.starts_at, "2026-11-05T09:00:00");
+        assert_eq!(shortened.ends_at, "2026-11-05T10:00:00");
+
+        // Shortening past start must fail
+        assert!(shift_minutes(&timed, -90, true).is_err());
+
+        // All-day event shifting
+        let all_day = CalendarEntry {
+            all_day: true,
+            starts_at: "2026-11-05".into(),
+            ends_at: "2026-11-06".into(),
+            ..CalendarEntry::default()
+        };
+        let all_day_shifted = shift_days(&all_day, 2).expect("shift all-day +2 days");
+        assert_eq!(all_day_shifted.starts_at, "2026-11-07");
+        assert_eq!(all_day_shifted.ends_at, "2026-11-08");
+        assert!(shift_minutes(&all_day, 15, false).is_err());
     }
 }

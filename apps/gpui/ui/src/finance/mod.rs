@@ -3,6 +3,7 @@
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::component::table::TableState;
 use gpui_kit::component::Sizable;
 use gpui_kit::{
     actions, div, prelude::*, px, App, Context, Entity, FocusHandle, KeyBinding, ScrollHandle,
@@ -15,7 +16,7 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::primitives::{column_width, cycle_column_width, key_bar, SortOrder};
+use crate::primitives::{column_width, key_bar};
 use crate::theme::{Palette, ThemeContext};
 
 actions!(
@@ -64,10 +65,10 @@ mod overview;
 mod subscriptions;
 mod transactions;
 
-use import::{default_csv_mapping, CandidateSort, CsvMappingField, ImportDerived};
+use import::{default_csv_mapping, CandidateTable, CsvMappingField, ImportDerived};
 use overview::BalanceDraft;
 use subscriptions::SubsDerived;
-use transactions::{TxDerived, TxSort};
+use transactions::TxTable;
 
 pub struct FinancePage {
     pub(super) repo: Repo,
@@ -110,13 +111,13 @@ pub struct FinancePage {
     pub(super) balance_fields: Vec<BalanceDraft>,
     pub search_query: String,
     pub selected_category: Option<String>,
-    pub(super) tx_sort: (TxSort, SortOrder),
-    pub(super) import_sort: (CandidateSort, SortOrder),
+    pub(super) import_table: Option<Entity<TableState<CandidateTable>>>,
+    pub(super) import_rows_key: Option<(Option<std::time::Instant>, u64, usize)>,
     pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     pub(super) filter_rev: u64,
     pub(super) review_rev: u64,
-    pub(super) tx_derived: TxDerived,
-    pub(super) tx_list: gpui::ListState,
+    pub(super) tx_table: Option<Entity<TableState<TxTable>>>,
+    pub(super) tx_rows_key: Option<(Option<std::time::Instant>, u64)>,
     pub(super) subs_derived: SubsDerived,
     pub(super) import_derived: ImportDerived,
     pub overview_scroll: ScrollHandle,
@@ -179,13 +180,13 @@ impl FinancePage {
             balance_fields: Vec::new(),
             search_query: String::new(),
             selected_category: None,
-            tx_sort: (TxSort::Date, SortOrder::Descending),
-            import_sort: (CandidateSort::BookedAt, SortOrder::Descending),
+            import_table: None,
+            import_rows_key: None,
             col_widths: Default::default(),
             filter_rev: 0,
             review_rev: 0,
-            tx_derived: TxDerived::default(),
-            tx_list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
+            tx_table: None,
+            tx_rows_key: None,
             subs_derived: SubsDerived::default(),
             import_derived: ImportDerived::default(),
             overview_scroll: ScrollHandle::new(),
@@ -218,13 +219,13 @@ impl FinancePage {
 
     pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
         if self.view == View::Transactions {
-            self.sync_tx_derived();
-            let rows = self.tx_derived.indices.len();
-            let item_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
-            self.tx_list.scroll_to(gpui::ListOffset {
-                item_ix,
-                offset_in_item: px(0.),
-            });
+            if let Some(table) = &self.tx_table {
+                table.update(cx, |state, cx| {
+                    let rows = state.delegate().rows().len();
+                    let row_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
+                    state.scroll_to_row(row_ix, cx);
+                });
+            }
         } else if let Some(scroll) = self.active_scroll() {
             let max = scroll.max_offset().y;
             scroll.set_offset(gpui_kit::point(px(0.), -max * fraction));
@@ -257,23 +258,6 @@ impl FinancePage {
 
     pub(super) fn col_width(&self, id: &'static str, default: f32) -> f32 {
         column_width(&self.col_widths, id, default)
-    }
-
-    pub(super) fn resize_column(&mut self, id: &'static str, cx: &mut Context<Self>) {
-        let default = match id {
-            "date" => Some(96.),
-            "category" => Some(130.),
-            "account" => Some(160.),
-            "amount" => Some(110.),
-            "cand_date" => Some(96.),
-            "cand_account" => Some(180.),
-            "cand_amount" => Some(110.),
-            _ => None,
-        };
-        if let Some(default) = default {
-            cycle_column_width(&mut self.col_widths, id, default);
-            cx.notify();
-        }
     }
 
     pub fn load(&mut self, cx: &mut Context<Self>) {
@@ -519,18 +503,6 @@ mod tests {
             assert_eq!(page.view, View::Transactions);
             page.set_view(View::Subscriptions, cx);
             assert_eq!(page.view, View::Subscriptions);
-            assert_eq!(page.tx_sort, (TxSort::Date, SortOrder::Descending));
-            page.set_tx_sort(TxSort::Amount, cx);
-            assert_eq!(page.tx_sort, (TxSort::Amount, SortOrder::Descending));
-            page.set_tx_sort(TxSort::Amount, cx);
-            assert_eq!(page.tx_sort, (TxSort::Amount, SortOrder::Ascending));
-            page.set_import_sort(CandidateSort::Account, cx);
-            assert_eq!(
-                page.import_sort,
-                (CandidateSort::Account, SortOrder::Ascending)
-            );
-            page.resize_column("amount", cx);
-            assert_eq!(page.col_width("amount", 110.), 149.);
         });
     }
 }

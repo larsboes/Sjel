@@ -2,6 +2,7 @@
 
 pub mod badges;
 pub mod cards;
+pub mod data_table;
 pub mod tables;
 pub mod tokens;
 
@@ -13,12 +14,13 @@ pub use cards::{
     back_button, card, list, progress_bar, row, row_for_density, section, stat_card,
     stat_card_interactive, stat_strip, virtual_list, InteractiveStatCard,
 };
+pub use data_table::{data_table, new_table_state, set_table_rows, RowTable, TableColumn};
 pub use tables::{
     column_width, cycle_column_width, data_row, key_bar, page_scroll, remote_state,
     resizable_table_header, shortcut_hint, sortable_table_header, sub_tabs, table_header,
     tabular_cell, SortOrder, SortableColumn,
 };
-pub use tokens::{dot, note, placeholder, RADIUS_LG, RADIUS_MD, RADIUS_SM};
+pub use tokens::{dot, note, placeholder, FONT_MONO_TABULAR, RADIUS_LG, RADIUS_MD, RADIUS_SM};
 
 #[cfg(test)]
 mod tests {

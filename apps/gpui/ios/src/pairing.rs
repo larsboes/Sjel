@@ -30,7 +30,7 @@ impl Found {
 pub(crate) async fn load(
     pair: Option<String>,
     join: Option<String>,
-    events: &UnboundedSender<Event>,
+    events: &EventSender,
 ) -> Result<(), String> {
     let path = node_file()?;
     let node = match std::fs::read(&path) {
@@ -52,27 +52,20 @@ pub(crate) async fn load(
 
 /// Saves the node, then reads the Mac's health as this device. The save comes first so a
 /// connection that fails afterwards does not lose a pairing the owner already allowed.
-pub(crate) async fn connect(
-    path: &Path,
-    node: Node,
-    events: &UnboundedSender<Event>,
-) -> Result<(), String> {
+pub(crate) async fn connect(path: &Path, node: Node, events: &EventSender) -> Result<(), String> {
     save(path, &node)?;
     let sign: Signer = Arc::new(identity::sign);
     let client = DeviceClient::new(node, sign)?;
     let health = client.get::<NodeHealth>(HEALTH).await?;
-    let _ = events.unbounded_send(Event::Ready(client.node().clone(), health));
+    events.post(Event::Ready(client.node().clone(), health));
     Ok(())
 }
 
 /// Asks to join, shows the codes to compare, and waits until the owner decides on the Mac.
-pub(crate) async fn join_and_wait(
-    target: &str,
-    events: &UnboundedSender<Event>,
-) -> Result<Node, String> {
+pub(crate) async fn join_and_wait(target: &str, events: &EventSender) -> Result<Node, String> {
     let (base, pin) = device::parse_join_target(target)?;
     let request = device::request_join(&base, &pin, label(), &identity::public_key()?).await?;
-    let _ = events.unbounded_send(Event::Status(format!(
+    events.post(Event::Status(format!(
         "Allow \"{}\" in Devices on the Mac if it shows {} · {}",
         label(),
         device::comparison_code(&pin),

@@ -82,8 +82,7 @@ failures keep the previous answer visible.
 
 The Mac map uses OpenStreetMap raster tiles, GPUI images and labelled stops, without a webview or
 another rendering dependency. The phone draws its global and per-trip maps with NSH
-(`ui/src/nsh_map.rs`), using the same projection, tile loader and disk cache. GPUI Travel still
-owns trip reads and editing. On the Mac, drag to pan; the scroll wheel and a trackpad pinch zoom,
+(`ui/src/nsh_map.rs`), using the same projection, tile loader and disk cache. The phone reads trips through `ui/src/nsh_travel.rs`; desktop editing stays in GPUI Travel. On the Mac, drag to pan; the scroll wheel and a trackpad pinch zoom,
 both about the pointer rather than the centre. Fit trip and the zoom buttons sit on the map. The map takes the
 wheel while the pointer is over it, so the page scrolls when the pointer is anywhere else. On
 desktop the stops list sits beside the map; on iPhone it sits below. Selecting a stop recenters the
@@ -224,12 +223,12 @@ phone's app container, and `SJEL_REPLICA_PATH` is how the Mac tries the phone's 
 Navigation routes and deep links are resolved directly by `core/src/route.rs`. Every destination
 opens natively within the client. Deep links (`sjel://<path>`) follow the same routing.
 
-## Why this shape: GPUI for every client
+## Native renderers, shared models
 
-GPUI Fast renders the desktop. The iOS host combines shared GPUI screens with NSH's UIKit
-Documents and Mail readers; UIKit owns the window and safe areas. [`Cargo.toml`](Cargo.toml)
-and [`ios/Cargo.toml`](ios/Cargo.toml) own the coordinated framework pins, and
-[`upstreams.toml`](../../upstreams.toml) records the temporary mobile fork.
+GPUI Fast renders the desktop. NSH draws every phone screen with UIKit views inside the Swift
+host. The clients share capability contracts, local storage, sync, theme palettes and pure view
+models in `core/`; renderer dependencies stay optional in `ui/`. The phone builds with
+`default-features = false, features = ["nsh"]` and has no GPUI platform dependency.
 
 It is a stack decision, not a speed fix: Sjel's waits come from services, not from rendering. A
 release build starts in one frame under 10 ms with about 100 MB resident, and the Swift menu bar
@@ -237,8 +236,7 @@ keeps system-wide ⌃⌥Space, so global invocation pays no second resident proc
 cold-launch hop. How the numbers were measured: `SJEL_GPUI_FRAMES` and `ps -o rss=` in
 `src/frames.rs`.
 
-One Cargo workspace builds GPUI, gpui-kit and gpui-mobile. Every page is native, and GPUI draws the
-charts. Travel, Map, Inventory and Wishlist are partly built. Travel has a shared native map view:
+One Cargo workspace builds the desktop and phone clients. GPUI draws the desktop charts. Travel, Map, Inventory and Wishlist are partly built. Travel has a shared native map view:
 raster maps work on both clients, with the MapLibre vector prototype on macOS. `/systems` is the
 one page that is not a capability's: it puts macmon's live sample beside storage, updates, the
 runtime profile, the hourly host watch and the agent's reach, each read from whoever already owns
@@ -247,40 +245,35 @@ that answer (`ui/src/systems/`). Open work is in [`docs/plans/gpui.md`](../../do
 ## Workspace and the iOS app
 
 This directory is one Cargo workspace with one lockfile, so every member builds against the same
-GPUI snapshot (step 0 above).
+dependency resolution.
 
 | Member | What it holds |
 |---|---|
 | `.` | The Mac app |
 | `core/` | What both apps share: the destinations, the shell client, a paired device's client, the offline replica and the two-way sync. No GPUI types. |
-| `ui/` | What both apps share for GPUI: semantic design tokens (Palette), density rules, layout primitives, document/block renderer, the Projects page, the note editor and navigation bar. |
-| `ios/` | The iOS app: GPUI content in `src/lib.rs`, the UIKit host in `host/` |
+| `ui/` | Shared theme tokens, GPUI desktop pages behind `gpui`, and native phone screens behind `nsh`. |
+| `ios/` | Phone event coordinator, pairing, sync and notifications in `src/`; UIKit host in `host/`. |
 
-On iOS, UIKit owns the window, the navigation bar and the safe areas. GPUI draws the content in a
-child view controller. `gpui-pre-mobile` comes from git rev `c24a1308e1`, because its only release
-(0.1.0) pins an older GPUI. That rev also pins `libc =0.2.189`, so the whole workspace uses that
-version. The iOS 27 SDK starts only apps with the UIScene life cycle, so the host uses a scene
-delegate.
+On iOS, UIKit owns the window, safe areas and scene lifecycle. `NshHostScreen` routes Today,
+Calendar, Travel, Projects, Interior, People, capture, Settings, Documents, Mail and the four
+side-panel seats. The host mounts one NSH view; it does not run a GPUI window or frame pump.
 
 The iOS app has no inbound token: it is a paired device (`core/src/device.rs`), signed with its
 Keychain key over TLS pinned to the Mac's LAN listener. The Mac is found over Bonjour:
 `host/Discovery.swift` browses `_sjel._tcp`, whose TXT record carries host, port and certificate
 fingerprint, and hands every result to `sjel_ios_nodes` in `ios/src/host.rs`, which shows the card
 the person taps Join on. `SJEL_JOIN` and `SJEL_PAIR` stay as the fallbacks for a host that cannot
-browse and for the QR code. What does not exist yet is the camera scanner that would read that QR
-code on a phone.
+browse and for the QR code. The native scanner in `host/PairScanner.swift` reads pairing codes.
 
 `ios/run-sim` builds the app, runs it on a headless simulator and prints a screenshot path; it
 needs Xcode, XcodeGen and the `aarch64-apple-ios-sim` Rust target, and never opens Simulator.app.
 `ios/run-sim --tap` runs the touch check instead: taps Join on the discovered Mac and keeps a
-screenshot before and after, because GPUI paints its own pixels and a screenshot alone cannot show
-whether a finger reached it.
+screenshot before and after. `--build-only` builds without booting a simulator;
+`--typecheck-only` checks the Swift host against the simulator SDK without generating an Xcode project.
 
 `ios/run-sim` selects the newest installed iOS runtime with an available iPhone.
-`ios/run-sim --smoke` asserts that Documents and Mail render contrasting text and that
-opening NSH from Today reaches Documents. A fourth case opens Map, changes zoom and connection
-mode, and returns to Trips. It runs four XCTest cases in each actual simulator
-appearance, light and dark, then restores the original appearance. It keeps result bundles
+`ios/run-sim --smoke` checks Documents, Mail, map navigation, Trips, Projects, Interior and all
+four panel seats. It runs in light and dark appearances, then restores the original appearance. It keeps result bundles
 and screenshots on failure as well as success. Set `SJEL_IOS_RESULTS` to a fresh directory to
 choose where results go; otherwise the command prints their temporary paths. These tests
 do not require device pairing or personal data. The `iOS screen smoke tests` Actions workflow runs the
@@ -308,32 +301,28 @@ the Mac's copy answered, then the tasks the phone's own replica holds with a che
 hit, then the projects those tasks are filed under, each with its progress and a row that opens it in
 the Mac's Projects page. A page that reads two sources says so: one line names the copy and its age,
 one says what is queued and whether this launch is connected. Nothing on it is a chart or a greeting.
-The bar holds four items at its 64 px floor, so Projects is not one of them — it is the list a
-project on Today opens — and **Settings**, which holds the pairing: the found Mac, the Join tap, and
+The bottom bar opens Today, Mail, Documents, Calendar, Travel and Agent. Projects and Interior
+open from Today's shortcuts, and **Settings**, which holds the pairing: the found Mac, the Join tap, and
 the capability health list it answers with once the owner allows the device, sits behind Today's
-gear, one row from it. **Projects** is where a person writes: the Mac's Projects page over the
-phone's own records, under the queued/synced badge and the report of the last sync. Tables drop the project and
-type columns at phone width. The software keyboard opens with a note and after a tap into a text
-field, because gpui-mobile raises none on focus. A fresh install starts empty and queues
+gear, one row from it. **Projects** is where a person writes: the NSH project reader and editor over the
+phone's own records, under the queue count and the report of the last sync. UIKit text inputs own the software keyboard. A fresh install starts empty and queues
 nothing, so pairing later sends the Mac only what the person wrote. A store that cannot open says
 so on that page instead of falling back to memory.
 
-**The right edge** is one panel with seats, not a drawer per feature (`ui/src/sidebar.rs`): the frame
-draws the title, the seat chips and the close button, and a seat is the content a host hands in. On the
-phone it is an overlay 340 pt wide from the right edge with the page dimmed beside it — a phone has no
-width to dock beside a page — and the same frame docks where a Mac has the room. Which seat is showing
-and whether it is showing at all live in `sidebar.json`; the frame's scrim is `.occlude()`d, so a tap
-that closes the edge cannot reach the page underneath it.
+**The side panel** holds Agent, Terminal, Soundscape and Activity. The Mac uses
+`ui/src/sidebar/`; the phone uses `ui/src/nsh_edge.rs`, with a close action that restores the
+previous page. Its open state and selected seat are persisted in `sidebar.json`. Terminal access
+requires Face ID or the device passcode, and background entry locks the terminal and clears its
+visible grid.
 
 **Soundscape** is the first seat: the note in Today's header opens the edge on it, and it holds the
-transport, the six presets, the volume and a mixer of five layers (`ui/src/soundscape.rs`). The engine
+transport, the six presets, the volume and a mixer of five layers (`ui/src/soundscape/` on Mac, `ui/src/nsh_soundscape.rs` on phone). The engine
 is the Mac's own (`core/src/soundscape`, platform-free); the difference is who drives the clock. On the
 Mac a CPAL stream asks for frames; on the phone `AVAudioSourceNode` does (`ios/host/Audio.swift`,
 `ios/src/audio.rs`), on a `.playback` session that mixes with whatever else is playing. The seat keeps
 its mixer disclosure, its preset and its volume in `soundscape.json` beside `appearance.json`; it does
-not keep `playing`, so a phone never starts making sound by itself. A value is a row of ten cells rather
-than a track to drag: a thumb wants an exact tap, and a measured rectangle is one more thing to get
-wrong.
+not keep `playing`, so a phone never starts making sound by itself. The phone uses native sliders for volume and layer levels. Closing the panel pauses playback;
+switching seats keeps it playing.
 
 **Activity** is the second seat, behind the list button in Today's header: what this phone is doing, in
 its own words — the Mac's answer, the last sync, the queue, and the reminders the notification centre
@@ -401,16 +390,15 @@ are in `PHONE_SET` now, and the copy is 2,493 rows in 11.3 MB instead of 1,878 i
 and `phones` as arrays, so no contact card on either client had ever shown an email or a phone
 number; the parser accepts both spellings now, which is a Mac fix as much as a phone one.
 
-The tabs ship on TestFlight (People arrived in build 1363, internal group `Team`), the only
-distribution today. The touch checks are `host/UITests/`: `JoinTap.swift`, `ScanTap.swift`,
-`TodaySwipe.swift` (which drags the landing page up and proves both that a finger reaches GPUI's
-scroll and that the projects below the fold are really drawn), `InboxCapture.swift`,
+The touch checks are `host/UITests/`: `JoinTap.swift`, `ScanTap.swift`,
+`TodaySwipe.swift` (which scrolls the landing page), `InboxCapture.swift`,
 `SoundscapeTap.swift`, `NotificationsTap.swift` and `SidebarTap.swift`. `SJEL_TAB=today|projects|calendar|people|travel|settings`,
 `SJEL_REGISTER=places`, `SJEL_PERSON=Ada`, `SJEL_DAY=2026-10-21`, `SJEL_NOTIFY=1` and
 `SJEL_SIDEBAR=soundscape|activity|off` open a given tab, register, card, day, the reminder card with its
 switch on, or the right edge on a seat (or away), at launch — which is how `ios/run-sim` and a
-screenshot reach a page that is not the first one without a hand on the screen. Only the scanner check
-asserts anything: GPUI paints its own pixels, so the rest are screenshots a person reads.
+screenshot reach a page that is not the first one without a hand on the screen. `NshScreens.swift`
+asserts visible headings and navigation in the native screens; older coordinate tests require
+review against the new layout.
 
 A write the Mac will not take is named rather than counted. `sync` used to stop at the first refusal,
 so one duplicate note title held every later write in the queue and nothing said which record it was

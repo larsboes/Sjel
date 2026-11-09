@@ -329,7 +329,7 @@ pub(crate) fn named_index(named: NamedColor) -> u8 {
 }
 
 /// One stretch of a line in one look, at the column it starts: what the grid paints.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Span {
     pub(crate) column: usize,
     pub(crate) text: String,

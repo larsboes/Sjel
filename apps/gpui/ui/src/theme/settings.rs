@@ -1,4 +1,5 @@
 //! Window background tone, glass style, accent colors, and user appearance settings.
+#[cfg(feature = "gpui")]
 use gpui_kit::WindowAppearance;
 
 use super::density::Density;
@@ -224,6 +225,7 @@ impl ThemeMode {
     }
 
     /// The appearance to force on every window, or `None` to follow the system.
+    #[cfg(feature = "gpui")]
     pub fn forced_appearance(self) -> Option<WindowAppearance> {
         match self {
             Self::System => None,
@@ -371,14 +373,17 @@ pub(crate) fn default_panel_opacity() -> WindowOpacity {
 /// Active theme and density context stored as a GPUI [`gpui::Global`] so every view can read the
 /// user-configured [`Palette`], [`Density`], and [`AppearanceSettings`] without manual prop-drilling.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg(feature = "gpui")]
 pub struct ThemeContext {
     pub palette: Palette,
     pub density: Density,
     pub appearance: AppearanceSettings,
 }
 
+#[cfg(feature = "gpui")]
 impl gpui::Global for ThemeContext {}
 
+#[cfg(feature = "gpui")]
 impl ThemeContext {
     /// Reads the active [`ThemeContext`] from the GPUI app context, or falls back to the window's
     /// system appearance when rendered inside an isolated unit test where no global was set.
@@ -586,7 +591,7 @@ impl Default for SidebarPrefs {
     fn default() -> Self {
         Self {
             open: false,
-            seat: crate::sidebar::Seat::default().key().to_owned(),
+            seat: sjel_gpui_core::panel::Seat::default().key().to_owned(),
             width: default_sidebar_width(),
         }
     }

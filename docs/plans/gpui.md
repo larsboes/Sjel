@@ -3,7 +3,7 @@
 The native GPUI client ([`apps/gpui`](../../apps/gpui/README.md)) is the one Sjel app on macOS and
 iOS, with Linux, Windows and Android later. A rule the Mac and the phone share goes into a
 capability or `apps/gpui/core`. The renderer for each platform is decided in §11: GPUI Fast on the
-desktop, and a trial of NSH on the phone.
+desktop, and NSH on the phone.
 
 Lane A in [`PLAN.md`](../../PLAN.md). Lane B, the agent, has priority when the two compete. The agent seat (Work Package 22) is in
 [`agent.md`](agent.md), RoomPlan and the other scanners are in [`scanning.md`](scanning.md), and
@@ -415,31 +415,26 @@ build was performed for this handoff.
 - **Open: search quality.** `LIKE` folds ASCII case only ("Ä" does not find "ä"), and document
   text is not searched, only titles. An FTS5 index fixes both. Do it when a missed result costs
   something.
-- **Right edge.** One frame (`ui/src/sidebar.rs`) with seats: soundscape, the phone's activity,
-  and the agent run. On the phone it is a 340 pt overlay. On the Mac it docks.
+- **Side panel.** The Mac docks `ui/src/sidebar/`; the phone uses `ui/src/nsh_edge.rs`.
+  Both offer Agent, Terminal, Soundscape and Activity.
 - **Open: Sjel works in view.** The later adaptive UI: while the agent runs a task, the main
   column follows its steps (search, open a page, change a value). The agent's step stream is the
   input. Not designed yet.
 
 ## 6. One UI crate, every platform
 
-1. **GPUI pins.** `gpui-kit =0.9.1`, `gpui-pre =0.3.12` and `gpui-fast` 0.1.14
-   (`apps/gpui/Cargo.toml`) with the `gpui-mobile` fork `larsboes/gpui-mobile` rev `98f6466`
-   (`ios/Cargo.toml`), one matching set. The fork re-vendors `gpui-pre-wgpu` at each snapshot
-   with its offscreen patch unchanged. The three move together by hand in one commit, with
-   `cargo test` on core and ui and `ios/run-sim` before and after. Dependabot ignores them
-   (`.github/dependabot.yml`). Open: a return to the upstream rev once it carries 0.3.12.
-   `longbridge/gpui-mobile` #46 makes the 0.3.11 change and was checked on Android. #47, from the
-   fork, duplicates it.
+1. **Renderer pins.** The Mac uses `gpui-kit =0.9.1`, `gpui-pre =0.3.12` and
+   `gpui-fast` 0.1.14. The phone uses NSH rev `1894697155` with UIKit. The iOS dependency
+   tree contains no GPUI platform or `gpui-mobile`; the shared UI crate gates desktop modules
+   behind its `gpui` feature. The phone enables only `nsh`.
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
    seventeen more modules (`documents`, `pdf_kit`, `feed`, `scout`, `clipper`, `context`,
    `people::page`, `calendar::page`, `inbox::triage`, `import`, `music`, `ask`, `capabilities`,
    `docs`, `accounts`, `selection`, `viz`) moved on 2026-11-03. The phone shell is split by
-   seam: `host.rs` (the Swift boundary both ways), `events.rs`, `nav.rs`, `edge.rs`,
-   `pairing.rs`, `launch.rs`; `lib.rs` keeps the view, its construction and `render`. The agent
+   seam: `host.rs` (the Swift boundary both ways), `events.rs`, `nav.rs`, `runtime.rs`,
+   `pairing.rs`, `launch.rs`; `lib.rs` starts a rendering-independent event coordinator. The agent
    controller moved to
-   `ui/src/agent_seat.rs` over `Host` (`core/src/agent.rs`); the Mac finder and the phone edge
-   draw the same seat. Still in `src/`: desktop shell
+   `ui/src/agent_seat.rs` over `Host` (`core/src/agent.rs`); the Mac finder draws the GPUI seat and the phone uses `ui/src/nsh_agent.rs` over the same run model. Still in `src/`: desktop shell
    orchestration and host window management (`workspace.rs`, `finder.rs`, `settings.rs`, `soundscape.rs`,
    `sidebar.rs`, `header.rs`, `update.rs`, `home.rs`, `agent_run.rs`, `audio.rs`). A page reaches the
    platform through GPUI's own API (`cx.open_url`, the clipboard, `prompt_for_paths`). A service
@@ -449,10 +444,8 @@ build was performed for this handoff.
    implementation per shell and no shared caller. The two `audio.rs` files are two device
    backends over one engine (`core/src/soundscape`): cpal pushes on the Mac, `host/Audio.swift`
    pulls on the phone. Run `simplify` on each page as it moves.
-3. **Phone tabs for moved pages.** The phone bar is five items (`Today | Mail | Calendar | Travel |
-   Agent`, `ios/src/lib.rs` and `ui/src/nav.rs`). Inbox capture lives on Today; Documents, People
-   and Places open via 1-tap shortcuts and finder. A sixth tab needs a different bar, not a sixth
-   item. The phone opens the Mac's destinations (`route::Target`) through
+3. **Phone navigation.** `NshHostScreen` owns the bottom bar (`Today | Mail | Documents |
+   Calendar | Travel | Agent`). Inbox capture, Projects, Interior and People & Places open from Today. The phone opens the Mac's destinations (`route::Target`) through
    `phone_screen` and one `select_tab` (`ios/src/nav.rs`); a page it does not draw says it opens
    on the Mac. An unknown path falls back to its first segment's page on both devices
    (`route::first_page`). Open: the host does not register the `sjel://` scheme yet, so only a
@@ -461,8 +454,7 @@ build was performed for this handoff.
 4. **Linux, Windows, Android.** The Mac shell checks on Linux (`4cd60961`), and CI checks every
    leg (`578e6948`). Linux credentials use the Secret Service (`37adf658`). Open: a Windows
    keychain crate, a PDF renderer off macOS, a launch on a real Linux desktop, packaging, and an
-   Android host like `ios/host`. The pinned `gpui-mobile` already has an Android backend. If the
-   NSH trial in §11 passes, the Android phone app comes from NSH's Android backend instead.
+   Android host like `ios/host`. The Android phone app will use NSH's Android backend.
 5. **Lints.** Clippy is clean for `apps/gpui` at `--all-targets`
    (`sjel cargo clippy --manifest-path apps/gpui/Cargo.toml --all-targets --locked`). The
    remaining warnings were a manual counter loop, manual prefix slicing, a reversed-key sort,
@@ -641,7 +633,6 @@ Open:
 ## 11. UI stack
 
 Upgrade and fork review: [`research/dependency-upgrade-review.md`](../../research/dependency-upgrade-review.md).
-Keep the Mobile fork until upstream's compatible revision is merged and verified.
 NSH Mail caches its filtered row projection with `computed`; three focused Mail tests
 pass, including retained rows, filter changes and removal. Frame-time and device
 checks remain open.
@@ -656,13 +647,13 @@ opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-s
 
 | What | Where | Commit |
 |---|---|---|
-| Pins: `gpui-kit` 0.9.1, `gpui-pre` 0.3.12, `gpui-mobile` fork | §6 item 1 | this section's commit |
+| Pins: `gpui-kit` 0.9.1, `gpui-pre` 0.3.12; NSH on the phone | §6 item 1 | this section's commit |
 | Crates reach GPUI only through the Kit (`extern crate gpui_kit as gpui;`) | each crate root | `21966ff8` |
 | GPUI Fast is the Mac default; `--no-default-features` builds `gpui-pre` | `apps/gpui/Cargo.toml` | `fdf3f6cb` |
 | Frame cost on both renderers | §9 | `c28ffb23` |
 | NSH Documents reader, one screen for phone and Mac | `ui/src/nsh_documents.rs` | `62145b47` |
 | `device::Source`: the Mac's shell or the phone's client, one read path | `core/src/device.rs` | `62145b47` |
-| Documents on the phone is the NSH reader; "Back" returns to GPUI | `ios/src/nsh.rs`, `nav.rs`, `launch.rs` | `a71af504` |
+| Documents on the phone is the NSH reader; "Back" returns to Today | `ios/src/nsh.rs`, `nav.rs`, `launch.rs` | `a71af504` |
 | Originals: SHA-256 checked, PDFKit view, "Keep offline" | `core/src/originals.rs`, `host/Documents.swift` | `4c9910e6` |
 | Mac NSH trial (`SJEL_NSH_TRIAL=1`) registers `sjel.pdf` + `Originals` | `src/nsh_trial.rs` | `81cd6935` |
 | NSH Mail triage screen, one screen for phone and Mac (`NshHostScreen`) | `ui/src/nsh_mail.rs`, `core/src/shell/feed_mail.rs`, `ios/src/`, `src/nsh_trial.rs` | `5b63b531` |
@@ -672,19 +663,39 @@ opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-s
 | NSH Settings: the shell describes pairing, found Macs, room scan, alerts and appearance as `SettingsState` and answers `SettingsAction` | `ui/src/nsh_settings.rs`, `ios/src/settings.rs` | `79a07b08` |
 | NSH screens follow the appearance settings: palette tokens as theme overrides, forced light or dark, and a host cover that paints the safe-area bands. Touch density has no NSH token and applies to GPUI pages only | `ui/src/theme/nsh.rs`, `ios/src/nsh.rs`, `host/App.swift` | `7ee75fc3` |
 | NSH Calendar replaces the phone's GPUI day view: list and 24-hour grid, free time, new entries, a sheet per entry with quarter-hour moves in place of the long-press drag, undo and two-tap delete | `ui/src/nsh_calendar.rs` | `0dd6807e` |
-| NSH draws the phone's global and per-trip maps with OpenStreetMap, the shared tile cache, anchored pan/pinch, filters and stop details; coordinate retries target the inspected stop's trip; GPUI Travel still owns trip reads and editing | `ui/src/nsh_map.rs`, `ui/src/travel/` | `849fbb92`, this section's commit |
+| NSH draws the phone's global and per-trip maps with OpenStreetMap, the shared tile cache, anchored pan/pinch, filters and stop details; coordinate retries target the inspected stop's trip; phone trip reads use the signed device source and saved cache | `ui/src/nsh_map.rs`, `ui/src/travel/` | `849fbb92`, `00922f7a` |
+| NSH Trips and Connections, saved reads and OpenStreetMap offline packs; trip writes remain unavailable on the phone | `ui/src/nsh_travel.rs`, `core/src/travel/` | this section's commit |
+| NSH Projects writes the local replica: hubs, task filters/sorts/board, notes, content editing, due date, priority and confirmed deletion | `ui/src/nsh_projects.rs`, `core/src/tasks.rs` | this section's commit |
+| NSH Interior: local capture/archive, native USDZ previews, revision review, comparisons, inventory links, placements with expected revisions and layout planning | `ui/src/nsh_interior.rs`, `core/src/interior/` | this section's commit |
+| NSH side panel: Agent, authenticated Terminal, Soundscape and Activity; GPUI phone coordinator and `gpui-mobile` removed | `ui/src/nsh_{edge,agent,terminal,soundscape}.rs`, `ios/src/`, `host/App.swift` | this section's commit |
 
 Trial result, 2026-11-07, on a paired iPhone: the list fills from the Mac, a long press on the
 text opens the system menu, and VoiceOver reads the list and the reader.
 
+Verification of the remaining phone migrations: 640 workspace tests pass, including one doctest;
+six existing tests are ignored. The CoreAudio device-open test fails with OSStatus 560947818 in
+this environment and is excluded from that passing run. With UI default features disabled,
+29 phone-screen and VT-parser tests pass. The iOS simulator Rust library builds; the production
+iOS dependency tree contains no GPUI or Mermaid renderer. UI and iOS Clippy pass with the existing
+`redundant_closure` lint excluded. Swift host type-checking passes with two existing SDK
+deprecation warnings in `PairScanner.swift` and `Audio.swift`. Native simulator execution, a
+linked host build, paired-iPhone acceptance and runtime theme switching have not passed here.
+The architecture freshness gate fails on unrelated concurrent upstream-review changes;
+`upstreams.toml` and the generated architecture file are outside this migration's commit.
+
 ### How the phone shows an NSH screen
 
-`host/App.swift` mounts one hidden NSH view over the GPUI view at launch (`sjel_ios_nsh_mount`).
-`host::show_nsh` and `host::hide_nsh` switch it. `select_tab` sets `NshPage::Documents` or
-`NshPage::Mail` and shows `NshHostScreen`, and "Back" hides it (`nsh_documents::set_close`,
-`nsh_mail::set_close`). Native views come from the host as NSH native components: `sjel.pdf` is a
-PDFKit `PDFView` (`host/Documents.swift`, registered in `ios/src/nsh.rs`). A new NSH screen goes in
-`ui/src` behind the `nsh` feature, reads through `device::Source`, and joins `NshHostScreen`.
+`host/App.swift` mounts one full-screen NSH root at launch (`sjel_ios_nsh_mount`).
+`NshPage` routes every phone screen; the side panel remembers the page to return to. UIKit owns
+text entry, selection, safe areas and the application lifecycle. The host has no GPUI view,
+display link or frame pump. Native components include `sjel.pdf`, a PDFKit `PDFView`
+(`host/Documents.swift`, registered in `ios/src/nsh.rs`).
+
+The coordinator in `ios/src` owns pairing, replica synchronization, notifications and native
+capture events. NSH screens subscribe to bounded snapshots; shared models, ordering rules,
+planning interpretation and the VT parser are independent of GPUI. Appearance updates cross to
+the main queue before touching the mounted NSH view. Background entry invalidates terminal
+authentication and clears its visible output; leaving the side panel pauses soundscape playback.
 
 Run it: `apps/gpui/ios/run-sim` (add `SIMCTL_CHILD_SJEL_TAB=documents` or `mail` to land on the
 NSH screen), `apps/gpui/ios/run-device <udid>` on a cabled or network-paired iPhone. The Mac
@@ -709,21 +720,19 @@ so it resolves to the Mac app's 0.1.14.
    `mail_detail`, `mail_action`, `mail_gmail_job`), wired through `NshHostScreen` on both iOS
    (`Tab::Mail`) and the Mac trial (`SJEL_NSH_TRIAL=mail`). Not run yet: device check on a paired
    iPhone.
-4. **The new tab bar** after Mail. Built (2026-11-08): `NshHostScreen` (`ui/src/nsh_documents.rs`)
-   carries a native NSH bottom tab bar (`Today | Mail | Documents | Calendar | Travel | Agent`)
-   with zero-cost in-NSH navigation between Mail and Documents, and coordinated host switching
-   (`docs::set_switch_tab` -> `Event::SelectTab` / `Event::OpenEdge` in `ios/src/nsh.rs`, `events.rs`)
-   for GPUI views. Open: device check on paired iPhone.
-5. **Retire the phone's GPUI pages**, all of them now (decided 2026-11-09), in waves: wave 1
-   Today, capture, People & Places, Settings and pairing (done); wave 2 Calendar (done), Travel
-   (maps built; Trips and Connections remain), Projects, Interior; wave 3 the edge (Agent seat,
-   terminal, soundscape, activity). Map verification: Mac compilation, the iOS simulator Rust
-   library build and 591 tests passed (6 ignored). Strict UI Clippy remains blocked by existing
-   redundant-closure warnings in other NSH screens.
-   Native simulator rendering and touch checks could not run because CoreSimulator refused its
-   service connection. Paired-iPhone acceptance remains open. `ios/src`'s GPUI shell and
-   `gpui-mobile` go when the last one has moved. Android comes from NSH's Android backend.
-6. **The Mac window's content** was not looked at (`SJEL_NSH_TRIAL=1`). Whether Mac pages move to
+4. **Phone navigation and migrations.** All three waves are implemented: Today, capture,
+   People & Places, Settings/pairing, Calendar, Travel, Projects, Interior and all four side-panel
+   seats. The tab bar remains `Today | Mail | Documents | Calendar | Travel | Agent`; Today
+   exposes Projects and Interior. The phone no longer depends on `gpui-mobile`.
+   Native acceptance remains open: paired-device writes and sync; scan capture/upload/preview;
+   agent attach/reconnect/approval/stop; terminal authentication, keyboard, selection, paste and
+   reconnect; audio routing and pause-on-close; offline travel; light/dark switching while running.
+   Headless interaction checks cover connection-input retention, local project save and confirmed
+   deletion, blocked agent calls, terminal locking, UTF-8 input and soundscape playback. Rust and
+   Swift verification results are recorded below. CoreSimulator refuses its service connection;
+   XcodeGen cannot replace its generated project under the current permissions, so simulator
+   rendering and a linked host build have not passed.
+5. **The Mac window's content** was not looked at (`SJEL_NSH_TRIAL=1`). Whether Mac pages move to
    NSH is not decided.
-7. **A smaller `ui/`.** Not designed. A page that moves to NSH drops its GPUI version in the same
-   change.
+6. **A smaller `ui/`.** The phone's GPUI shell and phone-only views are removed. GPUI pages
+   still used by the Mac remain behind the `gpui` feature; a desktop migration is not decided.

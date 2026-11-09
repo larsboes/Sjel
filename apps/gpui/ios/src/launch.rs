@@ -21,9 +21,9 @@ pub(crate) fn launch_person() -> Option<String> {
 
 pub(crate) fn label() -> &'static str {
     if cfg!(target_abi = "sim") {
-        "GPUI iOS Simulator"
+        "Sjel iOS Simulator"
     } else {
-        "GPUI iPhone"
+        "Sjel iPhone"
     }
 }
 
@@ -41,38 +41,16 @@ pub(crate) fn launch_day() -> chrono::NaiveDate {
 pub(crate) fn launch_tab() -> Tab {
     match std::env::var("SJEL_TAB").unwrap_or_default().as_str() {
         "projects" => Tab::Projects,
-        "calendar" => nsh_tab(Tab::Calendar),
-        "people" => nsh_tab(Tab::People),
+        "calendar" => Tab::Calendar,
+        "people" => Tab::People,
         "interior" => Tab::Interior,
-        "inbox" => nsh_tab(Tab::Inbox),
+        "inbox" => Tab::Inbox,
         "travel" | "map" => Tab::Travel,
-        "settings" => nsh_tab(Tab::Settings),
-        "mail" => nsh_tab(Tab::Mail),
-        "documents" => nsh_tab(Tab::Documents),
-        _ => nsh_tab(Tab::Today),
+        "settings" => Tab::Settings,
+        "mail" => Tab::Mail,
+        "documents" => Tab::Documents,
+        _ => Tab::Today,
     }
-}
-
-/// Opens the NSH screen that draws `tab` (`nav.rs`, `select_tab`). The GPUI page under it stays
-/// on Today.
-fn nsh_tab(tab: Tab) -> Tab {
-    #[cfg(target_os = "ios")]
-    {
-        use sjel_gpui_ui::nsh_documents::{set_nsh_page, NshPage};
-        set_nsh_page(match tab {
-            Tab::Inbox => NshPage::Capture,
-            Tab::People => NshPage::People,
-            Tab::Settings => NshPage::Settings,
-            Tab::Calendar => NshPage::Calendar,
-            Tab::Documents => NshPage::Documents,
-            Tab::Mail => NshPage::Mail,
-            _ => NshPage::Today,
-        });
-        crate::host::show_nsh();
-        Tab::Today
-    }
-    #[cfg(not(target_os = "ios"))]
-    tab
 }
 
 /// `SJEL_SIDEBAR=soundscape|activity` opens the right edge at launch on that seat. A phone never sets

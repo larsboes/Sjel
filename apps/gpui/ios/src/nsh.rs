@@ -1,7 +1,4 @@
-//! Mounts the NSH screens (`sjel_gpui_ui::nsh_documents::NshHostScreen`: Today, Documents, Mail)
-//! into a view from `host/App.swift`, over the GPUI one (`docs/plans/gpui.md` §11). The view
-//! shows at launch on Today and hides while a GPUI page is open. PDFs show in PDFKit through the `sjel.pdf` component, whose view
-//! `host/Documents.swift` makes.
+//! Mounts the phone's NSH screens inside the UIKit host.
 
 #[cfg(target_os = "ios")]
 thread_local! {
@@ -86,12 +83,11 @@ pub fn mount(container: &objc2_ui_kit::UIView) -> bool {
     mail::set_close(|| docs::set_nsh_page(docs::NshPage::Today));
     docs::set_switch_tab(|target| {
         sjel_gpui_ui::nsh_map::hide();
-        crate::host::hide_nsh();
         match target {
             "today" => crate::host::announce(crate::Event::SelectTab(crate::Tab::Today)),
             "calendar" => crate::host::announce(crate::Event::SelectTab(crate::Tab::Calendar)),
             "travel" => crate::host::announce(crate::Event::SelectTab(crate::Tab::Travel)),
-            "agent" => crate::host::announce(crate::Event::OpenEdge(crate::Seat::Agent)),
+            "agent" => sjel_gpui_ui::nsh_edge::open(crate::Seat::Agent),
             _ => crate::host::announce(crate::Event::SelectTab(crate::Tab::Today)),
         }
     });
@@ -103,6 +99,10 @@ pub fn mount(container: &objc2_ui_kit::UIView) -> bool {
         mail::set_offline(offline);
     }
     let app = AppView::new(mtm, container.bounds(), SurfaceOptions::default());
+    let appearance = sjel_gpui_ui::AppearanceSettings::load();
+    let _ = app.set_theme_overrides(Some(&sjel_gpui_ui::theme::nsh_theme_overrides(&appearance)));
+    app.set_font_scale(Some(f32::from(appearance.ui_font_size) / 16.));
+    apply_appearance(&appearance);
     app.register_component(
         PDF_COMPONENT,
         std::rc::Rc::new(|_: ComponentContext| -> Box<dyn NativeComponent> {
@@ -119,38 +119,26 @@ pub fn mount(container: &objc2_ui_kit::UIView) -> bool {
 }
 
 #[cfg(target_os = "ios")]
-thread_local! {
-    /// The appearance last handed to the NSH view, so an unchanged one is not sent again.
-    static APPLIED: std::cell::RefCell<Option<(String, Option<bool>)>> =
-        const { std::cell::RefCell::new(None) };
-}
+static APPEARANCE: std::sync::Mutex<Option<(String, Option<bool>, f32)>> =
+    std::sync::Mutex::new(None);
 
 #[cfg(target_os = "ios")]
-#[allow(unsafe_code)] // Declaring the host's symbol is unsafe; the host owns its definition.
+#[allow(unsafe_code)]
 unsafe extern "C" {
-    /// Paints the cover around the screens and forces a scheme (`host/App.swift`).
     fn sjel_ios_nsh_cover(style: i32, light: u32, dark: u32);
 }
 
-/// Hands the appearance settings to the NSH screens: the palette's tokens as theme overrides,
-/// and light or dark when the settings force one (`sjel_gpui_ui::theme::nsh`).
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)]
 pub fn apply_appearance(settings: &sjel_gpui_ui::AppearanceSettings) {
     use sjel_gpui_ui::theme::{forced_dark, nsh_background, nsh_theme_overrides};
-    let next = (nsh_theme_overrides(settings), forced_dark(settings));
-    if APPLIED.with(|last| last.borrow().as_ref() == Some(&next)) {
-        return;
-    }
-    let mounted = MOUNTED.with(|slot| {
-        let slot = slot.borrow();
-        let Some(app) = slot.as_ref() else {
-            return false;
-        };
-        let _ = app.set_theme_overrides(Some(&next.0));
-        true
-    });
-    if !mounted {
+    let next = (
+        nsh_theme_overrides(settings),
+        forced_dark(settings),
+        f32::from(settings.ui_font_size) / 16.,
+    );
+    let mut last = APPEARANCE.lock().expect("appearance lock");
+    if last.as_ref() == Some(&next) {
         return;
     }
     let style = match next.1 {
@@ -158,7 +146,9 @@ pub fn apply_appearance(settings: &sjel_gpui_ui::AppearanceSettings) {
         Some(false) => 1,
         Some(true) => 2,
     };
-    // SAFETY: plain integers; the host paints on the main queue.
+    *last = Some(next);
+    drop(last);
+    // SAFETY: the host copies these values and schedules the update on the main queue.
     unsafe {
         sjel_ios_nsh_cover(
             style,
@@ -166,5 +156,22 @@ pub fn apply_appearance(settings: &sjel_gpui_ui::AppearanceSettings) {
             nsh_background(settings, true),
         )
     };
-    APPLIED.with(|last| *last.borrow_mut() = Some(next));
+}
+
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sjel_ios_nsh_apply_theme() {
+    let Some(_) = objc2::MainThreadMarker::new() else {
+        return;
+    };
+    let last = APPEARANCE.lock().expect("appearance lock");
+    if let Some((theme, _, scale)) = last.as_ref() {
+        MOUNTED.with(|slot| {
+            if let Some(app) = slot.borrow().as_ref() {
+                let _ = app.set_theme_overrides(Some(theme));
+                app.set_font_scale(Some(*scale));
+            }
+        });
+    }
 }

@@ -40,6 +40,10 @@ pub enum TodayEvent {
     People,
     /// The person tapped the Documents shortcut.
     Documents,
+    /// Opens all project hubs, including on an empty replica.
+    Projects,
+    /// Opens the phone's scan archive and room review.
+    Interior,
 }
 
 /// Everything the screen draws, rebuilt whenever a source moves.
@@ -626,8 +630,11 @@ fn capture_bar() -> impl IntoElement {
             view()
                 .flex_row()
                 .gap_2()
+                .flex_wrap()
                 .child(shortcut("People & Places", TodayEvent::People))
-                .child(shortcut("Documents", TodayEvent::Documents)),
+                .child(shortcut("Documents", TodayEvent::Documents))
+                .child(shortcut("Projects", TodayEvent::Projects))
+                .child(shortcut("Interior", TodayEvent::Interior)),
         )
 }
 

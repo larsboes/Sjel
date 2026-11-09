@@ -9,6 +9,8 @@ pub mod around;
 pub mod connections;
 mod details;
 pub mod edit;
+pub mod itinerary;
+pub mod markers;
 mod navigation;
 pub mod places;
 pub use crate::device::Source;

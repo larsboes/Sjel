@@ -18,6 +18,26 @@ final class NshScreens: XCTestCase {
     XCTAssertFalse(app.buttons["Zoom in"].firstMatch.waitForExistence(timeout: 3))
   }
 
+  func testProjectsRenders() { assertScreen("projects", heading: "Projects") }
+  func testInteriorRenders() { assertScreen("interior", heading: "Interior") }
+  func testTripsRenders() { assertScreen("travel", heading: "Trips") }
+  func testAgentRenders() { assertSeat("agent", heading: "Agent") }
+  func testTerminalStartsLocked() { assertSeat("terminal", heading: "Terminal locked") }
+  func testSoundscapeRenders() { assertSeat("soundscape", heading: "Soundscape") }
+  func testActivityRenders() { assertSeat("activity", heading: "Activity") }
+
+  private func assertSeat(_ seat: String, heading: String) {
+    let app = XCUIApplication()
+    app.launchEnvironment["SJEL_TAB"] = "today"
+    app.launchEnvironment["SJEL_SIDEBAR"] = seat
+    app.launchEnvironment["SJEL_GPUI_NO_AUDIO"] = "1"
+    app.launch()
+    defer { attach("nsh-\(seat)"); app.terminate() }
+    assertHeading(app, heading)
+    app.buttons["Close panel"].firstMatch.tap()
+    assertHeading(app, "TODAY")
+  }
+
   func testDocumentsRenders() {
     assertScreen("documents", heading: "Documents")
   }
@@ -33,13 +53,11 @@ final class NshScreens: XCTestCase {
     app.launch()
     defer { attach("nsh-after-today"); app.terminate() }
 
-    // GPUI paints its five tabs in Metal; Mail is second, above the home indicator.
-    let mail = app.coordinate(withNormalizedOffset: .zero).withOffset(
-      CGVector(dx: app.frame.width * 0.3, dy: app.frame.height - 62))
+    let mail = app.buttons["Mail"].firstMatch
     attach("today-before-nsh")
     mail.tap()
     assertHeading(app, "Mail")
-    app.buttons["Documents"].firstMatch.tap()
+    app.buttons["Docs"].firstMatch.tap()
     assertHeading(app, "Documents")
   }
 

@@ -7,13 +7,15 @@ license = "AGPL-3.0-only"
 description = "Shared GPUI design system, tokens, and primitives for Sjel desktop and mobile"
 
 [features]
-native-maps = ["dep:maplibre_native", "dep:metal"]
+default = ["gpui"]
+gpui = ["dep:gpui-kit", "dep:image", "dep:mermaid-rs-renderer", "dep:objc2-core-foundation", "dep:objc2-core-graphics"]
+native-maps = ["gpui", "dep:maplibre_native", "dep:metal"]
 # Screens drawn by NSH: UIKit views on the phone, GPUI Fast on the Mac (docs/plans/gpui.md §11).
 nsh = ["dep:nsh-core", "dep:nsh-base"]
 
 [dependencies]
 sjel-gpui-core.workspace = true
-gpui-kit.workspace = true
+gpui-kit = { workspace = true, optional = true }
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -21,13 +23,13 @@ futures.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 # The VT parser and grid model behind ui/src/terminal.rs. See its upstreams.toml row.
 alacritty_terminal = "0.26"
-image = { version = "=0.25.10", default-features = false, features = ["png"] }
-mermaid-rs-renderer = { version = "=0.3.1", default-features = false }
+image = { version = "=0.25.10", default-features = false, features = ["png"], optional = true }
+mermaid-rs-renderer = { version = "=0.3.1", default-features = false, optional = true }
 zeroize.workspace = true
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFCGTypes", "CFData"] }
-objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["std", "CGAffineTransform", "CGBase", "CGBitmapContext", "CGColorSpace", "CGContext", "CGDataProvider", "CGGeometry", "CGImage", "CGPDFDocument", "CGPDFPage"] }
+objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFCGTypes", "CFData"], optional = true }
+objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["std", "CGAffineTransform", "CGBase", "CGBitmapContext", "CGColorSpace", "CGContext", "CGDataProvider", "CGGeometry", "CGImage", "CGPDFDocument", "CGPDFPage"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 maplibre_native = { version = "=0.10.0", default-features = false, features = ["metal"], optional = true }
@@ -36,6 +38,10 @@ metal = { version = "=0.33.0", optional = true }
 [[example]]
 name = "native-map"
 required-features = ["native-maps"]
+
+[[example]]
+name = "calendar-preview"
+required-features = ["gpui"]
 
 [dependencies.nsh-core]
 git = "https://github.com/longbridge/nsh"

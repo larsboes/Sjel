@@ -12,9 +12,13 @@
 //! able to show a preset and a volume before there is any sound; the [`Engine`] is created on the
 //! first render, because it needs the device's sample rate and nothing else.
 
-use std::sync::{Arc, Mutex, OnceLock};
+#[cfg(target_os = "ios")]
+use std::sync::Mutex;
+use std::sync::{Arc, OnceLock};
 
-use sjel_gpui_core::soundscape::{Control, Engine, Visual};
+#[cfg(target_os = "ios")]
+use sjel_gpui_core::soundscape::Engine;
+use sjel_gpui_core::soundscape::{Control, Visual};
 
 /// `SJEL_GPUI_NO_AUDIO=1` keeps the app off the device, the way the Mac's own switch does: a
 /// screenshot run has no business taking the speakers, and the drawer still opens and still writes to
@@ -25,6 +29,7 @@ const NO_AUDIO: &str = "SJEL_GPUI_NO_AUDIO";
 static PARTS: OnceLock<(Arc<Control>, Arc<Visual>)> = OnceLock::new();
 
 /// The engine, which needs the device's rate and is therefore born on the first render.
+#[cfg(target_os = "ios")]
 static ENGINE: Mutex<Option<Engine>> = Mutex::new(None);
 
 /// The drawer's two halves. Safe to call before any device exists.

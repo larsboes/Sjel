@@ -1,4 +1,5 @@
 //! Layout density options and Apple HIG touch target dimensions.
+#[cfg(feature = "gpui")]
 use gpui::{px, Pixels};
 
 /// Layout density: handles compact desktop keyboards/mouse vs touch targets on mobile.
@@ -34,6 +35,7 @@ impl Density {
     }
 
     /// Minimum touch target size (44pt on iOS per Apple HIG, 32px on macOS).
+    #[cfg(feature = "gpui")]
     pub fn min_touch_target(self) -> Pixels {
         match self {
             Self::Compact => px(28.0),
@@ -44,6 +46,7 @@ impl Density {
     }
 
     /// Standard row height for lists and tables.
+    #[cfg(feature = "gpui")]
     pub fn row_height(self) -> Pixels {
         match self {
             Self::Compact => px(28.0),
@@ -54,6 +57,7 @@ impl Density {
     }
 
     /// Standard vertical padding.
+    #[cfg(feature = "gpui")]
     pub fn pad_y(self) -> Pixels {
         match self {
             Self::Compact => px(4.0),
@@ -64,6 +68,7 @@ impl Density {
     }
 
     /// Standard horizontal padding.
+    #[cfg(feature = "gpui")]
     pub fn pad_x(self) -> Pixels {
         match self {
             Self::Compact => px(8.0),

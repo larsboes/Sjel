@@ -18,7 +18,7 @@ use sjel_gpui_core::{
 };
 use tokio::sync::watch;
 
-use crate::travel::{LocationMarker, PlaceCategory};
+use sjel_gpui_core::travel::markers::{LocationMarker, PlaceCategory};
 
 /// A map action handled by the phone shell.
 #[derive(Clone, Debug)]

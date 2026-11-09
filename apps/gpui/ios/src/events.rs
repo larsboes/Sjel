@@ -1,19 +1,36 @@
-//! What each [`Event`] does to the view.
-
+//! Native and capability events applied to the phone's rendering-independent state.
 use super::*;
-
-/// The Mac's answer to a RoomPlan upload.
 #[derive(Deserialize)]
 struct RoomplanUploadAck {
     draft_id: String,
 }
-
-impl Capabilities {
-    /// One event from the host, the network or a page, applied to the view.
-    pub(super) fn handle(&mut self, event: Event, cx: &mut Context<Self>) {
+impl AppState {
+    fn board_changed(&mut self, board: Board) {
+        if self.repo.is_none() {
+            if let Some(store) = board.store().cloned() {
+                let repo = self.repo_for(store.clone());
+                sjel_gpui_ui::nsh_capture::set_store(Some(store));
+                nsh_today::set_store(Some(repo.clone()));
+                nsh_calendar::set_store(Some(repo.clone()));
+                sjel_gpui_ui::nsh_projects::set_repo(repo.clone());
+                self.repo = Some(repo);
+            }
+        }
+        sjel_gpui_ui::nsh_projects::set_blocked(board.blocked().to_vec());
+        sjel_gpui_ui::nsh_projects::load();
+        sjel_gpui_ui::nsh_capture::load();
+        nsh_today::set_records(board.records().to_vec());
+        nsh_today::set_travel(board.pending(), self.client.is_some());
+        self.board = Some(board);
+        self.rebuild_reminders();
+    }
+    pub(crate) fn handle(&mut self, event: Event) {
         match event {
-            Event::Status(text) => self.status = text.into(),
-            Event::StoreFailed(text) => self.store_error = Some(text.into()),
+            Event::Status(text) => self.status = text,
+            Event::StoreFailed(text) => {
+                self.status = text.clone();
+                nsh_today::set_note(Some(text));
+            }
             Event::Copy(outcome) => {
                 self.copying = false;
                 match outcome {
@@ -23,76 +40,40 @@ impl Capabilities {
                         sjel_gpui_ui::nsh_people::set_copy(Some(copy.clone()), None);
                         nsh_today::set_copy(Some(copy), None);
                     }
-                    // A refresh that fails leaves the copy already on screen alone:
-                    // it is still true, only older, and the page says how old.
+                    Err(error) if self.copy.is_none() => {
+                        nsh_calendar::set_copy(None, Some(error.clone()));
+                        sjel_gpui_ui::nsh_people::set_copy(None, Some(error.clone()));
+                        nsh_today::set_copy(None, Some(error));
+                    }
                     Err(error) => {
-                        if self.copy.is_none() {
-                            nsh_calendar::set_copy(None, Some(error.clone()));
-                            sjel_gpui_ui::nsh_people::set_copy(None, Some(error.clone()));
-                            nsh_today::set_copy(None, Some(error));
-                        } else {
-                            let note = format!("Could not fetch a newer copy: {error}");
-                            nsh_calendar::set_note(Some(note.clone()));
-                            sjel_gpui_ui::nsh_people::set_note(Some(note.clone()));
-                            nsh_today::set_note(Some(note));
-                        }
+                        let note = Some(format!("Could not fetch a newer copy: {error}"));
+                        nsh_calendar::set_note(note.clone());
+                        sjel_gpui_ui::nsh_people::set_note(note.clone());
+                        nsh_today::set_note(note);
                     }
                 }
             }
             Event::Board(board) => {
-                if self.projects.is_none() {
-                    if let Some(store) = board.store().cloned() {
-                        let projects = self.open_projects(store.clone(), cx);
-                        self.projects = Some(projects);
-                        // The Calendar tab writes to the same store, and reads it as
-                        // soon as its change feed has been read once — until then the
-                        // Mac's copy keeps drawing the day (`ui/src/calendar.rs`).
-                        sjel_gpui_ui::nsh_capture::set_store(Some(store.clone()));
-                        let repo = self.repo_for(store);
-                        nsh_today::set_store(Some(repo.clone()));
-                        nsh_calendar::set_store(Some(repo.clone()));
-                        // The reminder rebuild reads the same store: an entry written on
-                        // the phone is a reminder on the same phone, without the Mac.
-                        self.repo = Some(repo);
-                    }
-                }
-                // The landing page draws the replica's tasks and projects from these
-                // rows: `Board` already read them, and a second read here could only
-                // disagree with the queue count beside them.
-                let records = board.records().to_vec();
-                let blocked = board.blocked().to_vec();
-                if let Some(projects) = &self.projects {
-                    projects.update(cx, |projects, cx| projects.set_blocked(blocked, cx));
-                }
-                sjel_gpui_ui::nsh_capture::load();
-                nsh_today::set_records(records);
-                nsh_today::set_travel(board.pending(), self.client.is_some());
-                self.board = Some(board);
-                // The replica moved: the lock screen follows it, whether or not the Mac
-                // answered (`rebuild_reminders`).
-                self.rebuild_reminders(cx);
-                // A local write landed. If this launch has reached the Mac, it goes
-                // there now instead of waiting for the next launch.
-                self.maybe_sync(cx);
+                self.board_changed(board);
+                self.maybe_sync();
             }
             Event::Found(nodes) => {
                 self.found = nodes;
-                // A previous answer is not an error; keep it on screen.
                 if self.rows.is_empty() && !self.joining {
                     self.status = if self.found.is_empty() {
-                        "Looking for your Mac on this network…".into()
+                        "Looking for your Mac on this network…"
                     } else {
-                        "Found your Mac. Tap Join to ask for access.".into()
-                    };
+                        "Found your Mac. Tap Join to ask for access."
+                    }
+                    .into();
                 }
             }
             Event::Join(found) => {
+                if self.joining {
+                    return;
+                }
                 self.joining = true;
-                self.status = format!(
-                    "Asking \u{201c}{}\u{201d} to allow this device…",
-                    found.name
-                )
-                .into();
+                self.status = format!("Asking {} to allow this device…", found.name);
                 let events = self.events.clone();
                 shell::spawn(async move {
                     let outcome = match node_file() {
@@ -103,13 +84,11 @@ impl Capabilities {
                         Err(error) => Err(error),
                     };
                     if let Err(error) = outcome {
-                        let _ = events.unbounded_send(Event::PairFailed(error));
+                        events.post(Event::PairFailed(error));
                     }
                 });
             }
             Event::Scanned(code) => {
-                // A scanned code makes the same claim the `SJEL_PAIR` launch path makes;
-                // it arrives after launch, so the whole claim runs here instead.
                 self.joining = true;
                 self.status = "Reading the code from your Mac…".into();
                 let events = self.events.clone();
@@ -122,84 +101,66 @@ impl Capabilities {
                         Err(error) => Err(error),
                     };
                     if let Err(error) = outcome {
-                        let _ = events.unbounded_send(Event::PairFailed(error));
+                        events.post(Event::PairFailed(error));
                     }
                 });
             }
-            Event::PairFailed(text) | Event::ScanFailed(text) => {
-                self.status = text.into();
+            Event::PairFailed(error) | Event::ScanFailed(error) => {
+                self.status = error;
                 self.joining = false;
             }
             Event::RoomplanResult(text) => {
-                self.roomplan_status = text.into();
-                if self.client.is_some() {
-                    self.interior.update(cx, |history, cx| history.refresh(cx));
-                }
+                self.roomplan_status = text;
+                sjel_gpui_ui::nsh_interior::load();
+                load_roomplan_archive();
             }
-            Event::RoomplanArchive(records) => self
-                .interior
-                .update(cx, |history, cx| history.set_local_archive(records, cx)),
-            Event::RoomplanLive(snapshot) => self
-                .interior
-                .update(cx, |history, cx| history.set_live_snapshot(snapshot, cx)),
+            Event::RoomplanArchive(records) => sjel_gpui_ui::nsh_interior::set_local(records),
+            Event::RoomplanLive(live) => sjel_gpui_ui::nsh_interior::set_live(live),
             Event::RoomplanUpload(body) => {
-                if let Some(client) = self.client.clone() {
-                    self.roomplan_status = "Sending the room scan to your Mac…".into();
-                    let events = self.events.clone();
-                    shell::spawn(async move {
-                        let body = body.into_bytes();
-                        let expected_id = serde_json::from_slice::<serde_json::Value>(&body)
-                            .ok()
-                            .and_then(|value| {
-                                value
-                                    .get("draft")?
-                                    .get("draft_id")?
-                                    .as_str()
-                                    .map(str::to_owned)
-                            });
-                        let status = match client
-                            .post::<RoomplanUploadAck>("/interior/api/roomplan/captures", &body)
-                            .await
-                        {
-                            Ok(ack) if expected_id.as_deref() == Some(&ack.draft_id) => {
-                                mark_roomplan_uploaded(&ack.draft_id);
-                                format!("Sent to Mac · {}", ack.draft_id)
-                            }
-                            Ok(_) => "Mac returned a mismatched scan receipt; scan remains queued."
-                                .to_owned(),
-                            Err(error) => format!("Could not send room scan: {error}"),
-                        };
-                        let _ = events.unbounded_send(Event::RoomplanResult(status));
-                    });
-                } else {
+                let Some(client) = self.client.clone() else {
                     self.roomplan_status = "Pair with your Mac before sending a scan.".into();
-                }
+                    return;
+                };
+                self.roomplan_status = "Sending the room scan to your Mac…".into();
+                let events = self.events.clone();
+                shell::spawn(async move {
+                    let body = body.into_bytes();
+                    let expected = serde_json::from_slice::<serde_json::Value>(&body)
+                        .ok()
+                        .and_then(|v| v.get("draft")?.get("draft_id")?.as_str().map(str::to_owned));
+                    let status = match client
+                        .post::<RoomplanUploadAck>("/interior/api/roomplan/captures", &body)
+                        .await
+                    {
+                        Ok(ack) if expected.as_deref() == Some(&ack.draft_id) => {
+                            mark_roomplan_uploaded(&ack.draft_id);
+                            format!("Sent to Mac · {}", ack.draft_id)
+                        }
+                        Ok(_) => "Mac returned a mismatched scan receipt; the scan remains queued."
+                            .into(),
+                        Err(error) => format!("Could not send room scan: {error}"),
+                    };
+                    events.post(Event::RoomplanResult(status));
+                });
             }
             Event::Ready(node, health) => {
-                self.status = format!("Paired as {} with {}", node.device_id, node.base).into();
+                self.status = format!("Paired as {} with {}", node.device_id, node.base);
                 self.rows = health
                     .capabilities
                     .iter()
-                    .map(|(name, state)| (name.clone(), state.up))
+                    .map(|(name, status)| (name.clone(), status.up))
                     .collect();
                 self.found.clear();
                 self.joining = false;
                 match DeviceClient::new(node, Arc::new(identity::sign)) {
                     Ok(client) => {
                         let client = Arc::new(client);
-                        self.interior.update(cx, |history, cx| {
-                            history.set_source(Some(RoomPlanSource::Device(client.clone())), cx)
-                        });
-                        self.travel.update(cx, |travel, _| {
-                            travel
-                                .set_source(sjel_gpui_core::travel::Source::Device(client.clone()))
-                        });
-                        self.agent.update(cx, |seat, cx| {
-                            seat.set_host(Some(Host::Device(client.clone())), cx);
-                            if self.sidebar.is_open() && self.sidebar.seat() == Seat::Agent {
-                                seat.refresh_sessions(cx);
-                            }
-                        });
+                        sjel_gpui_ui::nsh_travel::connect(sjel_gpui_core::travel::Source::Device(
+                            client.clone(),
+                        ));
+                        sjel_gpui_ui::nsh_interior::connect(RoomPlanSource::Device(client.clone()));
+                        sjel_gpui_ui::nsh_agent::connect(Host::Device(client.clone()));
+                        sjel_gpui_ui::nsh_terminal::connect(Host::Device(client.clone()));
                         sjel_gpui_ui::nsh_documents::connect(
                             sjel_gpui_core::device::Source::Device(client.clone()),
                         );
@@ -208,73 +169,50 @@ impl Capabilities {
                         ));
                         self.client = Some(client);
                     }
-                    Err(error) => self.synced = Some(format!("Cannot sync: {error}").into()),
+                    Err(error) => self.synced = Some(format!("Cannot sync: {error}")),
                 }
-                self.maybe_sync(cx);
+                self.maybe_sync();
+                self.refresh_copy();
                 if self.client.is_some() {
                     load_roomplan_upload();
                 }
-                self.refresh_copy(cx);
-                let paired = self.client.is_some();
-                let pending = self.board.as_ref().map_or(0, Board::pending);
-                nsh_today::set_travel(pending, paired);
+                nsh_today::set_travel(
+                    self.board.as_ref().map_or(0, Board::pending),
+                    self.client.is_some(),
+                );
             }
             Event::Wrote => {
                 if let Some(board) = self.board.clone() {
                     let events = self.events.clone();
                     shell::spawn(async move {
                         let mut board = board;
-                        let _ = board.reload().await;
-                        let _ = events.unbounded_send(Event::Board(board));
+                        match board.reload().await {
+                            Ok(()) => events.post(Event::Board(board)),
+                            Err(e) => events.post(Event::Status(format!(
+                                "The saved record could not be reloaded: {e}"
+                            ))),
+                        }
                     });
                 }
             }
             Event::Synced(outcome, board) => {
                 self.syncing = false;
-                self.board = Some(board);
-                // The pull may have changed any record the page shows.
-                if let Some(projects) = &self.projects {
-                    projects.update(cx, |projects, cx| projects.reload(cx));
-                }
-                // A pull lands entries too, and the ids a create answered with.
+                self.board_changed(board);
                 nsh_calendar::load();
-                // A sync is what moves a capture from "waiting" to "on the Mac".
-                sjel_gpui_ui::nsh_capture::load();
-                let (pending, paired) = (
-                    self.board.as_ref().map_or(0, Board::pending),
-                    self.client.is_some(),
-                );
-                let records = self
-                    .board
-                    .as_ref()
-                    .map(|board| board.records().to_vec())
-                    .unwrap_or_default();
-                // A sync is also how a refusal arrives, or stops being one.
-                let blocked = self
-                    .board
-                    .as_ref()
-                    .map(|board| board.blocked().to_vec())
-                    .unwrap_or_default();
-                if let Some(projects) = &self.projects {
-                    projects.update(cx, |projects, cx| projects.set_blocked(blocked, cx));
+                self.synced = Some(match outcome {
+                    Ok(report) => report.summary(),
+                    Err(error) => format!("Nothing moved: {error}"),
+                });
+            }
+            Event::Retry => {
+                if self.client.is_some() {
+                    self.maybe_sync();
+                } else {
+                    self.synced =
+                        Some("Not connected: pair with the Mac in Settings, then retry.".into());
                 }
-                sjel_gpui_ui::nsh_capture::load();
-                nsh_today::set_records(records);
-                nsh_today::set_travel(pending, paired);
-                self.synced = Some(
-                    match outcome {
-                        Ok(report) => report.summary(),
-                        Err(error) => format!("Nothing moved: {error}"),
-                    }
-                    .into(),
-                );
-                // A pull lands the ids a local entry was given, and the tasks the Mac
-                // ticked off: both change what earns a reminder.
-                self.rebuild_reminders(cx);
             }
-            Event::Reminded(plan) => {
-                self.notify_plan = plan;
-            }
+            Event::Reminded(plan) => self.notify_plan = plan,
             Event::FareAlertsSeen(ids) => {
                 self.notify_prefs.mark_fare_alerts_seen(&ids);
                 let _ = self.notify_prefs.save();
@@ -287,87 +225,100 @@ impl Capabilities {
                 if newly_allowed {
                     self.notify_prefs.fare_alerts_last_check_ms = 0;
                     let _ = self.notify_prefs.save();
-                    self.rebuild_reminders(cx);
+                    self.rebuild_reminders();
                 }
             }
-            Event::NotifyOpen(link) => self.open_link(&link, cx),
-            Event::Pinch(scale, ended) => {
-                if self.sidebar.is_open() && self.sidebar.seat() == Seat::Terminal {
-                    let steps = pinch_steps(&mut self.pinch_base, scale);
-                    if steps != 0 {
-                        self.zoom_terminal(steps, cx);
-                    }
-                } else if self.active_tab == Tab::Documents {
-                    let steps = pinch_steps(&mut self.pinch_base, scale);
-                    if steps != 0 {
-                        self.documents.update(cx, |docs, cx| docs.toggle_zoom(cx));
-                    }
-                }
-                if ended {
-                    self.pinch_base = 1.0;
-                }
-            }
+            Event::NotifyOpen(link) => self.open_link(&link),
             Event::Background => {
                 self.terminal_unlocked = false;
-                self.terminal = None;
+                sjel_gpui_ui::nsh_terminal::set_unlocked(false);
             }
             Event::Unlocked(ok) => {
                 self.terminal_unlocked = ok;
-                if !ok {
-                    self.terminal_note = Some(
-                        "Face ID did not confirm. Close and reopen the edge to try again.".into(),
-                    );
-                } else if self.sidebar.is_open() && self.sidebar.seat() == Seat::Terminal {
-                    self.open_terminal(cx);
-                }
+                sjel_gpui_ui::nsh_terminal::set_unlocked(ok);
             }
             Event::Foreground => {
                 load_roomplan_archive();
-                self.rebuild_reminders(cx);
+                self.rebuild_reminders();
                 if self.client.is_some() {
                     load_roomplan_upload();
                 }
-                // The count is the system's, so it is asked for rather than assumed:
-                // a reminder that fired while the phone was away is gone from it.
                 notify::report();
             }
-            Event::SelectTab(tab) => self.select_tab(tab, cx),
-            Event::OpenEdge(seat) => self.open_edge(seat, cx),
-            Event::Today(event) => self.on_today(event, cx),
-            Event::RefreshCopy => self.refresh_copy(cx),
-            Event::Settings(action) => self.on_settings(action, cx),
-            // Newer data: a sync when this phone has a store to sync, the Mac's copy otherwise.
-            Event::Calendar(CalendarEvent::Refresh) => {
-                if self.board.is_some() {
-                    self.maybe_sync(cx);
-                } else {
-                    self.refresh_copy(cx);
+            Event::Pinch(scale, ended) => {
+                if sjel_gpui_ui::nsh_documents::nsh_page()
+                    != sjel_gpui_ui::nsh_documents::NshPage::Edge
+                    || !nsh_edge::is_terminal()
+                {
+                    return;
+                }
+                if scale / self.pinch_base >= 1.2 {
+                    self.handle(Event::Zoom(1));
+                    self.pinch_base = scale;
+                } else if scale / self.pinch_base <= 1. / 1.2 {
+                    self.handle(Event::Zoom(-1));
+                    self.pinch_base = scale;
+                }
+                if ended {
+                    self.pinch_base = 1.;
                 }
             }
-            // An entry landed in the replica: the queue moved, so the Mac can have it now.
-            Event::Calendar(CalendarEvent::Wrote) => self.maybe_sync(cx),
-            Event::Map(event) => {
-                use sjel_gpui_ui::nsh_map::MapEvent;
-                match event {
-                    MapEvent::Show => {
-                        sjel_gpui_ui::nsh_documents::set_nsh_page(
-                            sjel_gpui_ui::nsh_documents::NshPage::Map,
-                        );
-                        #[cfg(target_os = "ios")]
-                        crate::host::show_nsh();
+            Event::Zoom(steps) => {
+                self.appearance.terminal_font_size = sjel_gpui_ui::step_terminal_font_size(
+                    self.appearance.terminal_font_size,
+                    steps,
+                );
+                let _ = self.appearance.save();
+            }
+            Event::SelectTab(tab) => self.select_tab(tab),
+            Event::OpenEdge(seat) => {
+                if seat == Seat::Soundscape && !self.audio_started {
+                    self.audio_started = true;
+                    sjel_gpui_ui::nsh_soundscape::set_device(audio::start());
+                }
+                if seat == Seat::Terminal {
+                    if self.terminal_unlocked {
+                        sjel_gpui_ui::nsh_terminal::refresh();
+                    } else if self.client.is_some() {
+                        unlock();
                     }
-                    MapEvent::Refresh => self.travel.update(cx, |travel, cx| travel.refresh(cx)),
-                    MapEvent::Resolve(id) => self
-                        .travel
-                        .update(cx, |travel, cx| travel.resolve_trip_places(&id, cx)),
-                    MapEvent::Open(route) => {
-                        sjel_gpui_ui::nsh_map::hide();
+                }
+                if seat == Seat::Activity {
+                    notify::report();
+                }
+            }
+            Event::Today(event) => self.on_today(event),
+            Event::RefreshCopy => self.refresh_copy(),
+            Event::Calendar(CalendarEvent::Refresh) => {
+                if self.board.is_some() {
+                    self.maybe_sync();
+                } else {
+                    self.refresh_copy();
+                }
+            }
+            Event::Calendar(CalendarEvent::Wrote) => self.maybe_sync(),
+            Event::Map(event) => sjel_gpui_ui::nsh_travel::map_event(event),
+            Event::Settings(action) => self.on_settings(action),
+            Event::Interior(event) => {
+                use sjel_gpui_ui::nsh_interior::InteriorEvent;
+                match event {
+                    InteriorEvent::Capture => present_roomplan(),
+                    InteriorEvent::Sync => load_roomplan_upload(),
+                    InteriorEvent::Import => {
                         #[cfg(target_os = "ios")]
-                        crate::host::hide_nsh();
-                        self.active_tab = Tab::Travel;
-                        self.travel
-                            .update(cx, |travel, cx| travel.open_route(route, cx));
-                        cx.notify();
+                        import_legacy_roomplan();
+                    }
+                    InteriorEvent::Preview(id) => {
+                        #[cfg(target_os = "ios")]
+                        preview_roomplan(&id);
+                        #[cfg(not(target_os = "ios"))]
+                        let _ = id;
+                    }
+                    InteriorEvent::CachePreview { id, draft, bytes } => {
+                        #[cfg(target_os = "ios")]
+                        cache_preview_roomplan(&id, &draft, bytes);
+                        #[cfg(not(target_os = "ios"))]
+                        let _ = (id, draft, bytes);
                     }
                 }
             }

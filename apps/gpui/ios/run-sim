@@ -12,17 +12,21 @@
 # cannot browse.
 #
 # --tap runs the touch check (`host/UITests/JoinTap.swift`): it taps Join on the discovered Mac
-# and takes a screenshot before and after, because GPUI paints its own pixels and a screenshot
-# alone cannot show whether a finger reached it.
+# and keeps screenshots before and after. --build-only skips simulator launch;
+# --typecheck-only checks the Swift host and tests without generating a project.
 set -euo pipefail
 join=false
 tap=false
 smoke=false
+build_only=false
+typecheck_only=false
 for arg in "$@"; do
   case "$arg" in
     --join) join=true ;;
     --tap) tap=true ;;
     --smoke) smoke=true ;;
+    --build-only) build_only=true ;;
+    --typecheck-only) build_only=true; typecheck_only=true ;;
     *) echo "ios/run-sim: unknown argument $arg" >&2; exit 1 ;;
   esac
 done
@@ -33,12 +37,13 @@ IOS_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOST="$IOS_DIR/host"
 BUNDLE_ID="dev.sjel.ios"
 
+export IPHONEOS_DEPLOYMENT_TARGET="$(sed -n 's/^ *iOS: *"\([^"]*\)".*/\1/p' "$HOST/project.yml")"
+[[ "$IPHONEOS_DEPLOYMENT_TARGET" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "ios/run-sim: invalid iOS deployment target" >&2; exit 1; }
+if ! $build_only; then
 if ! devices="$(xcrun simctl list devices available)"; then
   echo "ios/run-sim: CoreSimulator is unavailable; check device access before building" >&2
   exit 1
 fi
-export IPHONEOS_DEPLOYMENT_TARGET="$(sed -n 's/^ *iOS: *"\([^"]*\)".*/\1/p' "$HOST/project.yml")"
-[[ "$IPHONEOS_DEPLOYMENT_TARGET" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "ios/run-sim: invalid iOS deployment target" >&2; exit 1; }
 latest_devices="$(printf '%s\n' "$devices" | awk -v minimum="$IPHONEOS_DEPLOYMENT_TARGET" '
   /^-- iOS / { split($3, v, "."); version = v[1] * 1000000 + v[2] * 1000 + v[3] }
   /^ *iPhone/ && v[1] >= minimum {
@@ -58,15 +63,31 @@ if ! printf '%s\n' "$latest_devices" | grep -Fq "($udid)"; then
   exit 1
 fi
 
+fi
+
+sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+xcrun swiftc -typecheck -parse-as-library -sdk "$sdk" -target "arm64-apple-ios${IPHONEOS_DEPLOYMENT_TARGET}-simulator" \
+  -import-objc-header "$HOST/Embedding.h" "$HOST"/*.swift
+platform="$(xcrun --sdk iphonesimulator --show-sdk-platform-path)"
+xcrun swiftc -typecheck -sdk "$sdk" -target "arm64-apple-ios${IPHONEOS_DEPLOYMENT_TARGET}-simulator" \
+  -F "$platform/Developer/Library/Frameworks" -I "$platform/Developer/usr/lib" "$HOST"/UITests/*.swift
+if $typecheck_only; then exit 0; fi
+
 # SJEL_IOS_FEATURES adds cargo features to the Rust library.
-(cd "$IOS_DIR" && cargo build --lib --target aarch64-apple-ios-sim ${SJEL_IOS_FEATURES:+--features "$SJEL_IOS_FEATURES"})
-target_dir="$(cd "$IOS_DIR" && cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
+(cd "$IOS_DIR" && sjel cargo build --locked --lib --target aarch64-apple-ios-sim ${SJEL_IOS_FEATURES:+--features "$SJEL_IOS_FEATURES"})
+target_dir="$(cd "$IOS_DIR" && sjel cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
 rust_lib="$target_dir/aarch64-apple-ios-sim/debug/libsjel_gpui_ios.a"
 
+mkdir -p "$HOST/build"
+project_dir="$HOST"
 (cd "$HOST" && xcodegen generate --quiet --spec project.yml)
-xcodebuild -project "$HOST/SjelIOS.xcodeproj" -scheme SjelIOS -sdk iphonesimulator \
-  -configuration Debug -derivedDataPath "$HOST/build" -quiet RUST_LIB="$rust_lib" build
+xcodebuild -project "$project_dir/SjelIOS.xcodeproj" -scheme SjelIOS -sdk iphonesimulator \
+  -configuration Debug -derivedDataPath "$HOST/build" -destination 'generic/platform=iOS Simulator' -quiet RUST_LIB="$rust_lib" build
 app="$HOST/build/Build/Products/Debug-iphonesimulator/SjelIOS.app"
+if $build_only; then
+  echo "$app"
+  exit 0
+fi
 
 booted_here=false
 if ! xcrun simctl list devices | grep -q "$udid) (Booted)"; then
@@ -97,7 +118,7 @@ if $tap || $smoke; then
     if [ "$appearance" != current ]; then xcrun simctl ui "$udid" appearance "$appearance"; fi
     result="$results/$appearance/tests.xcresult"
     mkdir -p "$results/$appearance"
-    xcodebuild -project "$HOST/SjelIOS.xcodeproj" -scheme SjelIOS -sdk iphonesimulator \
+    xcodebuild -project "$project_dir/SjelIOS.xcodeproj" -scheme SjelIOS -sdk iphonesimulator \
       -configuration Debug -derivedDataPath "$HOST/build" -resultBundlePath "$result" \
       -destination "platform=iOS Simulator,id=$udid" -quiet RUST_LIB="$rust_lib" \
       "${selection[@]}" test || status=$?

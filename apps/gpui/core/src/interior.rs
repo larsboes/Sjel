@@ -6,6 +6,7 @@ use crate::device::DeviceClient;
 use crate::shell::{Shell, ShellError, ShellResult};
 
 pub use interior_api::*;
+pub mod planning;
 
 #[derive(Clone)]
 pub enum RoomPlanSource {

@@ -1,11 +1,7 @@
 import LocalAuthentication
 import UIKit
 
-// UIKit owns the window, the navigation bar and the safe areas. GPUI draws the content
-// (`../../README.md`, "GPUI for every client"). Host pattern from longbridge/gpui-mobile
-// example/ios/App.swift.
-// The iOS 27 SDK refuses to launch an app without the UIScene life cycle, so a scene
-// delegate owns the window (the upstream example's app-delegate window fails here).
+// UIKit owns the window and safe areas; NSH renders the phone screens.
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication,
@@ -30,38 +26,49 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
-        gpui_ios_did_become_active(nil)
         // The phone was in a pocket and the day moved on: the reminders it holds are the ones it
         // scheduled last time it was awake (`ios/src/notify.rs` rebuilds them).
         sjel_ios_became_active()
     }
-    func sceneWillResignActive(_ scene: UIScene) { gpui_ios_will_resign_active(nil) }
     // A Face ID sheet only resigns active; entering the background ends the session it unlocked.
-    func sceneDidEnterBackground(_ scene: UIScene) { sjel_ios_entered_background() }
-}
-
-/// `ios/src/edge.rs` asks for Face ID, or the passcode as its fallback, before a terminal on the
-/// Mac opens or reattaches. The answer goes back on the main queue.
-@_cdecl("sjel_ios_unlock")
-public func sjelIOSUnlock() {
-    LAContext().evaluatePolicy(.deviceOwnerAuthentication,
-                               localizedReason: "Open a terminal on your Mac.") { ok, _ in
-        DispatchQueue.main.async { sjel_ios_unlocked(ok) }
+    func sceneDidEnterBackground(_ scene: UIScene) {
+        terminalUnlockEpoch &+= 1
+        terminalUnlockContext?.invalidate()
+        terminalUnlockContext = nil
+        sjel_ios_entered_background()
     }
 }
 
-/// The full-screen cover over GPUI that holds the NSH view. `ios/src/host.rs` shows and hides it.
+/// `ios/src/events.rs` asks for Face ID, or the passcode as its fallback, before a terminal on the
+/// Mac opens or reattaches. The answer goes back on the main queue.
+private var terminalUnlockEpoch: UInt64 = 0
+private var terminalUnlockContext: LAContext?
+
+@_cdecl("sjel_ios_unlock")
+public func sjelIOSUnlock() {
+    DispatchQueue.main.async {
+        guard UIApplication.shared.applicationState != .background else {
+            sjel_ios_unlocked(false)
+            return
+        }
+        terminalUnlockEpoch &+= 1
+        let epoch = terminalUnlockEpoch
+        terminalUnlockContext?.invalidate()
+        let context = LAContext()
+        terminalUnlockContext = context
+        context.evaluatePolicy(.deviceOwnerAuthentication,
+                               localizedReason: "Open a terminal on your Mac.") { ok, _ in
+            DispatchQueue.main.async {
+                guard epoch == terminalUnlockEpoch else { return }
+                terminalUnlockContext = nil
+                sjel_ios_unlocked(ok)
+            }
+        }
+    }
+}
+
+/// The full-screen NSH background, including the bands outside the safe areas.
 private weak var nshScreens: UIView?
-
-@_cdecl("sjel_ios_nsh_show")
-public func sjelIOSNshShow() {
-    DispatchQueue.main.async { nshScreens?.isHidden = false }
-}
-
-@_cdecl("sjel_ios_nsh_hide")
-public func sjelIOSNshHide() {
-    DispatchQueue.main.async { nshScreens?.isHidden = true }
-}
 
 /// Paints the cover with the palette's page colours and forces a scheme: `style` 0 follows the
 /// system, 1 is light, 2 is dark. The colours are `0xRRGGBB`.
@@ -78,6 +85,7 @@ public func sjelIOSNshCover(_ style: Int32, _ light: UInt32, _ dark: UInt32) {
         guard let cover = nshScreens else { return }
         cover.overrideUserInterfaceStyle =
             style == 2 ? .dark : style == 1 ? .light : .unspecified
+        sjel_ios_nsh_apply_theme()
         cover.backgroundColor = UIColor { traits in
             traits.userInterfaceStyle == .dark ? color(dark) : color(light)
         }
@@ -85,46 +93,16 @@ public func sjelIOSNshCover(_ style: Int32, _ light: UInt32, _ dark: UInt32) {
 }
 
 final class SjelController: UIViewController {
-    private var gpuiWindow: UnsafeMutableRawPointer!
-    private var content: UIViewController!
-    private var displayLink: CADisplayLink?
     private var discovery: Discovery?
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Every GPUI page carries its own heading, so a bar above it only takes height.
+        // Each NSH page carries its own heading.
         navigationController?.setNavigationBarHidden(true, animated: false)
         view.backgroundColor = .systemBackground
-        gpui_ios_set_embedded()
-        gpui_ios_register_app()
-        gpui_ios_run_demo()
-        // The notification centre's delegate, so a reminder is shown while the app is open and a tap
-        // on one reaches Rust (`Notifications.swift`). Local only: no push registration here.
-        Reminders.shared.configure()
-        // Browses for the Mac while the app is open; every answer goes to Rust (Discovery.swift).
-        let discovery = Discovery()
-        discovery.start()
-        self.discovery = discovery
-        guard let window = gpui_ios_get_window(), let controller = gpui_ios_view_controller(window) else {
-            fatalError("GPUI did not create its view")
-        }
-        gpuiWindow = window
-        content = Unmanaged<UIViewController>.fromOpaque(controller).takeUnretainedValue()
-        addChild(content)
-        view.addSubview(content.view)
-        content.didMove(toParent: self)
-        // GPUI's iOS port reports one touch as a pointer and no pinch, so the gesture is UIKit's.
-        // It does not cancel the touches, so a pinch over anything else still reaches GPUI.
-        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
-        pinch.cancelsTouchesInView = false
-        content.view.addGestureRecognizer(pinch)
-        // NSH screens (docs/plans/gpui.md §11) cover GPUI while Rust shows them.
-        // The cover fills the screen, so the bands outside the safe area take the NSH screens'
-        // background (Rust sets it); the screens themselves stay inside the safe area.
         view.layoutIfNeeded()
         let cover = UIView(frame: view.bounds)
         cover.backgroundColor = .systemBackground
-        cover.isHidden = true
         view.addSubview(cover)
         cover.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -144,41 +122,21 @@ final class SjelController: UIViewController {
             screens.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
             screens.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
         ])
-        if sjel_ios_nsh_mount(Unmanaged.passUnretained(screens).toOpaque()) {
-            nshScreens = cover
-        } else {
-            cover.removeFromSuperview()
+        view.layoutIfNeeded()
+        nshScreens = cover
+        if !sjel_ios_nsh_mount(Unmanaged.passUnretained(screens).toOpaque()) {
+            fatalError("NSH could not mount")
         }
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
+        pinch.cancelsTouchesInView = false
+        screens.addGestureRecognizer(pinch)
+        Reminders.shared.configure()
+        let discovery = Discovery()
+        discovery.start()
+        self.discovery = discovery
     }
 
     @objc private func pinched(_ gesture: UIPinchGestureRecognizer) {
-        switch gesture.state {
-        case .began, .changed:
-            sjel_ios_pinch(Double(gesture.scale), false)
-        case .ended, .cancelled, .failed:
-            sjel_ios_pinch(Double(gesture.scale), true)
-        default:
-            break
-        }
+        sjel_ios_pinch(Double(gesture.scale), gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed)
     }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        let frame = view.safeAreaLayoutGuide.layoutFrame
-        guard frame.width > 0, content.view.frame != frame else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        content.view.frame = frame
-        gpui_ios_layout_view(gpuiWindow)
-        _ = gpui_ios_request_frame(gpuiWindow)
-        CATransaction.commit()
-    }
-
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        displayLink = CADisplayLink(target: self, selector: #selector(frame))
-        displayLink?.add(to: .main, forMode: .common)
-    }
-
-    @objc private func frame() { _ = gpui_ios_request_frame(gpuiWindow) }
 }

@@ -34,6 +34,9 @@ pub(crate) fn phone_screen(target: &Target) -> Screen {
         Target::Docs(_) => Screen::Mac("Docs"),
         Target::Record(_) => Screen::Mac("This record"),
         Target::Ask(_) => Screen::Mac("Ask"),
+        Target::Unknown(path) if path.split('?').next() == Some("/interior") => {
+            Screen::Tab(Tab::Interior)
+        }
         Target::Unknown(path) => match route::first_page(path) {
             Some(page) => phone_screen(&Target::Native(page)),
             None => Screen::Mac("This link"),
@@ -41,173 +44,99 @@ pub(crate) fn phone_screen(target: &Target) -> Screen {
     }
 }
 
-impl Capabilities {
-    /// Where a tapped reminder goes: the day it announced, on the Calendar tab.
-    /// A reminder's `calendar:<day>` link, or a `sjel://` link in the Mac's vocabulary
-    /// (`core/src/route.rs`).
-    pub(super) fn open_link(&mut self, link: &str, cx: &mut Context<Self>) {
+impl AppState {
+    pub(crate) fn select_tab(&mut self, tab: Tab) {
+        use sjel_gpui_ui::nsh_documents::{set_nsh_page, NshPage};
+        let page = match tab {
+            Tab::Today => {
+                nsh_today::load();
+                NshPage::Today
+            }
+            Tab::Projects => {
+                sjel_gpui_ui::nsh_projects::load();
+                NshPage::Projects
+            }
+            Tab::Calendar => {
+                nsh_calendar::load();
+                NshPage::Calendar
+            }
+            Tab::People => {
+                sjel_gpui_ui::nsh_people::load();
+                NshPage::People
+            }
+            Tab::Interior => {
+                sjel_gpui_ui::nsh_interior::load();
+                load_roomplan_archive();
+                NshPage::Interior
+            }
+            Tab::Inbox => {
+                sjel_gpui_ui::nsh_capture::load();
+                NshPage::Capture
+            }
+            Tab::Travel => {
+                sjel_gpui_ui::nsh_travel::open(sjel_gpui_core::travel::TravelRoute::Trips);
+                NshPage::Travel
+            }
+            Tab::Settings => {
+                notify::report();
+                NshPage::Settings
+            }
+            Tab::Mail => NshPage::Mail,
+            Tab::Documents => NshPage::Documents,
+        };
+        set_nsh_page(page);
+    }
+    pub(crate) fn open_link(&mut self, link: &str) {
         if let Some(day) = reminders::link_day(link) {
-            self.select_tab(Tab::Calendar, cx);
+            self.select_tab(Tab::Calendar);
             nsh_calendar::open_day(day);
-        } else if let Some(target) = route::parse_deep_link(link) {
-            self.open_target(target, cx);
-        }
-    }
-
-    /// Opens a destination the Mac would open, on the screen the phone has for it.
-    pub(super) fn open_target(&mut self, target: Target, cx: &mut Context<Self>) {
-        match phone_screen(&target) {
-            Screen::Tab(tab) => self.select_tab(tab, cx),
-            Screen::Travel(route) => {
-                #[cfg(target_os = "ios")]
-                crate::host::hide_nsh();
-                sjel_gpui_ui::nsh_map::hide();
-                self.active_tab = Tab::Travel;
-                self.travel
-                    .update(cx, |travel, cx| travel.open_route(route, cx));
-                cx.notify();
-            }
-            Screen::Terminal => self.open_edge(Seat::Terminal, cx),
-            Screen::Mac(what) => {
-                self.select_tab(Tab::Today, cx);
-                self.status = format!("{what} opens on the Mac, not on the phone.").into();
+        } else if let Some(screen) = phone_link(link) {
+            match screen {
+                Screen::Tab(tab) => self.select_tab(tab),
+                Screen::Travel(route) => sjel_gpui_ui::nsh_travel::open(route),
+                Screen::Terminal => nsh_edge::open(Seat::Terminal),
+                Screen::Mac(page) => {
+                    self.select_tab(Tab::Today);
+                    nsh_today::set_note(Some(format!("{page} opens on the Mac.")));
+                }
             }
         }
     }
-
-    /// What the NSH Today screen asked for. A day or a project is a place in another tab: the page
-    /// names it and the app goes there.
-    pub(super) fn on_today(&mut self, event: TodayEvent, cx: &mut Context<Self>) {
-        #[cfg(target_os = "ios")]
-        if !matches!(event, TodayEvent::Refresh | TodayEvent::Wrote) {
-            crate::host::hide_nsh();
-        }
+    pub(crate) fn on_today(&mut self, event: TodayEvent) {
         match event {
             TodayEvent::OpenDay(day) => {
-                self.select_tab(Tab::Calendar, cx);
+                self.select_tab(Tab::Calendar);
                 nsh_calendar::open_day(day);
             }
             TodayEvent::OpenProject(name) => {
-                self.select_tab(Tab::Projects, cx);
-                if let Some(projects) = &self.projects {
-                    projects.update(cx, |projects, cx| projects.open_project(name, cx));
-                }
+                self.select_tab(Tab::Projects);
+                sjel_gpui_ui::nsh_projects::open_project(Some(name));
             }
-            TodayEvent::Settings => self.select_tab(Tab::Settings, cx),
-            // The edge slides in over the page: the bar holds five items and is full.
-            TodayEvent::Soundscape => self.open_edge(Seat::Soundscape, cx),
-            TodayEvent::Activity => self.open_edge(Seat::Activity, cx),
+            TodayEvent::Settings => self.select_tab(Tab::Settings),
+            TodayEvent::Soundscape => nsh_edge::open(Seat::Soundscape),
+            TodayEvent::Activity => nsh_edge::open(Seat::Activity),
             TodayEvent::Refresh => {
                 if self.board.is_some() {
-                    self.maybe_sync(cx);
+                    self.maybe_sync();
                 } else {
-                    self.refresh_copy(cx);
+                    self.refresh_copy();
                 }
             }
-            TodayEvent::Wrote => self.maybe_sync(cx),
-            TodayEvent::Capture => self.select_tab(Tab::Inbox, cx),
-            TodayEvent::People => self.select_tab(Tab::People, cx),
-            TodayEvent::Documents => self.select_tab(Tab::Documents, cx),
+            TodayEvent::Wrote => self.maybe_sync(),
+            TodayEvent::Capture => self.select_tab(Tab::Inbox),
+            TodayEvent::People => self.select_tab(Tab::People),
+            TodayEvent::Documents => self.select_tab(Tab::Documents),
+            TodayEvent::Projects => self.select_tab(Tab::Projects),
+            TodayEvent::Interior => self.select_tab(Tab::Interior),
         }
     }
+}
 
-    /// Shows `tab` and starts what it reads. Every way onto a tab comes through here: the bar,
-    /// Today's shortcuts, a reminder and a link.
-    pub(super) fn select_tab(&mut self, tab: Tab, cx: &mut Context<Self>) {
-        // Today, Documents and Mail are NSH screens over the GPUI view; the tab under them stays
-        // where it was.
-        #[cfg(target_os = "ios")]
-        if tab == Tab::Calendar {
-            sjel_gpui_ui::nsh_documents::set_nsh_page(
-                sjel_gpui_ui::nsh_documents::NshPage::Calendar,
-            );
-            crate::host::show_nsh();
-            if self.copy.is_none() && !self.copying {
-                self.refresh_copy(cx);
-            }
-            return;
-        }
-        #[cfg(target_os = "ios")]
-        if tab == Tab::Settings {
-            sjel_gpui_ui::nsh_documents::set_nsh_page(
-                sjel_gpui_ui::nsh_documents::NshPage::Settings,
-            );
-            crate::host::show_nsh();
-            notify::report();
-            return;
-        }
-        #[cfg(target_os = "ios")]
-        if tab == Tab::People {
-            sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::People);
-            crate::host::show_nsh();
-            sjel_gpui_ui::nsh_people::load();
-            return;
-        }
-        #[cfg(target_os = "ios")]
-        if tab == Tab::Inbox {
-            sjel_gpui_ui::nsh_documents::set_nsh_page(
-                sjel_gpui_ui::nsh_documents::NshPage::Capture,
-            );
-            crate::host::show_nsh();
-            sjel_gpui_ui::nsh_capture::load();
-            return;
-        }
-        #[cfg(target_os = "ios")]
-        if tab == Tab::Today {
-            sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Today);
-            crate::host::show_nsh();
-            sjel_gpui_ui::nsh_today::load();
-            return;
-        }
-        #[cfg(target_os = "ios")]
-        if tab == Tab::Documents {
-            sjel_gpui_ui::nsh_documents::set_nsh_page(
-                sjel_gpui_ui::nsh_documents::NshPage::Documents,
-            );
-            crate::host::show_nsh();
-            return;
-        }
-        #[cfg(target_os = "ios")]
-        if tab == Tab::Mail {
-            sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Mail);
-            crate::host::show_nsh();
-            return;
-        }
-        if self.active_tab == Tab::Travel && tab != Tab::Travel {
-            self.travel.update(cx, |travel, _| travel.deactivate());
-        }
-        self.active_tab = tab;
-        match tab {
-            Tab::Mail => self.mail.update(cx, |mail, cx| mail.load(cx)),
-            Tab::Travel => self.travel.update(cx, |travel, cx| {
-                travel.activate(cx);
-                #[cfg(target_os = "ios")]
-                if matches!(
-                    travel.route(),
-                    sjel_gpui_core::travel::TravelRoute::Map
-                        | sjel_gpui_core::travel::TravelRoute::Trip {
-                            section: sjel_gpui_core::travel::TripSection::Map,
-                            ..
-                        }
-                ) {
-                    sjel_gpui_ui::nsh_map::show(None);
-                }
-            }),
-            Tab::Inbox => sjel_gpui_ui::nsh_capture::load(),
-            Tab::Documents => self.documents.update(cx, |docs, cx| docs.load(cx)),
-            Tab::Interior => {
-                self.interior.update(cx, |history, cx| history.refresh(cx));
-                load_roomplan_archive();
-            }
-            Tab::Settings => notify::report(),
-            Tab::Today | Tab::Calendar | Tab::People => {
-                if self.copy.is_none() && !self.copying {
-                    self.refresh_copy(cx);
-                }
-            }
-            Tab::Projects => {}
-        }
-        cx.notify();
+fn phone_link(link: &str) -> Option<Screen> {
+    if link.trim_end_matches('/') == "sjel://interior" {
+        Some(Screen::Tab(Tab::Interior))
+    } else {
+        route::parse_deep_link(link).map(|target| phone_screen(&target))
     }
 }
 
@@ -217,7 +146,7 @@ mod tests {
 
     #[test]
     fn a_mac_link_lands_on_the_phone_screen_that_has_it() {
-        let open = |link: &str| phone_screen(&route::parse_deep_link(link).unwrap());
+        let open = |link: &str| phone_link(link).unwrap();
         assert_eq!(open("sjel://"), Screen::Tab(Tab::Today));
         assert_eq!(open("sjel://calendar"), Screen::Tab(Tab::Calendar));
         assert_eq!(open("sjel://feed?view=mail"), Screen::Tab(Tab::Mail));
@@ -226,6 +155,7 @@ mod tests {
             Screen::Tab(Tab::Calendar)
         );
         assert_eq!(open("sjel://terminal"), Screen::Terminal);
+        assert_eq!(open("sjel://interior"), Screen::Tab(Tab::Interior));
         assert!(matches!(open("sjel://travel/map"), Screen::Travel(_)));
         assert_eq!(open("sjel://finance"), Screen::Mac("Finance"));
         assert!(matches!(open("sjel://no-such-page"), Screen::Mac(_)));

@@ -78,12 +78,14 @@ impl TerminalFont {
 
     /// The font families this machine has, read once: the list does not change while the app
     /// runs, and a settings page asks for it on every frame.
+    #[cfg(feature = "gpui")]
     pub fn families(cx: &gpui::App) -> &'static [String] {
         static FAMILIES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
         FAMILIES.get_or_init(|| cx.text_system().all_font_names())
     }
 
     /// The choices that can be drawn here, for a settings row.
+    #[cfg(feature = "gpui")]
     pub fn available(cx: &gpui::App) -> Vec<Self> {
         let families = Self::families(cx);
         Self::ALL

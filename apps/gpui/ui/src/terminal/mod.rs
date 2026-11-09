@@ -28,7 +28,7 @@ use crate::theme::{Palette, TerminalFont, MONOKAI};
 mod deck;
 mod grid;
 mod keys;
-mod screen;
+use crate::terminal_screen as screen;
 
 pub use deck::TerminalDeck;
 pub use grid::Metrics;

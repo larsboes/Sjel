@@ -1,4 +1,5 @@
 //! Semantic color palette and tinting primitives.
+#[cfg(feature = "gpui")]
 use gpui_kit::WindowAppearance;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,9 +46,17 @@ impl Palette {
         self.panel_surface
     }
 
+    #[cfg(feature = "gpui")]
     pub fn for_appearance(appearance: WindowAppearance) -> Self {
-        match appearance {
-            WindowAppearance::Light | WindowAppearance::VibrantLight => Self {
+        Self::for_dark(matches!(
+            appearance,
+            WindowAppearance::Dark | WindowAppearance::VibrantDark
+        ))
+    }
+
+    fn for_dark(dark: bool) -> Self {
+        match dark {
+            false => Self {
                 window_tint: 0xf3f5f9a8,
                 surface: 0xfffffff0,
                 terminal_surface: 0xfffffff0,
@@ -62,7 +71,7 @@ impl Palette {
                 amber: 0xc93400,
                 red: 0xd70015,
             },
-            WindowAppearance::Dark | WindowAppearance::VibrantDark => Self {
+            true => Self {
                 window_tint: 0x10131ae0,
                 surface: 0x252a3499,
                 terminal_surface: 0x252a3499,
@@ -82,11 +91,11 @@ impl Palette {
 
     /// Light mode palette as default baseline (e.g. for views before window appearance resolves).
     pub fn light() -> Self {
-        Self::for_appearance(WindowAppearance::Light)
+        Self::for_dark(false)
     }
 
     /// Dark mode palette.
     pub fn dark() -> Self {
-        Self::for_appearance(WindowAppearance::Dark)
+        Self::for_dark(true)
     }
 }

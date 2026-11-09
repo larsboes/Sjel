@@ -24,7 +24,7 @@ unsafe_code = "deny"
 
 [workspace.dependencies]
 sjel-gpui-core = { path = "core" }
-sjel-gpui-ui = { path = "ui" }
+sjel-gpui-ui = { path = "ui", default-features = false }
 gpui-kit = { version = "=0.9.1", default-features = false, features = ["component"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
@@ -45,7 +45,7 @@ nsh-trial = ["gpui-fast", "sjel-gpui-ui/nsh", "dep:nsh-platform-gpui", "dep:nsh-
 
 [dependencies]
 sjel-gpui-core.workspace = true
-sjel-gpui-ui.workspace = true
+sjel-gpui-ui = { workspace = true, features = ["gpui"] }
 gpui-kit = { workspace = true, features = ["assets"] }
 chrono.workspace = true
 futures.workspace = true

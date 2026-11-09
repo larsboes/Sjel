@@ -7,9 +7,9 @@ fn choice(id: &'static str, title: &'static str, options: Vec<(String, bool)>) -
     Choice { id, title, options }
 }
 
-impl Capabilities {
+impl AppState {
     /// Everything Settings shows, from the shell's own fields.
-    pub(super) fn settings_state(&self, cx: &gpui::App) -> SettingsState {
+    pub(super) fn settings_state(&self) -> SettingsState {
         let settings = self.appearance;
         let on = self.notify_prefs.enabled;
         let denied = self.notify_state.authorization == notify::Authorization::Denied;
@@ -97,20 +97,12 @@ impl Capabilities {
                         .map(|t| (t.label().to_owned(), settings.tone == *t))
                         .collect(),
                 ),
-                choice(
-                    "density",
-                    "TOUCH DENSITY",
-                    [Density::Mobile, Density::Comfortable]
-                        .iter()
-                        .map(|d| (density_label(*d).to_owned(), settings.density == *d))
-                        .collect(),
-                ),
             ],
             terminal: vec![
                 choice(
                     "term_font",
                     "TERMINAL FONT",
-                    TerminalFont::available(cx)
+                    terminal_fonts()
                         .iter()
                         .map(|f| (f.label().to_owned(), settings.terminal_font == *f))
                         .collect(),
@@ -144,9 +136,9 @@ impl Capabilities {
     }
 
     /// One press on the Settings screen.
-    pub(super) fn on_settings(&mut self, action: SettingsAction, cx: &mut Context<Self>) {
+    pub(super) fn on_settings(&mut self, action: SettingsAction) {
         match action {
-            SettingsAction::Back => self.select_tab(Tab::Today, cx),
+            SettingsAction::Back => self.select_tab(Tab::Today),
             SettingsAction::Scan => {
                 if !self.joining {
                     self.status = "Point the camera at the code on your Mac.".into();
@@ -155,30 +147,27 @@ impl Capabilities {
             }
             SettingsAction::Join(ix) => {
                 if let (false, Some(found)) = (self.joining, self.found.get(ix).cloned()) {
-                    let _ = self.events.unbounded_send(Event::Join(found));
+                    self.events.post(Event::Join(found));
                 }
             }
             SettingsAction::CaptureRoom => present_roomplan(),
             SettingsAction::SyncRoomScans => load_roomplan_upload(),
-            SettingsAction::ToggleReminders => self.toggle_reminders(cx),
+            SettingsAction::ToggleReminders => self.toggle_reminders(),
             SettingsAction::OpenSystemSettings => notify::open_settings(),
             SettingsAction::Choose { id: "lead", option } => {
                 if let Some(lead) = reminders::Lead::ALL.get(option) {
                     self.notify_prefs.set_lead(*lead);
                     let _ = self.notify_prefs.save();
-                    self.rebuild_reminders(cx);
+                    self.rebuild_reminders();
                 }
             }
             SettingsAction::Choose { id, option } => {
-                let fonts = TerminalFont::available(cx);
+                let fonts = terminal_fonts();
                 let a = &mut self.appearance;
                 let applied = match id {
                     "theme" => ThemeMode::ALL.get(option).map(|v| a.theme_mode = *v),
                     "accent" => AccentColor::ALL.get(option).map(|v| a.accent = *v),
                     "tone" => BackgroundTone::ALL.get(option).map(|v| a.tone = *v),
-                    "density" => [Density::Mobile, Density::Comfortable]
-                        .get(option)
-                        .map(|v| a.density = *v),
                     "term_font" => fonts.get(option).map(|v| a.terminal_font = *v),
                     "term_size" => TERMINAL_FONT_SIZES
                         .get(option)
@@ -196,13 +185,12 @@ impl Capabilities {
                 }
             }
         }
-        cx.notify();
     }
 }
 
-fn density_label(density: Density) -> &'static str {
-    match density {
-        Density::Mobile => "Touch 44pt",
-        _ => "Compact 36pt",
-    }
+fn terminal_fonts() -> Vec<TerminalFont> {
+    TerminalFont::ALL
+        .into_iter()
+        .filter(|font| font.installed(&["Menlo".into()]))
+        .collect()
 }

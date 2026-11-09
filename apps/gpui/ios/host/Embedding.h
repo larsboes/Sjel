@@ -2,15 +2,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-void gpui_ios_register_app(void);
-void gpui_ios_run_demo(void);
-void gpui_ios_set_embedded(void);
-void *gpui_ios_get_window(void);
-void *gpui_ios_view_controller(void *window);
-void gpui_ios_layout_view(void *window);
-bool gpui_ios_request_frame(void *window);
-void gpui_ios_did_become_active(void *app);
-void gpui_ios_will_resign_active(void *app);
 // ios/src/host.rs: one browse answer from Discovery.swift, `{"nodes":[…],"denied":false}`.
 void sjel_ios_nodes(const char *json);
 // ios/src/host.rs: the text of a pairing code PairScanner.swift read, and why the camera could not
@@ -47,6 +38,6 @@ void sjel_ios_unlocked(bool ok);
 // ios/src/host.rs: a pinch on the page, its scale since it began, and whether it ended. The
 // terminal steps its font size with it.
 void sjel_ios_pinch(double scale, bool ended);
-// ios/src/host.rs: mounts the NSH trial screen into `container`, a UIView. false without the
-// `nsh-trial` feature.
+// ios/src/host.rs: mounts all phone screens into `container`, a UIView.
 bool sjel_ios_nsh_mount(void *container);
+void sjel_ios_nsh_apply_theme(void);

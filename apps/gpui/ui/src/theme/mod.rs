@@ -9,12 +9,12 @@ pub mod settings;
 pub mod terminal;
 
 pub use density::*;
-pub use nsh::{forced_dark, nsh_background, nsh_theme_overrides};
+pub use nsh::{forced_dark, nsh_background, nsh_terminal_background, nsh_theme_overrides};
 pub use palette::*;
 pub use settings::*;
 pub use terminal::*;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "gpui"))]
 mod tests {
     use super::*;
     use gpui::px;

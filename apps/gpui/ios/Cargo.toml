@@ -4,16 +4,15 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 license = "AGPL-3.0-only"
-description = "The iOS GPUI app: GPUI content inside a UIKit host (host/)"
+description = "Sjel phone application with NSH screens inside a UIKit host"
 
 [lib]
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 sjel-gpui-core.workspace = true
-# Screens drawn by NSH with UIKit views next to GPUI (docs/plans/gpui.md §11).
-sjel-gpui-ui = { workspace = true, features = ["nsh"] }
-gpui-kit.workspace = true
+# Native UIKit screens through NSH (docs/plans/gpui.md §11).
+sjel-gpui-ui = { workspace = true, default-features = false, features = ["nsh"] }
 device-auth = { path = "../../../crates/device-auth" }
 # `SJEL_DAY` names the calendar day a screenshot opens on (src/lib.rs, `launch_day`).
 chrono.workspace = true
@@ -21,10 +20,6 @@ futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["time"] }
-
-[target.'cfg(target_os = "ios")'.dependencies]
-# Fork at the gpui-pre snapshot gpui-kit pins (upstreams.toml, gpui-mobile). camera and video_player: the crate uses both modules without their feature gates.
-gpui-mobile = { package = "gpui-pre-mobile", git = "https://github.com/larsboes/gpui-mobile", rev = "98f6466", default-features = false, features = ["camera", "video_player"] }
 
 [target.'cfg(target_os = "ios")'.dependencies.nsh-platform-ios]
 git = "https://github.com/longbridge/nsh"

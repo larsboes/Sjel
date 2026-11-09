@@ -35,6 +35,10 @@ pub enum NshPage {
     Today,
     Calendar,
     Map,
+    Travel,
+    Projects,
+    Interior,
+    Edge,
     Capture,
     People,
     Settings,
@@ -57,6 +61,9 @@ fn page_router() -> &'static PageRouter {
 
 /// Switches [`NshHostScreen`] to `page` (`Documents` or `Mail`).
 pub fn set_nsh_page(page: NshPage) {
+    if nsh_page() == NshPage::Edge && page != NshPage::Edge {
+        crate::nsh_edge::leaving();
+    }
     if page != NshPage::Map {
         crate::nsh_map::hide();
     }
@@ -414,7 +421,11 @@ pub fn NshHostScreen() -> impl IntoElement {
                 .py_2()
                 .on_press(move || {
                     if let Some(tp) = target_page {
-                        set_nsh_page(tp);
+                        if tp == NshPage::Travel {
+                            crate::nsh_travel::open(sjel_gpui_core::travel::TravelRoute::Trips);
+                        } else {
+                            set_nsh_page(tp);
+                        }
                     } else {
                         switch_tab_target(route_name);
                     }
@@ -441,11 +452,12 @@ pub fn NshHostScreen() -> impl IntoElement {
         .child(tab_item("Mail", Some(NshPage::Mail), "mail"))
         .child(tab_item("Docs", Some(NshPage::Documents), "documents"))
         .child(tab_item("Calendar", Some(NshPage::Calendar), "calendar"))
-        .child(tab_item("Travel", None, "travel"))
+        .child(tab_item("Travel", Some(NshPage::Travel), "travel"))
         .child(tab_item("Agent", None, "agent"));
 
     view()
         .flex_1()
+        .pb(keyboard_height)
         .bg(move || nsh_base::theme().background)
         .text_color(move || nsh_base::theme().foreground)
         .child((!closable).then(|| {
@@ -462,6 +474,10 @@ pub fn NshHostScreen() -> impl IntoElement {
             NshPage::Today => today_screen().into_element(),
             NshPage::Calendar => calendar_screen().into_element(),
             NshPage::Map => crate::nsh_map::map_screen().into_element(),
+            NshPage::Travel => crate::nsh_travel::travel_screen().into_element(),
+            NshPage::Projects => crate::nsh_projects::projects_screen().into_element(),
+            NshPage::Interior => crate::nsh_interior::interior_screen().into_element(),
+            NshPage::Edge => crate::nsh_edge::edge_screen().into_element(),
             NshPage::Capture => capture_screen().into_element(),
             NshPage::People => people_screen().into_element(),
             NshPage::Settings => settings_screen().into_element(),

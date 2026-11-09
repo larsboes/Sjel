@@ -536,6 +536,20 @@ impl AgentRun {
         *self = Self::default();
     }
 
+    /// A newly accepted turn has a fresh stream sequence, even in an existing session.
+    pub fn started(&mut self, mut session: Session) -> Session {
+        session.active = true;
+        self.sessions.retain(|listed| listed.id != session.id);
+        self.sessions.insert(0, session.clone());
+        self.session = Some(session.clone());
+        self.running = true;
+        self.last_seq = 0;
+        self.truncated = false;
+        self.pending = None;
+        self.error = None;
+        session
+    }
+
     /// Restores a stored conversation for the session shelf.
     pub fn restore(&mut self, session: Session, turns: Vec<Turn>) {
         let sessions = std::mem::take(&mut self.sessions);
@@ -1001,5 +1015,40 @@ mod tests {
             ..session
         };
         assert_eq!(untitled.label(), "/Users/x/Developer/Sjel");
+    }
+}
+
+#[cfg(test)]
+mod turn_sequence_tests {
+    use super::*;
+    #[test]
+    fn continuing_a_session_accepts_a_new_sequence_without_losing_history() {
+        let mut run = AgentRun::default();
+        run.rows.push(Row::Answer("Previous turn".into()));
+        run.last_seq = 400;
+        run.started(Session {
+            id: "session-test".into(),
+            ..Default::default()
+        });
+        let events: Vec<Event> = serde_json::from_value(serde_json::json!([
+            {"type":"turn","seq":1,"content":"Next question"},
+            {"type":"text","seq":2,"content":"Next answer"}
+        ]))
+        .unwrap();
+        for event in events {
+            if event.seq > run.last_seq {
+                run.apply(event);
+            }
+        }
+        assert_eq!(run.last_seq, 2);
+        assert_eq!(
+            run.rows,
+            vec![
+                Row::Answer("Previous turn".into()),
+                Row::Prompt("Next question".into()),
+                Row::Answer("Next answer".into())
+            ]
+        );
+        assert!(run.session.unwrap().active);
     }
 }

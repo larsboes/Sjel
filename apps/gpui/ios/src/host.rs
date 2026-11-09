@@ -25,11 +25,9 @@ pub(crate) struct Browse {
 }
 
 /// The view's event sender, so the C entry point below can reach the view it feeds.
-pub(crate) static EVENTS: OnceLock<Mutex<Option<UnboundedSender<Event>>>> = OnceLock::new();
+pub(crate) static EVENTS: OnceLock<EventSender> = OnceLock::new();
 
-// Opens the camera (`host/PairScanner.swift`). The screen is Swift's because a camera preview is an
-// `AVCaptureVideoPreviewLayer`, and GPUI draws its own pixels; the answer comes back through
-// `sjel_ios_scanned_pairing`.
+// Native camera, scan archive and terminal authentication entry points.
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)] // Declaring the host's symbol is unsafe; the host owns its definition.
 unsafe extern "C" {
@@ -41,25 +39,6 @@ unsafe extern "C" {
     fn sjel_ios_load_roomplan_archive();
     // Face ID before a terminal on the Mac opens; the answer is `sjel_ios_unlocked`.
     fn sjel_ios_unlock();
-    // Shows and hides the view NSH draws in (`host/App.swift`), on the main queue.
-    fn sjel_ios_nsh_show();
-    fn sjel_ios_nsh_hide();
-}
-
-/// Shows the NSH screens over the GPUI view.
-#[cfg(target_os = "ios")]
-#[allow(unsafe_code)]
-pub(crate) fn show_nsh() {
-    // SAFETY: no arguments; the host switches the view on the main queue.
-    unsafe { sjel_ios_nsh_show() }
-}
-
-/// Hides the NSH screens; the GPUI view under them shows again.
-#[cfg(target_os = "ios")]
-#[allow(unsafe_code)]
-pub(crate) fn hide_nsh() {
-    // SAFETY: no arguments; the host switches the view on the main queue.
-    unsafe { sjel_ios_nsh_hide() }
 }
 
 #[cfg(target_os = "ios")]
@@ -172,29 +151,9 @@ pub(crate) fn mark_roomplan_uploaded(_draft_id: &str) {}
 
 /// Sends one event to the live view, if there is one. Called from the main queue.
 pub(crate) fn announce(event: Event) {
-    let sender = EVENTS.get().and_then(|slot| slot.lock().ok()?.clone());
-    if let Some(sender) = sender {
-        let _ = sender.unbounded_send(event);
+    if let Some(sender) = EVENTS.get() {
+        sender.post(event);
     }
-}
-
-pub(crate) fn keyboard(open: bool) {
-    #[cfg(target_os = "ios")]
-    if open {
-        gpui_mobile::show_keyboard();
-    } else {
-        gpui_mobile::hide_keyboard();
-    }
-    #[cfg(not(target_os = "ios"))]
-    let _ = open;
-}
-
-/// The software keyboard's height, so the open note's caret stays above it.
-pub(crate) fn keyboard_inset() -> f32 {
-    #[cfg(target_os = "ios")]
-    return gpui_mobile::keyboard_height();
-    #[cfg(not(target_os = "ios"))]
-    0.0
 }
 
 /// Called by `host/Discovery.swift` with one browse answer, `{"nodes":[…],"denied":false}`.
@@ -396,24 +355,7 @@ pub extern "C" fn sjel_ios_unlocked(ok: bool) {
     announce(Event::Unlocked(ok));
 }
 
-/// Called by `host/App.swift` before `gpui_ios_run_demo`: registers what the GPUI window shows.
-#[cfg(target_os = "ios")]
-#[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
-#[unsafe(no_mangle)]
-pub extern "C" fn gpui_ios_register_app() {
-    use gpui::{App, WindowOptions};
-    use gpui_kit::component::Root;
-
-    gpui_mobile::ios::ffi::set_app_callback(Box::new(|cx: &mut App| {
-        gpui_kit::init(cx);
-        let _ = cx.open_window(WindowOptions::default(), |window, cx| {
-            let view = cx.new(Capabilities::new);
-            cx.new(|cx| Root::new(view, window, cx))
-        });
-    }));
-}
-
-/// Called by `host/App.swift` at launch: mounts the NSH screens into `container`, a hidden
+/// Called by `host/App.swift` at launch: mounts the NSH screens into `container`, a
 /// `UIView`. Returns `false` for a null container or off the main thread.
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
@@ -424,5 +366,9 @@ pub extern "C" fn sjel_ios_nsh_mount(container: *mut std::ffi::c_void) -> bool {
     }
     // SAFETY: the host passes an unretained `UIView` it keeps in its hierarchy for the call.
     let view = unsafe { &*container.cast::<objc2_ui_kit::UIView>() };
-    crate::nsh::mount(view)
+    let mounted = crate::nsh::mount(view);
+    if mounted {
+        crate::start();
+    }
+    mounted
 }

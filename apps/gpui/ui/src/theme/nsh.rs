@@ -59,6 +59,19 @@ pub fn nsh_background(settings: &AppearanceSettings, dark: bool) -> u32 {
     settings.apply_to_palette(base, dark).window_tint >> 8
 }
 
+/// The terminal surface blended over the phone page, using the shared palette.
+pub fn nsh_terminal_background(settings: &AppearanceSettings, dark: bool) -> u32 {
+    let palette = settings.apply_to_palette(
+        if dark {
+            Palette::dark()
+        } else {
+            Palette::light()
+        },
+        dark,
+    );
+    over(palette.terminal_surface, palette.window_tint >> 8)
+}
+
 /// `Some(true)` or `Some(false)` when the settings force dark or light; `None` follows the system.
 pub fn forced_dark(settings: &AppearanceSettings) -> Option<bool> {
     match settings.theme_mode {

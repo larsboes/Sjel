@@ -137,12 +137,7 @@ impl AgentSeat {
                 }
             };
             let _ = this.update(cx, |seat, cx| {
-                if seat.run.session.is_none() {
-                    seat.run.session = Some(session.clone());
-                }
-                seat.run.sessions.retain(|listed| listed.id != session.id);
-                seat.run.sessions.insert(0, session.clone());
-                seat.run.running = true;
+                let session = seat.run.started(session.clone());
                 seat.follow(session, stream, 0, cx);
                 cx.notify();
             });

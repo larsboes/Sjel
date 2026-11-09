@@ -44,17 +44,18 @@ pub fn no_audio_reason() -> Option<String> {
     (!audio_allowed()).then(|| format!("{NO_AUDIO} is set: no output device"))
 }
 
-/// Asks the host to open its audio device and start pulling frames.
-///
-/// Answers the same sentence the drawer shows: the device's name and rate, or why there is none. The
-/// host implements it (`host/Audio.swift`), because the session and the engine are its own.
-///
-/// # Safety
-/// `sjel_ios_audio_start` is declared by the host and called with no arguments; it returns a
-/// NUL-terminated string it owns for the duration of the call.
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)] // Declaring the host's symbol is unsafe; the host owns its definition.
 unsafe extern "C" {
+    /// Asks the host to open its audio device and start pulling frames.
+    ///
+    /// Answers the same sentence the drawer shows: the device's name and rate, or why there is
+    /// none. The host implements it (`host/Audio.swift`), because the session and the engine are
+    /// its own.
+    ///
+    /// # Safety
+    /// Called with no arguments; it returns a NUL-terminated string the host owns for the
+    /// duration of the call.
     fn sjel_ios_audio_start() -> *const std::ffi::c_char;
 }
 

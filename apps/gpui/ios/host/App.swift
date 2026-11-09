@@ -50,7 +50,7 @@ public func sjelIOSUnlock() {
     }
 }
 
-/// The view NSH draws in, over GPUI. `ios/src/host.rs` shows and hides it.
+/// The full-screen cover over GPUI that holds the NSH view. `ios/src/host.rs` shows and hides it.
 private weak var nshScreens: UIView?
 
 @_cdecl("sjel_ios_nsh_show")
@@ -61,6 +61,27 @@ public func sjelIOSNshShow() {
 @_cdecl("sjel_ios_nsh_hide")
 public func sjelIOSNshHide() {
     DispatchQueue.main.async { nshScreens?.isHidden = true }
+}
+
+/// Paints the cover with the palette's page colours and forces a scheme: `style` 0 follows the
+/// system, 1 is light, 2 is dark. The colours are `0xRRGGBB`.
+@_cdecl("sjel_ios_nsh_cover")
+public func sjelIOSNshCover(_ style: Int32, _ light: UInt32, _ dark: UInt32) {
+    func color(_ rgb: UInt32) -> UIColor {
+        UIColor(
+            red: CGFloat((rgb >> 16) & 0xff) / 255,
+            green: CGFloat((rgb >> 8) & 0xff) / 255,
+            blue: CGFloat(rgb & 0xff) / 255,
+            alpha: 1)
+    }
+    DispatchQueue.main.async {
+        guard let cover = nshScreens else { return }
+        cover.overrideUserInterfaceStyle =
+            style == 2 ? .dark : style == 1 ? .light : .unspecified
+        cover.backgroundColor = UIColor { traits in
+            traits.userInterfaceStyle == .dark ? color(dark) : color(light)
+        }
+    }
 }
 
 final class SjelController: UIViewController {
@@ -98,13 +119,25 @@ final class SjelController: UIViewController {
         pinch.cancelsTouchesInView = false
         content.view.addGestureRecognizer(pinch)
         // NSH screens (docs/plans/gpui.md §11) cover GPUI while Rust shows them.
+        // The cover fills the screen, so the bands outside the safe area take the NSH screens'
+        // background (Rust sets it); the screens themselves stay inside the safe area.
         view.layoutIfNeeded()
+        let cover = UIView(frame: view.bounds)
+        cover.backgroundColor = .systemBackground
+        cover.isHidden = true
+        view.addSubview(cover)
+        cover.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            cover.topAnchor.constraint(equalTo: view.topAnchor),
+            cover.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            cover.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            cover.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
         let screens = UIView(frame: view.safeAreaLayoutGuide.layoutFrame)
-        screens.backgroundColor = .systemBackground
-        screens.isHidden = true
-        view.addSubview(screens)
+        screens.backgroundColor = .clear
+        cover.addSubview(screens)
         screens.translatesAutoresizingMaskIntoConstraints = false
-        let guide = view.safeAreaLayoutGuide
+        let guide = cover.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
             screens.topAnchor.constraint(equalTo: guide.topAnchor),
             screens.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
@@ -112,9 +145,9 @@ final class SjelController: UIViewController {
             screens.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
         ])
         if sjel_ios_nsh_mount(Unmanaged.passUnretained(screens).toOpaque()) {
-            nshScreens = screens
+            nshScreens = cover
         } else {
-            screens.removeFromSuperview()
+            cover.removeFromSuperview()
         }
     }
 

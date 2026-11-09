@@ -669,7 +669,8 @@ opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-s
 | NSH Today is the phone's landing screen; GPUI Today removed; ticks write the replica | `ui/src/nsh_today.rs`, `ios/src/nav.rs`, `events.rs` | `e88e1adf` |
 | NSH Capture replaces the phone's GPUI Inbox; the Mac keeps its triage page | `ui/src/nsh_capture.rs`, `ui/src/inbox/` | `dcb59cf1` |
 | NSH People & Places replaces the phone's GPUI register; the Mac keeps its editable page | `ui/src/nsh_people.rs`, `ui/src/people/mod.rs` | `3de1a88a` |
-| NSH Settings: the shell describes pairing, found Macs, room scan, alerts and appearance as `SettingsState` and answers `SettingsAction` | `ui/src/nsh_settings.rs`, `ios/src/settings.rs` | this section's commit |
+| NSH Settings: the shell describes pairing, found Macs, room scan, alerts and appearance as `SettingsState` and answers `SettingsAction` | `ui/src/nsh_settings.rs`, `ios/src/settings.rs` | `79a07b08` |
+| NSH screens follow the appearance settings: palette tokens as theme overrides, forced light or dark, and a host cover that paints the safe-area bands. Touch density has no NSH token and applies to GPUI pages only | `ui/src/theme/nsh.rs`, `ios/src/nsh.rs`, `host/App.swift` | this section's commit |
 
 Trial result, 2026-11-07, on a paired iPhone: the list fills from the Mac, a long press on the
 text opens the system menu, and VoiceOver reads the list and the reader.

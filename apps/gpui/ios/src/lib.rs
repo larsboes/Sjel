@@ -487,16 +487,6 @@ impl Capabilities {
         cx.notify();
     }
 
-    fn palette(&self) -> Palette {
-        let is_dark = self.appearance.theme_mode.is_dark(false);
-        let base = if is_dark {
-            Palette::dark()
-        } else {
-            Palette::light()
-        };
-        self.appearance.apply_to_palette(base, is_dark)
-    }
-
     /// Rebuilds the lock screen from what this phone holds: the calendar's next weeks and the open
     /// tasks, through the same store their pages read.
     ///
@@ -765,6 +755,8 @@ impl Render for Capabilities {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Every change to the shell renders, so this is where the NSH Settings screen hears of it.
         sjel_gpui_ui::nsh_settings::set_state(self.settings_state(cx));
+        #[cfg(target_os = "ios")]
+        nsh::apply_appearance(&self.appearance);
         let palette = ThemeContext::sync(self.appearance, window, cx);
         let page_bg = palette.window_tint >> 8;
         let is_mac = self.active_tab == Tab::Settings;

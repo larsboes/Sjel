@@ -116,3 +116,54 @@ pub fn mount(container: &objc2_ui_kit::UIView) -> bool {
     MOUNTED.with(|slot| *slot.borrow_mut() = Some(app));
     true
 }
+
+#[cfg(target_os = "ios")]
+thread_local! {
+    /// The appearance last handed to the NSH view, so an unchanged one is not sent again.
+    static APPLIED: std::cell::RefCell<Option<(String, Option<bool>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)] // Declaring the host's symbol is unsafe; the host owns its definition.
+unsafe extern "C" {
+    /// Paints the cover around the screens and forces a scheme (`host/App.swift`).
+    fn sjel_ios_nsh_cover(style: i32, light: u32, dark: u32);
+}
+
+/// Hands the appearance settings to the NSH screens: the palette's tokens as theme overrides,
+/// and light or dark when the settings force one (`sjel_gpui_ui::theme::nsh`).
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)]
+pub fn apply_appearance(settings: &sjel_gpui_ui::AppearanceSettings) {
+    use sjel_gpui_ui::theme::{forced_dark, nsh_background, nsh_theme_overrides};
+    let next = (nsh_theme_overrides(settings), forced_dark(settings));
+    if APPLIED.with(|last| last.borrow().as_ref() == Some(&next)) {
+        return;
+    }
+    let mounted = MOUNTED.with(|slot| {
+        let slot = slot.borrow();
+        let Some(app) = slot.as_ref() else {
+            return false;
+        };
+        let _ = app.set_theme_overrides(Some(&next.0));
+        true
+    });
+    if !mounted {
+        return;
+    }
+    let style = match next.1 {
+        None => 0,
+        Some(false) => 1,
+        Some(true) => 2,
+    };
+    // SAFETY: plain integers; the host paints on the main queue.
+    unsafe {
+        sjel_ios_nsh_cover(
+            style,
+            nsh_background(settings, false),
+            nsh_background(settings, true),
+        )
+    };
+    APPLIED.with(|last| *last.borrow_mut() = Some(next));
+}

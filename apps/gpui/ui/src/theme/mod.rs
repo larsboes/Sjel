@@ -3,11 +3,13 @@
 //! A tone says what a value means; nothing here is decorative (`Packs/design/skills/ui-craftsmanship`, rule 1).
 
 pub mod density;
+pub mod nsh;
 pub mod palette;
 pub mod settings;
 pub mod terminal;
 
 pub use density::*;
+pub use nsh::{forced_dark, nsh_background, nsh_theme_overrides};
 pub use palette::*;
 pub use settings::*;
 pub use terminal::*;

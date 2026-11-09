@@ -5,7 +5,6 @@ if [ "$#" -ne 2 ] && [ "$#" -ne 4 ]; then
   printf '%s\n' 'Usage: bash tools/distribution/cli-smoke.sh ARCHIVE TRUSTED_SHA256 [UPDATE_ARCHIVE UPDATE_SHA256]' >&2
   exit 2
 fi
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/sjel-cli-smoke.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
 export HOME="$SCRATCH/home"
@@ -23,7 +22,9 @@ export PATH="$SCRATCH/no-build-tools:$PATH"
 ARCHIVE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 UPDATE=""
 if [ "$#" -eq 4 ]; then UPDATE="$(cd "$(dirname "$3")" && pwd)/$(basename "$3")"; fi
-bash "$HERE/cli-install.sh" --archive "$ARCHIVE" --sha256 "$2"
+BOOTSTRAP="$(dirname "$ARCHIVE")/install.sh"
+[ -f "$BOOTSTRAP" ] || { printf '%s\n' 'CLI smoke: install.sh must accompany the archive' >&2; exit 1; }
+sh -s -- --archive "$ARCHIVE" --sha256 "$2" < "$BOOTSTRAP"
 cd "$HOME"
 CLI="$HOME/.local/bin/sjel"
 "$CLI" --version

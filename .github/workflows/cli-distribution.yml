@@ -6,7 +6,7 @@ on:
       version:
         description: Preview artifact version; this workflow does not tag or publish
         required: true
-        default: v0.0.2
+        default: v0.0.3
         type: string
   push:
     branches: [main]
@@ -37,7 +37,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
-      RELEASE_VERSION: ${{ inputs.version || 'v0.0.2' }}
+      RELEASE_VERSION: ${{ inputs.version || 'v0.0.3' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -61,7 +61,7 @@ jobs:
           next="v${base%.*}.$((10#$patch + 1))"
           bun tools/distribution/prepare.ts cli --version "$next" \
             --target-dir "$RUNNER_TEMP/sjel-cli-build" --out "$RUNNER_TEMP/sjel-cli-update" --prepare-dependencies
-      - name: Rehearse install, update and rollback without developer tools
+      - name: Rehearse POSIX bootstrap, update and rollback without developer tools
         shell: bash
         run: |
           archive=$(find "$RUNNER_TEMP/sjel-cli-dist" -maxdepth 1 -name 'sjel-cli-*.tar.gz' -print)

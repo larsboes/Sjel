@@ -3,9 +3,11 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { standaloneInstaller } from "./cli-payload.ts";
 
 const installer = join(import.meta.dir, "cli-install.sh");
 const manager = join(import.meta.dir, "cli-management.sh");
+const bootstrap = standaloneInstaller("v0.0.3", readFileSync(installer, "utf8"));
 const platform = `${process.arch === "arm64" ? "aarch64" : "x86_64"}-${process.platform === "darwin" ? "apple-darwin" : "unknown-linux-gnu"}`;
 const hash = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
@@ -39,10 +41,50 @@ function fixture() {
     expect(Bun.spawnSync(["tar", "-czf", path, "sjel"], { cwd: stage }).exitCode).toBe(0);
     return ["--archive", path, "--sha256", hash(path)];
   };
-  return { scratch, prefix, bin, home, run, cli, archive, close: () => rmSync(scratch, { recursive: true, force: true }) };
+  const standalone = (args: string[] = [], extraEnv: Record<string, string | undefined> = {}, source = bootstrap) => Bun.spawnSync(["/bin/sh", "-s", "--", ...args, "--prefix", prefix, "--bin-dir", bin], {
+    env: { ...env, ...extraEnv }, stdin: Buffer.from(source), stdout: "pipe", stderr: "pipe",
+  });
+  return { scratch, prefix, bin, home, env, run, cli, archive, standalone, close: () => rmSync(scratch, { recursive: true, force: true }) };
 }
 
 describe("direct CLI installation", () => {
+  test("POSIX stdin bootstrap supports help, local archives and custom paths", () => {
+    const f = fixture();
+    try {
+      expect(f.standalone(["--help"]).exitCode).toBe(0);
+      expect(existsSync(f.prefix)).toBe(false);
+      const installed = f.standalone(f.archive("v0.0.3"));
+      expect(installed.stderr.toString()).toBe("");
+      expect(installed.exitCode).toBe(0);
+      expect(installed.stdout.toString()).toContain(`export PATH=${f.bin.replaceAll(" ", "\\ ")}:$PATH`);
+      expect(f.cli("--version").stdout.toString()).toBe("v0.0.3\n");
+    } finally { f.close(); }
+  });
+
+  test("incomplete piped scripts and a missing Bash never start installation", () => {
+    const f = fixture();
+    try {
+      const truncated = bootstrap.slice(0, bootstrap.lastIndexOf("\nmain \"$@\""));
+      expect(f.standalone([], {}, truncated).exitCode).toBe(0);
+      expect(existsSync(f.prefix)).toBe(false);
+      const incompleteBody = bootstrap.slice(0, bootstrap.indexOf("\nSJEL_EMBEDDED_BASH_INSTALLER\n"));
+      expect(f.standalone([], {}, incompleteBody).exitCode).not.toBe(0);
+      expect(existsSync(f.prefix)).toBe(false);
+      const missing = f.standalone([], { PATH: f.scratch });
+      expect(missing.exitCode).not.toBe(0);
+      expect(missing.stderr.toString()).toContain("Bash is required");
+      expect(existsSync(f.prefix)).toBe(false);
+      const commands = join(f.scratch, "minimal"); mkdirSync(commands);
+      for (const name of ["bash", "uname"]) symlinkSync(Bun.which(name)!, join(commands, name));
+      const prerequisite = f.standalone([], { PATH: commands });
+      expect(prerequisite.exitCode).not.toBe(0);
+      expect(prerequisite.stderr.toString()).toContain("required command is missing");
+      expect(existsSync(f.prefix)).toBe(false);
+      expect(() => standaloneInstaller("v1.2.3;exit 0", "")).toThrow();
+      expect(() => standaloneInstaller("v1.2.3", "SJEL_EMBEDDED_BASH_INSTALLER\n")).toThrow();
+    } finally { f.close(); }
+  });
+
   test("help is non-mutating, including nested lifecycle help", () => {
     const f = fixture();
     try {
@@ -126,16 +168,17 @@ while [ "$#" -gt 0 ]; do
   case "$1" in https://*) url="$1" ;; -o) shift; out="$1" ;; esac
   shift
 done
+printf '%s\\n' "$url" >> "$MOCK_REQUESTS"
 [ "\${MOCK_FAIL:-}" != yes ] || exit 22
 case "$url" in
-  https://github.com/larsboes/Sjel/releases/latest/download/CLI_VERSION) printf 'v0.0.3\\n' ;;
+  https://github.com/larsboes/Sjel/releases/latest/download/CLI_VERSION) printf '%s\\n' "\${MOCK_LATEST:-v0.0.3}" > "$out" ;;
   https://github.com/larsboes/Sjel/releases/download/v0.0.3/SHA256SUMS) printf '%s  sjel-cli-v0.0.3-%s.tar.gz\\n' "$MOCK_DIGEST" "$MOCK_PLATFORM" > "$out" ;;
   https://github.com/larsboes/Sjel/releases/download/v0.0.3/sjel-cli-*.tar.gz) cp "$MOCK_ARCHIVE" "$out" ;;
   *) exit 99 ;;
 esac
 `;
       writeFileSync(join(mockBin, "curl"), curl); chmodSync(join(mockBin, "curl"), 0o755);
-      const env = { ...process.env, PATH: `${mockBin}:${process.env.PATH}`, MOCK_ARCHIVE: next[1], MOCK_DIGEST: next[3], MOCK_PLATFORM: platform };
+      const env = { ...process.env, PATH: `${mockBin}:${process.env.PATH}`, MOCK_ARCHIVE: next[1], MOCK_DIGEST: next[3], MOCK_PLATFORM: platform, MOCK_REQUESTS: join(f.scratch, "requests") };
       const run = (...args: string[]) => Bun.spawnSync(["bash", join(f.bin, "sjel"), "self", ...args], { env, stdout: "pipe", stderr: "pipe" });
       const check = run("check");
       expect(check.exitCode).toBe(0);
@@ -144,10 +187,77 @@ esac
       const failed = Bun.spawnSync(["bash", join(f.bin, "sjel"), "self", "update"], { env: { ...env, MOCK_FAIL: "yes" }, stdout: "pipe", stderr: "pipe" });
       expect(failed.exitCode).not.toBe(0);
       expect(readlinkSync(join(f.prefix, "current"))).toBe("versions/v0.0.2");
+      writeFileSync(env.MOCK_REQUESTS, "");
+      const piped = f.standalone([], env);
+      expect(piped.stderr.toString()).toBe("");
+      expect(piped.exitCode).toBe(0);
+      expect(readFileSync(env.MOCK_REQUESTS, "utf8")).not.toContain("/latest/");
+      expect(readFileSync(env.MOCK_REQUESTS, "utf8")).toContain("/download/v0.0.3/SHA256SUMS");
       expect(run("update").exitCode).toBe(0);
       expect(f.cli("--version").stdout.toString()).toBe("v0.0.3\n");
+      const later = Bun.spawnSync(["bash", join(f.bin, "sjel"), "self", "check"], { env: { ...env, MOCK_LATEST: "v0.0.9" }, stdout: "pipe", stderr: "pipe" });
+      expect(later.exitCode).toBe(0);
+      expect(later.stdout.toString()).toContain("available: v0.0.9");
     } finally { f.close(); }
   });
+
+  for (const mode of ["ok", "http", "badsha", "404", "oversize", "tls", "missing"]) {
+    test(`wget-only bootstrap handles ${mode} without curl`, () => {
+      const f = fixture();
+      try {
+        const archive = f.archive("v0.0.3");
+        const commands = join(f.scratch, "commands"); mkdirSync(commands);
+        for (const name of ["bash", "mkdir", "mktemp", "uname", "rm", "rmdir", "readlink", "ls", "awk", "sort", "uniq", "wc", "tr", "find", "grep", "head", "gzip", "tar", "mv", "ln", "cp", "chmod", "cat", "dirname", "sha256sum", "shasum"]) {
+          const path = Bun.which(name);
+          if (path) symlinkSync(path, join(commands, name));
+        }
+        writeFileSync(join(commands, "wget"), `#!/bin/bash
+set -eu
+url=""
+case " $* " in *" --max-redirect=0 "*) ;; *) exit 99 ;; esac
+for arg in "$@"; do case "$arg" in https://*|http://*) url="$arg" ;; esac; done
+printf '%s\\n' "$url" >> "$MOCK_REQUESTS"
+[ "$MOCK_MODE" != tls ] || exit 5
+if [ "$MOCK_MODE" = 404 ]; then printf '  HTTP/1.1 404 Not Found\\n' >&2; exit 8; fi
+case "$url" in
+  https://github.com/larsboes/Sjel/releases/download/v0.0.3/SHA256SUMS)
+    scheme=https; [ "$MOCK_MODE" != http ] || scheme=http
+    printf '  HTTP/1.1 302 Found\\n  Location: %s://downloads.example.invalid/checksums\\n' "$scheme" >&2
+    exit 8 ;;
+  https://downloads.example.invalid/checksums)
+    printf '%s  sjel-cli-v0.0.3-${platform}.tar.gz\\n' "$MOCK_DIGEST" ;;
+  https://github.com/larsboes/Sjel/releases/download/v0.0.3/sjel-cli-*.tar.gz) cat "$MOCK_ARCHIVE" ;;
+  https://github.com/larsboes/Sjel/releases/latest/download/CLI_VERSION)
+    if [ "$MOCK_MODE" = oversize ]; then printf '%0128d\\n' 0; else printf 'v0.0.3\\n'; fi ;;
+  *) exit 99 ;;
+esac
+`);
+        chmodSync(join(commands, "wget"), 0o755);
+        if (mode === "missing") rmSync(join(commands, "wget"));
+        const env = { ...f.env, PATH: commands, MOCK_MODE: mode, MOCK_ARCHIVE: archive[1], MOCK_DIGEST: mode === "badsha" ? "0".repeat(64) : archive[3], MOCK_REQUESTS: join(f.scratch, "requests") };
+        const result = f.standalone([], env);
+        if (mode === "ok" || mode === "oversize") {
+          expect(result.stderr.toString()).toBe("");
+          expect(result.exitCode).toBe(0);
+          expect(f.cli("--version").stdout.toString()).toBe("v0.0.3\n");
+          const check = Bun.spawnSync(["/bin/bash", join(f.bin, "sjel"), "self", "check"], { env, stdout: "pipe", stderr: "pipe" });
+          expect(check.exitCode === 0).toBe(mode === "ok");
+          expect(readlinkSync(join(f.prefix, "current"))).toBe("versions/v0.0.3");
+        } else {
+          expect(result.exitCode).not.toBe(0);
+          expect(existsSync(join(f.prefix, "current"))).toBe(false);
+          expect(existsSync(join(f.prefix, ".install-lock"))).toBe(false);
+        }
+        if (mode === "missing") {
+          expect(result.stderr.toString()).toContain("curl or wget is required");
+          expect(existsSync(f.prefix)).toBe(false);
+        }
+        const requests = existsSync(env.MOCK_REQUESTS) ? readFileSync(env.MOCK_REQUESTS, "utf8") : "";
+        expect(requests).not.toContain("http://downloads.example.invalid");
+        expect(existsSync(join(f.home, ".pi"))).toBe(false);
+      } finally { f.close(); }
+    });
+  }
 
   test("rollback recovers a damaged active binary without deleting it", () => {
     const f = fixture();

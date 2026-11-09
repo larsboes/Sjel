@@ -41,7 +41,7 @@ try {
   for (let index = 0; index < catalogues.length; index++) {
     const catalogue = catalogues[index];
     for (const asset of catalogue.assets) {
-      const shared = ["CLI_VERSION", "cli-install.sh"].includes(asset.name);
+      const shared = ["CLI_VERSION", "cli-install.sh", "install.sh"].includes(asset.name);
       if (!shared && !/^[a-zA-Z0-9][a-zA-Z0-9._-]+\.(dmg|tar\.gz)$/.test(asset.name)) throw new Error("invalid asset filename");
       const path = join(directories[index], asset.name);
       const digest = createHash("sha256").update(readFileSync(path)).digest("hex");

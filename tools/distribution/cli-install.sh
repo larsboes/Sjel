@@ -78,25 +78,59 @@ if [ "$ACTION" = status ]; then
   exit 0
 fi
 
+wget_fetch() (
+  local url="$1" output="$2" limit="$3" headers code hop
+  headers="$(mktemp)" || return 1
+  trap 'rm -f "$headers"' EXIT
+  # Wget's --https-only applies to recursive links, not redirects.
+  for ((hop=0; hop<10; hop++)); do
+    case "$url" in https://*) ;; *) fail 'download redirect must use HTTPS' ;; esac
+    if wget --no-config --quiet --server-response --max-redirect=0 --timeout=30 --tries=1 \
+      --output-document=- "$url" 2>"$headers" | head -c "$((limit + 1))" > "$output"; then
+      [ "$(wc -c < "$output" | tr -d ' ')" -le "$limit" ] || return 1
+      return 0
+    fi
+    code="$(awk '$1 ~ /^HTTP\// {code=$2} END {print code}' "$headers")"
+    case "$code" in 301|302|303|307|308) ;; *) return 1 ;; esac
+    url="$(awk 'tolower($1) == "location:" {value=$2} END {sub(/\r$/, "", value); print value}' "$headers")"
+  done
+  fail 'too many download redirects'
+)
 fetch() {
-  command -v curl >/dev/null 2>&1 || fail 'curl is required for downloads'
-  curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-    --connect-timeout 15 --max-time 300 --max-filesize 268435456 "$1" -o "$2"
+  local limit="${3:-268435456}"
+  case "$1" in https://*) ;; *) fail 'downloads must use HTTPS' ;; esac
+  if command -v curl >/dev/null 2>&1; then
+    curl --disable --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+      --connect-timeout 15 --max-time 300 --max-filesize "$limit" "$1" -o "$2"
+  elif command -v wget >/dev/null 2>&1; then
+    wget_fetch "$1" "$2" "$limit"
+  else
+    fail 'curl or wget is required for downloads'
+  fi || fail 'download failed; check connectivity and that the release is published for this platform'
 }
-latest_version() {
-  local value
-  value="$(curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-    --connect-timeout 15 --max-time 30 --max-filesize 64 "$RELEASES/latest/download/CLI_VERSION")" || fail 'cannot discover the latest CLI release'
+latest_version() (
+  local value temporary
+  temporary="$(mktemp)" || fail 'cannot allocate update-check temporary file'
+  trap 'rm -f "$temporary"' EXIT
+  fetch "$RELEASES/latest/download/CLI_VERSION" "$temporary" 64 || fail 'cannot discover the latest CLI release'
+  value="$(< "$temporary")"
   valid_version "$value" || fail 'official release has no valid CLI_VERSION asset'
   printf '%s\n' "$value"
-}
+)
 if [ "$ACTION" = check ]; then
   owned || fail 'not a direct CLI installation'
-  command -v curl >/dev/null 2>&1 || fail 'curl is required for update checks'
   [ -n "$VERSION" ] || VERSION="$(latest_version)"
   printf 'installed: %s\navailable: %s\n' "$(version_at current)" "$VERSION"
   if [ "$(version_at current)" != "$VERSION" ]; then printf '%s\n' 'Run sjel self update to install. Nothing was changed.'; fi
   exit 0
+fi
+
+for tool in awk chmod cp dirname find grep gzip head ln ls mkdir mktemp mv readlink rm rmdir sort tar tr uname uniq wc; do
+  command -v "$tool" >/dev/null 2>&1 || fail "required command is missing: $tool"
+done
+command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || fail 'sha256sum or shasum is required'
+if [ "$ACTION" != rollback ] && [ -z "$ARCHIVE" ]; then
+  command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 || fail 'curl or wget is required for downloads'
 fi
 
 # mkdir is the portable exclusive lock; stale locks require explicit inspection.
@@ -178,10 +212,10 @@ if [ "$ACTION" = rollback ]; then
 fi
 
 if [ -z "$ARCHIVE" ]; then
-  command -v curl >/dev/null 2>&1 || fail 'curl is required for downloads'
   [ -n "$VERSION" ] || VERSION="$(latest_version)"
   if [ "$CURRENT" = "$VERSION" ]; then printf 'Already installed: %s\n' "$VERSION"; exit 0; fi
   ASSET="sjel-cli-$VERSION-$PLATFORM.tar.gz"
+  printf 'Downloading Sjel %s (%s)...\n' "$VERSION" "$PLATFORM"
   fetch "$RELEASES/download/$VERSION/SHA256SUMS" "$STAGE/SHA256SUMS"
   DIGEST="$(awk -v asset="$ASSET" '$2 == asset {print $1}' "$STAGE/SHA256SUMS")"
   valid_digest "$DIGEST" || fail 'official release has no unique checksum for this platform'
@@ -242,7 +276,11 @@ if [ -n "$LINK" ]; then
 fi
 atomic_link "versions/$VERSION" "$PREFIX/current"
 printf 'Installed %s (%s).\nCommand: %s/sjel\n' "$VERSION" "$PLATFORM" "$BIN_DIR"
-printf '%s\n' 'Add the command directory to PATH if needed.' \
-  'No services, credentials or harness settings were changed.' \
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ;;
+  *) printf 'For this shell: export PATH=%q:$%s\n' "$BIN_DIR" PATH
+     printf '%s\n' 'For future shells, add that directory to the shell configuration.' ;;
+esac
+printf '%s\n' 'No services, credentials or harness settings were changed.' \
   'Run sjel harnesses list, then explicitly select a harness/profile.' \
   'After an update, inspect sjel harnesses status before synchronizing materialized copies.'

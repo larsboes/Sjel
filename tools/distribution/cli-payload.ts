@@ -115,6 +115,24 @@ function profilesText(selection: CliSelection, disabled: string[]) {
   return lines.join("\n") + "\n";
 }
 
+/** Render a pipe-safe POSIX entry point with the release version as its default.
+ * @throws If the version or embedded script cannot be represented safely.
+ */
+export function standaloneInstaller(version: string, installer: string): string {
+  const delimiter = "SJEL_EMBEDDED_BASH_INSTALLER";
+  if (!/^v\d+\.\d+\.\d+$/.test(version) || installer.split(/\r?\n/).includes(delimiter)) throw new Error("invalid standalone installer input");
+  return `#!/bin/sh
+set -eu
+main() {
+  command -v bash >/dev/null 2>&1 || { printf '%s\\n' 'sjel install: Bash is required on macOS and Linux' >&2; return 1; }
+  bash -s -- --version '${version}' "$@" <<'${delimiter}'
+${installer.trimEnd()}
+${delimiter}
+}
+main "$@"
+`;
+}
+
 function prebuiltWrapper(binary: string) {
   return `#!/bin/bash\nset -eu\n_here="$(cd "$(dirname "\${BASH_SOURCE[0]:-$0}")" && pwd)"\n. "$_here/../lib/paths.sh"\nBIN="$SJEL_ROOT/target/release/${binary}"\n[ -x "$BIN" ] || { echo "${binary}: packaged binary missing; repair the CLI installation" >&2; exit 2; }\nexec "$BIN" "$@"\n`;
 }

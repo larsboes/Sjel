@@ -152,6 +152,35 @@ The CLI installs without a source checkout or Rust toolchain. It includes coding
 harness integration helpers, not the desktop app, node services, model weights or credentials.
 Pi, Claude Code and other harness executables must be installed and authenticated separately.
 
+#### Standalone installer
+
+The next CLI preview adds a standalone installer for macOS and Linux. **These URLs require a
+published release containing `install.sh`; the current `v0.0.2` draft does not contain it.**
+
+~~~sh
+curl -LsSf https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh
+~~~
+
+Without curl, use wget. The installer supports either downloader for its archive downloads too:
+
+~~~sh
+wget -qO- https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh
+~~~
+
+A version-specific URL defaults to that exact release rather than resolving latest again:
+
+~~~sh
+curl -LsSf https://github.com/larsboes/Sjel/releases/download/v0.0.3/install.sh | sh
+~~~
+
+The installer checks prerequisites, selects the host archive and verifies its SHA-256. Bash and
+standard Unix tools are required; Git and a Rust toolchain are not. It prints PATH instructions
+without editing shell configuration. [Installation options and recovery](website/content/operations/index.md#cli-only-coding-installation)
+include custom directories and explicit updates.
+
+<details>
+<summary>Maintainer installation from the existing v0.0.2 draft</summary>
+
 `v0.0.2` is a [draft release](https://github.com/larsboes/Sjel/releases), not a public download.
 The following example requires GitHub CLI authentication with maintainer access to the draft.
 It selects macOS ARM64; the [CLI installation guide](website/content/operations/index.md#cli-only-coding-installation)
@@ -169,6 +198,8 @@ export PATH="$HOME/.local/bin:$PATH"
 sjel --version
 sjel harnesses list
 ~~~
+
+</details>
 
 The PATH change applies to the current shell. For later shells, add `~/.local/bin` to the shell
 configuration if it is not already present. Installation does not change harness settings.

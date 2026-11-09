@@ -28,7 +28,7 @@ test("draft publication merges identical CLI bootstrap assets across platforms",
     const directories = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"].map(platform => {
       const dir = join(scratch, platform); mkdirSync(dir);
       const files = new Map([
-        ["CLI_VERSION", "v0.0.2\n"], ["cli-install.sh", "synthetic bootstrap\n"],
+        ["CLI_VERSION", "v0.0.2\n"], ["cli-install.sh", "synthetic lifecycle installer\n"], ["install.sh", "synthetic POSIX bootstrap\n"],
         [`sjel-cli-v0.0.2-${platform}.tar.gz`, "synthetic archive\n"],
       ]);
       const assets = [...files].map(([name, content]) => {
@@ -44,14 +44,15 @@ test("draft publication merges identical CLI bootstrap assets across platforms",
     expect(result.stderr.toString()).toBe("");
     expect(result.exitCode).toBe(0);
     const catalogue = JSON.parse(readFileSync(join(capture, "release.json"), "utf8"));
-    expect(catalogue.assets).toHaveLength(4);
+    expect(catalogue.assets).toHaveLength(5);
+    expect(catalogue.assets.filter((asset: { name: string }) => asset.name === "install.sh")).toHaveLength(1);
     expect(catalogue.assets.filter((asset: { name: string }) => asset.name === "CLI_VERSION")).toHaveLength(1);
     expect(readFileSync(join(capture, "args"), "utf8")).toContain("--draft\n");
     const metadata = JSON.parse(readFileSync(join(directories[1], "release.json"), "utf8"));
     const content = "different installer\n";
-    writeFileSync(join(directories[1], "cli-install.sh"), content);
-    Object.assign(metadata.assets.find((asset: { name: string }) => asset.name === "cli-install.sh"), { bytes: Buffer.byteLength(content), sha256: createHash("sha256").update(content).digest("hex") });
+    writeFileSync(join(directories[1], "install.sh"), content);
+    Object.assign(metadata.assets.find((asset: { name: string }) => asset.name === "install.sh"), { bytes: Buffer.byteLength(content), sha256: createHash("sha256").update(content).digest("hex") });
     writeFileSync(join(directories[1], "release.json"), JSON.stringify(metadata));
-    expect(run().stderr.toString()).toContain("repeated asset name: cli-install.sh");
+    expect(run().stderr.toString()).toContain("repeated asset name: install.sh");
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 });

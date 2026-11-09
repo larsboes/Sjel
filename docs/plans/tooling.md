@@ -38,7 +38,28 @@ The CLI installation does not start services, generate credentials or deploy a h
 Registered Pack paths remain stable across updates; materialized copies require explicit,
 drift-checked reconciliation. Runtime recovery does not imply database rollback.
 
-Open acceptance before publication:
+### Standalone installer for the next preview
+
+The public entry point uses GitHub Releases directly: `releases/latest/download/install.sh`
+and `releases/download/v0.0.3/install.sh`. No separate hosting or Pages routing is added.
+`prepare.ts` renders a POSIX stdin entry point around the existing Bash lifecycle installer,
+with the artifact version as its default. The versioned runtime retains latest-version discovery
+for later explicit updates. Shared bootstrap assets are checksummed and merged across platforms.
+
+Curl and GNU wget are supported without disabling TLS verification or allowing HTTP redirects.
+Downloader configuration files are ignored. Prerequisites are checked before creating the install
+root; PATH instructions do not edit shell configuration. Truncated script bodies never activate
+an installation. The distribution workflow rehearses the generated entry point and defaults to
+`v0.0.3`; `v0.0.2` assets remain unchanged. A new tag or public release has not been created.
+
+Verification: 26 installer/packaging/publication tests with 1007 assertions pass on macOS and
+network-disabled Linux ARM64; 113 CI-selection tests and shell/doc checks pass. The generated
+stdin bootstrap passes real-binary macOS install/update/rollback using reused CI binaries; those
+local fixtures retain `source.rebuilt: false` and are not publication-eligible. Fresh three-platform
+CI and a live public-channel test remain pending. Actionlint is unavailable locally. Real harness
+loading remains a separate acceptance item below.
+
+### Open acceptance before publication
 
 1. Rehearse installation, a compatible update and recovery on a clean Linux user account; verify
    extension loading in an installed harness, not only profile registration. CI's real-binary

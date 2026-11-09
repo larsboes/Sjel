@@ -19,7 +19,7 @@ function cliFixture(scratch: string) {
     mkdirSync(dirname(join(fixture, path)), { recursive: true });
     copyFileSync(join(root, path), join(fixture, path));
   }
-  // The installer belongs to another change; packaging tests never execute these stand-ins.
+  // Packaging assertions never execute these fixture installers.
   for (const name of ["cli-install.sh", "cli-management.sh"]) {
     writeFileSync(join(fixture, "tools/distribution", name), "#!/bin/bash\nexit 99\n");
     chmodSync(join(fixture, "tools/distribution", name), 0o755);
@@ -70,6 +70,11 @@ describe("release preparation (no installation)", () => {
       const archive = catalogue.assets.find((asset: { name: string }) => asset.name.endsWith(".tar.gz"));
       expect(archive.name).toBe(`sjel-cli-v0.0.2-${catalogue.platform}.tar.gz`);
       expect(catalogue.assets.map((asset: { name: string }) => asset.name)).toContain("CLI_VERSION");
+      expect(catalogue.assets.map((asset: { name: string }) => asset.name)).toContain("install.sh");
+      const bootstrap = readFileSync(join(output, "install.sh"), "utf8");
+      expect(bootstrap.startsWith("#!/bin/sh\n")).toBe(true);
+      expect(bootstrap).toContain("--version 'v0.0.2'");
+      expect(Bun.spawnSync(["sh", "-n"], { stdin: Buffer.from(bootstrap), stderr: "pipe" }).exitCode).toBe(0);
       for (const asset of catalogue.assets) {
         const bytes = readFileSync(join(output, asset.name));
         expect(bytes.length).toBe(asset.bytes);

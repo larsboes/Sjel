@@ -27,8 +27,47 @@ node services, model weights, credentials or a source checkout. Every packaged h
 Harness executables such as Pi or Claude Code are separate installations. Extension runtime
 requirements still apply when those extensions are selected.
 
+#### Standalone installer for the next preview
+
+Once a release containing `install.sh` is published, the standard installation uses either command:
+
+```sh
+curl -LsSf https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh
+# Alternative when curl is absent:
+wget -qO- https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh
+```
+
+A version-specific URL selects that release by default:
+
+```sh
+curl -LsSf https://github.com/larsboes/Sjel/releases/download/v0.0.3/install.sh | sh
+```
+
+The generated POSIX entry point embeds the existing Bash installer and the release version. It
+loads the complete function body before starting installation, selects the host archive, checks
+its SHA-256 and preserves the existing ownership/update rules. The retained runtime's updater
+still discovers newer releases; the bootstrap's version default does not pin future updates.
+
+Both curl and GNU wget work for archive downloads. HTTPS is required across redirects, TLS
+certificate checks stay enabled, and download sizes are bounded. Missing prerequisite tools fail
+before creating the installation root. The bootstrap does not install dependencies or edit shell
+configuration; it prints the PATH command when the command directory is absent from PATH.
+
+Custom directories remain explicit:
+
+```sh
+curl -LsSf https://github.com/larsboes/Sjel/releases/latest/download/install.sh |
+  sh -s -- --prefix "$HOME/.local/share/sjel" --bin-dir "$HOME/.local/bin"
+```
+
+These public URLs are not live while only the `v0.0.2` draft exists. That immutable draft predates
+the standalone entry point; its authenticated manual-download path remains below.
+
+#### Existing draft and manual installation
+
 The [CLI distribution workflow](../../../.github/workflows/cli-distribution.yml) builds these
-archives and rehearses installation, a compatible update and rollback in isolated homes:
+archives and rehearses the generated POSIX bootstrap, a compatible update and rollback in isolated
+homes. The existing draft filenames are:
 
 | Host | Archive |
 | --- | --- |
@@ -41,8 +80,8 @@ macOS Intel are not supported by these preview assets. Source compilation remain
 machine, not the installation machine. The workflow retains artifacts; tagging and draft creation
 are separate maintainer actions.
 
-Bootstrap installation uses Bash, tar, gzip and either `sha256sum` or `shasum`. Online downloads
-also need curl and CA certificates. Harness executables and their extension runtimes are separate
+Bootstrap installation uses a POSIX shell, Bash, standard Unix tools including tar and gzip,
+and either `sha256sum` or `shasum`. Online downloads also need curl or GNU wget and CA certificates. Harness executables and their extension runtimes are separate
 prerequisites; the installer does not install or authenticate them.
 
 `v0.0.2` is a draft in [GitHub Releases](https://github.com/larsboes/Sjel/releases). Downloading it

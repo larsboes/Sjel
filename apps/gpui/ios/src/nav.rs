@@ -72,11 +72,56 @@ impl Capabilities {
         }
     }
 
+    /// What the NSH Today screen asked for. A day or a project is a place in another tab: the page
+    /// names it and the app goes there.
+    pub(super) fn on_today(&mut self, event: TodayEvent, cx: &mut Context<Self>) {
+        #[cfg(target_os = "ios")]
+        if !matches!(event, TodayEvent::Refresh | TodayEvent::Wrote) {
+            crate::host::hide_nsh();
+        }
+        match event {
+            TodayEvent::OpenDay(day) => {
+                self.select_tab(Tab::Calendar, cx);
+                self.calendar
+                    .update(cx, |calendar, cx| calendar.open_day(day, cx));
+            }
+            TodayEvent::OpenProject(name) => {
+                self.select_tab(Tab::Projects, cx);
+                if let Some(projects) = &self.projects {
+                    projects.update(cx, |projects, cx| projects.open_project(name, cx));
+                }
+            }
+            TodayEvent::Settings => self.select_tab(Tab::Settings, cx),
+            // The edge slides in over the page: the bar holds five items and is full.
+            TodayEvent::Soundscape => self.open_edge(Seat::Soundscape, cx),
+            TodayEvent::Activity => self.open_edge(Seat::Activity, cx),
+            TodayEvent::Refresh => {
+                if self.board.is_some() {
+                    self.maybe_sync(cx);
+                } else {
+                    self.refresh_copy(cx);
+                }
+            }
+            TodayEvent::Wrote => self.maybe_sync(cx),
+            TodayEvent::Capture => self.select_tab(Tab::Inbox, cx),
+            TodayEvent::People => self.select_tab(Tab::People, cx),
+            TodayEvent::Documents => self.select_tab(Tab::Documents, cx),
+        }
+    }
+
     /// Shows `tab` and starts what it reads. Every way onto a tab comes through here: the bar,
     /// Today's shortcuts, a reminder and a link.
     pub(super) fn select_tab(&mut self, tab: Tab, cx: &mut Context<Self>) {
-        // Documents and Mail are NSH screens over the GPUI view; the tab under them stays where it was.
-        #[cfg(all(target_os = "ios", feature = "nsh"))]
+        // Today, Documents and Mail are NSH screens over the GPUI view; the tab under them stays
+        // where it was.
+        #[cfg(target_os = "ios")]
+        if tab == Tab::Today {
+            sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Today);
+            crate::host::show_nsh();
+            sjel_gpui_ui::nsh_today::load();
+            return;
+        }
+        #[cfg(target_os = "ios")]
         if tab == Tab::Documents {
             sjel_gpui_ui::nsh_documents::set_nsh_page(
                 sjel_gpui_ui::nsh_documents::NshPage::Documents,
@@ -84,7 +129,7 @@ impl Capabilities {
             crate::host::show_nsh();
             return;
         }
-        #[cfg(all(target_os = "ios", feature = "nsh"))]
+        #[cfg(target_os = "ios")]
         if tab == Tab::Mail {
             sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Mail);
             crate::host::show_nsh();

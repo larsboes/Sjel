@@ -414,23 +414,15 @@ pub extern "C" fn gpui_ios_register_app() {
 }
 
 /// Called by `host/App.swift` at launch: mounts the NSH screens into `container`, a hidden
-/// `UIView`. Returns `false` when the build has no `nsh` feature.
+/// `UIView`. Returns `false` for a null container or off the main thread.
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
 #[unsafe(no_mangle)]
 pub extern "C" fn sjel_ios_nsh_mount(container: *mut std::ffi::c_void) -> bool {
-    #[cfg(feature = "nsh")]
-    {
-        if container.is_null() {
-            return false;
-        }
-        // SAFETY: the host passes an unretained `UIView` it keeps in its hierarchy for the call.
-        let view = unsafe { &*container.cast::<objc2_ui_kit::UIView>() };
-        crate::nsh::mount(view)
+    if container.is_null() {
+        return false;
     }
-    #[cfg(not(feature = "nsh"))]
-    {
-        let _ = container;
-        false
-    }
+    // SAFETY: the host passes an unretained `UIView` it keeps in its hierarchy for the call.
+    let view = unsafe { &*container.cast::<objc2_ui_kit::UIView>() };
+    crate::nsh::mount(view)
 }

@@ -25,8 +25,7 @@ impl Capabilities {
                         self.people.update(cx, |people, cx| {
                             people.set_copy(Some(copy.clone()), None, cx)
                         });
-                        self.today
-                            .update(cx, |today, cx| today.set_copy(Some(copy), None, cx));
+                        nsh_today::set_copy(Some(copy), None);
                     }
                     // A refresh that fails leaves the copy already on screen alone:
                     // it is still true, only older, and the page says how old.
@@ -38,8 +37,7 @@ impl Capabilities {
                             self.people.update(cx, |people, cx| {
                                 people.set_copy(None, Some(error.clone()), cx)
                             });
-                            self.today
-                                .update(cx, |today, cx| today.set_copy(None, Some(error), cx));
+                            nsh_today::set_copy(None, Some(error));
                         } else {
                             let note = format!("Could not fetch a newer copy: {error}");
                             self.calendar.update(cx, |calendar, cx| {
@@ -47,8 +45,7 @@ impl Capabilities {
                             });
                             self.people
                                 .update(cx, |people, cx| people.set_note(Some(note.clone()), cx));
-                            self.today
-                                .update(cx, |today, cx| today.set_note(Some(note), cx));
+                            nsh_today::set_note(Some(note));
                         }
                     }
                 }
@@ -64,6 +61,7 @@ impl Capabilities {
                         self.inbox
                             .update(cx, |inbox, cx| inbox.set_store(Some(store.clone()), cx));
                         let repo = self.repo_for(store);
+                        nsh_today::set_store(Some(repo.clone()));
                         self.calendar.update(cx, |calendar, cx| {
                             calendar.set_store(Some(repo.clone()), cx)
                         });
@@ -81,10 +79,8 @@ impl Capabilities {
                     projects.update(cx, |projects, cx| projects.set_blocked(blocked, cx));
                 }
                 self.inbox.update(cx, |inbox, cx| inbox.load(cx));
-                self.today.update(cx, |today, cx| {
-                    today.set_records(records, cx);
-                    today.set_travel(board.pending(), self.client.is_some(), cx);
-                });
+                nsh_today::set_records(records);
+                nsh_today::set_travel(board.pending(), self.client.is_some());
                 self.board = Some(board);
                 // The replica moved: the lock screen follows it, whether or not the Mac
                 // answered (`rebuild_reminders`).
@@ -218,15 +214,12 @@ impl Capabilities {
                                 seat.refresh_sessions(cx);
                             }
                         });
-                        #[cfg(feature = "nsh")]
-                        {
-                            sjel_gpui_ui::nsh_documents::connect(
-                                sjel_gpui_core::device::Source::Device(client.clone()),
-                            );
-                            sjel_gpui_ui::nsh_mail::connect(
-                                sjel_gpui_core::device::Source::Device(client.clone()),
-                            );
-                        }
+                        sjel_gpui_ui::nsh_documents::connect(
+                            sjel_gpui_core::device::Source::Device(client.clone()),
+                        );
+                        sjel_gpui_ui::nsh_mail::connect(sjel_gpui_core::device::Source::Device(
+                            client.clone(),
+                        ));
                         self.client = Some(client);
                     }
                     Err(error) => self.synced = Some(format!("Cannot sync: {error}").into()),
@@ -238,8 +231,7 @@ impl Capabilities {
                 self.refresh_copy(cx);
                 let paired = self.client.is_some();
                 let pending = self.board.as_ref().map_or(0, Board::pending);
-                self.today
-                    .update(cx, |today, cx| today.set_travel(pending, paired, cx));
+                nsh_today::set_travel(pending, paired);
             }
             Event::Wrote => {
                 if let Some(board) = self.board.clone() {
@@ -281,10 +273,8 @@ impl Capabilities {
                     projects.update(cx, |projects, cx| projects.set_blocked(blocked, cx));
                 }
                 self.inbox.update(cx, |inbox, cx| inbox.load(cx));
-                self.today.update(cx, |today, cx| {
-                    today.set_records(records, cx);
-                    today.set_travel(pending, paired, cx);
-                });
+                nsh_today::set_records(records);
+                nsh_today::set_travel(pending, paired);
                 self.synced = Some(
                     match outcome {
                         Ok(report) => report.summary(),
@@ -357,6 +347,7 @@ impl Capabilities {
             }
             Event::SelectTab(tab) => self.select_tab(tab, cx),
             Event::OpenEdge(seat) => self.open_edge(seat, cx),
+            Event::Today(event) => self.on_today(event, cx),
         }
     }
 }

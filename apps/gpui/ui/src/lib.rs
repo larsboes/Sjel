@@ -34,6 +34,8 @@ pub mod nav;
 pub mod nsh_documents;
 #[cfg(feature = "nsh")]
 pub mod nsh_mail;
+#[cfg(feature = "nsh")]
+pub mod nsh_today;
 pub mod packs;
 pub mod pdf_kit;
 pub mod people;
@@ -52,7 +54,6 @@ pub mod systems;
 pub mod tasks;
 pub mod terminal;
 pub mod theme;
-pub mod today;
 pub mod travel;
 pub mod viz;
 pub mod web_links;

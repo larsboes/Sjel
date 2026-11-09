@@ -1,6 +1,6 @@
-//! Mounts the NSH Documents reader (`sjel_gpui_ui::nsh_documents`) into a view from
-//! `host/App.swift`, over the GPUI one (`docs/plans/gpui.md` §11). The view stays hidden until
-//! the phone opens Documents. PDFs show in PDFKit through the `sjel.pdf` component, whose view
+//! Mounts the NSH screens (`sjel_gpui_ui::nsh_documents::NshHostScreen`: Today, Documents, Mail)
+//! into a view from `host/App.swift`, over the GPUI one (`docs/plans/gpui.md` §11). The view
+//! shows at launch on Today and hides while a GPUI page is open. PDFs show in PDFKit through the `sjel.pdf` component, whose view
 //! `host/Documents.swift` makes.
 
 #[cfg(target_os = "ios")]
@@ -81,8 +81,9 @@ pub fn mount(container: &objc2_ui_kit::UIView) -> bool {
         return false;
     };
     set_ui_sets(vec![nsh_base::registry()]);
-    docs::set_close(crate::host::hide_nsh);
-    mail::set_close(crate::host::hide_nsh);
+    // "Back" from Documents or Mail returns to Today, which is the NSH screen under them.
+    docs::set_close(|| docs::set_nsh_page(docs::NshPage::Today));
+    mail::set_close(|| docs::set_nsh_page(docs::NshPage::Today));
     docs::set_switch_tab(|target| {
         crate::host::hide_nsh();
         match target {

@@ -49,31 +49,41 @@ pub(crate) fn launch_tab() -> Tab {
         "settings" => Tab::Settings,
         "mail" => mail_tab(),
         "documents" => documents_tab(),
-        _ => Tab::Today,
+        _ => today_tab(),
     }
+}
+
+/// Today is the NSH screen the app opens on (`nav.rs`, `select_tab`).
+fn today_tab() -> Tab {
+    #[cfg(target_os = "ios")]
+    {
+        sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Today);
+        crate::host::show_nsh();
+    }
+    Tab::Today
 }
 
 /// Documents is an NSH screen over Today when the build has NSH (`nav.rs`, `select_tab`).
 fn documents_tab() -> Tab {
-    #[cfg(all(target_os = "ios", feature = "nsh"))]
+    #[cfg(target_os = "ios")]
     {
         sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Documents);
         crate::host::show_nsh();
         Tab::Today
     }
-    #[cfg(not(all(target_os = "ios", feature = "nsh")))]
+    #[cfg(not(target_os = "ios"))]
     Tab::Documents
 }
 
 /// Mail is an NSH screen over Today when the build has NSH (`nav.rs`, `select_tab`).
 fn mail_tab() -> Tab {
-    #[cfg(all(target_os = "ios", feature = "nsh"))]
+    #[cfg(target_os = "ios")]
     {
         sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Mail);
         crate::host::show_nsh();
         Tab::Today
     }
-    #[cfg(not(all(target_os = "ios", feature = "nsh")))]
+    #[cfg(not(target_os = "ios"))]
     Tab::Mail
 }
 

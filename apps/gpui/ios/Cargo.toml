@@ -11,7 +11,8 @@ crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 sjel-gpui-core.workspace = true
-sjel-gpui-ui.workspace = true
+# Screens drawn by NSH with UIKit views next to GPUI (docs/plans/gpui.md §11).
+sjel-gpui-ui = { workspace = true, features = ["nsh"] }
 gpui-kit.workspace = true
 device-auth = { path = "../../../crates/device-auth" }
 # `SJEL_DAY` names the calendar day a screenshot opens on (src/lib.rs, `launch_day`).
@@ -25,31 +26,22 @@ tokio = { workspace = true, features = ["time"] }
 # Fork at the gpui-pre snapshot gpui-kit pins (upstreams.toml, gpui-mobile). camera and video_player: the crate uses both modules without their feature gates.
 gpui-mobile = { package = "gpui-pre-mobile", git = "https://github.com/larsboes/gpui-mobile", rev = "98f6466", default-features = false, features = ["camera", "video_player"] }
 
-[features]
-# Screens drawn by NSH with UIKit views next to GPUI (docs/plans/gpui.md §11).
-default = ["nsh"]
-nsh = ["sjel-gpui-ui/nsh", "dep:nsh-base", "dep:nsh-platform-ios", "dep:objc2", "dep:objc2-ui-kit"]
-
 [target.'cfg(target_os = "ios")'.dependencies.nsh-platform-ios]
 git = "https://github.com/longbridge/nsh"
 rev = "1894697155"
 default-features = false
-optional = true
 
 [target.'cfg(target_os = "ios")'.dependencies.objc2]
 version = "0.6.5"
-optional = true
 
 [target.'cfg(target_os = "ios")'.dependencies.objc2-ui-kit]
 version = "0.3.2"
 default-features = false
 features = ["UIView", "UIResponder", "objc2-core-foundation"]
-optional = true
 
 [dependencies.nsh-base]
 git = "https://github.com/longbridge/nsh"
 rev = "1894697155"
-optional = true
 
 [lints]
 workspace = true

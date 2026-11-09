@@ -48,7 +48,7 @@ use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
 use sjel_gpui_ui::sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 use sjel_gpui_ui::soundscape::Soundscape;
 use sjel_gpui_ui::terminal::{TerminalDeck, TerminalEvent};
-use sjel_gpui_ui::today::{Today, TodayEvent};
+use sjel_gpui_ui::nsh_today::{self, TodayEvent};
 use sjel_gpui_ui::{
     mobile_tab_bar, step_terminal_font_size, AccentColor, AppearanceSettings, BackgroundTone,
     Density, NavItem, NotifyPrefs, Palette, SoundscapePrefs, TerminalFont, ThemeContext, ThemeMode,
@@ -63,7 +63,6 @@ mod identity;
 mod launch;
 mod nav;
 mod notify;
-#[cfg(feature = "nsh")]
 mod nsh;
 mod pairing;
 
@@ -169,6 +168,8 @@ enum Event {
     /// Host or NSH edge seat opening request.
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
     OpenEdge(Seat),
+    /// What the NSH Today screen asked for (`sjel_gpui_ui::nsh_today`).
+    Today(TodayEvent),
 }
 
 pub struct Capabilities {
@@ -188,9 +189,6 @@ pub struct Capabilities {
     board: Option<Board>,
     /// The Mac's Projects page over the replica (`sjel_gpui_ui::projects`), once the store opens.
     projects: Option<gpui::Entity<Projects>>,
-    /// The landing page: the day the copy answered and the tasks the replica holds
-    /// (`sjel_gpui_ui::today`). It reads both, so it exists before either has answered.
-    today: gpui::Entity<Today>,
     /// The Calendar page over the Mac's read-only copy (`sjel_gpui_ui::calendar`).
     calendar: gpui::Entity<Calendar>,
     /// The capture field over the phone's own replica (`sjel_gpui_ui::inbox`).
@@ -347,47 +345,13 @@ impl Capabilities {
             history.set_cache_preview_handler(Some(cache_preview_roomplan));
             history
         });
-        // The landing page reads the copy for the day and the replica for the tasks, so it is built
-        // before either answers and says what it is missing until one does. A launch with
-        // `SJEL_DAY` freezes the day, the way the calendar's does: a screenshot cannot be allowed to
-        // disagree with itself a minute later.
-        let today = cx.new(|_| match frozen_day() {
-            Some(day) => Today::at(day, Density::Mobile),
-            None => Today::new(Density::Mobile),
-        });
-        cx.subscribe(&today, |view, _, event, cx| match event {
-            // A day or a project is a place in another tab: the page names it and the app goes
-            // there, so a thumb never has to work out which tab holds what it just tapped.
-            TodayEvent::OpenDay(day) => {
-                view.select_tab(Tab::Calendar, cx);
-                view.calendar
-                    .update(cx, |calendar, cx| calendar.open_day(*day, cx));
-            }
-            TodayEvent::OpenProject(name) => {
-                view.select_tab(Tab::Projects, cx);
-                if let Some(projects) = &view.projects {
-                    let name = name.clone();
-                    projects.update(cx, |projects, cx| projects.open_project(name, cx));
-                }
-            }
-            TodayEvent::Settings => view.select_tab(Tab::Settings, cx),
-            // The edge slides in over the page rather than becoming a tab: the bar holds five and is
-            // full, and the plan's own shape for it is a panel from the right edge (`ui/src/sidebar.rs`).
-            TodayEvent::Soundscape => view.open_edge(Seat::Soundscape, cx),
-            TodayEvent::Activity => view.open_edge(Seat::Activity, cx),
-            TodayEvent::Refresh => {
-                if view.board.is_some() {
-                    view.maybe_sync(cx);
-                } else {
-                    view.refresh_copy(cx);
-                }
-            }
-            TodayEvent::Wrote => view.maybe_sync(cx),
-            TodayEvent::Capture => view.select_tab(Tab::Inbox, cx),
-            TodayEvent::People => view.select_tab(Tab::People, cx),
-            TodayEvent::Documents => view.select_tab(Tab::Documents, cx),
-        })
-        .detach();
+        // The landing page is the NSH Today screen (`sjel_gpui_ui::nsh_today`). It reads the copy
+        // for the day and the replica for the tasks; what it cannot do, it hands back here. A launch
+        // with `SJEL_DAY` freezes the day, so a screenshot cannot disagree with itself.
+        if let Some(day) = frozen_day() {
+            sjel_gpui_ui::nsh_today::set_day(day);
+        }
+        sjel_gpui_ui::nsh_today::set_host(|event| crate::host::announce(Event::Today(event)));
         // The register and the card a screenshot needs, for the same reason `SJEL_DAY` exists: a
         // page a hand did not navigate to still has to be photographable (`launch_register`,
         // `launch_person`).
@@ -495,7 +459,6 @@ impl Capabilities {
             documents,
             soundscape,
             sidebar,
-            today,
             copy: None,
             copying: false,
             store_error: None,
@@ -1183,8 +1146,6 @@ impl Render for Capabilities {
             .update(cx, |people, cx| people.set_palette(palette, cx));
         self.interior
             .update(cx, |history, cx| history.set_palette(palette, cx));
-        self.today
-            .update(cx, |today, cx| today.set_palette(palette, cx));
         self.inbox
             .update(cx, |inbox, cx| inbox.set_palette(palette, cx));
         self.soundscape
@@ -1656,7 +1617,6 @@ impl Render for Capabilities {
                                 .child(self.terminal_settings(palette, cx)),
                         )
                     })
-                    .when(is_today, |page| page.child(self.today.clone()))
                     .when(is_mail && paired, |page| page.child(self.mail.clone()))
                     .when(is_mail && !paired, |page| {
                         page.child(needs_mac("needs-mac-mail", "Mail", palette, cx))

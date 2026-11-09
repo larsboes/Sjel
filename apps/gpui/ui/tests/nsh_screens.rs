@@ -7,7 +7,7 @@ use nsh_testing::Headless;
 use sjel_gpui_ui::nsh_documents::{self, NshHostScreen, NshPage};
 
 #[test]
-fn documents_and_mail_render_and_switch_in_the_phone_host() {
+fn today_documents_and_mail_render_and_switch_in_the_phone_host() {
     nsh_documents::set_close(|| {});
     for appearance in [Appearance::Light, Appearance::Dark] {
         nsh_documents::set_nsh_page(NshPage::Documents);
@@ -23,10 +23,12 @@ fn documents_and_mail_render_and_switch_in_the_phone_host() {
         app.press("text:Mail").expect("the Mail tab responds");
         app.wait_for("text:Mail").expect("Mail renders its heading");
         assert_readable_heading(&app, "Mail", appearance);
-        app.press("text:Documents")
-            .expect("the Documents tab responds");
+        app.press("text:Docs").expect("the Docs tab responds");
         app.wait_for("text:Documents")
             .expect("Documents renders again after switching back");
+        app.press("text:Today").expect("the Today tab responds");
+        app.wait_for("text:TODAY")
+            .expect("Today renders its heading");
     }
 }
 

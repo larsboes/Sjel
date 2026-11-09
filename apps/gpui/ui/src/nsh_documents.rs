@@ -19,6 +19,7 @@ use sjel_gpui_core::shell::{self, DocumentDetail, DocumentSummary};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
 use crate::nsh_mail::mail_screen;
+use crate::nsh_today::today_screen;
 
 /// The native component that shows a PDF at a file path (`ios/src/nsh.rs` registers it).
 pub const PDF_COMPONENT: &str = "sjel.pdf";
@@ -27,6 +28,7 @@ pub const PDF_COMPONENT: &str = "sjel.pdf";
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum NshPage {
     #[default]
+    Today,
     Documents,
     Mail,
 }
@@ -39,7 +41,7 @@ struct PageRouter {
 fn page_router() -> &'static PageRouter {
     static ROUTER: OnceLock<PageRouter> = OnceLock::new();
     ROUTER.get_or_init(|| PageRouter {
-        current: Mutex::new(NshPage::Documents),
+        current: Mutex::new(NshPage::Today),
         tx: Mutex::new(None),
     })
 }
@@ -409,7 +411,8 @@ pub fn NshHostScreen() -> impl IntoElement {
                             label.to_owned()
                         }
                     })
-                    .text_xs(),
+                    .text_xs()
+                    .number_of_lines(1u32),
                 )
         };
     let bottom_tab_bar = view()
@@ -418,9 +421,9 @@ pub fn NshHostScreen() -> impl IntoElement {
         .px_2()
         .pt_1()
         .pb_2()
-        .child(tab_item("Today", None, "today"))
+        .child(tab_item("Today", Some(NshPage::Today), "today"))
         .child(tab_item("Mail", Some(NshPage::Mail), "mail"))
-        .child(tab_item("Documents", Some(NshPage::Documents), "documents"))
+        .child(tab_item("Docs", Some(NshPage::Documents), "documents"))
         .child(tab_item("Calendar", None, "calendar"))
         .child(tab_item("Travel", None, "travel"))
         .child(tab_item("Agent", None, "agent"));
@@ -435,10 +438,12 @@ pub fn NshHostScreen() -> impl IntoElement {
                 .px_4()
                 .pt_2()
                 .gap_2()
+                .child(page_chip(NshPage::Today, "Today"))
                 .child(page_chip(NshPage::Documents, "Documents"))
                 .child(page_chip(NshPage::Mail, "Mail"))
         }))
         .child(view().flex_1().child(dynamic(move || match page.get() {
+            NshPage::Today => today_screen().into_element(),
             NshPage::Documents => documents_screen().into_element(),
             NshPage::Mail => mail_screen().into_element(),
         })))

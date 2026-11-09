@@ -7,6 +7,11 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 pub use setup_api::*;
 
+mod storage;
+pub use storage::{
+    StorageDirectory, StorageDirectorySnapshot, StorageExplorer, ROUTE_STATUS_STORAGE_EXPLORER,
+};
+
 // --- Route Constants ---
 
 pub const ROUTE_STATUS_HEALTH: &str = "/api/sjel-status/health";
@@ -563,7 +568,6 @@ pub struct StorageView {
     pub state_label: String,
     pub classes: Vec<StorageClass>,
     pub scale_bytes: u64,
-    pub reclaimable_label: String,
     pub protected: Vec<StorageProtected>,
     pub protected_absent: usize,
     pub protected_absent_paths: Vec<String>,
@@ -572,6 +576,7 @@ pub struct StorageView {
     pub classes_absent: Vec<StorageClass>,
     pub services_absent: Vec<String>,
     pub reconciliation: Option<(String, String)>,
+    pub other_allocation_label: Option<String>,
 }
 
 impl StorageReport {
@@ -606,12 +611,6 @@ impl StorageReport {
         let mut protected = self.protected.clone();
         protected.sort_by_key(|entry| std::cmp::Reverse(entry.bytes));
 
-        let reclaimable: u64 = classes
-            .iter()
-            .filter(|class| class.applicable)
-            .map(|class| class.bytes)
-            .sum();
-
         let scale_bytes = classes
             .iter()
             .filter(|class| class.measured != Some(false))
@@ -642,7 +641,6 @@ impl StorageReport {
             state_label: self.state.clone(),
             classes,
             scale_bytes,
-            reclaimable_label: storage_bytes(reclaimable),
             protected_absent: protected
                 .iter()
                 .filter(|entry| entry.present == Some(false))
@@ -660,6 +658,14 @@ impl StorageReport {
             unmeasured,
             classes_absent,
             services_absent,
+            other_allocation_label: {
+                let bytes = self
+                    .disk
+                    .total
+                    .saturating_sub(self.disk.used)
+                    .saturating_sub(self.disk.free);
+                (bytes > 0).then(|| storage_bytes(bytes))
+            },
             reconciliation: match (self.named_bytes, self.unattributed_bytes) {
                 (Some(named), Some(unattributed)) => {
                     Some((storage_bytes(named), storage_bytes(unattributed)))

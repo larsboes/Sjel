@@ -241,12 +241,11 @@ const GIT_READS: &[&str] = &[
     "version",
 ];
 
-/// `git` subcommands that touch only the local index or a fresh copy (`R2`).
+/// `git` subcommands that stage files or obtain a copy (`R2`).
 const GIT_LOCAL: &[&str] = &["fetch", "add", "rm", "mv", "clone", "init"];
 
-/// `git` subcommands that change history, branches or remotes (`A2`).
+/// `git` subcommands that change existing history, branches or remotes (`A2`).
 const GIT_ASK: &[&str] = &[
-    "commit",
     "push",
     "merge",
     "rebase",
@@ -298,6 +297,73 @@ const PROCESSES: &[&str] = &["kill", "pkill", "killall", "docker", "podman", "or
 const DOCKER_READS: &[&str] = &[
     "ps", "images", "logs", "inspect", "version", "info", "stats", "top",
 ];
+
+fn container_read(arguments: &[&str]) -> bool {
+    let Some(first) = arguments.first() else {
+        return false;
+    };
+    if DOCKER_READS.contains(first) {
+        return true;
+    }
+    let reads: &[&str] = match *first {
+        "system" => &["df", "info", "events"],
+        "container" => &["ls", "inspect", "logs", "stats", "top", "port"],
+        "image" => &["ls", "inspect", "history"],
+        "volume" | "network" => &["ls", "inspect"],
+        "context" => &["ls", "show", "inspect"],
+        "compose" => &["ps", "ls", "logs", "images", "top", "version"],
+        "builder" => &["du"],
+        _ => &[],
+    };
+    arguments
+        .get(1)
+        .is_some_and(|action| reads.contains(action))
+}
+
+fn system_read(program: &str, arguments: &[&str]) -> bool {
+    if program == "spctl" {
+        return arguments == ["--status"];
+    }
+    let arguments = if program == "systemctl" {
+        let index = arguments
+            .iter()
+            .position(|arg| {
+                !matches!(
+                    *arg,
+                    "--user" | "--system" | "--no-pager" | "--all" | "--plain"
+                )
+            })
+            .unwrap_or(arguments.len());
+        &arguments[index..]
+    } else {
+        arguments
+    };
+    if program == "diskutil" && arguments.first() == Some(&"apfs") {
+        return arguments
+            .get(1)
+            .is_some_and(|action| ["list", "listSnapshots", "listVolumeGroups"].contains(action));
+    }
+    let reads: &[&str] = match program {
+        "diskutil" => &["list", "info"],
+        "launchctl" => &["list", "print", "print-disabled"],
+        "systemctl" => &[
+            "status",
+            "show",
+            "list-units",
+            "list-unit-files",
+            "is-active",
+            "is-enabled",
+            "is-failed",
+            "list-jobs",
+            "list-timers",
+        ],
+        "csrutil" => &["status"],
+        _ => &[],
+    };
+    arguments
+        .first()
+        .is_some_and(|action| reads.contains(action))
+}
 
 /// Programs that only write, so their arguments are write targets.
 const WRITERS: &[&str] = &[
@@ -832,6 +898,12 @@ impl Policy {
         if program == "gh" {
             return with_substitutions(classify_gh(&texts));
         }
+        if !unknown_arguments && system_read(program, &texts) {
+            return with_substitutions(Decision::allow(
+                "R1",
+                format!("`{program}` reads system state"),
+            ));
+        }
         if block_rule(program) == Some("B5") || is_mkfs(program) {
             return Decision::block("B5", format!("`{program}` changes disks or system state"));
         }
@@ -953,12 +1025,11 @@ impl Policy {
             return with_substitutions(strictest(parts));
         }
         if PROCESSES.contains(&program) {
-            if matches!(program, "docker" | "podman")
-                && texts
-                    .first()
-                    .is_some_and(|action| DOCKER_READS.contains(action))
-            {
-                return Decision::allow("R1", format!("`{program}` reads"));
+            if matches!(program, "docker" | "podman") && container_read(&texts) {
+                return with_substitutions(Decision::allow(
+                    "R1",
+                    format!("`{program}` reads container state"),
+                ));
             }
             return with_substitutions(Decision::ask(
                 "A5",
@@ -1002,11 +1073,11 @@ impl Policy {
             return Decision::block("B1", "`rm` with arguments chosen at run time");
         }
         let flags = short_flags(arguments);
-        if ["-r", "-R", "-f", "--recursive", "--force"]
+        if ["-r", "-R", "--recursive"]
             .iter()
             .any(|flag| flags.contains(*flag))
         {
-            return Decision::block("B1", "`rm` with a recursive or forced flag");
+            return Decision::block("B1", "recursive `rm`");
         }
         for target in arguments.iter().filter(|word| !word.text.starts_with('-')) {
             if target.dynamic {
@@ -1024,7 +1095,7 @@ impl Policy {
         Decision::allow("R4", "`rm` of a file in the working directory")
     }
 
-    /// `git` and its subcommand: history that cannot be recovered is Block, a change is Ask.
+    /// `git`: new local commits run; rewriting history or discarding work is Block.
     fn classify_git(&self, arguments: &[Word]) -> Decision {
         let mut index = 0;
         // Global options before the subcommand.
@@ -1061,6 +1132,35 @@ impl Policy {
         };
         if subcommand.is_empty() {
             return Decision::allow("R2", "`git` without a subcommand");
+        }
+        if subcommand == "commit" {
+            let values = [
+                "-m",
+                "--message",
+                "-F",
+                "--file",
+                "-C",
+                "--reuse-message",
+                "-c",
+                "--reedit-message",
+                "-t",
+                "--template",
+                "--author",
+                "--date",
+                "--cleanup",
+                "--trailer",
+                "--fixup",
+                "--squash",
+                "--pathspec-from-file",
+            ];
+            let mut index = 0;
+            while index < rest.len() && rest[index] != "--" {
+                if rest[index].len() >= 4 && "--amend".starts_with(rest[index]) {
+                    return Decision::block("B2", "`git commit --amend` rewrites history");
+                }
+                index += if values.contains(&rest[index]) { 2 } else { 1 };
+            }
+            return Decision::allow("R2", "`git commit` creates a local commit");
         }
         if subcommand == "reset" && has(&["--hard", "--merge", "--keep"]) {
             return Decision::block("B2", "`git reset` discards work");
@@ -1968,7 +2068,7 @@ mod tests {
             "secret-tool lookup a b",
             "cargo publish",
             "echo hi > ~/.x",
-            "git commit -m x",
+            "git push origin main",
             "brew install jq",
             "curl -d a=1 https://example.com",
             "kill 1",

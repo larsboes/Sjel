@@ -7,7 +7,7 @@ use serde::Serialize;
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 pub struct Ledger {
-    pool: sjel_store::Pool,
+    pub(crate) pool: sjel_store::Pool,
 }
 
 fn ingest_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IngestRow> {
@@ -118,6 +118,15 @@ impl Ledger {
                     decided_at TEXT NOT NULL DEFAULT ({now}),
                     PRIMARY KEY (left_digest, right_digest),
                     CHECK(left_digest < right_digest)
+                );
+                CREATE TABLE IF NOT EXISTS media_attachments (
+                    sha256 TEXT PRIMARY KEY, byte_len INTEGER NOT NULL CHECK(byte_len >= 0),
+                    imported_at TEXT NOT NULL DEFAULT ({now})
+                );
+                CREATE TABLE IF NOT EXISTS media_attachment_sources (
+                    sha256 TEXT NOT NULL REFERENCES media_attachments(sha256),
+                    filename TEXT NOT NULL, first_seen TEXT NOT NULL DEFAULT ({now}),
+                    PRIMARY KEY(sha256, filename)
                 );
                 CREATE TABLE IF NOT EXISTS media_geotags (
                     digest TEXT PRIMARY KEY REFERENCES media_files(digest),

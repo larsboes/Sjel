@@ -18,6 +18,7 @@ pub use route::Route;
 const PREFIX: &str = "import";
 /// documents refuses larger uploads (`crates/documents/src/library.rs` `MAX_BYTES`).
 const DOCUMENTS_MAX_BYTES: u64 = 128 * 1024 * 1024;
+const MEDIA_MAX_BYTES: u64 = 128 * 1024 * 1024;
 
 pub type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -67,6 +68,25 @@ pub trait Documents {
     fn upload(&self, filename: &str, bytes: &[u8]) -> Result<String, Handover>;
 }
 
+/// Media's local attachment contract. All calls cross the owning HTTP boundary.
+pub trait Media {
+    /// Find a verified local original.
+    ///
+    /// # Errors
+    /// The service or its original cannot be verified.
+    fn holding(&self, sha256: &str) -> Result<bool, String>;
+    /// Store an original and retain this source filename, including on duplicate uploads.
+    ///
+    /// # Errors
+    /// Refusal or a retryable service failure.
+    fn upload(
+        &self,
+        filename: &str,
+        sha256: &str,
+        bytes: &[u8],
+    ) -> Result<(String, bool), Handover>;
+}
+
 /// Why an upload did not store the file.
 #[derive(Debug)]
 pub enum Handover {
@@ -88,12 +108,14 @@ pub struct Entry {
 /// # Errors
 /// `root` is not a directory or a directory cannot be read.
 pub fn plan(root: &Path) -> Fallible<Vec<Entry>> {
+    validate_root(root)?;
     if !fs::symlink_metadata(root)?.is_dir() {
         return Err(format!("{} is not a directory", root.display()).into());
     }
     let mut entries = Vec::new();
     let mut pending = vec![root.to_path_buf()];
     while let Some(dir) = pending.pop() {
+        reject_symlink_components(&dir)?;
         for item in fs::read_dir(&dir)? {
             let path = item?.path();
             let metadata = fs::symlink_metadata(&path)?;
@@ -111,11 +133,16 @@ pub fn plan(root: &Path) -> Fallible<Vec<Entry>> {
             } else if !metadata.is_file() {
                 Route::Skip("not a regular file")
             } else {
+                let initial = route::route(relative, None);
                 let is_csv = path
                     .extension()
                     .is_some_and(|extension| extension.eq_ignore_ascii_case("csv"));
-                let header = is_csv.then(|| first_line(&path)).flatten();
-                route::route(relative, header.as_deref())
+                if is_csv && initial == Route::Skip("data export, not a bank statement") {
+                    let header = first_line(&path);
+                    route::route(relative, header.as_deref())
+                } else {
+                    initial
+                }
             };
             entries.push(entry(path, route, &metadata));
         }
@@ -138,10 +165,98 @@ fn entry(path: PathBuf, route: Route, metadata: &fs::Metadata) -> Entry {
     }
 }
 
+/// Refuse credential roots and symlink roots before canonicalization.
+///
+/// # Errors
+/// A credential component, symlink root, or inaccessible path is encountered.
+pub fn validate_root(root: &Path) -> Fallible<()> {
+    reject_symlink_components(root)?;
+    if route::credential_path(root) || route::credential_path(&root.canonicalize()?) {
+        return Err("import root is inside a credential folder".into());
+    }
+    if fs::symlink_metadata(root)?.file_type().is_symlink() {
+        return Err("import root must not be a symlink".into());
+    }
+    Ok(())
+}
+
+fn reject_symlink_components(path: &Path) -> Fallible<()> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    for ancestor in absolute.ancestors() {
+        if fs::symlink_metadata(ancestor)?.file_type().is_symlink() {
+            return Err("source path contains a symlink".into());
+        }
+    }
+    Ok(())
+}
+
+fn open_regular(path: &Path) -> Fallible<fs::File> {
+    use std::os::unix::fs::MetadataExt;
+    reject_symlink_components(path)?;
+    if route::credential_path(path.parent().unwrap_or(path)) || route::secret_file(path) {
+        return Err("credential or secret path".into());
+    }
+    let canonical = path.canonicalize()?;
+    if route::credential_path(canonical.parent().unwrap_or(&canonical))
+        || route::secret_file(&canonical)
+    {
+        return Err("credential or secret path".into());
+    }
+    let before = fs::symlink_metadata(path)?;
+    if !before.is_file() {
+        return Err("not a regular file".into());
+    }
+    let file = fs::File::open(path)?;
+    let opened = file.metadata()?;
+    reject_symlink_components(path)?;
+    if !opened.is_file() || before.dev() != opened.dev() || before.ino() != opened.ino() {
+        return Err("source changed while opening".into());
+    }
+    Ok(file)
+}
+
+fn source_unchanged(entry: &Entry) -> Fallible<()> {
+    reject_symlink_components(&entry.path)?;
+    let metadata = fs::symlink_metadata(&entry.path)?;
+    let current = self::entry(entry.path.clone(), entry.route, &metadata);
+    if !metadata.is_file()
+        || current.byte_len != entry.byte_len
+        || current.modified_ns != entry.modified_ns
+    {
+        return Err("source size or mtime changed since planning".into());
+    }
+    Ok(())
+}
+
+fn read_bytes(entry: &Entry, max_bytes: u64) -> Fallible<Vec<u8>> {
+    use std::{io::Read, os::unix::fs::MetadataExt};
+    source_unchanged(entry)?;
+    let file = open_regular(&entry.path)?;
+    let before = file.metadata()?;
+    let mut bytes = Vec::new();
+    file.take(max_bytes + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > max_bytes {
+        return Err("source exceeds upload limit".into());
+    }
+    source_unchanged(entry)?;
+    let after = fs::symlink_metadata(&entry.path)?;
+    if before.dev() != after.dev()
+        || before.ino() != after.ino()
+        || bytes.len() as u64 != before.len()
+    {
+        return Err("source changed while reading".into());
+    }
+    Ok(bytes)
+}
+
 fn first_line(path: &Path) -> Option<String> {
     use std::io::{BufRead, BufReader, Read};
     let mut line = String::new();
-    BufReader::new(fs::File::open(path).ok()?.take(4096))
+    BufReader::new(open_regular(path).ok()?.take(4096))
         .read_line(&mut line)
         .ok()?;
     Some(line)
@@ -285,6 +400,20 @@ pub fn run(
     entries: &[Entry],
     ledger: &Ledger,
     documents: &dyn Documents,
+    progress: impl FnMut(&Entry, Option<Outcome>, Option<&str>),
+) -> Fallible<Summary> {
+    run_with_media(entries, ledger, documents, None, progress)
+}
+
+/// Hand files to documents and, when configured, the local media attachment library.
+///
+/// # Errors
+/// The ledger cannot be read or written. Handover failures remain retryable ledger outcomes.
+pub fn run_with_media(
+    entries: &[Entry],
+    ledger: &Ledger,
+    documents: &dyn Documents,
+    media: Option<&dyn Media>,
     mut progress: impl FnMut(&Entry, Option<Outcome>, Option<&str>),
 ) -> Fallible<Summary> {
     let mut summary = Summary::default();
@@ -300,7 +429,16 @@ pub fn run(
         }
         let (sha256, outcome, detail, target) = match entry.route {
             Route::Skip(reason) => (None, Outcome::Skipped, Some(reason.to_owned()), None),
-            Route::Media | Route::Finance | Route::Notes => (
+            Route::Media => match media {
+                Some(media) => hand_to_media(entry, media),
+                None => (
+                    None,
+                    Outcome::Pending,
+                    Some("media client is not configured".into()),
+                    None,
+                ),
+            },
+            Route::Finance | Route::Notes => (
                 None,
                 Outcome::Pending,
                 Some(format!("{} has no import contract yet", entry.route.name())),
@@ -331,7 +469,7 @@ pub fn run(
 type Handled = (Option<String>, Outcome, Option<String>, Option<String>);
 
 fn hand_to_documents(entry: &Entry, documents: &dyn Documents) -> Handled {
-    let bytes = match fs::read(&entry.path) {
+    let bytes = match read_bytes(entry, DOCUMENTS_MAX_BYTES) {
         Ok(bytes) => bytes,
         Err(error) => return (None, Outcome::Failed, Some(format!("read: {error}")), None),
     };
@@ -349,10 +487,66 @@ fn hand_to_documents(entry: &Entry, documents: &dyn Documents) -> Handled {
         Ok(None) => {}
         Err(error) => return (Some(sha256), Outcome::Failed, Some(error), None),
     }
+    if let Err(error) = source_unchanged(entry) {
+        return (Some(sha256), Outcome::Failed, Some(error.to_string()), None);
+    }
     match documents.upload(filename, &bytes) {
         Ok(id) => (Some(sha256), Outcome::Imported, None, Some(id)),
         Err(Handover::Refused(reason)) => (Some(sha256), Outcome::Skipped, Some(reason), None),
         Err(Handover::Failed(error)) => (Some(sha256), Outcome::Failed, Some(error), None),
+    }
+}
+
+fn hand_to_media(entry: &Entry, media: &dyn Media) -> Handled {
+    if entry.byte_len > MEDIA_MAX_BYTES {
+        return (
+            None,
+            Outcome::Skipped,
+            Some("larger than the 128 MiB media limit".into()),
+            None,
+        );
+    }
+    let bytes = match read_bytes(entry, MEDIA_MAX_BYTES) {
+        Ok(bytes) => bytes,
+        Err(error) => return (None, Outcome::Failed, Some(format!("read: {error}")), None),
+    };
+    if bytes.starts_with(b"bplist00") {
+        return (
+            None,
+            Outcome::Skipped,
+            Some(
+                "unsupported Apple binary-plist placeholder; original media bytes are required"
+                    .into(),
+            ),
+            None,
+        );
+    }
+    let digest = hex(&Sha256::digest(&bytes));
+    let filename = entry
+        .path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("attachment");
+    if let Err(error) = media.holding(&digest) {
+        return (Some(digest), Outcome::Failed, Some(error), None);
+    }
+    if let Err(error) = source_unchanged(entry) {
+        return (Some(digest), Outcome::Failed, Some(error.to_string()), None);
+    }
+    // Duplicate uploads retain every source filename; the owner decides byte admission atomically.
+    match media.upload(filename, &digest, &bytes) {
+        Ok((id, created)) => (
+            Some(digest),
+            if created {
+                Outcome::Imported
+            } else {
+                Outcome::Present
+            },
+            None,
+            Some(id),
+        ),
+        Err(Handover::Refused(reason)) => (Some(digest), Outcome::Skipped, Some(reason), None),
+        Err(Handover::Failed(error)) => (Some(digest), Outcome::Failed, Some(error), None),
     }
 }
 
@@ -375,10 +569,14 @@ impl DocumentsHttp {
     /// # Errors
     /// The HTTP client cannot be built.
     pub fn from_deployment() -> Fallible<Self> {
+        Self::for_route("documents/api/documents")
+    }
+
+    fn for_route(route: &str) -> Fallible<Self> {
         let shell =
             std::env::var("SJEL_STATUS_URL").unwrap_or_else(|_| "http://127.0.0.1:8082".to_owned());
         Ok(Self {
-            base: format!("{}/documents/api/documents", shell.trim_end_matches('/')),
+            base: format!("{}/{route}", shell.trim_end_matches('/')),
             bearer: sjel_server::InboundAuth::from_deployment().bearer_header(),
             client: sjel_http::client(PURPOSE, std::time::Duration::from_secs(300))?,
         })
@@ -399,14 +597,14 @@ impl DocumentsHttp {
     }
 }
 
-fn body_error(response: reqwest::blocking::Response) -> String {
+fn body_error(owner: &str, response: reqwest::blocking::Response) -> String {
     let status = response.status().as_u16();
     let body = response.text().unwrap_or_default();
     let reason = serde_json::from_str::<serde_json::Value>(&body)
         .ok()
         .and_then(|value| value["error"].as_str().map(str::to_owned))
         .unwrap_or(body);
-    format!("documents answered HTTP {status}: {reason}")
+    format!("{owner} answered HTTP {status}: {reason}")
 }
 
 impl Documents for DocumentsHttp {
@@ -419,7 +617,7 @@ impl Documents for DocumentsHttp {
             .send()
             .map_err(|error| format!("documents unreachable: {error}"))?;
         if !response.status().is_success() {
-            return Err(body_error(response));
+            return Err(body_error("documents", response));
         }
         let value: serde_json::Value = response.json().map_err(|error| error.to_string())?;
         Ok(value["documents"].get(0).and_then(|document| {
@@ -444,10 +642,10 @@ impl Documents for DocumentsHttp {
             .map_err(|error| Handover::Failed(format!("documents unreachable: {error}")))?;
         let status = response.status();
         if status.is_client_error() && status != reqwest::StatusCode::UNAUTHORIZED {
-            return Err(Handover::Refused(body_error(response)));
+            return Err(Handover::Refused(body_error("documents", response)));
         }
         if !status.is_success() {
-            return Err(Handover::Failed(body_error(response)));
+            return Err(Handover::Failed(body_error("documents", response)));
         }
         let value: serde_json::Value = response
             .json()
@@ -456,6 +654,106 @@ impl Documents for DocumentsHttp {
             .as_str()
             .map(str::to_owned)
             .ok_or_else(|| Handover::Failed("documents answered without a document id".to_owned()))
+    }
+}
+
+/// Media attachment intake over HTTP, using the deployment credential.
+pub struct MediaHttp {
+    http: DocumentsHttp,
+}
+
+impl MediaHttp {
+    /// Build the blocking media client outside an async worker thread.
+    ///
+    /// # Errors
+    /// The HTTP client cannot be built.
+    pub fn from_deployment() -> Fallible<Self> {
+        let mut http = DocumentsHttp::for_route("media/api/attachments")?;
+        // The shell proxy buffers at most 8 MiB; raw originals use the capability listener.
+        let base = std::env::var("SJEL_MEDIA_URL")
+            .unwrap_or_else(|_| format!("http://127.0.0.1:{}", media_api::DEFAULT_MEDIA_PORT));
+        let url = reqwest::Url::parse(&base)?;
+        if url.scheme() != "http"
+            || !matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
+            || url.path() != "/"
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+        {
+            return Err(
+                "SJEL_MEDIA_URL must be a local HTTP origin without credentials or query".into(),
+            );
+        }
+        http.base = format!("{}/api/attachments", base.trim_end_matches('/'));
+        Ok(Self { http })
+    }
+}
+
+impl Media for MediaHttp {
+    fn holding(&self, sha256: &str) -> Result<bool, String> {
+        if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err("invalid media digest".into());
+        }
+        let response = self
+            .http
+            .authorized(self.http.client.get(format!("{}/{sha256}", self.http.base)))
+            .send()
+            .map_err(|e| format!("media unreachable: {e}"))?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(false);
+        }
+        if !response.status().is_success() {
+            return Err(body_error("media", response));
+        }
+        let value: serde_json::Value = response.json().map_err(|e| e.to_string())?;
+        if value["attachment"]["sha256"].as_str() != Some(sha256) {
+            return Err("media lookup returned an unexpected attachment".into());
+        }
+        Ok(true)
+    }
+
+    fn upload(
+        &self,
+        filename: &str,
+        sha256: &str,
+        bytes: &[u8],
+    ) -> Result<(String, bool), Handover> {
+        let url = self
+            .http
+            .url(&[("filename", filename), ("sha256", sha256)])
+            .map_err(Handover::Failed)?;
+        let response = self
+            .http
+            .authorized(
+                self.http
+                    .client
+                    .post(url)
+                    .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+                    .body(bytes.to_vec()),
+            )
+            .send()
+            .map_err(|e| Handover::Failed(format!("media unreachable: {e}")))?;
+        let status = response.status();
+        if matches!(status.as_u16(), 400 | 413 | 422) {
+            return Err(Handover::Refused(body_error("media", response)));
+        }
+        if !status.is_success() {
+            return Err(Handover::Failed(body_error("media", response)));
+        }
+        let value: serde_json::Value = response
+            .json()
+            .map_err(|e| Handover::Failed(e.to_string()))?;
+        let id = value["attachment"]["sha256"]
+            .as_str()
+            .filter(|id| *id == sha256)
+            .ok_or_else(|| {
+                Handover::Failed("media answered without the expected attachment digest".into())
+            })?;
+        let created = value["created"]
+            .as_bool()
+            .ok_or_else(|| Handover::Failed("media answered without created".into()))?;
+        Ok((id.into(), created))
     }
 }
 
@@ -492,7 +790,10 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("sjel-import-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir()
+            .canonicalize()
+            .unwrap()
+            .join(format!("sjel-import-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("a/node_modules/pkg")).unwrap();
         fs::create_dir_all(dir.join("b")).unwrap();
@@ -502,6 +803,221 @@ mod tests {
         fs::write(dir.join("b/photo.jpg"), b"jpg").unwrap();
         fs::write(dir.join("a/node_modules/pkg/index.js"), b"js").unwrap();
         dir
+    }
+
+    impl Media for Fake {
+        fn holding(&self, sha256: &str) -> Result<bool, String> {
+            Ok(self.held.borrow().contains_key(sha256))
+        }
+        fn upload(
+            &self,
+            filename: &str,
+            sha256: &str,
+            _: &[u8],
+        ) -> Result<(String, bool), Handover> {
+            let mut attempts = self.uploads.borrow_mut();
+            *attempts += 1;
+            if *attempts == 1 {
+                return Err(Handover::Failed("synthetic interrupted handover".into()));
+            }
+            let created = self
+                .held
+                .borrow_mut()
+                .insert(sha256.into(), filename.into())
+                .is_none();
+            Ok((sha256.into(), created))
+        }
+    }
+
+    #[test]
+    fn media_failures_retry_and_duplicates_settle_without_reuploading() {
+        let root = scratch("media");
+        fs::write(root.join("b/copy.jpg"), b"jpg").unwrap();
+        let ledger = Ledger::open(&root.join("ledger.db")).unwrap();
+        let entries = plan(&root).unwrap();
+        let documents = Fake::default();
+        let media = Fake::default();
+        let first =
+            run_with_media(&entries, &ledger, &documents, Some(&media), |_, _, _| {}).unwrap();
+        assert_eq!(first.outcomes.get("failed"), Some(&1));
+        assert_eq!(media.held.borrow().len(), 1);
+        let second =
+            run_with_media(&entries, &ledger, &documents, Some(&media), |_, _, _| {}).unwrap();
+        assert_eq!(second.outcomes.get("present"), Some(&1));
+        assert_eq!(second.unchanged, entries.len() - 1);
+        assert_eq!(*media.uploads.borrow(), 3);
+        let third =
+            run_with_media(&entries, &ledger, &documents, Some(&media), |_, _, _| {}).unwrap();
+        assert_eq!(third.unchanged, entries.len());
+        assert_eq!(*media.uploads.borrow(), 3);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn credentials_are_excluded_before_descent_and_csv_inspection() {
+        let root = scratch("exclusions");
+        for directory in [
+            "Credentials",
+            "nested/SeCrEtS",
+            "nested/KEYS",
+            "nested/.ssh",
+            "nested/.aws",
+        ] {
+            fs::create_dir_all(root.join(directory)).unwrap();
+            fs::write(root.join(directory).join("bank.csv"), b"amount,iban").unwrap();
+            fs::write(root.join(directory).join("photo.jpg"), b"private").unwrap();
+        }
+        for name in [
+            "credentials.csv",
+            "api_key.csv",
+            "passwords.txt",
+            "private.pem",
+            "signing.KEY",
+            "id_ed25519.pub",
+        ] {
+            fs::write(root.join(name), b"amount,iban").unwrap();
+        }
+        std::os::unix::fs::symlink(root.join("Credentials/bank.csv"), root.join("alias.csv"))
+            .unwrap();
+        let entries = plan(&root).unwrap();
+        assert!(!entries.iter().any(|e| e.path.ends_with("bank.csv")));
+        for entry in &entries {
+            if entry.path.file_name().unwrap() != "b"
+                && (route::secret_file(&entry.path) || entry.path.ends_with("alias.csv"))
+            {
+                assert!(
+                    matches!(entry.route, Route::Skip(_)),
+                    "{}",
+                    entry.path.display()
+                );
+            }
+        }
+        assert!(first_line(&root.join("credentials.csv")).is_none());
+        assert!(first_line(&root.join("alias.csv")).is_none());
+        assert!(plan(&root.join("Credentials")).is_err());
+        assert!(plan(&root.join("nested/SeCrEtS")).is_err());
+        std::os::unix::fs::symlink(&root, root.with_extension("link")).unwrap();
+        assert!(plan(&root.with_extension("link")).is_err());
+        fs::remove_file(root.with_extension("link")).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn placeholders_are_skipped_live_photo_components_remain_media_and_changed_sources_fail() {
+        let root = scratch("placeholder");
+        let photo = root.join("b/photo.jpg");
+        let mut placeholder = vec![0; 135];
+        placeholder[..8].copy_from_slice(b"bplist00");
+        fs::write(&photo, &placeholder).unwrap();
+        fs::create_dir_all(root.join("live.pvt")).unwrap();
+        fs::write(root.join("live.pvt/original.heic"), b"original-heic").unwrap();
+        fs::write(root.join("live.pvt/original.mov"), b"original-movie").unwrap();
+        let entries = plan(&root).unwrap();
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|e| e.path.parent().is_some_and(|p| p.ends_with("live.pvt"))
+                    && e.route == Route::Media)
+                .count(),
+            2
+        );
+        let ledger = Ledger::open(&root.join("ledger.db")).unwrap();
+        let media = Fake::default();
+        let mut placeholder_reason = None;
+        run_with_media(
+            &entries,
+            &ledger,
+            &Fake::default(),
+            Some(&media),
+            |e, outcome, detail| {
+                if e.path == photo {
+                    assert_eq!(outcome, Some(Outcome::Skipped));
+                    placeholder_reason = detail.map(str::to_owned);
+                }
+            },
+        )
+        .unwrap();
+        assert!(placeholder_reason.unwrap().contains("placeholder"));
+        assert_eq!(fs::read(&photo).unwrap(), placeholder);
+        let planned = entries.iter().find(|e| e.path == photo).unwrap();
+        fs::write(&photo, b"changed size").unwrap();
+        assert!(read_bytes(planned, MEDIA_MAX_BYTES)
+            .unwrap_err()
+            .to_string()
+            .contains("changed"));
+        fs::write(&photo, &placeholder).unwrap();
+        let changed_mtime = UNIX_EPOCH
+            + std::time::Duration::from_nanos(planned.modified_ns as u64)
+            + std::time::Duration::from_secs(2);
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&photo)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(changed_mtime))
+            .unwrap();
+        assert_eq!(fs::metadata(&photo).unwrap().len(), planned.byte_len);
+        assert!(read_bytes(planned, MEDIA_MAX_BYTES)
+            .unwrap_err()
+            .to_string()
+            .contains("mtime"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn parent_directory_substitution_is_rejected_before_reading_or_uploading() {
+        let root = scratch("parent-symlink");
+        let entries = plan(&root).unwrap();
+        let moved = root.with_extension("moved");
+        fs::rename(root.join("b"), &moved).unwrap();
+        std::os::unix::fs::symlink(&moved, root.join("b")).unwrap();
+        let ledger = Ledger::open(&root.join("ledger.db")).unwrap();
+        let media = Fake::default();
+        let result = run_with_media(
+            &entries,
+            &ledger,
+            &Fake::default(),
+            Some(&media),
+            |_, _, _| {},
+        )
+        .unwrap();
+        assert_eq!(result.outcomes.get("failed"), Some(&2));
+        assert_eq!(*media.uploads.borrow(), 0);
+        assert!(first_line(&root.join("b/photo.jpg")).is_none());
+        assert!(validate_root(&root.join("b")).is_err());
+        fs::remove_file(root.join("b")).unwrap();
+        fs::rename(moved, root.join("b")).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_source_replaced_by_a_symlink_after_planning_is_not_read() {
+        let root = scratch("source-symlink");
+        let entries = plan(&root).unwrap();
+        let photo = root.join("b/photo.jpg");
+        fs::remove_file(&photo).unwrap();
+        std::os::unix::fs::symlink(root.join("a/Bescheid.pdf"), &photo).unwrap();
+        let ledger = Ledger::open(&root.join("ledger.db")).unwrap();
+        let media = Fake::default();
+        let summary = run_with_media(
+            &entries,
+            &ledger,
+            &Fake::default(),
+            Some(&media),
+            |_, _, _| {},
+        )
+        .unwrap();
+        assert_eq!(summary.outcomes.get("failed"), Some(&1));
+        assert_eq!(*media.uploads.borrow(), 0);
+        assert!(matches!(
+            plan(&root)
+                .unwrap()
+                .iter()
+                .find(|e| e.path == photo)
+                .unwrap()
+                .route,
+            Route::Skip("symlink")
+        ));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

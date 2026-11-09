@@ -112,9 +112,14 @@ documents library (7,154 records):
 
 Decisions (2026-10-23):
 
-1. **Media: check, then queue.** The library stays on the two mirrored external drives. Import
-   hashes a file and asks media through a read-only route whether a library holds it. A new file
-   waits until a library drive is mounted. Nothing is copied to the laptop.
+1. **Media: local attachments and mounted libraries have separate contracts.** Decided
+   2026-11-08: Media owns a content-addressed attachment library under the private overlay for
+   local personal intake, including screenshots, photos and video. Import hands eligible files
+   to that owner through its HTTP contract; immutable bytes are deduplicated and retain source
+   provenance. Mounted-volume libraries and their existing ingest gate remain separate. Intake
+   never removes originals. Credentials are excluded before directory descent or content reads.
+   This replaces the external-drive-only rule for local attachments; it does not move existing
+   external libraries or claim an off-machine backup.
 2. **The vault keeps knowledge only** (2026-10-20,
    [projects README](../../capabilities/projects/README.md#why-this-shape-records-and-rendered-files)).
    Finance, Items, Interior, People, Events, Media, Reflections and Journal have moved. Open:
@@ -158,9 +163,17 @@ Open:
 
   Cutover is complete when the Obsidian review passes. Keep the iCloud copy unchanged as a
   historical state.
-- **Every route has an owner that accepts it.** Media, finance and notes files are recorded
-  `pending` because those capabilities have no import contract. Done when a run over a real mixed
-  folder leaves no `pending` row, no file goes to two owners, and a rerun stores no bytes twice.
+- **Every route has an owner that accepts it.** Documents and local Media attachments have
+  HTTP handover contracts; Finance and Notes still record `pending`. Media refuses binary-plist
+  placeholders rather than claiming they are usable originals. Attachment blobs have no backup
+  contract yet; the shared-store backup covers metadata only. Retain source originals until a
+  byte-inclusive backup and restore have been verified. Done when a real mixed-folder run and
+  retry retain provenance, store no bytes twice and leave no unaccounted-for file; Finance and
+  Notes acceptance and attachment backup remain open.
+  Live local intake accepted 136 originals, explicitly skipped 33 Apple placeholders and 7
+  excluded entries, and retained every source. The repeat run reported all 176 entries unchanged.
+  A separate screenshot intake and retry stored one original. App/gallery acceptance and
+  byte-inclusive attachment restore have not run.
 - **Import from the app.** The GPUI Import page runs plan, run and status. Done when an import of
   a real folder from the app matches `sjel-import status`.
 - **Media `To Sort/`.** 229 files (53 GB) in `Library/To Sort/` have no reviewed destinations,
@@ -288,7 +301,7 @@ native-messaging ping reaches the live `comms-server`. Open, in order:
    and a dry run; keep the originals.
 8. Done: `axon-clip` retired; Sjel Clipper carries daily use.
 9. **Prompt outbox.** An agent drafts a prompt for the user to paste into another tool, for
-   example AI Studio with Search grounding (the `research` skill). Built 2026-11-03: the
+   example AI Studio with Search grounding (the `web-research` skill). Built 2026-11-03: the
    `comms_prompt_drafts` table, the clip-socket requests `drafts`, `draft_add` and `draft_take`,
    `comms prompts [add --title T | take <id>]`, and a "Prompts for you" section on `Today` in
    GPUI whose Copy puts the body on the clipboard and takes the draft out. Checked: store, socket
@@ -305,7 +318,12 @@ automated access; a capture of a page the operator is viewing stays the default.
 - **PDF rule** (2026-10-23). Official documents (contracts, invoices, certificates, tax notices)
   stay PDF-first. For any other document, the extracted data in the owning capability is what
   Sjel uses. The original stays archived and hash-verified, and is never removed.
-- Convert the 237 Notability and GoodNotes `.note` files to PDF, then OCR and enrich them.
+- Notability archive decoding is available through `tools/note-extract` (contract and checks:
+  [`extraction README`](../../crates/extraction/README.md#notability-archive-reader)). It recovers
+  stored text and attachments without OCR or destination writes. Open: faithful page/PDF
+  rendering, GoodNotes support, and the Notes import acceptance contract. The planned conversion
+  of 237 source archives remains unverified. All 25 synthetic decoder tests pass; no private
+  archive, live OCR, or end-to-end Notes import was checked.
 - Align formats across capabilities, so one fact has one shape.
 
 ## 3. Settings surface for inference and keys

@@ -30,6 +30,36 @@ The `calendar` capability manages scheduled time, recurring rhythms, planning co
   - `GET /content/:source/:id` — unified content contract reader projection.
   - `GET /health` & `GET /ready` — service health and readiness endpoints.
 
+### Reviewed Google duplicate cleanup
+
+```bash
+sjel calendar dedupe audit YYYY-MM-DD YYYY-MM-DD /private/path/plan.json
+sjel calendar dedupe apply /private/path/plan.json --apply
+```
+
+Audit uses the configured `google.calendar_id` and credential resolver. Each window is at most
+90 days. It pages unexpanded events and refuses to write a partial plan when `google.max_events`
+is exceeded. Plans are private files created without overwriting an existing path.
+
+Only confirmed, self-organized, non-recurring default events qualify. All returned fields must
+match except `id`, `etag`, `created`, `updated`, `iCalUID`, `htmlLink` and `kind`. Differences in
+descriptions, attendees, attachments, reminders or unknown fields prevent grouping. The oldest
+creation timestamp wins, with event ID breaking ties. Likely-duplicate import hints are not
+cleanup evidence.
+
+Apply requires a reviewed plan and the explicit flag. Removing whole groups from a plan narrows
+the selection. All members are re-fetched before the first deletion; the survivor and target
+are checked again before each deletion. Google receives `If-Match` with the reviewed target
+ETag and `sendUpdates=none`. A changed or missing event stops the run. Attempts and confirmed
+deletions are synced to a new private journal beside the plan before and after each request. After any partial or uncertain failure, audit
+again; there are no blind retries or inferred batch successes. Google's API cannot atomically
+lock the survivor and target together, so the survivor recheck is not a cross-event transaction.
+This CLI does not modify Sjel's local entries; regular Google sync reconciles them separately.
+
+`src/google_sync/dedupe.rs` owns the contract. Google's
+[conditional modification guide](https://developers.google.com/workspace/calendar/api/guides/version-resources)
+documents ETag protection for deletion. No automatic cleanup or cleanup HTTP route is exposed.
+
 ## Why this shape: Orthogonal kind and commitment axes
 
 An entry has two independent axes: `kind` defines what it is (`busy`, `work_onsite`, `work_remote`, `away`, `event`, `nightlife`, `deadline`, `travel_ok`), while `commitment` defines whether it is actually happening (`possible`, `planned`, `committed`) in `src/model.rs` and `src/store.rs`. Conflating status into kind would prevent expressing tentative travel or confirmed appointments cleanly. In `src/correlate/events.rs`, candidate impact is calculated as the minimum of the kind ceiling and commitment ceiling, ensuring that `possible` entries never block a travel window.

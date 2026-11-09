@@ -43,7 +43,7 @@ pub enum PlaceKind {
     Venue,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, schemars::JsonSchema)]
 pub struct PlaceRef {
     #[serde(default)]
     pub id: String,
@@ -57,12 +57,31 @@ pub struct PlaceRef {
 }
 
 impl PlaceRef {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            id: String::new(),
+            name: name.into(),
+            kind: PlaceKind::default(),
+            address: None,
+            latitude: None,
+            longitude: None,
+        }
+    }
+
+    pub fn with_coords(mut self, lat: f64, lon: f64) -> Self {
+        self.latitude = Some(lat);
+        self.longitude = Some(lon);
+        self
+    }
+
     pub fn coordinate(&self) -> Option<places_api::Coordinate> {
         places_api::Coordinate::new(self.latitude?, self.longitude?)
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TransportMode {
     Bike,
@@ -70,8 +89,29 @@ pub enum TransportMode {
     Car,
     Ferry,
     Flight,
+    #[default]
     Train,
     Walk,
+}
+
+impl TransportMode {
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Bike => "bike",
+            Self::Bus => "bus",
+            Self::Car => "car",
+            Self::Ferry => "ferry",
+            Self::Flight => "flight",
+            Self::Train => "train",
+            Self::Walk => "walk",
+        }
+    }
+}
+
+impl std::fmt::Display for TransportMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 #[derive(
@@ -87,12 +127,32 @@ pub enum StageStatus {
     Open,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+impl StageStatus {
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Booked => "booked",
+            Self::Completed => "completed",
+            Self::OptionSelected => "option_selected",
+            Self::Planning => "planning",
+            Self::Open => "open",
+        }
+    }
+}
+
+impl std::fmt::Display for StageStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, schemars::JsonSchema)]
 pub struct TripStage {
+    #[serde(default)]
     pub id: String,
     pub sequence: usize,
     pub origin: PlaceRef,
     pub destination: PlaceRef,
+    #[serde(default)]
     pub date: Option<String>,
     #[serde(default)]
     pub transport_modes: Vec<TransportMode>,
@@ -106,7 +166,7 @@ pub struct TripStage {
     pub branch_note: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, schemars::JsonSchema)]
 pub struct PlanSource {
     pub kind: String,
     pub reference: String,
@@ -133,7 +193,7 @@ pub struct CreatePlan {
     pub source: Option<PlanSource>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, schemars::JsonSchema)]
 pub struct TripPlan {
     pub id: String,
     pub title: String,
@@ -141,19 +201,52 @@ pub struct TripPlan {
     pub destinations: Vec<PlaceRef>,
     pub date_start: String,
     pub date_end: String,
+    #[serde(default)]
     pub interests: String,
+    #[serde(default)]
     pub status: String,
+    #[serde(default)]
     pub travelers: Vec<String>,
+    #[serde(default)]
     pub transport_modes: Vec<TransportMode>,
+    #[serde(default)]
     pub stages: Vec<TripStage>,
+    #[serde(default)]
     pub cover_image_url: Option<String>,
+    #[serde(default)]
     pub source: Option<PlanSource>,
+    #[serde(default)]
     pub created_at: String,
+    #[serde(default)]
     pub updated_at: String,
     #[serde(default)]
     pub budget_cents: Option<i64>,
     #[serde(default)]
     pub currency: Option<String>,
+}
+
+impl TripPlan {
+    /// Connections follow explicitly saved stages; they are not turn-by-turn routes.
+    pub fn connections(&self) -> Vec<(places_api::Coordinate, places_api::Coordinate)> {
+        self.stages
+            .iter()
+            .filter_map(|stage| Some((stage.origin.coordinate()?, stage.destination.coordinate()?)))
+            .collect()
+    }
+
+    pub fn places(&self) -> impl Iterator<Item = &PlaceRef> {
+        let mut seen = std::collections::HashSet::new();
+        std::iter::once(&self.origin)
+            .chain(self.destinations.iter())
+            .chain(self.stages.iter().flat_map(|s| [&s.origin, &s.destination]))
+            .filter(move |place| {
+                seen.insert((
+                    place.name.as_str(),
+                    place.latitude.map(f64::to_bits),
+                    place.longitude.map(f64::to_bits),
+                ))
+            })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
@@ -275,6 +368,37 @@ impl PlanItem {
             .and_then(serde_json::Value::as_f64)?;
         Some(format!("{rating:.1}"))
     }
+
+    /// Whether a packing or gear item is marked as packed.
+    pub fn is_packed(&self) -> bool {
+        self.payload
+            .get("packed")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+            || self
+                .payload
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                == Some("packed")
+    }
+
+    /// Packing category or gear classification.
+    pub fn packing_category(&self) -> Option<&str> {
+        self.payload
+            .get("category")
+            .or_else(|| self.payload.get("pack_location"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|s| !s.is_empty())
+    }
+
+    /// Weight in grams if known.
+    pub fn weight_grams(&self) -> Option<i64> {
+        self.payload
+            .get("weight_g")
+            .or_else(|| self.payload.get("weight"))
+            .and_then(serde_json::Value::as_i64)
+            .filter(|&w| w > 0)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
@@ -287,7 +411,7 @@ pub struct Retrospective {
     pub filled_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, schemars::JsonSchema)]
 pub struct PlanDetails {
     #[serde(flatten)]
     pub plan: TripPlan,

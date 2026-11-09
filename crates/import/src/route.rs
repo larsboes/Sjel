@@ -86,8 +86,87 @@ const BANK_HEADER: &[&str] = &[
     "amount",
 ];
 
+fn credential_name(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name.split(|c: char| !c.is_ascii_alphanumeric())
+        .any(|word| {
+            matches!(
+                word,
+                "credential"
+                    | "credentials"
+                    | "secret"
+                    | "secrets"
+                    | "password"
+                    | "passwords"
+                    | "passwd"
+                    | "token"
+                    | "tokens"
+                    | "key"
+                    | "keys"
+                    | "keychain"
+                    | "keychains"
+                    | "env"
+                    | "apikey"
+                    | "apikeys"
+                    | "privatekey"
+                    | "privatekeys"
+                    | "keystore"
+                    | "keystores"
+                    | "ssh"
+                    | "gnupg"
+            )
+        })
+        || matches!(
+            name.as_str(),
+            ".ssh" | ".gnupg" | ".aws" | ".azure" | ".kube" | "gcloud" | ".secrets"
+        )
+}
+
+/// Detect credential-bearing directory components before any descent or file read.
+pub fn credential_path(path: &Path) -> bool {
+    path.iter()
+        .any(|name| name.to_str().is_none_or(credential_name))
+}
+
+/// Refuse credential filenames before inspecting file contents.
+pub fn secret_file(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return true;
+    };
+    let name = name.to_ascii_lowercase();
+    credential_name(&name)
+        || name.starts_with("id_rsa")
+        || name.starts_with("id_dsa")
+        || name.starts_with("id_ecdsa")
+        || name.starts_with("id_ed25519")
+        || matches!(
+            name.as_str(),
+            "authorized_keys" | "known_hosts" | ".netrc" | ".npmrc" | ".pypirc"
+        )
+        || name.rsplit('.').next().is_some_and(|ext| {
+            matches!(
+                ext,
+                "env"
+                    | "key"
+                    | "pem"
+                    | "p12"
+                    | "pfx"
+                    | "kdbx"
+                    | "keychain"
+                    | "keychain-db"
+                    | "keytab"
+                    | "gpg"
+                    | "asc"
+                    | "age"
+            )
+        })
+}
+
 /// Why a folder at `relative` holds no personal files, if it does not.
 pub fn skip_folder(relative: &Path) -> Option<&'static str> {
+    if credential_path(relative) {
+        return Some("inside a credential folder");
+    }
     for dir in relative.iter() {
         let Some(dir) = dir.to_str() else {
             return Some("name is not UTF-8");
@@ -113,6 +192,9 @@ pub fn route(relative: &Path, csv_header: Option<&str>) -> Route {
     };
     if let Some(reason) = relative.parent().and_then(skip_folder) {
         return Route::Skip(reason);
+    }
+    if secret_file(relative) {
+        return Route::Skip("credential or secret file");
     }
     if name.starts_with('.') {
         return Route::Skip("hidden file");

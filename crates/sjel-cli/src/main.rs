@@ -145,6 +145,10 @@ fn main() -> ExitCode {
         "toolchain-check" => return toolchain::run(rest),
         "capability.sh" => return registry::run(rest),
         "service-runner.sh" => return runner::run(rest),
+        "--service-runner-restart-protocol" if rest.is_empty() => {
+            println!("sjel-service-runner-held-restart-v1");
+            return ExitCode::SUCCESS;
+        }
         "--service-runner-protocol" if rest.is_empty() => {
             println!("sjel-service-runner-sqld-rotation-v1");
             return ExitCode::SUCCESS;
@@ -191,6 +195,15 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "pi" => pi_config::run(root, rest),
         // What this machine still needs, and what applying it would do (tools/sjel-cli/src/setup/).
         "setup" => setup::run(rest),
+        "fda-launcher" => {
+            let mut command = Command::new(tool("tools/fda-launcher/install"));
+            if rest.is_empty() {
+                command.arg("status");
+            } else {
+                command.args(rest);
+            }
+            exec(&mut command)
+        }
         // A read-only copy of this machine's data, for a device that is not here.
         "mirror" => mirror::run(rest),
         // stdio MCP server, and its registration with each harness. Both halves are
@@ -254,6 +267,9 @@ fn help(root: &Path, topic: &str) -> ExitCode {
     let text = match topic {
         "" => help::USAGE,
         "capability" => help::CAPABILITY,
+        "fda-launcher" => {
+            return exec(Command::new(root.join("tools/fda-launcher/install")).arg("--help"))
+        }
         "runtime" => help::RUNTIME,
         "provider" => help::PROVIDER,
         "credentials" => help::CREDENTIALS,

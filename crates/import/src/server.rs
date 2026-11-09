@@ -22,10 +22,26 @@ const DEFAULT_PORT: u16 = 8107;
 
 const ROUTES: &[route_manifest::Route] = &[
     route_manifest::get("GET", "/health", "Liveness."),
-    route_manifest::get("GET", "/routes", "This manifest. Agent credentials are not admitted."),
-    route_manifest::get("GET", "/api/import/plan", "Sort every file under folder (absolute path) without importing: files and bytes per route, files per skip reason."),
-    route_manifest::get("GET", "/api/import/status", "Ledger counts per route, outcome and reason for every recorded file under folder (absolute path)."),
-    route_manifest::get("GET", "/api/import/runs/current", "The running or last finished run: folder, files done of total, outcome counts, error. null before the first run."),
+    route_manifest::get(
+        "GET",
+        "/routes",
+        "This manifest. Agent credentials are not admitted.",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/import/plan",
+        "Sort every file under folder (absolute path) without importing: files and bytes per route, files per skip reason.",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/import/status",
+        "Ledger counts per route, outcome and reason for every recorded file under folder (absolute path).",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/import/runs/current",
+        "The running or last finished run: folder, files done of total, outcome counts, error. null before the first run.",
+    ),
     route_manifest::Route {
         method: "POST",
         path: "/api/import/runs",
@@ -71,6 +87,8 @@ fn folder(raw: &str) -> Result<PathBuf, ApiError> {
             "folder must be an absolute path".into(),
         ));
     }
+    crate::validate_root(&path)
+        .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))?;
     match path.canonicalize() {
         Ok(path) if path.is_dir() => Ok(path),
         _ => Err(ApiError(
@@ -176,19 +194,26 @@ fn run_job(state: &AppState, root: &std::path::Path) -> crate::Fallible<()> {
     update(&|job| job.total = entries.len());
     // The blocking HTTP client must be built off the async threads.
     let documents = crate::DocumentsHttp::from_deployment()?;
-    crate::run(&entries, &state.ledger, &documents, |_, outcome, _| {
-        update(&|job| {
-            job.done += 1;
-            match outcome {
-                Some(outcome) => {
-                    *job.outcomes
-                        .entry(Outcome::name(outcome).to_string())
-                        .or_default() += 1
+    let media = crate::MediaHttp::from_deployment()?;
+    crate::run_with_media(
+        &entries,
+        &state.ledger,
+        &documents,
+        Some(&media),
+        |_, outcome, _| {
+            update(&|job| {
+                job.done += 1;
+                match outcome {
+                    Some(outcome) => {
+                        *job.outcomes
+                            .entry(Outcome::name(outcome).to_string())
+                            .or_default() += 1
+                    }
+                    None => job.unchanged += 1,
                 }
-                None => job.unchanged += 1,
-            }
-        });
-    })?;
+            });
+        },
+    )?;
     Ok(())
 }
 
@@ -246,8 +271,15 @@ mod tests {
         );
         assert_eq!(
             folder("/no/such/folder/here").err().map(|e| e.0),
-            Some(StatusCode::NOT_FOUND)
+            Some(StatusCode::UNPROCESSABLE_ENTITY)
         );
-        assert!(folder(&std::env::temp_dir().display().to_string()).is_ok());
+        assert!(folder(
+            &std::env::temp_dir()
+                .canonicalize()
+                .unwrap()
+                .display()
+                .to_string()
+        )
+        .is_ok());
     }
 }

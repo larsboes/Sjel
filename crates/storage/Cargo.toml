@@ -15,10 +15,9 @@ name = "sjel-storage"
 path = "src/main.rs"
 
 [dependencies]
-# The overlay's location, read from SJEL_PERSONAL_ROOT exactly as crates/host-net
-# reads its own policy. Zero external dependencies of its own
-# (libs/sjel-config/Cargo.toml), so this stays a four-crate build.
+# Policy resolution and the shared Systems discovery contract.
 sjel-config = { path = "../sjel-config" }
+status-api = { path = "../status-api" }
 
 # --json, the policy file, and target/.rustc_info.json. All three were already resolved in
 # the workspace lock before this crate existed (serde 1.0.229, serde_json 1.0.151, toml

@@ -1,40 +1,186 @@
-#!/usr/bin/env bash
-# tools/fda-launcher/install — build, sign and install sjel-fda-launcher for this Mac.
-#
-# Installs to $SJEL_PERSONAL_ROOT/bin/sjel-fda-launcher: machine-local, outside target/, so a
-# cargo build never replaces the signed copy. macOS keys a Full Disk Access grant on the code
-# signature; an ad-hoc signature changes with every build and the grant would silently lapse.
-# So it is signed with the first valid code-signing identity in the keychain, or the one named
-# in SJEL_CODESIGN_IDENTITY.
-#
-# After the first install, grant it once: System Settings → Privacy & Security → Full Disk
-# Access → + → the installed path. Re-running this keeps the grant while the identity is the
-# same.
+#!/bin/bash
+# Manage the signed macOS helper outside the checkout and private overlay.
 set -euo pipefail
 TOOLS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"
-[ "$(uname -s)" = Darwin ] || { echo "fda-launcher: macOS only; nothing to do here"; exit 0; }
+DIR="${HOME:?HOME is required}/Library/Application Support/Sjel/helpers"
+BIN="$DIR/sjel-fda-launcher"
+RECEIPT="$BIN.receipt"
+LEGACY="${SJEL_OVERLAY_ROOT:-${SJEL_PERSONAL_ROOT:-}}/bin/sjel-fda-launcher"
+IDENTIFIER="dev.sjel.fda-launcher"
 
-identity="${SJEL_CODESIGN_IDENTITY:-}"
-if [ -z "$identity" ]; then
-  identity="$(security find-identity -v -p codesigning | awk 'NR==1 && $2 ~ /^[0-9A-F]{40}$/ {print $2}')"
-fi
-[ -n "$identity" ] || { echo "fda-launcher: no code-signing identity in the keychain" >&2; exit 1; }
+fail() { echo "fda-launcher: $*" >&2; return 1; }
+digest() { shasum -a 256 "$1" | awk '{print $1}'; }
+source_digest() {
+  { digest "$SJEL_ROOT/crates/fda-launcher/Cargo.toml"; digest "$SJEL_ROOT/crates/fda-launcher/src/main.rs"; } |
+    shasum -a 256 | awk '{print $1}'
+}
+field() { awk -F= -v key="$1" '$1 == key {print $2}' "$RECEIPT"; }
+signed() {
+  local details
+  codesign --verify --strict "$1" >/dev/null 2>&1 || return 1
+  details="$(codesign -dv "$1" 2>&1)" || return 1
+  grep -Fxq "Identifier=$IDENTIFIER" <<< "$details"
+}
+state() {
+  if [ ! -e "$BIN" ] && [ ! -L "$BIN" ]; then echo missing; return; fi
+  if [ -L "$BIN" ] || [ ! -f "$BIN" ] || [ ! -f "$RECEIPT" ] || [ -L "$RECEIPT" ]; then echo unmanaged; return; fi
+  if [ "$(digest "$BIN")" != "$(field binary_sha256)" ] || ! signed "$BIN"; then echo modified; return; fi
+  if [ "$(source_digest)" != "$(field source_sha256)" ]; then echo stale; else echo current; fi
+}
+plist_program() {
+  plutil -extract Program raw -o - "$1" 2>/dev/null ||
+    plutil -extract ProgramArguments.0 raw -o - "$1" 2>/dev/null
+}
+status() {
+  local current
+  current="$(state)"
+  printf '%s\t%s\n' "$current" "$BIN"
+  [ "$current" = current ]
+}
 
-(cd "$SJEL_ROOT" && cargo build --release -p sjel-fda-launcher)
-dest_dir="$SJEL_PERSONAL_ROOT/bin"
-dest="$dest_dir/sjel-fda-launcher"
-mkdir -p "$dest_dir"
-# CARGO_TARGET_DIR is honoured so a relocated target dir does not install a stale or
-# missing binary; same pattern as tools/storage/storage.
-cp "${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-fda-launcher" "$dest.new"
-codesign --force --sign "$identity" --identifier dev.sjel.fda-launcher --options runtime "$dest.new"
-mv "$dest.new" "$dest"
-codesign --verify --strict "$dest"
-# The binary was axon-fda-launcher until 2026-10-01. A grant is keyed on the
-# signature's identifier, which changed with the name, so the old copy holds a grant nothing
-# uses. Removed here so the list in System Settings has one entry to re-grant.
-rm -f "$dest_dir/axon-fda-launcher"
-echo "fda-launcher: installed and signed $dest"
-echo "fda-launcher: grant it Full Disk Access once, then re-render each scheduled job whose"
-echo "  manifest declares full_disk_access = \"true\": tools/service-runner.sh install-persistence <name>"
+install_helper() (
+  local current candidate receipt source_before
+  current="$(state)"
+  case "$current" in
+    current) echo "fda-launcher: current, untouched: $BIN"; return ;;
+    missing|stale) ;;
+    *) fail "refusing to overwrite $current installation: $BIN"; return 1 ;;
+  esac
+  mkdir -p "$DIR"
+  mkdir "$DIR/.fda-install.lock" || { fail "another installation holds the lock"; return 1; }
+  candidate="$DIR/.fda-launcher.$$.new"
+  receipt="$DIR/.fda-launcher.$$.receipt"
+  trap 'rm -f "$candidate" "$receipt"; rmdir "$DIR/.fda-install.lock"' EXIT
+  source "$TOOLS_DIR/lib/local-build.sh"
+  local admitted=0
+  local_build_check || admitted=$?
+  [ "$admitted" -ne 3 ] || return 3
+  source_before="$(source_digest)"
+  (cd "$SJEL_ROOT" && cargo build --locked --release -p sjel-fda-launcher)
+  local target="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}"
+  case "$target" in /*) ;; *) target="$SJEL_ROOT/$target" ;; esac
+  cp "$target/release/sjel-fda-launcher" "$candidate"
+  "$TOOLS_DIR/codesign-binary.sh" "$candidate" "$IDENTIFIER" --require-identity
+  signed "$candidate" || { fail "candidate signature did not verify"; return 1; }
+  [ "$(source_digest)" = "$source_before" ] || { fail "helper source changed during installation; retry"; return 1; }
+  printf 'source_sha256=%s\nbinary_sha256=%s\n' "$source_before" "$(digest "$candidate")" > "$receipt"
+  mv "$candidate" "$BIN"
+  mv "$receipt" "$RECEIPT"
+  echo "fda-launcher: installed: $BIN"
+)
+
+verify_helper() (
+  local current protected scratch label result
+  current="$(state)"
+  case "$current" in current|stale) ;; *) fail "cannot verify $current installation"; return 1 ;; esac
+  protected="$HOME/Library/Mail"
+  [ -d "$protected" ] || { fail "protected Mail directory is absent; access remains unverified"; return 1; }
+  scratch="$(mktemp -d "${TMPDIR:-/tmp}/sjel-fda-probe.XXXXXX")"
+  label="dev.sjel.fda-probe.$$"
+  trap 'launchctl remove "$label" >/dev/null 2>&1 || true; rm -rf "$scratch"' EXIT
+  launchctl submit -l "$label" -o "$scratch/out" -e "$scratch/err" -- \
+    "$BIN" /bin/sh -c '/bin/ls -A "$1" >/dev/null 2>&1 && printf "%s\n" sjel-fda-access-ok' \
+    fda-probe "$protected"
+  result=0
+  for _ in $(seq 1 50); do
+    if [ -f "$scratch/out" ] && grep -Fxq sjel-fda-access-ok "$scratch/out"; then result=1; break; fi
+    sleep 0.1
+  done
+  if [ "$result" -ne 1 ]; then
+    fail "protected-folder access was not proved under launchd. Grant Full Disk Access to $BIN in System Settings, then run 'sjel fda-launcher verify'. No existing job was changed."
+    return 3
+  fi
+  echo "fda-launcher: protected-folder access verified under launchd"
+)
+
+rollback() {
+  local scratch="$1" plist failed=0
+  shift
+  for plist in "$@"; do
+    cp "$scratch/$(basename "$plist")" "$plist" || { failed=1; continue; }
+    launchctl unload "$plist" >/dev/null 2>&1 || true
+    launchctl load "$plist" || failed=1
+  done
+  [ "$failed" -eq 0 ] || fail "rollback incomplete; original job files are retained in $scratch"
+}
+
+migrate_helper() (
+  install_helper
+  verify_helper
+  local scratch plist program cap uid loaded label
+  local changed=()
+  scratch="$(mktemp -d "${TMPDIR:-/tmp}/sjel-fda-migrate.XXXXXX")"
+  trap 'rm -rf "$scratch"' EXIT
+  uid="$(id -u)"
+  for plist in "$HOME"/Library/LaunchAgents/com.sjel.*.plist; do
+    [ -f "$plist" ] || continue
+    program="$(plist_program "$plist")" || { fail "cannot inspect managed job: $plist"; return 1; }
+    [ "$program" = "$LEGACY" ] || continue
+    cap="$(basename "$plist" .plist)"
+    cap="${cap#com.sjel.}"
+    case "$cap" in ""|*[!a-zA-Z0-9_-]*) fail "invalid capability label"; return 1 ;; esac
+    cp "$plist" "$scratch/$(basename "$plist")"
+    changed+=("$plist")
+    if ! "$TOOLS_DIR/service-runner.sh" install-persistence "$cap"; then
+      rollback "$scratch" "${changed[@]}" || { trap - EXIT; return 1; }
+      fail "job migration failed; original jobs restored and old helper retained"
+      return 1
+    fi
+    loaded="$(launchctl print "gui/$uid/com.sjel.$cap")" || loaded=""
+    if ! grep -Fq "program = $BIN" <<< "$loaded"; then
+      rollback "$scratch" "${changed[@]}" || { trap - EXIT; return 1; }
+      fail "new helper was not loaded; original jobs restored and old helper retained"
+      return 1
+    fi
+  done
+  # Check both installed and loaded jobs before removing the rollback executable.
+  for plist in "$HOME"/Library/LaunchAgents/*.plist; do
+    [ -f "$plist" ] || continue
+    program="$(plist_program "$plist")" || continue
+    [ "$program" != "$LEGACY" ] || { fail "a job still uses the old helper: $plist"; return 1; }
+    if [ "$program" = "$BIN" ]; then
+      cap="$(basename "$plist" .plist)"
+      loaded="$(launchctl print "gui/$uid/$cap")" || { fail "helper job is not loaded: $cap"; return 1; }
+      if grep -Fq "program = $LEGACY" <<< "$loaded"; then
+        fail "loaded job still uses the old helper: $cap"; return 1
+      fi
+    fi
+  done
+  loaded="$(launchctl list)" || { fail "cannot inspect loaded jobs; old helper retained"; return 1; }
+  while IFS= read -r label; do
+    [ -n "$label" ] || continue
+    if ! program="$(launchctl print "gui/$uid/$label" 2>/dev/null)"; then
+      if launchctl list "$label" >/dev/null 2>&1; then
+        fail "cannot inspect loaded job: $label"; return 1
+      fi
+      continue
+    fi
+    if grep -Fq "program = $LEGACY" <<< "$program"; then
+      fail "loaded job still uses the old helper: $label"; return 1
+    fi
+  done < <(printf '%s\n' "$loaded" | awk 'NR > 1 {print $3}')
+  if [ -e "$LEGACY" ] || [ -L "$LEGACY" ]; then
+    [ -f "$LEGACY" ] && [ ! -L "$LEGACY" ] && signed "$LEGACY" || { fail "legacy helper is not the expected signed binary"; return 1; }
+    rm "$LEGACY"
+    echo "fda-launcher: removed the overlay installation"
+  fi
+  echo "fda-launcher: migration complete"
+)
+
+case "${1:-install}" in
+  path) [ "$#" -eq 1 ] || { fail "path takes no arguments"; exit 2; }; printf '%s\n' "$BIN"; exit 0 ;;
+  -h|--help|help)
+    echo "Usage: sjel fda-launcher <status|install|verify|migrate|path>"
+    echo "install reconciles the signed helper; migrate verifies access, switches jobs, then removes the old helper."
+    exit 0 ;;
+esac
+[ "$#" -le 1 ] || { fail "expected one action"; exit 2; }
+[ "$(uname -s)" = Darwin ] || { echo "fda-launcher: macOS only"; exit 0; }
+case "${1:-install}" in
+  status) status ;;
+  install) install_helper ;;
+  verify) verify_helper ;;
+  migrate) migrate_helper ;;
+  *) fail "expected status, install, verify, migrate, or path"; exit 2 ;;
+esac

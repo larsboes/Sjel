@@ -1,0 +1,5 @@
+#!/bin/bash
+# Read one Notability archive as structured JSON; no OCR or destination writes.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+exec uv run --no-project "$ROOT/crates/extraction/notability.py" "$@"

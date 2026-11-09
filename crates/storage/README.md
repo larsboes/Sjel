@@ -48,6 +48,7 @@ needs a guard.
 | Verb | Reads | Answers |
 |---|---|---|
 | `report [--json]` | the overlay policy | free/used/total, every class against its cap, what is over the flag, what is protected, which entries are gone, which paths exist but could not be read, and how much space no entry accounts for |
+| `browse [--root PATH] [--top N] [--json]` | one directory tree, without a policy | immediate child directories by allocated size, including managed paths; bytes outside the listed directories, omitted counts and partial measurements remain explicit |
 | `discover [--top N] [--depth D] [--root PATH] [--include-named] [--json]` | the overlay policy | unnamed directories by default; `--include-named` ranks all directories by total bytes, including policy-managed paths |
 
 | Verb | Acts on | Answers |
@@ -142,6 +143,24 @@ a stopped service.
 `--json` is additive throughout. `named_bytes`, `unattributed_bytes`, `measured`, `present`,
 `cap_bytes`, `over_cap`, `presence` and `where` all arrived after the field names
 `tools/host-watch` reads, so a reader that predates one sees what it always saw.
+
+## Browse the disk without a policy
+
+`sjel storage browse` defaults to the writable volume. `--root` selects a folder and `--top`
+limits the displayed immediate children, not the filesystem walk. One `du -x -k -d 1` invocation
+measures the tree; no per-policy-path scans run. The command requires no overlay policy and never
+runs cleanup. On macOS, `/` selects the Data volume and returned paths use their normal aliases.
+
+The JSON contract is `status-api::StorageDirectorySnapshot`, shared with Systems. `bytes` is the
+root allocation; `unlisted_bytes` includes direct files, directory metadata and omitted children.
+`omitted_directories` makes the display limit visible. An unreadable subtree marks the snapshot
+partial and preserves the first scan error. Neither directory sums nor changes between snapshots
+establish recoverable space on a filesystem with shared extents.
+
+Systems serves on-demand snapshots through `/api/sjel-status/storage-explorer`. Reading the
+cache does not start a scan. The explicit scan request and folder navigation are described in the
+[status capability](../sjel-status/README.md). Installed-software and container ownership remain
+separate from this allocation tree.
 
 ## Where the unattributed space is
 

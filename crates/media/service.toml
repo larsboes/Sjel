@@ -1,4 +1,4 @@
-# Read-only HTTP surface over the media ingest gate and volume integrity ledger.
+# Media ledger reads and local attachment intake.
 kind           = "process"
 name           = "media"
 command        = ["target/release/media", "serve"]

@@ -1,5 +1,6 @@
 //! Storage reporting, discovery, and guarded reclaim CLI.
 
+mod browse;
 mod checkout;
 mod classes;
 mod discover;
@@ -33,6 +34,10 @@ const HELP: &str = "sjel-storage — what is filling this disk, and what is safe
                                    the one verb that removes anything. Classes by
                                    default; `--repo` acts on the checkout's build
                                    output instead, and needs one of the three
+  sjel-storage browse [--root PATH] [--top N] [--json]
+                                   immediate child directories by allocated size, including
+                                   managed paths; defaults to the writable volume. No policy
+                                   required. Unlisted bytes and partial scans stay visible
   sjel-storage target [--json]     the Cargo target dir against PRD §9's R6 ratio
   sjel-storage discover [--top N] [--depth D] [--root PATH] [--include-named] [--json]
                                    the largest directories under PATH (default $HOME) that
@@ -133,6 +138,7 @@ fn main() -> ExitCode {
             },
             verb != "reclaim",
         ),
+        "browse" => number("--top", 80).and_then(|top| browse::run(json, value("--root"), top)),
         "target" => cmd_target(json),
         "discover" => number("--top", 20).and_then(|top| {
             number("--depth", 2).and_then(|depth| {

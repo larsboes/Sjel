@@ -16,7 +16,7 @@ Preview releases use successive `v0.0.x` tags; existing tags remain immutable. A
 checklist, not completion of `PLAN.md`, gates `v0.1.0`. This does not change the primary-checkout
 and branch policy.
 
-Built locally, not released: `tools/distribution/prepare.ts cli` packages coding-only resources
+Implemented (`7b219631`), not released: `tools/distribution/prepare.ts cli` packages coding-only resources
 and frozen production extension dependencies; `cli-install.sh` and `cli-management.sh` provide
 explicit updates, integrity checks and retained-version recovery. The Linux workflow targets
 Ubuntu 24.04 x86-64 and ARM64 and runs `cli-smoke.sh` in an isolated home. Commands, requirements
@@ -47,19 +47,136 @@ Open acceptance before publication:
    CLI delivery does not wait for desktop readiness; desktop first-run and recovery acceptance
    remain owned by [#235](https://github.com/larsboes/Sjel/issues/235).
 
-Before `v0.1.0`, align the older tag-triggered branch wording in `AGENTS.md`, `CONTRIBUTING.md`
-and the Sjel change-workflow reference with the prevailing decision in `PLAN.md`. Those files
-contain concurrent work and are not changed here. Release tags do not activate the branch workflow.
+The change-workflow reference, `AGENTS.md` and `CONTRIBUTING.md` now keep release tags independent
+of the branch workflow. Primary-checkout work continues until `PLAN.md` is done.
 
 Verification: focused packaging, lifecycle and draft-publication tests pass on macOS and in a
 network-disabled Linux ARM64 container. Production-dependency archives from existing Mac binaries
 pass isolated-home installation, coding-profile deployment, update and recovery with Cargo and
 Git blocked; Pi settings remain unchanged across the update. The repository test preload also
-rebuilt `sjel-cli` during review; the other release binaries were reused. Full-workspace checks,
-Linux Rust-binary smoke, GitHub workflow execution and publication remain unverified. Doctor
-retains the unrelated Packs backup-source failure.
+rebuilt `sjel-cli` during review; the other release binaries were reused. The initial Linux
+workflow compiled both architectures but refused archive hardlinks during installation. Payload
+materialization now breaks those links before archiving; 17 distribution tests with 942 assertions
+pass on macOS and network-disabled Linux ARM64. Local formatting, publication and selected
+repository gates pass. Fresh real-binary Linux smoke and full Rust CI remain pending; no tag or
+publication is authorized. Doctor retains the unrelated Packs backup-source failure.
+
+## Signed macOS helper
+
+`sjel fda-launcher` owns the stable Application Support installation, mandatory signing,
+source/integrity receipt, launchd permission probe, and guarded migration out of the overlay.
+The existing shell installer remains the macOS platform boundary; the CLI and persistence
+renderer use it rather than duplicating its path or signing policy. Contract:
+[`signed helper`](../../tools/fda-launcher/README.md).
+
+Verification: isolated lifecycle tests, two Rust persistence tests, CLI build, and formatting
+pass. The live helper is installed and signed; its launchd access probe has not passed, so
+existing jobs and the old executable remain unchanged. Live acceptance waits for the macOS
+permission grant, a successful migration/probe, and service-health verification. Broader Rust
+suites, packaged helper installation, and alternate-platform execution remain unchecked. The node
+archive includes the managed path resolver; its extracted-path regression passes.
 
 ## Open
+
+- **Native-plugin activation control.** Sjel's Pack holds do not cover native marketplace or
+  account-managed plugins. The scoped cleanup used Claude's native disable command; Codex exposes
+  removal but no persistent disable command, so its named plugin enablement was edited directly.
+  Smallest change: inventory native activation alongside Packs and add a guarded disable route;
+  prove non-target settings remain unchanged. Do not substitute uninstall for disable.
+
+- **Unit-scoped harness sync.** `tools/harnesses sync` selects a whole Pack. A coding sync would
+  also deploy unrelated concurrent Rust guidance changes. Pi already reads the changed owned
+  source through its registry; materialized destinations are intentionally not refreshed in this
+  change. Smallest change: add an explicit unit selector with existing profile and drift guards,
+  and prove sibling destinations and ledgers remain unchanged.
+
+- **Controlled owned-skill comparisons.** The existing eval runner launches native Claude
+  processes with other installed plugins and compares project installation against no local copy,
+  not one owned revision against another. This adoption used fresh owned Pi agents with immutable
+  before/candidate guidance and synthetic prompts; common inherited context remains a limitation.
+  Public responses and source identities live in the skills' eval fixtures. Smallest change:
+  support explicit baseline/candidate snapshots and a controlled owned runner, record the actual
+  capture date and include grading usage in cost totals. Keep live workspace data out of inputs.
+
+- **Non-mutating command help.** `tools/harnesses apply --help` was needed to inspect options,
+  but applied every bound profile instead. The observed side effect deployed the already-selected
+  Sjel-owned `vendor-audit` skill to Claude, Codex, OpenCode and Copilot. Do not use nested help
+  on this verb until fixed. Smallest change: handle help and reject unknown options before any
+  write, with tests proving help leaves settings, destinations and ledgers unchanged.
+
+- **Owned-component deployment eligibility.** Intake screening and store pins do not distinguish
+  reference snapshots from intentionally maintained adaptations. Current workaround: explicit
+  profile exclusions and global holdbacks for unchanged Matt and Anatomy store Packs, plus
+  native plugin controls. Whole-Pack exclusions are needed because the Pi path-hold matcher
+  does not apply the materialized adapter's trailing-slash prefix semantics.
+  Smallest change: an ownership/adoption eligibility contract checked by install and deployment
+  entry points, including wildcard profiles; reference-only or unknown ownership must not become
+  active by being present in a store. Include application and account discovery in the audit.
+
+- **On-demand disk explorer.** `sjel storage browse` and the Systems storage explorer share
+  `status-api::StorageDirectorySnapshot`: one allocation walk, immediate-directory drilldown,
+  explicit unlisted bytes, omitted counts and partial errors. The status route caches at most
+  32 roots in memory, runs one scan at a time with a timeout, and starts discovery only on an
+  explicit POST. No scheduled discovery is authorized. Systems reads cached state, retains old
+  snapshots during refresh, and compares only complete readings. Policy classes are no longer
+  presented as a summed reclaimable total; allocation outside the reported volume is shown
+  separately. Verification: 124 storage tests, 5 shared-contract tests, 112 status tests,
+  26 core Systems tests and 8 UI Systems tests pass; scoped backend Clippy passes with warnings
+  denied. A live CLI volume scan returned a partial snapshot with its permission warning.
+  Focused independent review passed. Installed CLI smoke and status cache-read checks pass;
+  the signed desktop app builds, installs and restarts. Its installer now restarts with the
+  existing no-activation flag and can reuse the prebuilt release binary. Pending: native visual
+  and interaction acceptance; full repository gates did not run. App/tool/container ownership
+  adapters remain a later slice.
+
+- **Safe process restart ordering.** Host process restarts take a non-expiring restart hold,
+  stop before building, and release that hold only after a successful build. Failed stops do not
+  build. Successful retries preserve any ordinary operator hold; explicit resume releases both.
+  Ordinary maintenance holds retain their 30-minute expiry. Restart holds live in deployment
+  state, not boot-cleared temporary files. Process lifecycle calls serialize through a standard
+  file lock, released before launchd re-enters the runner. The launcher refuses restart through
+  stale CLIs that lack the safety protocol. Startup retry behavior remains unchanged after a
+  successful build. Verification: 14 runner tests, both service-runner shell suites and strict
+  CLI Clippy pass. The delayed-handoff regression fails against the old implementation and
+  passes after the fix; focused review passes. Fresh-checkout profile exclusions now accept absent
+  globally held Packs while retaining unknown-name errors; fresh Rust test execution remains in
+  CI. Both shell suites and local repository gates pass. Verification did not restart live services.
+
+- **Verified import-source disposal.** Import records successful intake but has no owner-aware
+  source cleanup command. The bounded workaround reads only successful media ledger rows,
+  verifies source and stored-original SHA-256 plus stable regular-file identity, records a private
+  receipt, and sends only matching source files to the platform Trash after explicit approval.
+  Excluded paths and directories are never disposal candidates. Smallest change: an Import
+  cleanup plan and explicit apply command using the owner's verified lookup, with stale-source,
+  missing-original, symlink and partial-Trash-failure cases. Permanent deletion remains excluded.
+
+- **Verification build footprint.** `sjel` verification guidance requires checkout-scoped cache
+  reuse, guarded retention for justified separate targets, and non-incremental builds only for
+  genuinely one-shot checks. The deployment's existing two-day scratch policy also covers the
+  two confirmed verification targets missed by its naming patterns; release locations remain
+  unchanged. Acceptance: wrapper regressions and skill validation pass; a reclaim dry run
+  measures both roots without selecting recent entries. Pending: observe expiry and volume-space
+  recovery after the retention interval; no cleanup or service migration is part of this change.
+
+- **Maintained scratch replacements.** Calendar exact-copy maintenance is owned by
+  `crates/calendar/src/google_sync/dedupe.rs`, exposed through `sjel calendar dedupe`;
+  installed Obsidian plugin inventory is `tools/vault-plugin-audit`, with deployment remaining
+  in the existing plugin tools. The old one-off scripts used fixed private paths and historical
+  cleanup assumptions. Their private reports and originals must not enter public source.
+  Synthetic tests cover exact-content selection, stale revisions, repeat-apply refusal and plugin
+  inventory. A configured-calendar audit fetched 2 events and found no exact groups; nothing was
+  deleted. The live plugin inventory reported two installed, unmapped plugins as incomplete rather
+  than a successful upstream check. Conditional deletion against explicitly approved synthetic
+  remote events remains untested. No real calendar deletion or old plugin-settings migration is
+  authorized by the replacements.
+
+- **Approval and delegation proportionality.** `CONTRIBUTING.md#proportionate-approvals-and-delegation`
+  owns the instruction, linked from `AGENTS.md` for every harness. Repeated routine approval
+  cards require a matched-rule and side-effect review, then a narrow regression-tested change,
+  not a blanket tool grant. Failed or redundant delegation is evaluated before more agents start.
+  No permission rule has been loosened without evidence. Acceptance: identify a repeated routine
+  rule from actual usage, reduce its unnecessary cards without admitting harmful fixture cases,
+  and compare usable delegation output against its recorded cost.
 
 - **Cross-root build-output comparison.** Directory totals do not establish byte identity across
   Cargo profiles or build configurations. Workaround: compare artifact names and sizes, then hash
@@ -194,7 +311,7 @@ retains the unrelated Packs backup-source failure.
   forbid caching, analyzing or learning from grounded results even on the paid tier
   (https://aistudio.google.com/docs/terms, "Grounding with Google Search"). Driving the AI Studio
   chat with an agent is excluded too: its `robots.txt` disallows `/prompts/` and `/app`. The
-  `research` skill (Packs/knowledge) routes instead: built-in web search for quick facts,
+  `web-research` skill (Packs/knowledge) routes instead: built-in web search for quick facts,
   `interceptor-research` for wide investigations, and a drafted prompt that the user runs in
   AI Studio and clips. Open: the prompt outbox (`data.md`, "Prompt outbox").
 - **Reading the newest clip.** `sjel search clip` found nothing, and no `comms` binary was on

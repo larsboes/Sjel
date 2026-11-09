@@ -1,7 +1,7 @@
 # Media Ledger & Ingest Gate Architecture
 
 Technical reference manual for `crates/media`: the exact-byte ingest gate, the volume
-integrity ledger, and the read-only HTTP surface. The operator
+integrity ledger, private local attachment library, and HTTP surface. The operator
 workflow — every verb, its guards and its flags — is in [`crates/media/README.md`](../../../crates/media/README.md).
 
 ```mermaid
@@ -53,7 +53,7 @@ flowchart TD
 
 ## 1. The ledger
 
-Six tables in the shared SQLite store (opened through `sjel_store`, created on first use by
+Media-prefixed tables in the shared SQLite store (opened through `sjel_store`, created on first use by
 `Ledger::open`). A file and its location commit in one transaction, so a crashed indexer cannot
 leave an orphaned digest.
 
@@ -65,6 +65,12 @@ leave an orphaned digest.
 | `media_ingests` | One ingest run and its disposition counts | `id` |
 | `media_ingest_items` | One path's disposition inside a run, with the reason | `(ingest_id, relpath)` |
 | `media_ingest_copies` | Incoming directory ownership, target volume UUID and canonical library root | `(ingest_id, relpath)`; unique incoming name |
+| `media_attachments` | A verified local original's digest, byte length and import time | `sha256` |
+| `media_attachment_sources` | Each observed source filename and its first-seen time | `(sha256, filename)` |
+
+Local attachments are separate from `media_files` and `media_locations`: mounted-volume counts,
+audit and ingest do not treat local attachments as volume copies. Perceptual and geotag tables
+remain owned by their existing indexing commands; local attachment intake does not populate them.
 
 Two invariants make the ledger answer *"where do these bytes live"* rather than *"what did the last
 run look like"*. A digest's `size` is written once and any later row that disagrees is refused
@@ -116,10 +122,10 @@ external filesystem edits and storage failure.
 
 ## 3. The HTTP surface
 
-`media serve` starts a process capability on port **8102** ([`service.toml`](../../../capabilities/media/service.toml)).
-It is read-only by construction: every handler calls a `Ledger` reader, so nothing reachable over
-the port can move a file, drop a row, or change a library byte. The verbs that act on the library
-stay operator-invoked commands with their own approval lists and are not exposed.
+`media serve` starts a process capability on port **8102** ([`service.toml`](../../../crates/media/service.toml)).
+Mounted-volume routes are read-only. The attachment intake writes only to the private local
+attachment root and its metadata tables. Verbs that move or organize mounted-library files stay
+operator-invoked commands with their own approval lists and are not exposed.
 
 | Method & path | Answers |
 | :--- | :--- |
@@ -128,23 +134,76 @@ stay operator-invoked commands with their own approval lists and are not exposed
 | `GET /api/status` | Distinct digests, indexed paths, and every volume with its path and byte counts |
 | `GET /api/ingests` | The 20 most recent runs, newest first, with each run's disposition counts |
 | `GET /api/ingests/{id}` | One run and the disposition of every path it considered (404 if unknown) |
+| `POST /api/attachments?filename=<name>&sha256=<digest>` | Store raw bytes, at most 128 MiB. Returns `{attachment, created}` with 201 for a new original, 200 for existing verified bytes |
+| `GET /api/attachments/{sha256}` | Verify the original and return `{attachment: {sha256, byte_len, filenames}}`; 404 if no metadata exists |
 
-**Auth and mounting.** The surface sits behind the shared inbound credential every capability uses
-(`libs/sjel-server`), so a request without it answers `401`; `/health` is the one exception. The
-capability declares `proxy_api_only`, so the shell proxies only `/media/api` with the prefix
-stripped and keeps `/media` as its own page. A reader reaches the routes above as
-`/media/api/status` and never dials the port.
+The upload requires a single visible filename, not a path, and a 64-character lowercase SHA-256
+that matches the submitted bytes. Unknown query fields are refused. Unsafe names or mismatched
+digests return 422; oversized bodies return 413. Apple binary-plist payloads starting with
+`bplist00` return 422 with an unsupported-placeholder reason, even under a media filename.
+This narrow signature check is not general media decoding or proof that arbitrary submitted
+bytes are usable media. A missing, corrupt or symlinked recorded original
+is an internal failure (500), never a successful lookup or an overwrite. Lookup returns metadata
+only; there is no arbitrary-path intake or raw-content download route.
+
+**Auth and mounting.** The surface requires the deployment credential through
+`crates/sjel-server`, with no agent-token admission. Requests without it return 401 when a token
+is configured, or 403 when none is configured; shared liveness exemptions remain. The capability
+declares `proxy_api_only`, so the shell proxies `/media/api` with the prefix stripped and keeps
+`/media` as its own page. Ordinary ledger reads use `/media/api/status`. The shell proxy buffers
+requests up to 8 MiB; import therefore submits raw attachments directly to the loopback media
+listener, using the deployment credential. `SJEL_MEDIA_URL` selects an alternate loopback HTTP
+origin when needed; media's declared default port is the fallback.
 
 **The HTTP surface does not cache or materialize derived data.** It renders ledger contents at
 request time, so its response reflects the tables written by each verb. A slow query runs on
 `spawn_blocking` rather than stalling the listener.
+
+### Local attachment storage and retry contract
+
+`media serve` requires a private overlay and opens `<overlay>/data/media/attachments` with mode
+0700. Each original is named by its SHA-256, without a filename extension. Intake verifies the
+submitted digest, writes a create-new temporary file with mode 0600, syncs and rehashes it, changes
+its mode to 0400, then publishes with an atomic no-clobber hard link. An existing path must be a
+regular file with the expected size and hash. Symlink roots, symlink ancestors and symlink
+originals are refused. No API replaces or deletes a stored original.
+
+After verification and directory sync, metadata and source filename provenance commit together
+in the shared SQLite store. Repeated uploads with another filename add provenance without
+copying the original again. A crash after publication but before the metadata transaction may
+leave an orphan original; resubmitting the same bytes verifies and registers it. A crash during
+temporary writing may leave a hidden `.upload-*` file; it is not an attachment, is never reported
+present, and is not overwritten by a later upload. There is no automatic temporary-file cleanup.
+The filesystem and SQLite do not form one transaction. The root must remain private and must not
+be modified by external filesystem writers; these checks do not provide a filesystem snapshot
+against a same-user process concurrently replacing directories or originals.
+
+`media attach --file /absolute/path/screenshot.png [--db PATH]` is the single-file owner CLI.
+It uses the same overlay attachment library directly, without a running listener. It reads only a
+bounded regular source, refuses symlink path components, checks file identity, size and mtime
+around the read, and leaves the source untouched. Import additionally compares source size and
+mtime with its plan and rechecks before HTTP upload. `.pvt` live-photo folder components are
+routed individually; no bundle reconstruction is performed. Provenance is currently filename-only,
+not a relative source path.
+
+Intake performs no content extraction, EXIF indexing, cloud call, mounted-volume ingest, or
+source removal. Source filenames are the minimum provenance; no arbitrary source path is
+accepted. Original bytes and filename metadata stay in the local overlay. These originals are
+not a backup and are not automatically mirrored to mounted drives.
+
+Isolated coverage is exercised by `tools/cargo-hermetic test -p sjel-media -p sjel-import --locked`:
+raw-upload authentication and size limits, deduplication with multiple filenames, interrupted
+handover retries, orphan registration, corrupt originals, path and symlink refusal, and credential
+exclusions before import descent and CSV header inspection, binary-plist placeholder refusal,
+single-file intake and `.pvt` component routing. Real Downloads/Inbox intake and app
+acceptance require a separate operator run; synthetic tests do not establish that acceptance.
 
 ## 4. Invariants
 
 - **Exact bytes, never a guess.** A row is written from a SHA-256 digest computed on this machine.
 - **Nothing is deleted.** `supersede` and `reclaim` rename into quarantine and journal the move
   before it happens; reclaiming the space is a separate declared step.
-- **The surface cannot write.** Read-only handlers, an unauthenticated caller refused, and the
-  acting verbs absent from the router.
+- **Only attachment intake writes over HTTP.** It stores verified local originals without replacing
+  paths. Mounted-volume write verbs remain absent from the router; operator credentials gate both.
 - **A partial answer says so.** `complete: false` and a named `issues` list travel with the report
   that carries them, so a plan that had to skip a file cannot read as a clean run.

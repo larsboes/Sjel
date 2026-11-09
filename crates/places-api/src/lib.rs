@@ -283,6 +283,36 @@ pub struct VisitsListResponse {
     pub visits: Vec<PlaceVisitRow>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
+pub struct SpendCityRank {
+    pub city: String,
+    #[serde(default)]
+    pub country_code: Option<String>,
+    pub total_cents: i64,
+    pub transactions: i64,
+    #[serde(default)]
+    pub latitude: Option<f64>,
+    #[serde(default)]
+    pub longitude: Option<f64>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
+pub struct SpendSummary {
+    pub total_cents: i64,
+    pub transactions: i64,
+    pub linked: usize,
+    pub venues: usize,
+    #[serde(default)]
+    pub cities: Vec<SpendCityRank>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
+pub struct SpendLayerResponse {
+    pub summary: SpendSummary,
+    pub venues: serde_json::Value,
+    pub cities: serde_json::Value,
+}
+
 // ============================================================================
 // Reductions and Queries
 // ============================================================================

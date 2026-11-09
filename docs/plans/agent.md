@@ -107,23 +107,23 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
 
 | ID | Class | Matches |
 |---|---|---|
-| B1 | Block | `rm` with `-r`, `-R`, `--recursive` or `-f`, or any `rm` whose target is the tier root, `$HOME`, `/`, or outside the tier scope. `find … -delete`. |
-| B2 | Block | Discarding uncommitted work or history: `git reset --hard`, `git clean` with `-f`, `git checkout -- <path>` and `git restore` on the worktree, `git push` with `-f` or `--force`, `git push --delete`, `git branch -D`, `git tag -d`, `git filter-repo`, `git reflog expire`. |
+| B1 | Block | `rm` with `-r`, `-R` or `--recursive`, or any `rm` whose target is the tier root, `$HOME`, `/`, or outside the tier scope. `find … -delete`. |
+| B2 | Block | Discarding uncommitted work or history: `git commit --amend`, `git reset --hard`, `git clean` with `-f`, `git checkout -- <path>` and `git restore` on the worktree, `git push` with `-f` or `--force`, `git push --delete`, `git branch -D`, `git tag -d`, `git filter-repo`, `git reflog expire`. |
 | B3 | Block | Privilege: `sudo`, `su`, `doas`, `osascript` with `administrator privileges`. |
 | B4 | Block | Download and run: a pipe or process substitution into `sh`, `bash`, `zsh`, `python`, `node` or `ruby` (`curl … \| sh`, `bash <(curl …)`). |
-| B5 | Block | Disks and system state: `dd`, `mkfs*`, `diskutil`, `fdisk`, `shred`, `csrutil`, `spctl`, `nvram`, `launchctl`, `systemctl`, `crontab -r`, `defaults write`, `chmod -R`, `chown -R`. |
+| B5 | Block | Disks and system state, except explicit diagnostic subcommands in R1: `dd`, `mkfs*`, `diskutil`, `fdisk`, `shred`, `csrutil`, `spctl`, `nvram`, `launchctl`, `systemctl`, `crontab -r`, `defaults write`, `chmod -R`, `chown -R`. |
 | B6 | Block | Secrets: the existing guard (`crates/sjel-agent/src/ext/guard.rs`), plus `security find-*-password -w` and `security delete-*`. |
 | B7 | Block | Irreversible publishing: `cargo publish`, `npm publish`, `bun publish`, `gh release create`, `gh repo delete`. |
 | A1 | Ask | A write through the shell or the `write` and `edit` tools whose target is under `$HOME` but outside the tier scope. |
-| A2 | Ask | Git changes to history, branches or remotes: `commit`, `push` (no force), `pull`, `merge`, `rebase`, `cherry-pick`, `revert`, `am`, `apply`, `stash` (save, pop, apply), `reset` (soft or mixed), `switch`, `checkout` of a branch, `branch` and `tag` create, rename or delete, `worktree`, `submodule`, `remote` changes, `config` writes, `gc`, `prune`, `notes`, `bisect`, `update-index`. |
+| A2 | Ask | Git changes to existing history, branches or remotes: `push` (no force), `pull`, `merge`, `rebase`, `cherry-pick`, `revert`, `am`, `apply`, `stash` (save, pop, apply), `reset` (soft or mixed), `switch`, `checkout` of a branch, `branch` and `tag` create, rename or delete, `worktree`, `submodule`, `remote` changes, `config` writes, `gc`, `prune`, `notes`, `bisect`, `update-index`. |
 | A3 | Ask | Package changes and download-and-run: `brew`, `npm`/`pnpm`/`yarn`/`bun` `install`, `add`, `remove`, `update` and `link`, `pip install` and `uninstall`, `pipx`, `uv` `add`, `remove`, `sync`, `pip` and `tool`, `cargo install`, `add`, `update` and `remove`, `rustup` changes, `apt`, `dnf`, `snap`, `flatpak`, `gem install`, `go install` and `go get`, and `npx`, `bunx`, `uvx`. |
 | A4 | Ask | Network writes and remote shells: `curl` or `wget` that send data (`-d`, `--data*`, `-F`, `-T`, a `-X` other than `GET` or `HEAD`), `ssh`, `scp`, `sftp`, `rsync` to a remote, `nc`, `telnet`, `ftp`, and `gh` write subcommands. |
 | A5 | Ask | Processes and containers: `kill`, `pkill`, `killall`, and `docker`, `podman` and `orb` commands other than reads. |
 | A6 | Ask | Opaque input (step 3): a program name built at run time, `eval`. |
-| R1 | Allow | Reading: `ls`, `cat`, `rg`, `grep`, `find` without `-delete`, `curl` and `wget` reads, and the like. |
-| R2 | Allow | Git reads and local index changes: `status`, `diff`, `log`, `show`, `blame`, `branch` (list), `remote -v`, `fetch`, `add`, `rm`, `mv`, `restore --staged`, `clone`, `init`. |
+| R1 | Allow | Reading: `ls`, `cat`, `rg`, `grep`, `find` without `-delete`, `curl` and `wget` reads, Docker/Podman read subcommands including `system df`, and explicit disk/service diagnostics (`diskutil list`, `launchctl print`, `systemctl status`, `csrutil status`, `spctl --status`). Argument substitutions retain their own classification. |
+| R2 | Allow | New local commits without `--amend`, Git reads and local index changes: `status`, `diff`, `log`, `show`, `blame`, `branch` (list), `remote -v`, `fetch`, `add`, `rm`, `mv`, `restore --staged`, `clone`, `init`. |
 | R3 | Allow | Build and test: `cargo` other than A3, `bun test`, `bun run`, `npm run`, `tools/doctor`, `sjel` read verbs. |
-| R4 | Allow | Every program without a rule, interpreters running a named script or `-c` code, here-documents, `source`, `sed -i` and `perl -i`, plain `rm` of a file inside the tier scope, and writes per step 4. |
+| R4 | Allow | Every program without a rule, interpreters running a named script or `-c` code, here-documents, `source`, `sed -i` and `perl -i`, non-recursive `rm` of a file inside the tier scope, including `-f`, and writes per step 4. |
 
 ### Where it lives and how it is tested
 
@@ -143,6 +143,19 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
 
 The Pi implementation and Rust classifier share the case table (`b0d94cae`); tests are
 `tools/command-policy.test.ts` and `crates/sjel-agent/tests/policy_cases.rs`.
+
+Decided 2026-11-08: ordinary local work and diagnostics run without approval; destructive loss,
+privilege, secrets and external writes keep their guards. New local commits and non-recursive
+in-scope `rm -f` run; amendments and recursive deletion remain Block. Nested container reads and
+explicit system diagnostics are covered by the shared table, including the compound storage
+inventory regression. Container config rendering remains Ask because output options can write
+files. Package changes remain Ask and must be resolved before unattended work.
+The native Pi headless procedure lives in the `sjel` skill's `on-unattended.md` reference:
+approved local tasks only, blocked-task deferral, persistent sessions and evidence checkpoints.
+A hard wall-clock or spending supervisor is not implemented; an enforced limit or explicit
+approval for an uncapped run is required before launch. No unattended job has been started.
+Checked: 14 Pi tests, 4 shared-table Rust tests and 6 Rust policy unit tests pass; the table
+contains 167 command cases and 5 write cases. Full-workspace checks did not run.
 
 A local small model may classify A6 commands later, only after a measurement shows it lowers the
 prompt rate without a missed Block. `Packs/harness/extensions/clm-classifier.ts` is the prior art.

@@ -138,6 +138,17 @@ impl GlobalTask {
     }
 }
 
+/// One note across projects (`GET /projects/api/records` or `/api/notes`).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default, schemars::JsonSchema)]
+pub struct GlobalNote {
+    pub path: String,
+    #[serde(default)]
+    pub kind: String,
+    pub title: String,
+    #[serde(default)]
+    pub project: String,
+}
+
 // ============================================================================
 // Mail Proposals
 // ============================================================================

@@ -10,7 +10,11 @@ use crate::paths::{duplicate_message, Manifest, Paths};
 fn binary(manifest: &str, capability: &str) -> Result<String, String> {
     let table: toml::Table = toml::from_str(manifest).map_err(|e| e.to_string())?;
     let bins = table.get("bin").and_then(toml::Value::as_array);
-    for candidate in [capability.to_owned(), format!("{capability}-cli")] {
+    for candidate in [
+        capability.to_owned(),
+        format!("{capability}-cli"),
+        format!("sjel-{capability}"),
+    ] {
         if bins.is_some_and(|bins| {
             bins.iter().any(|bin| {
                 bin.get("name").and_then(toml::Value::as_str) == Some(candidate.as_str())
@@ -20,7 +24,7 @@ fn binary(manifest: &str, capability: &str) -> Result<String, String> {
         }
     }
     Err(format!(
-        "'{capability}' declares no '{capability}' or '{capability}-cli' CLI binary"
+        "'{capability}' declares no '{capability}', '{capability}-cli' or 'sjel-{capability}' CLI binary"
     ))
 }
 
@@ -59,10 +63,10 @@ pub fn run(root: &Path, capability: &str, args: &[String]) -> ExitCode {
         let service = match paths.manifest(capability) {
             Manifest::Found(path) => path,
             Manifest::Duplicate(core, overlay) => {
-                return Err(duplicate_message(capability, &core, &overlay))
+                return Err(duplicate_message(capability, &core, &overlay));
             }
             Manifest::None => {
-                return Err(format!("unknown command '{capability}'; run 'sjel help'"))
+                return Err(format!("unknown command '{capability}'; run 'sjel help'"));
             }
         };
         let manifest = service.with_file_name("Cargo.toml");
@@ -109,6 +113,10 @@ mod tests {
         assert_eq!(
             binary(include_str!("../../comms/Cargo.toml"), "comms").unwrap(),
             "comms"
+        );
+        assert_eq!(
+            binary(include_str!("../../import/Cargo.toml"), "import").unwrap(),
+            "sjel-import"
         );
         assert!(binary("[[bin]]\nname = 'example-server'", "example").is_err());
         assert!(binary("not toml", "example").is_err());

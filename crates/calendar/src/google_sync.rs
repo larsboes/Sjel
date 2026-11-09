@@ -34,6 +34,7 @@ use crate::store::CalendarStore;
 use crate::zone::HomeTimezone;
 
 mod auth;
+pub mod dedupe;
 mod export;
 mod import;
 mod transport;

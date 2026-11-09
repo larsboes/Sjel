@@ -38,6 +38,20 @@ Dedicated shell launchers under `tools/` maintain stable entry points for automa
 and supervisor services (`tools/service-runner.sh`). Each sources `tools/lib/paths.sh` and
 executes `sjel-cli` with the launcher's verb name.
 
+### Process restarts
+
+`tools/service-runner.sh restart <capability>` holds and stops a host process before building
+its executable. A failed stop or build leaves a non-expiring restart hold in the deployment's
+`data/service-runner/` directory. A successful retry clears that hold; an existing operator
+maintenance hold remains in force. Ordinary maintenance holds retain their 30-minute expiry.
+
+`tools/service-runner.sh resume <capability>` explicitly clears both holds and permits startup
+again. Process lifecycle operations use an exclusive lock, so concurrent starts and resumes
+cannot interrupt a restart build. The lock is released before a launchd handoff because the job
+re-enters the runner. The launcher refuses restart through an older CLI that lacks this safety
+contract, even when its automatic rebuild fails. Startup failures after a successful build keep
+the existing supervisor retry behavior.
+
 ## Why this shape: Unified operator binary
 
 Operator tooling is consolidated into a single Rust crate rather than independent scripts:

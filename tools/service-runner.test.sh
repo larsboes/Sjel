@@ -34,6 +34,13 @@ OVERLAY="$SCRATCH/overlay"
 LISTENER_PID=""
 cleanup() {
   if [ -n "$LISTENER_PID" ]; then kill -TERM "$LISTENER_PID" 2>/dev/null; wait "$LISTENER_PID" 2>/dev/null; fi
+  if [ -n "${BUILD_BLOCK:-}" ]; then rm -f "$BUILD_BLOCK"; fi
+  if [ -n "${FDA_BLOCK:-}" ]; then rm -f "$FDA_BLOCK"; fi
+  if [ -n "${INF_SR:-}" ] && [ -f "$INF_SR" ]; then "$INF_SR" stop buildhog >/dev/null 2>&1 || true; fi
+  for cap in porthog inferhog envhog buildhog dockhog; do
+    rm -f "/tmp/sjel-$cap.lifecycle"
+  done
+  rm -f /tmp/sjel-buildhog.pid /tmp/sjel-buildhog.maintenance /tmp/sjel-buildhog.log /tmp/sjel-buildhog.err
   rm -rf "$SCRATCH"
   rm -f /tmp/sjel-porthog.pid /tmp/sjel-porthog.maintenance
   rm -f /tmp/sjel-inferhog.pid /tmp/sjel-inferhog.maintenance
@@ -89,6 +96,7 @@ name = "porthog"
 port = "$PORT"
 autostart = true
 command = ["true"]
+build = ["/bin/sh", "-c", "touch '$SCRATCH/unexpected-build'"]
 TOML
 
 # The orphan: a listener this capability's pid file does not know about, which is exactly the
@@ -118,6 +126,12 @@ esac
 if ! (: < "/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then
   fail "the orphan died on its own — this run proved nothing"
 fi
+
+out_restart="$("$ROOT/tools/service-runner.sh" restart porthog 2>&1)"; rc_restart=$?
+[ "$rc_restart" -ne 0 ] || fail "restart succeeded while an unrelated listener held the port"
+[ ! -f "$SCRATCH/unexpected-build" ] || fail "restart built before stop succeeded"
+[ -f "$OVERLAY/data/service-runner/porthog.restart" ] || fail "failed stop did not retain the restart hold"
+rm -f "$OVERLAY/data/service-runner/porthog.restart"
 
 # The control: with the port free, the same call must succeed. Without this the assertion above
 # would also pass on a stop that always fails.
@@ -298,24 +312,182 @@ seen="$(marker_seen)"
 # left that binary stale and the restart relaunched it (2026-09-30).
 mkdir -p "$INF_ROOT/capabilities/buildhog"
 TARGET_DUMP="$SCRATCH/buildhog-target"
+OLD_PID="$SCRATCH/buildhog-old-pid"
+BUILD_FAIL="$SCRATCH/buildhog-fail"
+BUILD_BLOCK="$SCRATCH/buildhog-block"
+BUILD_ENTERED="$SCRATCH/buildhog-entered"
+BUILD_HOLD="$INF_OVERLAY/data/service-runner/buildhog.restart"
 cat > "$INF_ROOT/capabilities/buildhog/service.toml" <<'TOML'
 kind = "process"
 name = "buildhog"
 command = ["capabilities/buildhog/run"]
 build = ["capabilities/buildhog/build"]
 TOML
-printf '#!/bin/bash\nprintf "%%s" "${CARGO_TARGET_DIR:-<unset>}" > "%s"\n' "$TARGET_DUMP" \
-  > "$INF_ROOT/capabilities/buildhog/build"
-printf '#!/bin/bash\nsleep 30\n' > "$INF_ROOT/capabilities/buildhog/run"
+cat > "$INF_ROOT/capabilities/buildhog/build" <<SH
+#!/bin/bash
+[ ! -f /tmp/sjel-buildhog.pid ] || exit 41
+if [ -f "$OLD_PID" ] && kill -0 "\$(cat "$OLD_PID")" 2>/dev/null; then exit 42; fi
+[ -f "$BUILD_HOLD" ] || exit 43
+printf '%s' "\${CARGO_TARGET_DIR:-<unset>}" > "$TARGET_DUMP"
+touch "$BUILD_ENTERED"
+i=0
+while [ -f "$BUILD_BLOCK" ] && [ "\$i" -lt 100 ]; do sleep 0.05; i=\$((i+1)); done
+[ ! -f "$BUILD_BLOCK" ] || exit 44
+[ ! -f "$BUILD_FAIL" ] || exit 7
+SH
+printf '#!/bin/bash\nexec sleep 30\n' > "$INF_ROOT/capabilities/buildhog/run"
 chmod +x "$INF_ROOT/capabilities/buildhog/build" "$INF_ROOT/capabilities/buildhog/run"
 printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = ["buildhog"]\n' \
   > "$INF_OVERLAY/config/machine.toml"
-CARGO_TARGET_DIR="$SCRATCH/elsewhere" "$INF_SR" restart buildhog >/dev/null 2>&1
-"$INF_SR" stop buildhog >/dev/null 2>&1
+"$INF_SR" start buildhog >/dev/null 2>&1
+cp /tmp/sjel-buildhog.pid "$OLD_PID"
+CARGO_TARGET_DIR="$SCRATCH/elsewhere" "$INF_SR" restart buildhog >/dev/null 2>&1 \
+  || fail "restart failed to stop, build and start"
+[ -f /tmp/sjel-buildhog.pid ] || fail "successful restart did not start the process"
+[ ! -f "$BUILD_HOLD" ] || fail "successful restart retained its hold"
 seen="$(cat "$TARGET_DUMP" 2>/dev/null)"
 [ "$seen" = "$INF_ROOT/target" ] \
   || fail "a restart built outside the root's target/ (CARGO_TARGET_DIR seen: '$seen')"
+
+# A failed build stays down; a successful retry clears only the restart hold.
+touch "$BUILD_FAIL"
+failed_restart="$("$INF_SR" restart buildhog 2>&1)"; failed_rc=$?
+[ "$failed_rc" -ne 0 ] || fail "failed build reported restart success"
+[ -f "$BUILD_HOLD" ] || fail "failed build released the restart hold"
+[ ! -f /tmp/sjel-buildhog.pid ] || fail "failed build left a process running"
+case "$failed_restart" in
+  *"held until a successful restart or explicit resume"*) ;;
+  *) fail "failed build did not explain recovery: $failed_restart" ;;
+esac
+held_start="$("$INF_SR" start buildhog 2>&1)"
+case "$held_start" in *"held for maintenance"*) ;; *) fail "start ignored failed-build hold: $held_start" ;; esac
+[ ! -f /tmp/sjel-buildhog.pid ] || fail "automatic start revived a failed deployment"
+rm -f "$BUILD_FAIL"
+"$INF_SR" restart buildhog >/dev/null 2>&1 || fail "successful retry failed"
+[ ! -f "$BUILD_HOLD" ] || fail "successful retry did not clear restart hold"
+[ -f /tmp/sjel-buildhog.pid ] || fail "successful retry did not start process"
+
+"$INF_SR" stop buildhog >/dev/null 2>&1
+"$INF_SR" restart buildhog >/dev/null 2>&1 || fail "restart under operator hold failed"
+[ -f /tmp/sjel-buildhog.maintenance ] || fail "restart cleared an operator hold"
+[ ! -f /tmp/sjel-buildhog.pid ] || fail "restart ignored an operator hold"
+touch "$BUILD_FAIL"
+"$INF_SR" restart buildhog >/dev/null 2>&1
+rm -f "$BUILD_FAIL"
+"$INF_SR" resume buildhog >/dev/null 2>&1 || fail "explicit recovery failed"
+[ ! -f "$BUILD_HOLD" ] || fail "resume did not release failed-build hold"
+[ ! -f /tmp/sjel-buildhog.maintenance ] || fail "resume did not release operator hold"
+[ -f /tmp/sjel-buildhog.pid ] || fail "resume did not start process"
+
+# Concurrent starts, resumes and restarts cannot race the build or remove its hold.
+touch "$BUILD_BLOCK"
+rm -f "$BUILD_ENTERED"
+"$INF_SR" restart buildhog > "$SCRATCH/restart-output" 2>&1 &
+restart_pid=$!
+for _ in $(seq 100); do [ -f "$BUILD_ENTERED" ] && break; sleep 0.05; done
+entered=false
+[ ! -f "$BUILD_ENTERED" ] || entered=true
+for verb in start resume restart; do
+  busy="$("$INF_SR" "$verb" buildhog 2>&1)"; busy_rc=$?
+  [ "$busy_rc" -ne 0 ] || fail "$verb ran during an active build"
+  case "$busy" in *"cannot acquire lock"*) ;; *) fail "$verb did not report contention: $busy" ;; esac
+  [ -f "$BUILD_HOLD" ] || fail "$verb cleared the active restart hold"
+done
+rm -f "$BUILD_BLOCK"
+wait "$restart_pid" || fail "blocked restart did not complete"
+$entered || fail "restart never reached the build"
+[ -f /tmp/sjel-buildhog.pid ] || fail "serialized restart did not start process"
+"$INF_SR" stop buildhog >/dev/null 2>&1
 rm -f /tmp/sjel-buildhog.pid /tmp/sjel-buildhog.maintenance /tmp/sjel-buildhog.log /tmp/sjel-buildhog.err
+
+# A process ignoring TERM must be dead, not merely signalled, before the build starts.
+IGNORE_READY="$SCRATCH/ignore-ready"
+cat > "$INF_ROOT/capabilities/buildhog/run" <<SH
+#!/bin/bash
+trap '' TERM
+touch "$IGNORE_READY"
+exec sleep 30
+SH
+"$INF_SR" resume buildhog >/dev/null 2>&1
+for _ in $(seq 100); do [ -f "$IGNORE_READY" ] && break; sleep 0.05; done
+[ -f "$IGNORE_READY" ] || fail "TERM-ignoring process did not become ready"
+cp /tmp/sjel-buildhog.pid "$OLD_PID"
+"$INF_SR" restart buildhog >/dev/null 2>&1 || fail "restart did not wait for forced termination"
+"$INF_SR" stop buildhog >/dev/null 2>&1
+rm -f /tmp/sjel-buildhog.maintenance
+
+if [ "$HAVE_BUN" -eq 1 ]; then
+  # A launchd handoff re-enters start through the job; the parent must release its lock.
+  FDA_PORT="$(NO_COLOR=1 FORCE_COLOR=0 bun -e 'const s=Bun.listen({hostname:"127.0.0.1",port:0,socket:{data(){}}});console.log(s.port);s.stop(true)')"
+  FDA_BIN="$SCRATCH/fda-bin"
+  FDA_FAIL="$SCRATCH/fda-fail"
+  FDA_PAUSE="$SCRATCH/fda-pause"
+  FDA_BLOCK="$SCRATCH/fda-block"
+  FDA_ENTERED="$SCRATCH/fda-entered"
+  mkdir -p "$FDA_BIN"
+  cat > "$INF_ROOT/capabilities/buildhog/service.toml" <<TOML
+kind = "process"
+name = "buildhog"
+command = ["capabilities/buildhog/run"]
+build = ["capabilities/buildhog/build"]
+full_disk_access = "true"
+port = "$FDA_PORT"
+health_path = "/health"
+TOML
+  cat > "$INF_ROOT/capabilities/buildhog/run" <<SH
+#!/bin/bash
+exec bun -e 'Bun.serve({port:$FDA_PORT,hostname:"127.0.0.1",fetch:()=>new Response("ok")})'
+SH
+  cat > "$FDA_BIN/launchctl" <<SH
+#!/bin/bash
+case "\$1" in
+  print) exit 0 ;;
+  kickstart)
+    [ ! -f "$FDA_FAIL" ] || exit 7
+    if [ -f "$FDA_PAUSE" ]; then
+      rm -f "$FDA_PAUSE"
+      touch "$FDA_ENTERED"
+      i=0
+      while [ -f "$FDA_BLOCK" ] && [ "\$i" -lt 100 ]; do sleep 0.05; i=\$((i+1)); done
+      exit 7
+    fi
+    SJEL_WATCHDOG=1 "$INF_SR" start buildhog ;;
+  *) exit 1 ;;
+esac
+SH
+  chmod +x "$FDA_BIN/launchctl"
+  printf 'os = "macos"\ncontainer_runtime = "docker"\ncapabilities = ["buildhog"]\n' \
+    > "$INF_OVERLAY/config/machine.toml"
+  unset SJEL_WATCHDOG
+  PATH="$FDA_BIN:$PATH" "$INF_SR" restart buildhog > "$SCRATCH/fda-output" 2>&1 \
+    || fail "launchd handoff could not re-enter start: $(cat "$SCRATCH/fda-output")"
+  [ -f /tmp/sjel-buildhog.pid ] || fail "launchd handoff did not start the process"
+  "$INF_SR" stop buildhog >/dev/null 2>&1
+  rm -f /tmp/sjel-buildhog.maintenance
+  touch "$FDA_FAIL"
+  if PATH="$FDA_BIN:$PATH" "$INF_SR" restart buildhog >/dev/null 2>&1; then
+    fail "failed launchd startup reported restart success"
+  fi
+  [ ! -f "$BUILD_HOLD" ] || fail "startup failure changed the existing supervisor retry policy"
+  [ ! -f /tmp/sjel-buildhog.pid ] || fail "failed launchd startup left a process"
+  rm -f "$FDA_FAIL"
+
+  # A delayed failure must not overwrite a newer explicit recovery.
+  touch "$FDA_PAUSE" "$FDA_BLOCK"
+  PATH="$FDA_BIN:$PATH" "$INF_SR" restart buildhog > "$SCRATCH/delayed-handoff" 2>&1 &
+  handoff_pid=$!
+  for _ in $(seq 100); do [ -f "$FDA_ENTERED" ] && break; sleep 0.05; done
+  [ -f "$FDA_ENTERED" ] || fail "delayed handoff never started"
+  PATH="$FDA_BIN:$PATH" "$INF_SR" resume buildhog >/dev/null 2>&1 || fail "newer recovery failed"
+  [ -f /tmp/sjel-buildhog.pid ] || fail "newer recovery did not start process"
+  rm -f "$FDA_BLOCK"
+  if wait "$handoff_pid"; then fail "delayed failing handoff reported success"; fi
+  [ ! -f "$BUILD_HOLD" ] || fail "older handoff re-applied a hold after newer recovery"
+  "$INF_SR" stop buildhog >/dev/null 2>&1
+  rm -f /tmp/sjel-buildhog.maintenance
+else
+  echo "  ⊘ bun not on PATH — the launchd lock-handoff check is skipped"
+fi
 
 # The runtime gate that stood here until 2026-09-02 (Q75) guarded #125: a dead
 # apple-container apiserver aborted start_service before ensure_runtime could revive it, so a

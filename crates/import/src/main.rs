@@ -46,16 +46,23 @@ fn dispatch(args: &[String]) -> import::Fallible<ExitCode> {
             let entries = import::plan(&folder)?;
             let ledger = Ledger::open(&sjel_config::database_path())?;
             let documents = import::DocumentsHttp::from_deployment()?;
-            let summary = import::run(&entries, &ledger, &documents, |entry, outcome, detail| {
-                if matches!(outcome, Some(Outcome::Imported | Outcome::Failed)) {
-                    println!(
-                        "{:<9} {}  {}",
-                        outcome.map_or("", Outcome::name),
-                        entry.path.display(),
-                        detail.unwrap_or("")
-                    );
-                }
-            })?;
+            let media = import::MediaHttp::from_deployment()?;
+            let summary = import::run_with_media(
+                &entries,
+                &ledger,
+                &documents,
+                Some(&media),
+                |entry, outcome, detail| {
+                    if matches!(outcome, Some(Outcome::Imported | Outcome::Failed)) {
+                        println!(
+                            "{:<9} {}  {}",
+                            outcome.map_or("", Outcome::name),
+                            entry.path.display(),
+                            detail.unwrap_or("")
+                        );
+                    }
+                },
+            )?;
             println!(
                 "\n{} file(s) unchanged since the last run",
                 summary.unchanged
@@ -94,6 +101,7 @@ fn dispatch(args: &[String]) -> import::Fallible<ExitCode> {
 }
 
 fn canonical(folder: &str) -> import::Fallible<PathBuf> {
+    import::validate_root(Path::new(folder))?;
     Path::new(folder)
         .canonicalize()
         .map_err(|error| format!("{folder}: {error}").into())

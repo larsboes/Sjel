@@ -33,6 +33,41 @@ So is `TranscriptSource`. Whether a source offered the document or a stand-in is
 judgement about the source, not about the reader, and it stayed in
 `comms::provenance` when the readers moved.
 
+## Notability archive reader
+
+`tools/note-extract <source.note>` emits one JSON document from a local Notability archive.
+It reads metadata, typed text, stored handwriting-recognition text, and attachment bytes.
+The decoder in `notability.py` uses Python's standard-library ZIP and Apple-plist readers
+through `uv`; it adds no Rust dependency and does not change the Rust extractor registry.
+
+Output uses `schema_version: 1` and `producer: "notability-archive"`:
+
+- `source_sha256` identifies the original archive bytes.
+- `title`, `subject`, `tags`, `created`, and `modified` retain source metadata. Missing values
+  are null or empty; no title is inferred from the filename. Apple dates are emitted in UTC.
+- `typed_text` joins stored text boxes. `pages` contains numerically ordered `source_page`
+  and `text` fields; source numbering is preserved rather than assumed to start at one.
+- `attachments` retains each selected archive-relative `member`, its SHA-256, `byte_len`,
+  `role`, and `data_base64`. The stable `id` hashes the member path, a NUL separator, and its
+  bytes, so equal basenames in different directories cannot overwrite each other. Selected
+  members are images, PDFs, supported audio recordings, and the available thumbnail preview.
+- `warnings` always states `handwritten_strokes_not_rendered` and distinguishes a missing
+  handwriting index from one containing no recognized text. A thumbnail is only a preview.
+
+The command performs no OCR, network calls, destination writes, or vault import. JSON contains
+source content, including attachment bytes; keep redirected output in private storage. It is
+not a faithful page renderer and does not support GoodNotes. The Notes import route remains
+pending until its owner has an acceptance contract; this command does not mark a file imported.
+
+Limits are 32 MiB of input, 64 MiB of declared expanded content, 16 MiB per member, 4 MiB per
+property list, and 2,048 members. Property-list resolution has depth and visit limits plus a
+shared 8 MiB decoded-content budget that charges repeated references before text is joined.
+Unsafe paths, duplicate members, symlinks, encryption, malformed selected members, and ambiguous note
+roots fail the whole extraction. Failure produces a nonzero exit and no partial JSON.
+
+Run `tools/note-extract.test.sh` for synthetic decoding, resource-bound, collision, and read-only
+CLI checks. No private archive or live OCR engine is used by those tests.
+
 ## The rungs
 
 For a document that HAS a text layer, `for_class` is the whole policy: cost-ordered, first match
@@ -136,4 +171,6 @@ table.
 `tokio` behind the feature above. Nothing else. Every consumer inherits this surface, so it
 stays small enough to read — and `sjel-inference` was checked against that rule rather than
 assumed: it adds no crate to `crates/comms` or `crates/transit` that each did not
-already declare directly.
+already declare directly. The separate Notability command stays interpreted because ZIP and
+Apple-plist decoding are standard-library operations in Python; it adds no package installation
+or model runtime.

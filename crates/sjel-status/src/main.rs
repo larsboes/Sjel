@@ -28,6 +28,7 @@ mod device_gate;
 mod lan;
 mod proxy;
 mod status;
+mod storage_explorer;
 mod storage_history;
 
 use status::*;
@@ -208,6 +209,17 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/sjel-status/storage",
         "What fills the disk: the volume, every reclaimable class, and what the overlay's policy protects from reclaim. From tools/storage's own report --json.",
     ),
+    r(
+        "GET",
+        status_api::ROUTE_STATUS_STORAGE_EXPLORER,
+        "Cached directory allocation snapshot for ?root=/; never starts a scan.",
+    ),
+    route_manifest::Route {
+        method: "POST",
+        path: status_api::ROUTE_STATUS_STORAGE_EXPLORER,
+        summary: "Start a read-only directory scan for ?root=/. No JSON body; returns 202, or 409 while another root is scanning.",
+        request_schema: Some(route_manifest::schema_of::<()>),
+    },
     r(
         "GET",
         "/api/sjel-status/storage-history",
@@ -519,6 +531,10 @@ fn build_router(shell: proxy::Proxy) -> Router {
             get(cv_model_handler).put(cv_model_write_handler),
         )
         .route("/api/sjel-status/storage", get(storage_handler))
+        .route(
+            status_api::ROUTE_STATUS_STORAGE_EXPLORER,
+            get(storage_explorer::get).post(storage_explorer::post),
+        )
         .route(
             "/api/sjel-status/storage-history",
             get(storage_history_handler),

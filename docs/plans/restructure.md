@@ -280,6 +280,16 @@ their open edits.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.
+7. Retired shadow structs in `apps/gpui/core/src/shell/mod.rs`: `GlobalNote` migrated to `projects-api`,
+   and `MusicProbe`, `MusicChapter`, `MusicJob`, `MusicBuild` migrated to `media-api`, leaving
+   `shell/mod.rs` purely as an API re-exporter.
+8. Retired shadow travel plan structs in `apps/gpui/core/src/travel.rs` and `details.rs`: `Place`,
+   `Stage`, `Plan`, `Details` migrated to use `trips-api`'s canonical `PlaceRef`, `TripStage`,
+   `TripPlan`, `PlanDetails`, unifying route connections, places iteration, and wire models across
+   `sjel-trips` and `sjel-gpui`.
+9. Extracted map markers and location category categorization from `apps/gpui/ui/src/travel/mod.rs`
+   into `markers.rs`, added spend layer wire models in `crates/places-api`, and wired multi-currency
+   and per-stage cost breakdown into `overview.rs`.
 
 Naming (decided 2026-10-25): the directory name equals the package name. The `sjel-` prefix stays
 only on binaries a user types (`sjel`, `sjel-agent`, `sjel-mcp`).

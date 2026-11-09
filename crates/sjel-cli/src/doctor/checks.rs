@@ -44,7 +44,7 @@ const CONTEXT: [&str; 4] = [
 
 /// Sections that read a deployment: the overlay, machine.toml, services, data and backups. A
 /// repository checkout has none of these, so each reports itself skipped rather than failing.
-const DEPLOYMENT: [&str; 21] = [
+const DEPLOYMENT: [&str; 22] = [
     "Machine identity",
     "Shadowed binaries (tools/lib/tool-dirs)",
     "Global Bun/npm install policy",
@@ -55,6 +55,7 @@ const DEPLOYMENT: [&str; 21] = [
     "Capabilities (enabled set)",
     "Capabilities (external references)",
     "Boot persistence (autostart + schedule set)",
+    "Signed macOS helper",
     "Scheduled producers (did they run)",
     "Shared store (SQLite)",
     "State mounts",
@@ -89,6 +90,7 @@ fn entries() -> Vec<Entry> {
             "Boot persistence (autostart + schedule set)",
             boot_persistence,
         ),
+        One("Signed macOS helper", fda_helper),
         One("Scheduled producers (did they run)", scheduled_producers),
         One("Shared store (SQLite)", shared_store),
         One("State mounts", state_mounts),
@@ -1017,6 +1019,45 @@ fn external_refs(ctx: &mut Ctx) {
         ctx.ok(format!(
             "'{name}' resolves through systems.local.toml [{provider}]"
         ));
+    }
+}
+
+fn fda_helper(ctx: &mut Ctx) {
+    if ctx.machine.get("os").and_then(toml::Value::as_str) != Some("macos") {
+        ctx.ok("not a macOS deployment");
+        return;
+    }
+    let paths = match crate::paths::Paths::from_shell(&ctx.root) {
+        Ok(paths) => paths,
+        Err(error) => {
+            ctx.bad(format!("cannot resolve helper consumers: {error}"));
+            return;
+        }
+    };
+    let needed = ctx.enabled().iter().any(|name| {
+        let crate::paths::Manifest::Found(path) = paths.manifest(name) else {
+            return false;
+        };
+        read_toml(&path).is_ok_and(|table| {
+            table.get("full_disk_access").and_then(toml::Value::as_str) == Some("true")
+        })
+    });
+    if !needed {
+        ctx.ok("no enabled capability declares Full Disk Access");
+        return;
+    }
+    let result = Command::new(ctx.root.join("tools/fda-launcher/install"))
+        .arg("status")
+        .output();
+    match result {
+        Ok(output) if output.status.success() => {
+            ctx.ok("signed helper matches its source and installation receipt; access is checked by sjel fda-launcher verify");
+        }
+        Ok(output) => ctx.bad(format!(
+            "{} — run sjel fda-launcher migrate",
+            String::from_utf8_lossy(&output.stdout).trim()
+        )),
+        Err(error) => ctx.bad(format!("cannot inspect the signed helper: {error}")),
     }
 }
 

@@ -1,17 +1,10 @@
-//! The read-only HTTP surface over the media ledger.
-//!
-//! The CLI answers questions about bytes on a disk that is mounted on this machine. This answers
-//! the questions the dashboard can draw: how many digests and locations are indexed, which volumes
-//! hold them, and what the recent ingest runs did with every path they considered — including the
-//! refusals a count alone cannot name.
-//!
-//! Nothing here writes. Every handler calls a `Ledger` reader, so this surface cannot change the
-//! ledger or a library byte, and the browser cannot reach a verb that moves a file.
+//! Operator HTTP access to the ledger and local attachment intake.
 
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
+    body::Bytes,
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
@@ -20,8 +13,10 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-use media::store::Ledger;
+use media::{attachments, store::Ledger};
 pub use media_api::DEFAULT_MEDIA_PORT as DEFAULT_PORT;
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 /// How many runs `GET /api/ingests` reports. One page of history, not the whole table: a run is
 /// one row per file, and a panel wants the last few, not the archive.
@@ -29,6 +24,17 @@ const RECENT_RUNS: i64 = 20;
 
 /// The manifest served at `GET /routes`.
 pub const ROUTES: &[route_manifest::Route] = &[
+    route_manifest::get(
+        "GET",
+        "/api/attachments/{sha256}",
+        "Verified local attachment metadata and source filenames; 404 if unknown. Operator credential required.",
+    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/attachments",
+        summary: "Store raw bytes (at most 128 MiB), with filename and sha256 query parameters. Returns attachment and created. Operator credential required; no extraction or cloud use.",
+        request_schema: Some(raw_attachment_schema),
+    },
     route_manifest::get("GET", media_api::ROUTE_MEDIA_HEALTH, "Liveness."),
     route_manifest::get("GET", media_api::ROUTE_MEDIA_ROUTES, "This manifest."),
     route_manifest::get(
@@ -57,6 +63,17 @@ pub const ROUTES: &[route_manifest::Route] = &[
         "Indexed EXIF geotags with latitude, longitude, and capture dates from media_geotags.",
     ),
 ];
+
+fn raw_attachment_schema() -> Value {
+    json!({"type": "string", "format": "binary", "maxLength": attachments::MAX_BYTES})
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UploadQuery {
+    filename: String,
+    sha256: String,
+}
 
 struct ApiError {
     status: StatusCode,
@@ -170,6 +187,70 @@ async fn geotags(State(ledger): State<Arc<Ledger>>) -> Result<Json<Value>, ApiEr
     Ok(Json(blocking(ledger, geotags_json).await?))
 }
 
+async fn attachment(
+    State(library): State<Arc<attachments::Library>>,
+    Path(digest): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    attachments::validate_digest(&digest).map_err(|e| invalid(e.to_string()))?;
+    let held =
+        tokio::task::spawn_blocking(move || library.holding(&digest).map_err(|e| e.to_string()))
+            .await
+            .map_err(|e| ApiError::internal(e.to_string()))?
+            .map_err(ApiError::internal)?;
+    held.map(|attachment| Json(json!({"attachment": attachment})))
+        .ok_or_else(|| ApiError {
+            status: StatusCode::NOT_FOUND,
+            message: "attachment not found".into(),
+        })
+}
+
+fn invalid(message: String) -> ApiError {
+    ApiError {
+        status: StatusCode::UNPROCESSABLE_ENTITY,
+        message,
+    }
+}
+
+async fn upload_attachment(
+    State(library): State<Arc<attachments::Library>>,
+    Query(query): Query<UploadQuery>,
+    bytes: Bytes,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    attachments::validate_filename(&query.filename).map_err(|e| invalid(e.to_string()))?;
+    attachments::validate_digest(&query.sha256).map_err(|e| invalid(e.to_string()))?;
+    let (attachment, created) = tokio::task::spawn_blocking(move || {
+        let actual: String = Sha256::digest(&bytes)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        if actual != query.sha256 {
+            return Err(invalid("upload SHA-256 mismatch".into()));
+        }
+        attachments::validate_content(&bytes).map_err(|e| invalid(e.to_string()))?;
+        library
+            .upload(&query.filename, &query.sha256, &bytes)
+            .map_err(|e| ApiError::internal(e.to_string()))
+    })
+    .await
+    .map_err(|e| ApiError::internal(e.to_string()))??;
+    Ok((
+        if created {
+            StatusCode::CREATED
+        } else {
+            StatusCode::OK
+        },
+        Json(json!({"attachment": attachment, "created": created})),
+    ))
+}
+
+fn attachment_router(library: Arc<attachments::Library>) -> Router {
+    Router::new()
+        .route("/api/attachments", axum::routing::post(upload_attachment))
+        .route("/api/attachments/{sha256}", get(attachment))
+        .layer(DefaultBodyLimit::max(attachments::MAX_BYTES))
+        .with_state(library)
+}
+
 fn router(ledger: Arc<Ledger>) -> Router {
     Router::new()
         .route(media_api::ROUTE_MEDIA_HEALTH, get(health))
@@ -197,12 +278,35 @@ pub fn serve() {
             std::process::exit(1);
         }
     };
+    let ledger = Arc::new(ledger);
+    let library = sjel_config::overlay_root()
+        .ok_or_else(|| "media attachments require a private overlay".to_string())
+        .and_then(|root| {
+            attachments::Library::open(ledger.clone(), root.join("data/media/attachments"))
+                .map_err(|e| e.to_string())
+        });
+    let library = match library {
+        Ok(library) => Arc::new(library),
+        Err(error) => {
+            eprintln!("media: {error}");
+            std::process::exit(1);
+        }
+    };
+    let app =
+        router(ledger)
+            .merge(attachment_router(library))
+            .layer(middleware::from_fn_with_state(
+                "media",
+                sjel_server::origin::refuse_foreign_origins,
+            ));
     let port = sjel_config::resolve_port(None, None, DEFAULT_PORT);
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime could not start");
-    runtime.block_on(sjel_server::serve_local(
+    runtime.block_on(sjel_server::serve(
         "media",
+        sjel_server::Reach::Loopback,
         port,
-        router(Arc::new(ledger)),
+        app,
+        sjel_server::InboundAuth::from_deployment().require_credential(),
     ));
 }
 
@@ -270,6 +374,175 @@ mod tests {
             status,
             serde_json::from_slice(&bytes).unwrap_or(Value::Null),
         )
+    }
+
+    #[tokio::test]
+    async fn attachment_intake_requires_operator_auth_and_verifies_retries() {
+        let root = std::env::temp_dir()
+            .canonicalize()
+            .unwrap()
+            .join(format!("media-http-attachments-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let ledger = Arc::new(Ledger::open(&root.join("ledger.db")).unwrap());
+        let library =
+            Arc::new(attachments::Library::open(ledger.clone(), root.join("originals")).unwrap());
+        let inner = router(ledger).merge(attachment_router(library));
+        let app = sjel_server::authenticated(
+            inner.clone(),
+            sjel_server::InboundAuth::with_token(Some("public-operator-fixture".into()))
+                .require_credential(),
+        );
+        let digest: String = Sha256::digest(b"image")
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        let uri = format!("/api/attachments?filename=photo.jpg&sha256={digest}");
+        let request = |method: &str, uri: &str, token: Option<&str>, bytes: Vec<u8>| {
+            let mut builder = axum::http::Request::builder().method(method).uri(uri);
+            if let Some(token) = token {
+                builder = builder.header("authorization", format!("Bearer {token}"));
+            }
+            builder.body(axum::body::Body::from(bytes)).unwrap()
+        };
+        for method in ["GET", "POST"] {
+            let target = if method == "GET" {
+                format!("/api/attachments/{digest}")
+            } else {
+                uri.clone()
+            };
+            for credential in [None, Some("public-agent-fixture")] {
+                let response = app
+                    .clone()
+                    .oneshot(request(method, &target, credential, b"image".to_vec()))
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            }
+        }
+        let closed = sjel_server::authenticated(
+            inner,
+            sjel_server::InboundAuth::with_token(None).require_credential(),
+        );
+        assert_eq!(
+            closed
+                .oneshot(request("POST", &uri, None, b"image".to_vec()))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        for expected in [StatusCode::CREATED, StatusCode::OK] {
+            let response = app
+                .clone()
+                .oneshot(request(
+                    "POST",
+                    &uri,
+                    Some("public-operator-fixture"),
+                    b"image".to_vec(),
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), expected);
+            let bytes = axum::body::to_bytes(response.into_body(), 4096)
+                .await
+                .unwrap();
+            let value: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(value["attachment"]["sha256"], digest);
+            assert_eq!(value["created"], expected == StatusCode::CREATED);
+        }
+        let response = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                &format!("/api/attachments/{digest}"),
+                Some("public-operator-fixture"),
+                vec![],
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        for bad_uri in [
+            format!("/api/attachments?filename=..%2Fx.jpg&sha256={digest}"),
+            "/api/attachments?filename=x.jpg&sha256=invalid".to_owned(),
+        ] {
+            assert_eq!(
+                app.clone()
+                    .oneshot(request(
+                        "POST",
+                        &bad_uri,
+                        Some("public-operator-fixture"),
+                        b"image".to_vec()
+                    ))
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::UNPROCESSABLE_ENTITY
+            );
+        }
+        let placeholder = b"bplist00synthetic-placeholder";
+        let placeholder_digest: String = Sha256::digest(placeholder)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        let placeholder_uri =
+            format!("/api/attachments?filename=placeholder.mov&sha256={placeholder_digest}");
+        let refused = app
+            .clone()
+            .oneshot(request(
+                "POST",
+                &placeholder_uri,
+                Some("public-operator-fixture"),
+                placeholder.to_vec(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(refused.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let refusal = axum::body::to_bytes(refused.into_body(), 4096)
+            .await
+            .unwrap();
+        assert!(std::str::from_utf8(&refusal)
+            .unwrap()
+            .contains("placeholder"));
+        assert_eq!(
+            app.clone()
+                .oneshot(request(
+                    "POST",
+                    &uri,
+                    Some("public-operator-fixture"),
+                    b"wrong".to_vec()
+                ))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(request(
+                    "POST",
+                    &uri,
+                    Some("public-operator-fixture"),
+                    vec![0; attachments::MAX_BYTES + 1]
+                ))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+        assert_eq!(
+            app.oneshot(request(
+                "GET",
+                &format!("/api/attachments/{}", "0".repeat(64)),
+                Some("public-operator-fixture"),
+                vec![]
+            ))
+            .await
+            .unwrap()
+            .status(),
+            StatusCode::NOT_FOUND
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[tokio::test]

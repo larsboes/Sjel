@@ -16,6 +16,26 @@ tools/service-runner.sh start sjel-status
 
 The live HTTP contract is available at `GET /api/sjel-status/routes`.
 
+## On-demand storage explorer
+
+Systems uses `GET /api/sjel-status/storage-explorer?root=/` to read cached directory allocation.
+`POST` to the same route explicitly starts a scan and returns its state without waiting for the
+walk. Subsequent GET requests report progress, the last snapshot, scan errors and comparable
+previous measurements. Neither a GET request nor capability startup starts a discovery scan.
+The existing hourly policy-report history is unchanged.
+
+The storage tool owns measurement: `sjel storage browse` performs one allocation walk per
+requested folder. The service runs a prebuilt tool without compiling, permits one discovery
+process at a time, bounds its runtime, and keeps a bounded in-memory cache. Snapshots survive
+closing and reopening Systems, but not restarting this service. A failed refresh retains its
+previous snapshot; partial snapshots remain marked and do not establish growth.
+
+The initial root is the writable volume. Child roots must have appeared in a previous snapshot;
+callers cannot submit arbitrary filesystem paths. Navigation reads a cached folder first, and
+an unmeasured folder requires its own explicit scan. Allocation totals include policy-managed
+paths; they are not cleanup candidates. No file-content reads, deletion or scheduled discovery
+are exposed by this route.
+
 ## Considered and declined
 
 - **No duplicate capability registry.** The generated registry output is the source for names and service metadata.

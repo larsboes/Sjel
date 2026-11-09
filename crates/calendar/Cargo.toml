@@ -15,6 +15,10 @@ path = "src/lib.rs"
 name = "calendar-server"
 path = "src/server.rs"
 
+[[bin]]
+name = "calendar"
+path = "src/main.rs"
+
 [dependencies]
 calendar-api = { path = "../calendar-api" }
 schemars.workspace = true

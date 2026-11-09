@@ -91,5 +91,13 @@ sjel_cli_exec() {
         ;;
     esac
   fi
+  if [ "${1:-}" = service-runner.sh ] && [ "${2:-}" = restart ]; then
+    local restart_protocol
+    if ! restart_protocol="$("$bin" --service-runner-restart-protocol 2>/dev/null)" || \
+      [ "$restart_protocol" != sjel-service-runner-held-restart-v1 ]; then
+      echo "$sub: restart refused: sjel-cli lacks safe restart ordering; rebuild or repair the CLI" >&2
+      exit 2
+    fi
+  fi
   exec "$bin" "$@"
 }

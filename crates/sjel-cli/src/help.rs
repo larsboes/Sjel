@@ -11,7 +11,7 @@ Discover Sjel:
                                  What this machine still needs, and what applying it would do
   context with [capability]      Emit bounded current operating context
   context on [unit-or-path]      Emit bounded current repository context
-  storage <report|discover|installed|reclaim|target>
+  storage <browse|report|discover|installed|reclaim|target>
                                  What is filling this disk, what is installed and looks
                                  unused, and what is safe to reclaim
   backup policy [<target> <hours>|off]
@@ -20,6 +20,8 @@ Discover Sjel:
   update apply [--only <class>]  Move what Sjel owns, and delegate the rest
   app [update|install|status|open] [desktop|mac|all]
                                  Build, install, update or open native macOS applications
+  fda-launcher [status|install|verify|migrate|path]
+                                 Manage the signed macOS helper and migrate it out of the overlay
   testflight [ship|status]       Archive the iOS app, upload it and publish it to TestFlight
   demo up|mac <page>|down        Run the demo stack in a container and screenshot the app on it
 

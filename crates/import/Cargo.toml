@@ -20,6 +20,7 @@ path = "src/main.rs"
 axum.workspace = true
 chrono.workspace = true
 import-api = { path = "../import-api" }
+media-api = { path = "../media-api" }
 reqwest.workspace = true
 route-manifest = { path = "../route-manifest" }
 rusqlite.workspace = true

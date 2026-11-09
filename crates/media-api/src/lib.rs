@@ -18,6 +18,10 @@ pub const ROUTE_MEDIA_INGESTS: &str = "/api/ingests";
 pub const ROUTE_MEDIA_INGEST_BY_ID: &str = "/api/ingests/{id}";
 pub const ROUTE_MEDIA_PERCEPTUAL: &str = "/api/perceptual";
 pub const ROUTE_MEDIA_GEOTAGS: &str = "/api/geotags";
+pub const ROUTE_MUSIC_PROBE: &str = "/api/probe";
+pub const ROUTE_MUSIC_BUILD: &str = "/api/build";
+pub const ROUTE_MUSIC_JOBS: &str = "/api/jobs";
+pub const ROUTE_MUSIC_JOB_BY_ID: &str = "/api/jobs/{id}";
 
 // ============================================================================
 // Media Ledger and Ingest Models
@@ -244,6 +248,60 @@ pub fn sort_run_items(items: &[MediaIngestItem]) -> Vec<MediaIngestItem> {
             .then_with(|| a.relpath.cmp(&b.relpath))
     });
     sorted
+}
+
+// ============================================================================
+// Music Ingest & Build Models
+// ============================================================================
+
+/// Metadata returned by `POST /music/api/probe`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+pub struct MusicProbe {
+    pub title: String,
+    pub uploader: String,
+    pub duration_hms: String,
+    #[serde(default)]
+    pub chapters: Vec<MusicChapter>,
+    #[serde(default)]
+    pub tracklist_from_chapters: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+pub struct MusicChapter {
+    pub start: u64,
+    pub title: String,
+}
+
+/// Request and response contract for a music build.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicJob {
+    pub id: String,
+    pub album: String,
+    pub state: String,
+    #[serde(default)]
+    pub log: Vec<String>,
+    #[serde(default)]
+    pub started_at: Option<String>,
+    #[serde(default)]
+    pub finished_at: Option<String>,
+    #[serde(default)]
+    pub outdir: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+pub struct MusicBuild {
+    pub url: String,
+    /// `"song"` imports one track; empty or `"album"` cuts a tracklist.
+    pub mode: String,
+    pub album: String,
+    pub artist: String,
+    pub year: String,
+    pub tracklist: String,
+    /// Song mode only: the track title and an optional `M:SS` range.
+    pub title: String,
+    pub start: String,
+    pub end: String,
 }
 
 #[cfg(test)]

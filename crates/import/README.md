@@ -28,13 +28,38 @@ in the document library. Each file type now has one owner, and the router decide
 | Route | Takes | Handover |
 |---|---|---|
 | `documents` | PDF, Office, iWork, ODF, RTF, EPUB | `GET /api/documents?sha256=` first, then `POST /api/documents` |
-| `media` | photos, video, audio | none yet: recorded `pending` |
+| `media` | photos, video, audio | verified lookup at `GET /api/attachments/{sha256}`, then `POST /api/attachments?filename=&sha256=` to media's private local library |
 | `finance` | a CSV whose header has two or more bank-statement words | none yet: recorded `pending` |
 | `notes` | `.md`, `.markdown`, `.txt`, Notability `.note`, GoodNotes `.goodnotes` | none yet: recorded `pending` |
 | `skip` | software, caches, bundles, hidden files, unknown types | not handed over, with the reason in the ledger |
 
 The rules are in `src/route.rs`. The router records a software folder (`node_modules`, `plugins`,
-`skills`, an `.app` bundle and others) once and does not enter it.
+`skills`, an `.app` bundle and others) once and does not enter it. Credential, secret and key
+folders are excluded case-insensitively before descent. Credential filenames and key extensions
+are excluded before any content read, including CSV header inspection. Symlinks are never
+imported, and roots inside credential paths or symlink roots are refused.
+
+Media originals are local attachments, not pending external-drive imports. The owner stores one
+verified SHA-256 original under `<overlay>/data/media/attachments` and preserves each observed
+filename. Duplicate handovers still register the source filename; retries do not replace bytes.
+No extraction, cloud call, source deletion or mounted-volume ingest is triggered. Both documents
+and media intake are bounded at 128 MiB per file; oversized files are recorded `skipped`.
+Apple binary-plist payloads beginning with `bplist00` are also `skipped`, with an explicit
+unsupported-placeholder reason, not reported as usable media. Source bytes remain untouched.
+The router descends `.pvt` live-photo folders and hands their genuine components over separately;
+there is no bundle reconstruction. Provenance currently retains filenames, not relative paths.
+
+Source size and mtime must match the plan before and after bounded reading and again before
+upload. A changed source records `failed` for retry; source symlinks are refused. These checks
+are not a filesystem snapshot against an external writer deliberately preserving metadata.
+
+`DocumentsHttp` uses the shell proxy. `MediaHttp` uses the local media listener and the deployment
+credential because the shell proxy's request ceiling is 8 MiB. `SJEL_MEDIA_URL` overrides its
+origin for a deployment with a different media port; only a loopback HTTP origin is accepted.
+This is an HTTP contract, not a dependency on media's implementation. The service must be
+running for handover; an unavailable service or corrupt stored original records `failed` and
+is retried. The library's original `run` entry point remains documents-only; CLI and server use
+`run_with_media`.
 
 ## Outcomes
 
@@ -62,5 +87,4 @@ The ledger is the table `import_files` in the shared database, keyed by path. `s
 4. **documents folder intake no longer takes `.md`, `.txt` or `.csv`.** The 5,888 existing
    text records stay. Their cleanup is a separate decision.
 
-Open work: [`docs/plans/data.md`](../../docs/plans/data.md#1-import). The order and the decisions for the remaining routes:
-[the data plan](../../docs/plans/data.md#1-import).
+The remaining routes are tracked in [the data plan](../../docs/plans/data.md#1-import).

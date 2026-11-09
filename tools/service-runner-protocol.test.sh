@@ -13,7 +13,7 @@ printf '[package]\nname = "fixture"\n' > "$root/tools/sjel-cli/Cargo.toml"
 
 # Both fakes record execution; only the new one implements the protocol.
 printf '%s\n' '#!/bin/bash' 'if [ "${1:-}" = runtime ]; then exit 0; fi' 'printf "%s\n" "$*" >> "$TEST_LOG"' 'exit 1' > "$tmp/old"
-printf '%s\n' '#!/bin/bash' 'printf "%s\n" "$*" >> "$TEST_LOG"' 'if [ "${1:-}" = --service-runner-protocol ]; then printf "%s\n" sjel-service-runner-sqld-rotation-v1; fi' 'exit 0' > "$tmp/new"
+printf '%s\n' '#!/bin/bash' 'printf "%s\n" "$*" >> "$TEST_LOG"' 'case "${1:-}" in --service-runner-protocol) printf "%s\n" sjel-service-runner-sqld-rotation-v1 ;; --service-runner-restart-protocol) printf "%s\n" sjel-service-runner-held-restart-v1 ;; esac' 'exit 0' > "$tmp/new"
 chmod +x "$tmp/old" "$tmp/new"
 export TEST_LOG="$tmp/log" SJEL_OVERLAY_ROOT="$tmp/overlay"
 unset SJEL_CLI_BIN CARGO_TARGET_DIR SJEL_MACHINE_TOML
@@ -27,7 +27,12 @@ for verb in start resume restart recreate; do
   [ "$(< "$TEST_LOG")" = --service-runner-protocol ] || exit 1
   : > "$TEST_LOG"
   SJEL_CLI_BIN="$tmp/new" "$runner" "$verb" sqld >/dev/null
-  [ "$(< "$TEST_LOG")" = "$(printf '%s\n' --service-runner-protocol "service-runner.sh $verb sqld")" ] || exit 1
+  if [ "$verb" = restart ]; then
+    expected="$(printf '%s\n' --service-runner-protocol --service-runner-restart-protocol "service-runner.sh $verb sqld")"
+  else
+    expected="$(printf '%s\n' --service-runner-protocol "service-runner.sh $verb sqld")"
+  fi
+  [ "$(< "$TEST_LOG")" = "$expected" ] || exit 1
 done
 # Matching output with a failing exit status is not a valid probe.
 printf '%s\n' '#!/bin/bash' 'printf "%s\n" sjel-service-runner-sqld-rotation-v1' 'exit 1' > "$tmp/bad"
@@ -37,11 +42,28 @@ for bin in "$tmp/bad" "$tmp/missing"; do
     printf 'failed or missing probe accepted\n' >&2; exit 1
   fi
 done
-for args in 'status sqld' 'stop sqld' 'start other' 'restart other'; do
+for args in 'status sqld' 'stop sqld' 'start other'; do
   : > "$TEST_LOG"
   # Intentional splitting: each fixture is a two-word argument list.
   SJEL_CLI_BIN="$tmp/new" "$runner" $args >/dev/null
   [ "$(< "$TEST_LOG")" = "service-runner.sh $args" ] || exit 1
+done
+
+# Every restart requires the held-restart protocol, independently of rotation support.
+: > "$TEST_LOG"
+if SJEL_CLI_BIN="$tmp/old" SJEL_SERVICE_RUNNER_RESTART_PROTOCOL=sjel-service-runner-held-restart-v1 "$runner" restart other >/dev/null 2>&1; then
+  printf 'old binary accepted restart\n' >&2; exit 1
+fi
+[ "$(< "$TEST_LOG")" = --service-runner-restart-protocol ] || exit 1
+: > "$TEST_LOG"
+SJEL_CLI_BIN="$tmp/new" "$runner" restart other >/dev/null
+[ "$(< "$TEST_LOG")" = "$(printf '%s\n' --service-runner-restart-protocol 'service-runner.sh restart other')" ] || exit 1
+printf '%s\n' '#!/bin/bash' 'printf "%s\n" sjel-service-runner-held-restart-v1' 'exit 1' > "$tmp/bad-restart"
+chmod +x "$tmp/bad-restart"
+for bin in "$tmp/bad-restart" "$tmp/missing"; do
+  if SJEL_CLI_BIN="$bin" "$runner" restart other >/dev/null 2>&1; then
+    printf 'failed or missing restart probe accepted\n' >&2; exit 1
+  fi
 done
 
 # A legacy whole-machine fan-out reaches the same launcher for each service.
@@ -66,6 +88,11 @@ if env -u SJEL_CLI_BIN PATH="$tmp/bin:$PATH" "$runner" start sqld >/dev/null 2>&
 fi
 [ "$(< "$TEST_LOG")" = --service-runner-protocol ] || exit 1
 : > "$TEST_LOG"
+if env -u SJEL_CLI_BIN PATH="$tmp/bin:$PATH" "$runner" restart other >/dev/null 2>&1; then
+  printf 'failed build accepted stale restart ordering\n' >&2; exit 1
+fi
+[ "$(< "$TEST_LOG")" = --service-runner-restart-protocol ] || exit 1
+: > "$TEST_LOG"
 env -u SJEL_CLI_BIN PATH="$tmp/bin:$PATH" "$runner" status sqld >/dev/null 2>&1 || :
 [ "$(< "$TEST_LOG")" = 'service-runner.sh status sqld' ] || exit 1
 
@@ -79,6 +106,12 @@ if PATH="$tmp/no-cargo" "$runner" start sqld >/dev/null 2>&1; then
   printf 'missing cargo accepted stale binary\n' >&2; exit 1
 fi
 [ "$(< "$TEST_LOG")" = --service-runner-protocol ] || exit 1
+
+: > "$TEST_LOG"
+if PATH="$tmp/no-cargo" "$runner" restart other >/dev/null 2>&1; then
+  printf 'missing cargo accepted stale restart ordering\n' >&2; exit 1
+fi
+[ "$(< "$TEST_LOG")" = --service-runner-restart-protocol ] || exit 1
 
 if [ -n "${SJEL_TEST_REAL_BIN:-}" ]; then
   mkdir -p "$root/capabilities/sqld"

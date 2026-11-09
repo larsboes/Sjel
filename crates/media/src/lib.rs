@@ -2,6 +2,7 @@
 
 pub use media_api::*;
 
+pub mod attachments;
 pub mod duplicates;
 pub mod ingest;
 pub mod mirror;

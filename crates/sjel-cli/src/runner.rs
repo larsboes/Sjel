@@ -379,19 +379,33 @@ impl<'a> Svc<'a> {
         if process {
             self.process_init()?;
         }
+        let mut lifecycle =
+            if process && matches!(cmd, "start" | "stop" | "restart" | "resume" | "idle-stop") {
+                Some(self.lifecycle_lock()?)
+            } else {
+                None
+            };
         match cmd {
-            "start" if process => self.start_process(),
+            "start" if process => self.start_process(&mut lifecycle, false),
             "start" => self.start_service(),
             "stop" => {
                 let hold = !self.no_hold;
                 if process { self.stop_process(hold) } else { self.stop_service(hold) }
             }
             "restart" if process => {
-                self.maybe_build(true)?;
+                self.take_restart_hold()?;
                 if self.stop_process(false)? != 0 {
                     return Ok(1);
                 }
-                self.start_process()
+                self.maybe_build(true).map_err(|error| Fail {
+                    code: error.code,
+                    msg: format!(
+                        "service-runner.sh: restart build failed for '{}'; held until a successful restart or explicit resume",
+                        self.cap
+                    ),
+                })?;
+                self.clear_hold(&self.restart_hold())?;
+                self.start_process(&mut lifecycle, true)
             }
             "restart" => {
                 self.stop_service(false)?;
@@ -400,8 +414,9 @@ impl<'a> Svc<'a> {
             "idle-stop" if process => self.stop_process(false),
             "idle-stop" => self.stop_service(false),
             "resume" if process => {
-                let _ = std::fs::remove_file(&self.lock);
-                self.start_process()
+                self.clear_hold(&self.lock)?;
+                self.clear_hold(&self.restart_hold())?;
+                self.start_process(&mut lifecycle, false)
             }
             "resume" => {
                 let _ = std::fs::remove_file(&self.lock);
@@ -431,7 +446,92 @@ impl<'a> Svc<'a> {
     // /tmp, not $TMPDIR: the holder runs in a login shell and the watchdog under launchd, and
     // the two must agree on one path or the hold protects nothing.
 
+    fn lifecycle_lock(&self) -> R<std::fs::File> {
+        let path = self.lock.with_extension("lifecycle");
+        // Keep the inode stable so concurrent invocations share the same lock.
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .map_err(|error| Fail {
+                code: 1,
+                msg: format!(
+                    "service-runner.sh: cannot open lock {}: {error}",
+                    path.display()
+                ),
+            })?;
+        file.try_lock().map_err(|error| Fail {
+            code: 1,
+            msg: format!(
+                "service-runner.sh: cannot acquire lock {}: {error}",
+                path.display()
+            ),
+        })?;
+        Ok(file)
+    }
+
+    fn restart_hold(&self) -> PathBuf {
+        self.paths
+            .overlay_root
+            .as_ref()
+            .unwrap_or(&self.paths.root)
+            .join("data/service-runner")
+            .join(format!("{}.restart", self.cap))
+    }
+
+    fn take_restart_hold(&self) -> R<()> {
+        let marker = self.restart_hold();
+        let directory = marker.parent().expect("restart marker has a parent");
+        std::fs::create_dir_all(directory).map_err(|error| Fail {
+            code: 1,
+            msg: format!(
+                "service-runner.sh: cannot create restart state {}: {error}",
+                directory.display()
+            ),
+        })?;
+        match std::fs::File::create_new(marker) {
+            Ok(_) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+            Err(error) => fail(
+                1,
+                format!(
+                    "service-runner.sh: cannot hold restart of '{}': {error}",
+                    self.cap
+                ),
+            ),
+        }
+    }
+
+    fn clear_hold(&self, path: &Path) -> R<()> {
+        match std::fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => fail(
+                1,
+                format!(
+                    "service-runner.sh: cannot release hold {}: {error}",
+                    path.display()
+                ),
+            ),
+        }
+    }
+
     fn hold_active(&self, quiet: bool) -> bool {
+        match std::fs::symlink_metadata(self.restart_hold()) {
+            Ok(_) => return true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                if !quiet {
+                    eprintln!(
+                        "service-runner.sh: cannot check restart hold for '{}': {error}",
+                        self.cap
+                    );
+                }
+                return true;
+            }
+        }
         let Ok(meta) = std::fs::metadata(&self.lock) else {
             return false;
         };
@@ -691,7 +791,7 @@ impl<'a> Svc<'a> {
     /// runs through the signed sjel-fda-launcher. Started from a terminal or an app instead,
     /// macOS would ask on behalf of that app. `None` when the watchdog itself is starting it
     /// (`SJEL_WATCHDOG`), or no job is loaded.
-    fn launchd_start(&self) -> Option<u8> {
+    fn launchd_start(&self, lifecycle: &mut Option<std::fs::File>) -> Option<u8> {
         if self.platform.os != "macos"
             || self.full_disk_access != "true"
             || std::env::var_os("SJEL_WATCHDOG").is_some()
@@ -708,6 +808,8 @@ impl<'a> Svc<'a> {
         if !loaded {
             return None;
         }
+        // The launchd job re-enters this runner to start the process.
+        drop(lifecycle.take());
         let code = status_of(Command::new("launchctl").args(["kickstart", "-k", &job]));
         if code != 0 {
             return Some(code);
@@ -761,12 +863,11 @@ impl<'a> Svc<'a> {
         })
     }
 
-    fn start_process(&self) -> R<u8> {
+    fn start_process(&self, lifecycle: &mut Option<std::fs::File>, already_built: bool) -> R<u8> {
         if self.hold_active(false) {
             println!(
-                "service-runner.sh: '{}' is held for maintenance, not starting ({})",
-                self.cap,
-                self.lock.display()
+                "service-runner.sh: '{}' is held for maintenance, not starting; use resume for explicit recovery",
+                self.cap
             );
             return Ok(0);
         }
@@ -786,10 +887,12 @@ impl<'a> Svc<'a> {
             );
             return Ok(0);
         }
-        if let Some(code) = self.launchd_start() {
+        if let Some(code) = self.launchd_start(lifecycle) {
             return Ok(code);
         }
-        self.maybe_build(false)?;
+        if !already_built {
+            self.maybe_build(false)?;
+        }
         let open = |p: &Path| {
             std::fs::OpenOptions::new()
                 .create(true)
@@ -956,6 +1059,21 @@ impl<'a> Svc<'a> {
                 .args(["-KILL", &pid])
                 .stderr(Stdio::null())
                 .status();
+            for _ in 0..20 {
+                if !alive(&pid) {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(250));
+            }
+            if alive(&pid) {
+                return fail(
+                    1,
+                    format!(
+                        "service-runner.sh: '{}' pid {pid} is still alive after stop",
+                        self.cap
+                    ),
+                );
+            }
         }
         let _ = std::fs::remove_file(&self.pid_file);
         // A copy of this capability's own binary that lost its pid file (reparented after a
@@ -1627,6 +1745,105 @@ mod tests {
             || check_rotation_inhibit(cap, cmd, paths).map(drop),
             |f| f.msg.as_str(),
         )
+    }
+
+    fn process_fixture(root: &Path) -> Paths {
+        let manifest = root.join("capabilities/fixture/service.toml");
+        std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+        std::fs::write(&manifest, "kind = 'process'\ncommand = ['true']\n").unwrap();
+        Paths {
+            root: root.to_path_buf(),
+            caps_dir: root.join("capabilities"),
+            overlay_root: None,
+            overlay_caps_dir: None,
+            machine_toml: None,
+        }
+    }
+
+    fn fixture_svc(paths: &Paths) -> Svc<'_> {
+        let platform = Platform {
+            os: "test".into(),
+            runtime: "test".into(),
+            machine: paths.root.join("machine.toml"),
+            machine_table: toml::Table::new(),
+        };
+        let mut svc = Svc::load(paths, platform, "fixture", false).unwrap();
+        svc.lock = paths.root.join("maintenance");
+        svc.pid_file = paths.root.join("pid");
+        svc.log = paths.root.join("stdout");
+        svc.err = paths.root.join("stderr");
+        svc
+    }
+
+    #[test]
+    fn restart_holds_persist_while_ordinary_holds_expire() {
+        let root = scratch("restart-hold");
+        let paths = process_fixture(&root);
+        let svc = fixture_svc(&paths);
+        svc.take_restart_hold().unwrap();
+        write_at(&svc.restart_hold(), SystemTime::UNIX_EPOCH);
+        write_at(&svc.lock, SystemTime::UNIX_EPOCH);
+        assert!(svc.hold_active(true));
+        assert!(svc.lock.exists());
+        svc.clear_hold(&svc.restart_hold()).unwrap();
+        assert!(!svc.hold_active(true));
+        assert!(!svc.lock.exists());
+        svc.take_hold().unwrap();
+        assert!(svc.hold_active(true));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn concurrent_process_verbs_cannot_clear_holds_or_start_a_second_restart() {
+        let root = scratch("lifecycle-lock");
+        let paths = process_fixture(&root);
+        let mut svc = fixture_svc(&paths);
+        svc.take_hold().unwrap();
+        svc.take_restart_hold().unwrap();
+        let guard = past_forked_copies(|| svc.lifecycle_lock(), |f| f.msg.as_str()).unwrap();
+        for cmd in ["start", "stop", "restart", "resume", "idle-stop"] {
+            let error = svc.dispatch(cmd).unwrap_err();
+            assert!(error.msg.contains("cannot acquire lock"), "{}", error.msg);
+            assert!(svc.lock.exists());
+            assert!(svc.restart_hold().exists());
+            assert!(!svc.pid_file.exists());
+        }
+        drop(guard);
+        let guard = past_forked_copies(|| svc.lifecycle_lock(), |f| f.msg.as_str()).unwrap();
+        assert!(svc.lock.with_extension("lifecycle").is_file());
+        drop(guard);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unavailable_restart_state_refuses_before_stopping() {
+        let root = scratch("restart-state-unavailable");
+        let paths = process_fixture(&root);
+        let mut svc = fixture_svc(&paths);
+        std::fs::write(root.join("data"), "not a directory").unwrap();
+        std::fs::write(&svc.pid_file, "unchanged").unwrap();
+        let error = svc.dispatch("restart").unwrap_err();
+        assert!(
+            error.msg.contains("cannot create restart state"),
+            "{}",
+            error.msg
+        );
+        assert_eq!(std::fs::read_to_string(&svc.pid_file).unwrap(), "unchanged");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn no_launchd_handoff_keeps_the_lifecycle_lock() {
+        let root = scratch("lifecycle-no-handoff");
+        let paths = process_fixture(&root);
+        let svc = fixture_svc(&paths);
+        let mut guard =
+            Some(past_forked_copies(|| svc.lifecycle_lock(), |f| f.msg.as_str()).unwrap());
+        assert!(svc.launchd_start(&mut guard).is_none());
+        assert!(guard.is_some());
+        assert!(svc.lifecycle_lock().is_err());
+        drop(guard);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

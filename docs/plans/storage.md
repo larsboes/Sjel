@@ -107,8 +107,9 @@ Interior now uses its existing overlay data fallback instead
 of a missing vault assets path. Stale vault roots in Trips and Finance configuration were cleared;
 their current config loaders do not use those roots. Runtime reload and Interior asset resolution
 remain unverified. Historical backup configs and retired LifeOS files still contain old paths.
-The obsolete Notability-to-vault helper now refuses to run rather than writing into the retired
-vault; its source files remain for the Sjel import work in `data.md`.
+The six obsolete Notability migration scripts have been removed from the private deployment.
+Public archive decoding belongs to `crates/extraction`; it does not restore vault writeback or
+complete the Notes import contract in `data.md`.
 `tools/service-runner.sh status` reported both Vault and Scouting as stopped while their health
 endpoints answered. Their running process ownership and loaded configuration must be established
 before a restart; health alone does not prove the configured vault changed.

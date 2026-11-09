@@ -266,19 +266,46 @@ fn fda_launcher_line(s: &Svc) -> R<String> {
     if s.full_disk_access != "true" {
         return Ok(String::new());
     }
-    let personal = std::env::var("SJEL_PERSONAL_ROOT").unwrap_or_default();
-    let fda = PathBuf::from(format!("{personal}/bin/sjel-fda-launcher"));
+    let output = Command::new(s.tools_dir().join("fda-launcher/install"))
+        .arg("path")
+        .output()
+        .map_err(|e| Fail {
+            code: 1,
+            msg: format!("service-runner.sh: cannot resolve the managed FDA helper: {e}"),
+        })?;
+    let path = String::from_utf8(output.stdout).map_err(|e| Fail {
+        code: 1,
+        msg: format!("service-runner.sh: invalid FDA helper path: {e}"),
+    })?;
+    if !output.status.success() || path.trim().is_empty() {
+        return fail(
+            1,
+            "service-runner.sh: managed FDA helper path resolution failed",
+        );
+    }
+    let fda = PathBuf::from(path.trim_end_matches('\n'));
     if which(&fda.display().to_string()).is_none() {
         return fail(
             1,
             format!(
-                "service-runner.sh: {} declares full_disk_access but {} is not installed.\n  Run tools/fda-launcher/install, grant it Full Disk Access, then install-persistence again.",
+                "service-runner.sh: {} declares full_disk_access but {} is not installed.\n  Run sjel fda-launcher migrate; grant it Full Disk Access if requested.",
                 s.cap,
                 fda.display()
             ),
         );
     }
-    Ok(format!("    <string>{}</string>", fda.display()))
+    Ok(fda_launcher_markup(&fda))
+}
+
+fn fda_launcher_markup(fda: &Path) -> String {
+    let path = fda
+        .to_string_lossy()
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('\\', "\\\\")
+        .replace('&', "\\&");
+    format!("    <string>{path}</string>")
 }
 
 fn render_unit(s: &mut Svc) -> R<String> {
@@ -772,7 +799,20 @@ pub fn remove(s: &mut Svc) -> R<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::sed_sub;
+    use super::{fda_launcher_markup, sed_sub};
+    use std::path::Path;
+
+    #[test]
+    fn managed_helper_paths_survive_xml_and_template_substitution() {
+        let path = Path::new(
+            "/test/home & space/Library/Application Support/Sjel/helpers/sjel-fda-launcher",
+        );
+        let markup = fda_launcher_markup(path);
+        assert_eq!(
+            sed_sub("__LAUNCHER__", "__LAUNCHER__", &markup),
+            "    <string>/test/home &amp; space/Library/Application Support/Sjel/helpers/sjel-fda-launcher</string>"
+        );
+    }
 
     #[test]
     fn substitution_keeps_seds_semantics() {

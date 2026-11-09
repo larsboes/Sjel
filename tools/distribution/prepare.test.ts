@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { cliBinaries, payloadFiles, selectCliSources, verifyLocalImports } from "./cli-payload.ts";
+import { cliBinaries, detachHardlinks, payloadFiles, selectCliSources, verifyLocalImports } from "./cli-payload.ts";
 
 const root = resolve(import.meta.dir, "../..");
 const program = join(import.meta.dir, "prepare.ts");
@@ -39,6 +39,19 @@ function cliFixture(scratch: string) {
 }
 
 describe("release preparation (no installation)", () => {
+  test("Linux cache hardlinks are materialized before archiving", () => {
+    const stage = mkdtempSync(join(tmpdir(), "sjel-hardlinks-"));
+    try {
+      writeFileSync(join(stage, "one"), "shared bytes\n");
+      linkSync(join(stage, "one"), join(stage, "two"));
+      expect(lstatSync(join(stage, "one")).nlink).toBe(2);
+      detachHardlinks(stage);
+      for (const file of ["one", "two"]) {
+        expect(lstatSync(join(stage, file)).nlink).toBe(1);
+        expect(readFileSync(join(stage, file), "utf8")).toBe("shared bytes\n");
+      }
+    } finally { rmSync(stage, { recursive: true, force: true }); }
+  });
   test("CLI ships only selected coding tooling, prebuilt wrappers and complete payload hashes", () => {
     const scratch = mkdtempSync(join(tmpdir(), "sjel-cli-package-"));
     try {
@@ -132,6 +145,31 @@ describe("release preparation (no installation)", () => {
       const profiles = readFileSync(join(fixture, "profiles.toml"), "utf8");
       writeFileSync(join(fixture, "profiles.toml"), profiles.replace('skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }', 'skills = { "writing" = ["not-a-skill"] }'));
       expect(() => selectCliSources(fixture)).toThrow("invalid coding-harness skill subset");
+    } finally { rmSync(scratch, { recursive: true, force: true }); }
+  }, 30_000);
+
+  test("node runtimes retain the managed FDA helper path resolver", () => {
+    const scratch = mkdtempSync(join(tmpdir(), "sjel-node-fda-"));
+    try {
+      const target = join(scratch, "target");
+      mkdirSync(join(target, "release"), { recursive: true });
+      for (const name of ["sjel-cli", "sjel-status", "devices-server", "entities-server", "sjel-storage", "sjel-capability-auth"]) {
+        writeFileSync(join(target, "release", name), "synthetic fixture; never executed\n");
+        chmodSync(join(target, "release", name), 0o755);
+      }
+      const output = join(scratch, "output");
+      const run = Bun.spawnSync([process.execPath, program, "node", "--version", "v0.0.2", "--target-dir", target, "--out", output], { cwd: root, stdout: "pipe", stderr: "pipe" });
+      expect(run.stderr.toString()).toBe("");
+      expect(run.exitCode).toBe(0);
+      const catalogue = JSON.parse(readFileSync(join(output, "release.json"), "utf8"));
+      const archive = catalogue.assets.find((asset: { name: string }) => asset.name.endsWith(".tar.gz"));
+      const extracted = join(scratch, "extracted");
+      mkdirSync(extracted);
+      expect(Bun.spawnSync(["tar", "-xzf", join(output, archive.name), "-C", extracted]).exitCode).toBe(0);
+      const home = join(scratch, "home");
+      const path = Bun.spawnSync(["bash", join(extracted, "sjel/tools/fda-launcher/install"), "path"], { env: { ...process.env, HOME: home, SJEL_ROOT: join(extracted, "sjel") }, stdout: "pipe", stderr: "pipe" });
+      expect(path.exitCode).toBe(0);
+      expect(path.stdout.toString()).toBe(join(home, "Library/Application Support/Sjel/helpers/sjel-fda-launcher") + "\n");
     } finally { rmSync(scratch, { recursive: true, force: true }); }
   }, 30_000);
 

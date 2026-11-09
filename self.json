@@ -1573,6 +1573,16 @@
     },
     {
       "from": "import",
+      "to": "media-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/import/Cargo.toml"
+      ]
+    },
+    {
+      "from": "import",
       "to": "route-manifest",
       "kinds": [
         "cargo-dep"
@@ -2772,6 +2782,16 @@
       ]
     },
     {
+      "from": "storage",
+      "to": "status-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/storage/Cargo.toml"
+      ]
+    },
+    {
       "from": "summarize",
       "to": "inference",
       "kinds": [
@@ -3211,7 +3231,7 @@
     },
     {
       "name": "anatomy",
-      "verdict": "adopt"
+      "verdict": "inspiration"
     },
     {
       "name": "apfel",
@@ -3474,6 +3494,10 @@
       "verdict": "evaluate"
     },
     {
+      "name": "mattpocock-skills",
+      "verdict": "inspiration"
+    },
+    {
       "name": "mcp-audit",
       "verdict": "adopt"
     },
@@ -3535,6 +3559,10 @@
     },
     {
       "name": "obsidian-local-rest-api",
+      "verdict": "adopt"
+    },
+    {
+      "name": "obsidian-plugin-registry",
       "verdict": "adopt"
     },
     {
@@ -3604,6 +3632,10 @@
     {
       "name": "platforms",
       "verdict": "reject"
+    },
+    {
+      "name": "ponytail",
+      "verdict": "inspiration"
     },
     {
       "name": "portable-pty",

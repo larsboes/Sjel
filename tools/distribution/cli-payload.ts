@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 
 export const cliBinaries = ["sjel-cli", "sjel-claude-config", "sjel-mcp"];
@@ -94,6 +94,16 @@ export function payloadFiles(stage: string, prefix = ""): string[] {
   }).sort();
 }
 
+export function detachHardlinks(stage: string) {
+  for (const path of payloadFiles(stage)) {
+    const file = join(stage, path);
+    if (lstatSync(file).nlink <= 1) continue;
+    const temporary = `${file}.sjel-detached`;
+    copyFileSync(file, temporary, constants.COPYFILE_EXCL);
+    renameSync(temporary, file);
+  }
+}
+
 function profilesText(selection: CliSelection, disabled: string[]) {
   const { profiles, profile, packs } = selection;
   const lines = ["[unit_hold]"];
@@ -165,6 +175,8 @@ export function writeCliPayload(root: string, stage: string, target: string, ver
       prepared.push(unit);
     }
   }
+  // Bun's Linux cache hardlinks must not become archive link entries.
+  detachHardlinks(stage);
   put(stage, "CLI_RUNTIME.json", JSON.stringify({ schema: 1, pi_dependencies: build ? "prepared" : "unprepared", prepared, disabled, reason: build ? "Frozen production dependencies; lifecycle scripts disabled" : "No-build fixture: dependency-backed Pi packages omitted and held" }, null, 2) + "\n");
   put(stage, "distribution.json", JSON.stringify({ schema: 1, kind: "cli", version, platform, source_builds: false, core: [] }, null, 2) + "\n");
   put(stage, "CLI_VERSION", version + "\n");

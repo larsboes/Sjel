@@ -1,11 +1,13 @@
 # presentations pack
 
 Turns an argument into a deck, and an academic argument into a deck that survives a
-defence. Two skills. **`slide-deck`** owns the deck mechanism (a role-based theme, layout
+defence. Three skills. **`slide-deck`** owns the deck mechanism (a role-based theme, layout
 archetypes, a deterministic build, a render loop, and an argument extractor) and the
 judgment about what a slide owes the one after it and what an academic talk is judged on.
 **`diagrams`** renders Mermaid sources to figures with the colours of the deck that will
 embed them, so a diagram and the slides around it cannot drift apart.
+**`interactive-figures`** builds standalone SVG/HTML explainers whose controls and geometry
+share one explicit model.
 
 ## Why it exists
 
@@ -192,8 +194,15 @@ taxonomy (Wohlin et al.), with the constructs sourced from the `academic-writing
 The `deckkit` code is written against `python-pptx` and `pymupdf`, both pinned in
 `scripts/deck`.
 
-## Anatomy
+## Interactive figures
 
-Anatomy is not part of this Pack. Install it from upstream when a figure needs
-it (`upstreams.toml` `[anatomy]`). Embedding a figure in a note is described in
-[`Packs/knowledge/plugins/interactive/README.md`](../knowledge/plugins/interactive/README.md).
+`interactive-figures` owns interactive technical explainers. Its ideal-lever example contains
+an original model, standalone HTML generator and model/browser checks. Run its commands from
+the skill directory; browser checks require an installed Chrome or Chromium and do not verify
+an Obsidian embed.
+
+[Anatomy](https://github.com/wheresryan22/anatomy) (MIT) is design inspiration for using an
+interactive technical figure to explain a mechanism. No upstream instructions, code, images
+or assets are included. The owned skill and example use this Pack's MIT license. Upstream
+snapshots remain reference-only, not runtime skills. Obsidian embedding follows the knowledge
+Pack's [host contract](../knowledge/plugins/interactive/README.md).

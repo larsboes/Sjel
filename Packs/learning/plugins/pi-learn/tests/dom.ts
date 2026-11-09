@@ -11,6 +11,14 @@ Object.assign(globalThis, {
   Event: window.Event,
 });
 
+// linkedom omits the browser's HTMLSelectElement.value setter.
+Object.defineProperty(window.HTMLSelectElement.prototype, 'value', {
+  get() { return this.querySelector('option[selected]')?.getAttribute('value') ?? this.querySelector('option')?.getAttribute('value') ?? ''; },
+  set(value: string) {
+    for (const option of this.querySelectorAll('option')) option.toggleAttribute('selected', option.getAttribute('value') === value);
+  },
+});
+
 type Options = { cls?: string; text?: string; attr?: Record<string, string> };
 const proto = window.HTMLElement.prototype as any;
 proto.createEl = function (tag: string, options: Options = {}) {

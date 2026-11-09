@@ -24,7 +24,7 @@ The writing contract is optional and machine-specific. The overlay's `config/kno
 contract_path = "Meta/Vault-Contract.md"
 ```
 
-`obsidian_contract` reads that note through Obsidian's API. While a contract is configured, every mutation tool refuses to run until the contract has been loaded in that session; resumed sessions accept the prior load only while its SHA-256 digest still matches the current vault note. A configured contract that is missing, empty, larger than 50,000 bytes, or unreadable fails closed, and so does an invalid `knowledge.toml`. Without an overlay, a `knowledge.toml`, or a `contract_path`, `obsidian_contract` reports that no contract is configured and mutations are not gated on one.
+`obsidian_contract` reads that note through Obsidian's API. In local vault mode (`local_files = true`) it reads the file under `vault_root` directly and needs neither Obsidian nor the API key. While a contract is configured, every mutation tool refuses to run until the contract has been loaded in that session; resumed sessions accept the prior load only while its SHA-256 digest still matches the current vault note. A configured contract that is missing, empty, larger than 50,000 bytes, or unreadable fails closed, and so does an invalid `knowledge.toml`. Without an overlay, a `knowledge.toml`, or a `contract_path`, `obsidian_contract` reports that no contract is configured and mutations are not gated on one.
 
 ## Validation and Bases
 

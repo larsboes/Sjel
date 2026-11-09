@@ -17,7 +17,7 @@ Before editing:
 Always:
 
 - Until `PLAN.md` is done, every change goes straight to `main` from the primary checkout: no
-  worktrees, no work-package PRs. They start at `v0.1.0`. Rules:
+  worktrees, no work-package PRs. They start when the plan is done, independently of release tags. Rules:
   `Packs/harness/skills/sjel/references/on-changes.md`.
 - Other agent sessions edit the primary checkout at the same time. Never stash, revert, or overwrite
   their changes. Touch and stage only the files of your task.
@@ -42,6 +42,11 @@ Always:
 - Write a durable rule or decision into the repository: code, the skill that owns it, the area
   plan in `docs/plans/`, or this file. Never into agent memory. The tracked `.claude/settings.json`
   sets `autoMemoryEnabled: false`. Machine-specific settings go in `.claude/settings.local.json`.
+- Use only owned and maintained skills and harness plugins; adapt upstream material instead of
+  installing it wholesale. Rules: [owned agent components](CONTRIBUTING.md#owned-agent-components).
+- Reassess repeated routine approvals and wasteful delegation before continuing. Use narrow
+  permissions and agents only when they pay for their overhead. Rules:
+  [proportionate approvals and delegation](CONTRIBUTING.md#proportionate-approvals-and-delegation).
 - Format replies for low cognitive load, per the `attention-control` skill: the result and its
   verification first, numbered chunks, exact counts and paths, and manual steps in their own
   block with a time estimate.

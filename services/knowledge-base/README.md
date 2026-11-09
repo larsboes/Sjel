@@ -93,6 +93,28 @@ eleven names would differ byte-wise and Obsidian's wikilinks to them would not r
 2026-09-23 comparison normalises both sides to NFC and found no such difference, which is the
 confirmation that the earlier eleven were cosmetic.
 
+## Plugin maintenance
+
+`tools/vault-plugin-audit` inventories installed manifests and enabled IDs without reading plugin
+settings or changing the vault. It resolves the active vault through the existing knowledge
+configuration; `--vault PATH` selects a fixture or an explicit alternative.
+
+- Default: local installed versions, missing enabled plugins and invalid or symlinked manifests.
+- `--registry PATH`: resolve repositories against a local official registry snapshot.
+- `--online`: fetch the official Obsidian registry and query GitHub through `gh` for archived
+  state, last push and latest release. Unmapped plugins and unavailable upstream checks stay
+  explicit; an incomplete online check exits 2. Invalid input exits 1.
+
+The official registry is read as metadata, not installed as executable code. Freshness does not
+establish security or compatibility. Sjel-owned plugins absent from the official registry remain
+unmapped; `tools/vault-plugins status` reports their source/deployment drift, and
+`tools/obsidian-plugin` owns Pack plugin builds and deployment. The inventory is a stdlib-only
+Python tool beside the existing Python vault helpers, run with `uv`; no application runtime or
+new dependency is introduced. `tools/vault-plugin-audit.test.sh` checks it with synthetic vaults.
+
+Old one-off cleanup scripts are not deployment contracts: plugin removals, settings migrations
+and enable-list changes need a current explicit decision, not a replay of an old ruling.
+
 ## The Sjel Lens plugin, removed 2026-10-20
 
 `plugin/sjel-lens/` was an Obsidian pane that compared two kinds of note with what Sjel computed:

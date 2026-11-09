@@ -23,7 +23,7 @@ write. It runs on macOS, Linux and Windows.
   feedback. A prediction is reported as explored, not scored.
 - Leaves the reader's scroll position alone while an answer streams, unless the reader is at the
   bottom. The composer's button shows Stop while that is what it does.
-- Follows the open note. A path note is the path. Any other note is the focus, and its path is a
+- Follows eligible concept and claim notes under `Knowledge/`, or learning path notes. Dashboard, MOC, reference and configuration notes are excluded. An active sitting keeps its context when notes are browsed. Before a sitting, an explicitly selected planner target takes priority over the open note. A path note is the path. An eligible concept or claim note is the focus, and its path is a
   learning path that links to it or that it links to. Teach and Practice start from that context:
   the path at the focus note, the path alone, or the note alone when no path holds it.
 - Reads the path with the vault contract's learning-path schema: node states as dots in the
@@ -35,7 +35,36 @@ write. It runs on macOS, Linux and Windows.
 
 Teach and Practice each start a fresh pi session: the vault is the memory, and a sitting resumes
 from the path graph's `current` node. Decided 2026-11-05 (`docs/plans/learning.md`, stage 3).
-With no learning path open, type a topic first. A message sent while pi works becomes a steer.
+The session planner accepts a path or new topic, desired outcome, available minutes and mode.
+Leaving minutes blank asks the tutor to establish the budget once. Planning starts no model
+conversation. Starting a sitting uses the single current graph node, otherwise the first open
+node whose prerequisites are held. Cycles, multiple current nodes and unsupported dependency
+syntax require inspection rather than selecting an arbitrary node. Directed dependency chains
+with `-->`, `-.->` and `==>` are supported. With no learning path open, type a topic first. A message sent while pi works becomes a steer.
+
+## Dynamic home
+
+Embed the following in any home note, with optional `cssclasses: [learning-hub]` for the
+reading layout:
+
+````markdown
+```learning-hub
+```
+````
+
+The block lists graph-bearing path notes, their progress and next ready step, existing claim
+notes and the five latest Learning Log lines. Vault and metadata events refresh it after
+create, edit, rename and delete. Empty, blocked and unreadable paths have explicit states.
+Plan buttons open the sidebar planner without starting a sitting. Data remains in Markdown;
+the hub holds no saved counts, topic links or duplicate progress fields.
+
+Both surfaces use the optional CSS variables `--learn-gap`, `--learn-width`, `--learn-accent`,
+`--learn-rule` and `--learn-radius`. A single vault snippet can override these; defaults come
+from the active Obsidian theme. Structural styles belong to the plugin.
+
+Finish sitting saves completed work plus an explicit pending handoff for unfinished gates,
+claim reviews, problems, retests and contests. It does not require new questions to end a
+sitting. Required record-write failures still prevent the closed acknowledgement.
 
 ## Settings
 

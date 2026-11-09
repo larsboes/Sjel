@@ -51,6 +51,7 @@ Use this mode to understand, review, plan, or change the repository.
 | README, generated docs, manifests, Packs, or skills | `references/on-documentation.md` |
 | Tests, gates, review, or completion claims | `references/on-verification.md` |
 | Branch, commit, or PR | `references/on-changes.md` |
+| Approved unattended or overnight local work | `references/on-unattended.md` |
 
 ## Invariants
 

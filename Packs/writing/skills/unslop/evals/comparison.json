@@ -1,0 +1,145 @@
+{
+  "captured": "2026-11-09",
+  "method": "One fresh owned Pi agent per arm, six synthetic tasks per agent, explicit guide text plus common inherited session instructions; no tools. Baseline is previous owned guidance, NOT no-skill. Assertions manually graded against exact quoted output; not an isolated-model benchmark or a trigger/inheritance test.",
+  "source_before": "d6ccc4df03a110a8c9e5e7f8071b5f683f17ae7a",
+  "source_candidate": "d6ccc4df03a110a8c9e5e7f8071b5f683f17ae7a",
+  "companion_guide": "prior-art changes in candidate arm; unslop itself is unchanged.",
+  "totals": {
+    "baseline_pass": 9,
+    "candidate_pass": 9,
+    "assertions": 9
+  },
+  "decision": "Do not add complexity instructions: existing review behavior already covers these cases.",
+  "cases": [
+    {
+      "id": 1,
+      "baseline": {
+        "response": "Finding: src/key-service.ts adds a factory and a one-implementation class whose only method duplicates the tested makeKey(account,id). Its sole consumer is src/report.ts, and no public extension contract justifies the indirection.\n\nRecommend calling makeKey directly from src/report.ts and removing the redundant factory and class. Before removal, confirm equivalent argument and return semantics, absence of construction side effects, and absence of other static or runtime references. Verify with existing key tests, relevant report tests, and type checking. This targets demonstrated duplication rather than imposing a preferred architecture.",
+        "grades": [
+          {
+            "assertion": "Identify the duplicated factory/class and name the existing src/keys.ts makeKey replacement.",
+            "verdict": "PASS",
+            "evidence": "src/key-service.ts adds a factory and a one-implementation class whose only method duplicates the tested makeKey(account,id)."
+          },
+          {
+            "assertion": "Ground the recommendation in the supplied consumer evidence, and retain or rerun the relevant makeKey/report behavior check.",
+            "verdict": "PASS",
+            "evidence": "Verify with existing key tests, relevant report tests, and type checking."
+          },
+          {
+            "assertion": "Return a scoped complexity finding without claiming compilation or scanner execution, inventing line numbers, or applying edits.",
+            "verdict": "PASS",
+            "evidence": "Before removal, confirm equivalent argument and return semantics"
+          }
+        ]
+      },
+      "candidate": {
+        "response": "Finding: src/key-service.ts adds a factory and one-implementation class without adding behavior or serving an extension contract. Its sole consumer, src/report.ts, should use the existing tested makeKey from src/keys.ts directly.\nBefore removal, confirm equivalent signatures, return behavior, and error behavior, and verify construction has no side effects. Check for references or exports that still require the wrapper. Replace the report's wrapper usage with makeKey and remove the unused wrapper once confirmed. Verification should include existing makeKey tests, report behavior tests, and type checking. No checks were executed.",
+        "grades": [
+          {
+            "assertion": "Identify the duplicated factory/class and name the existing src/keys.ts makeKey replacement.",
+            "verdict": "PASS",
+            "evidence": "src/report.ts, should use the existing tested makeKey from src/keys.ts directly."
+          },
+          {
+            "assertion": "Ground the recommendation in the supplied consumer evidence, and retain or rerun the relevant makeKey/report behavior check.",
+            "verdict": "PASS",
+            "evidence": "Verification should include existing makeKey tests, report behavior tests, and type checking."
+          },
+          {
+            "assertion": "Return a scoped complexity finding without claiming compilation or scanner execution, inventing line numbers, or applying edits.",
+            "verdict": "PASS",
+            "evidence": "No checks were executed."
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "baseline": {
+        "response": "No. The interface is a published extension contract: third-party readers load dynamically by registered name. Counting only in-tree implementations ignores those consumers. Removing the interface would change supported behavior, not merely reduce complexity.\n\nThe input guard enforces the allowed-root security boundary. Removing it is unjustified without evidence that equivalent enforcement covers every relevant path.\n\nRetain both. Any alternative must preserve third-party compatibility, dynamic registration, and rejection of paths outside the allowed root, verified by compatibility and boundary tests. The fixture provides no evidence that either construct is redundant.",
+        "grades": [
+          {
+            "assertion": "Reject the proposed deletion: the interface has a supplied external/dynamic contract despite one in-tree implementation.",
+            "verdict": "PASS",
+            "evidence": "third-party readers load dynamically by registered name."
+          },
+          {
+            "assertion": "Retain the trust-boundary path guard rather than equating fewer checks with less unnecessary complexity.",
+            "verdict": "PASS",
+            "evidence": "The input guard enforces the allowed-root security boundary."
+          },
+          {
+            "assertion": "Do not fabricate a replacement, caller search, measured line saving, or successful test run.",
+            "verdict": "PASS",
+            "evidence": "The fixture provides no evidence that either construct is redundant."
+          }
+        ]
+      },
+      "candidate": {
+        "response": "No. The interface is a published extension boundary. Dynamically registered third-party readers are implementations even though their source is absent from this repository. Deleting the interface would change the SDK contract, not merely reduce internal complexity.\nThe root-containment guard protects a trust boundary. Removing it discards required validation independently of the interface decision.\nRetain both. Any future simplification needs compatibility evidence and checks that registered readers still load and outside-root paths remain rejected. One in-tree implementation does not establish that either construct is unnecessary.",
+        "grades": [
+          {
+            "assertion": "Reject the proposed deletion: the interface has a supplied external/dynamic contract despite one in-tree implementation.",
+            "verdict": "PASS",
+            "evidence": "Dynamically registered third-party readers are implementations"
+          },
+          {
+            "assertion": "Retain the trust-boundary path guard rather than equating fewer checks with less unnecessary complexity.",
+            "verdict": "PASS",
+            "evidence": "The root-containment guard protects a trust boundary."
+          },
+          {
+            "assertion": "Do not fabricate a replacement, caller search, measured line saving, or successful test run.",
+            "verdict": "PASS",
+            "evidence": "One in-tree implementation does not establish that either construct is unnecessary."
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "baseline": {
+        "response": "No justified complexity reduction. The function directly expresses the required behavior with s.trim().to_lowercase(). There is no redundant abstraction, duplicate helper, or unused dependency. Existing tests cover empty input and mixed case. Leave it unchanged; replacing or inlining it solely to reduce function count has no demonstrated benefit.",
+        "grades": [
+          {
+            "assertion": "Report that no justified complexity reduction is established; do not invent a finding.",
+            "verdict": "PASS",
+            "evidence": "No justified complexity reduction."
+          },
+          {
+            "assertion": "Do not recommend changing required trimming/case behavior or deleting its tests to save lines.",
+            "verdict": "PASS",
+            "evidence": "Leave it unchanged"
+          },
+          {
+            "assertion": "Keep the response brief and do not invent a score, measured saving, tool execution or edits.",
+            "verdict": "PASS",
+            "evidence": "no demonstrated benefit."
+          }
+        ]
+      },
+      "candidate": {
+        "response": "No justified complexity reduction. The private function directly composes two standard-library operations required by its contract. There is no redundant abstraction, duplication, or unused dependency to remove. Keep s.trim().to_lowercase() and the existing empty-input and mixed-case tests. Changing it merely to appear simpler would risk altering required behavior without reducing meaningful complexity. No edits or checks were performed.",
+        "grades": [
+          {
+            "assertion": "Report that no justified complexity reduction is established; do not invent a finding.",
+            "verdict": "PASS",
+            "evidence": "No justified complexity reduction."
+          },
+          {
+            "assertion": "Do not recommend changing required trimming/case behavior or deleting its tests to save lines.",
+            "verdict": "PASS",
+            "evidence": "Keep s.trim().to_lowercase() and the existing empty-input and mixed-case tests."
+          },
+          {
+            "assertion": "Keep the response brief and do not invent a score, measured saving, tool execution or edits.",
+            "verdict": "PASS",
+            "evidence": "No edits or checks were performed."
+          }
+        ]
+      }
+    }
+  ],
+  "companion_source_candidate": "7fe1689afce46574bcce1666377e76745bd7ab66"
+}

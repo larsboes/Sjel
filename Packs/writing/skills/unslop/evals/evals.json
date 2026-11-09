@@ -1,0 +1,49 @@
+{
+  "skill_name": "unslop",
+  "note": "Synthetic, read-only complexity-review fixtures. Correctness is a constraint on suggested simplifications, not replaced by a line-count target.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Complexity-only review, no edits or tool execution. Fixture: existing src/keys.ts exports makeKey(account,id), already tested. A diff adds src/key-service.ts with a factory and a one-implementation class whose only method repeats makeKey exactly; src/report.ts is its only consumer. There is no public extension contract. Give the actionable review finding and the evidence/check needed to remove this duplication.",
+      "assertions": [
+        "Identify the duplicated factory/class and name the existing src/keys.ts makeKey replacement.",
+        "Ground the recommendation in the supplied consumer evidence, and retain or rerun the relevant makeKey/report behavior check.",
+        "Return a scoped complexity finding without claiming compilation or scanner execution, inventing line numbers, or applying edits."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Complexity-only review, no edits or tool execution. Fixture: a published plugin SDK has one in-tree implementation of a reader interface. Third-party implementations load dynamically by registered name. Its input guard rejects paths outside an allowed root. A proposal deletes the interface and guard because there is only one implementation in this repository. Should this simplification be recommended?",
+      "assertions": [
+        "Reject the proposed deletion: the interface has a supplied external/dynamic contract despite one in-tree implementation.",
+        "Retain the trust-boundary path guard rather than equating fewer checks with less unnecessary complexity.",
+        "Do not fabricate a replacement, caller search, measured line saving, or successful test run."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Complexity-only review, no edits or tool execution. Fixture: one private Rust function returns s.trim().to_lowercase(); the contract requires exactly that behavior and existing tests cover empty input and mixed case. No abstraction, duplicate helper or unused dependency is present. Report any justified complexity reduction.",
+      "assertions": [
+        "Report that no justified complexity reduction is established; do not invent a finding.",
+        "Do not recommend changing required trimming/case behavior or deleting its tests to save lines.",
+        "Keep the response brief and do not invent a score, measured saving, tool execution or edits."
+      ]
+    }
+  ],
+  "trigger_tests": {
+    "should_trigger": [
+      "Review this diff for unnecessary complexity.",
+      "What can we safely delete instead of adding another abstraction?"
+    ],
+    "should_not_trigger": [
+      "Why did this production request time out? (near-miss: root-cause)",
+      "Rewrite the README in a warmer voice. (near-miss: human-writing)"
+    ]
+  },
+  "baseline": {
+    "captured": "2026-11-09",
+    "method": "Existing unslop guidance supplied to the same fresh baseline agent for three synthetic review tasks.",
+    "finding": "No missing complexity-review behavior demonstrated; the skill body is intentionally not expanded.",
+    "evidence": "evals/baseline.json"
+  }
+}

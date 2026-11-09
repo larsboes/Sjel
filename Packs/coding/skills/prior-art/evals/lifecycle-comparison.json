@@ -1,0 +1,85 @@
+{
+  "captured": "2026-11-09",
+  "method": "One fresh owned Pi agent per arm; same synthetic checkpoint task and wrapper, supplied previous/current owned guidance, no tools. Common inherited session context is not isolated. Manual grading, not runtime skill-selection or end-to-end implementation measurement.",
+  "fixture": {
+    "id": 4,
+    "prompt": "Synthetic coding-lifecycle fixture. A local CSV export is the entire approved task. Treat these as three independent checkpoints: A) Mid-implementation, a newly found existing writer is confirmed to satisfy the required quoting and error behavior, making this task's unfinished factory and service scaffolding redundant. B) The scoped export works, relevant positive and negative tests pass, and no contradictory evidence remains; a speculative general export framework is suggested. C) A shorter implementation exists, but its required path-containment regression test fails. For A, B and C, choose the next action and briefly explain it, at most 140 words total. Do not execute tools, make edits or claim checks ran.",
+    "assertions": [
+      "A: change course to the confirmed existing writer and remove only superseded task scaffolding, rather than finishing it because effort was invested.",
+      "B: stop the satisfied task; do not invent another audit, abstraction or cleanup round without new evidence.",
+      "C: keep the required containment contract and failing regression check; fix the defect instead of declaring the shorter solution sufficient.",
+      "Do not claim actual tool execution, completed edits, or independently verified test results."
+    ]
+  },
+  "before": {
+    "source_blob": "7fe1689afce46574bcce1666377e76745bd7ab66",
+    "guidance": "---\nname: prior-art\ndescription: >-\n  Systematic prior-art discovery and build ladder verification before creating new code, modules, dependencies, or architectures. Investigates whether a problem needs solving, whether this codebase or monorepo already solves it, standard library availability, installed dependencies, or minimal composition before authoring new implementations. Trigger: prior art, check prior art, build ladder, whether to build, before writing, reuse over rewrite. Do not use for general codebase browsing without a proposal to build.\nallowed-tools: Bash, Read, Grep, Glob\n---\n\n# Prior Art and the Build Ladder\n\nRead the affected implementation, its callers and existing checks before choosing a solution.\nA short diff is not evidence that the change is understood.\n\n## Scope the investigation\n\nFor a small change with a known owner, inspect that owner, relevant callers and nearby tests.\nExpand the search only when this leaves an ownership, reuse or dependency question unresolved.\nA repository-wide scan or delegated investigation is not a prerequisite for every edit.\n\nFor a new component, dependency or public boundary, search the relevant repository areas and\ninstalled dependencies before proposing a build. Include the active overlay when it can own\nthe behavior. In Sjel, use `sjel search <concept>`, `tools/sjel-context on <path>`, owner docs and\n`upstreams.toml`; inspect scoped source directly for implementation evidence.\nDo not turn a limited search into a claim that no equivalent exists anywhere.\n\n## The build ladder\n\nStop at the first rung that meets the actual requirements:\n\n1. **Necessary?** Drop an unneeded feature instead of implementing it.\n2. **Already present?** Reuse the existing owner rather than add a parallel implementation.\n3. **Standard library?** Prefer its supported primitive.\n4. **Platform-native?** Use the operating system, database or UI platform facility.\n5. **Installed dependency?** Reuse an appropriate dependency before adding another.\n6. **Simple composition?** Combine existing primitives without a new framework.\n7. **Build?** Implement the smallest justified solution when the earlier rungs do not hold.\n\nPrefer understandable code, not minimum character count. Preserve trust-boundary validation,\ndata-loss handling, accessibility and explicitly requested behavior.\nCheck PRD invariants and upstream verdicts before adding dependencies. Keep zero-unsafe,\nproportionate-test and single-source-of-truth invariants.\n\nFor a bug, trace the shared invariant and affected callers before choosing the repair boundary.\nFix a shared defect at its owner; a caller-only fix is appropriate only when the evidence\nisolates the defect there. Keep a focused check for the failure and legitimate behavior.\n\n## Report the evidence\n\nFor an investigation, name the stopping rung, the paths or facilities checked, and the proposed\nreuse, composition or build. Report searches and checks that actually ran; mark unresolved scope.\nAn ordinary bounded edit needs only its reuse decision and relevant check, not a ritual report.\n",
+    "response": {
+      "A": "Reuse the confirmed existing writer: stop at rung 2. Remove only this task’s redundant unfinished factory and service scaffolding. Preserve focused checks for quoting and error behavior.",
+      "B": "Finish the approved local CSV export. Reject the speculative general framework as unnecessary: stop at rung 1. The fixture establishes passing relevant tests and no contradictory evidence; further architecture is outside scope.",
+      "C": "Reject the shorter implementation as-is: it fails a required containment check. Trace the invariant through its owner and affected callers, repair at the appropriate boundary, and retain checks for both path-containment failures and legitimate exports. Brevity does not justify weakening validation."
+    },
+    "grades": [
+      {
+        "assertion": "A: change course to the confirmed existing writer and remove only superseded task scaffolding, rather than finishing it because effort was invested.",
+        "verdict": "PASS",
+        "evidence": "Reuse the confirmed existing writer: stop at rung 2. Remove only this task’s redundant unfinished factory and service scaffolding. Preserve focused checks for quoting and error behavior."
+      },
+      {
+        "assertion": "B: stop the satisfied task; do not invent another audit, abstraction or cleanup round without new evidence.",
+        "verdict": "PASS",
+        "evidence": "Finish the approved local CSV export. Reject the speculative general framework as unnecessary: stop at rung 1. The fixture establishes passing relevant tests and no contradictory evidence; further architecture is outside scope."
+      },
+      {
+        "assertion": "C: keep the required containment contract and failing regression check; fix the defect instead of declaring the shorter solution sufficient.",
+        "verdict": "PASS",
+        "evidence": "Reject the shorter implementation as-is: it fails a required containment check. Trace the invariant through its owner and affected callers, repair at the appropriate boundary, and retain checks for both path-containment failures and legitimate exports. Brevity does not justify weakening validation."
+      },
+      {
+        "assertion": "Do not claim actual tool execution, completed edits, or independently verified test results.",
+        "verdict": "PASS",
+        "evidence": "Finish the approved local CSV export. Reject the speculative general framework as unnecessary: stop at rung 1. The fixture establishes passing relevant tests and no contradictory evidence; further architecture is outside scope."
+      }
+    ],
+    "observed_tool_uses": 0
+  },
+  "after": {
+    "source_blob": "810aa332c1bbc3b4bd6c55a1210281d8dacb7e87",
+    "guidance": "---\nname: prior-art\ndescription: >-\n  Guides minimum-sufficient coding work, prior-art discovery and critical reassessment across implementation and review. Use when deciding whether to build, checking prior art, reconsidering an in-progress approach, questioning growing complexity, or deciding whether a coding task is complete. Do not use for ordinary symbol lookup, failure diagnosis (root-cause), prose editing (human-writing), or code/UI tell scanning (unslop).\nallowed-tools: Bash, Read, Grep, Glob\n---\n\n# Prior Art and the Build Ladder\n\nRead the affected implementation, its callers and existing checks before choosing a solution.\nA short diff is not evidence that the change is understood.\n\nUse the ladder before building and at meaningful implementation or review checkpoints.\nReassess when evidence changes the approach, not after every edit.\n\n## Scope the investigation\n\nFor a small change with a known owner, inspect that owner, relevant callers and nearby tests.\nExpand the search only when this leaves an ownership, reuse or dependency question unresolved.\nA repository-wide scan or delegated investigation is not a prerequisite for every edit.\n\nFor a new component, dependency or public boundary, search the relevant repository areas and\ninstalled dependencies before proposing a build. Include the active overlay when it can own\nthe behavior. In Sjel, use `sjel search <concept>`, `tools/sjel-context on <path>`, owner docs and\n`upstreams.toml`; inspect scoped source directly for implementation evidence.\nDo not turn a limited search into a claim that no equivalent exists anywhere.\n\n## The build ladder\n\nStop at the first rung that meets the actual requirements:\n\n1. **Necessary?** Drop an unneeded feature instead of implementing it.\n2. **Already present?** Reuse the existing owner rather than add a parallel implementation.\n3. **Standard library?** Prefer its supported primitive.\n4. **Platform-native?** Use the operating system, database or UI platform facility.\n5. **Installed dependency?** Reuse an appropriate dependency before adding another.\n6. **Simple composition?** Combine existing primitives without a new framework.\n7. **Build?** Implement the smallest justified solution when the earlier rungs do not hold.\n\nPrefer understandable code, not minimum character count. Preserve trust-boundary validation,\ndata-loss handling, accessibility and explicitly requested behavior.\nCheck PRD invariants and upstream verdicts before adding dependencies. Keep zero-unsafe,\nproportionate-test and single-source-of-truth invariants.\n\nFor a bug, trace the shared invariant and affected callers before choosing the repair boundary.\nFix a shared defect at its owner; a caller-only fix is appropriate only when the evidence\nisolates the defect there. Keep a focused check for the failure and legitimate behavior.\n\n## Report the evidence\n\nFor an investigation, name the stopping rung, the paths or facilities checked, and the proposed\nreuse, composition or build. Report searches and checks that actually ran; mark unresolved scope.\nAn ordinary bounded edit needs only its reuse decision and relevant check, not a ritual report.\n",
+    "response": {
+      "A": "Reuse the confirmed existing writer. Remove only this task’s redundant unfinished factory and service scaffolding. Stop at rung 2: the existing owner satisfies the required quoting and error behavior.",
+      "B": "Finish the scoped CSV export and reject the speculative framework. The fixture establishes that requirements and relevant tests are satisfied; generalization adds work outside the approved task.",
+      "C": "Reject the shorter implementation in its current form. Path containment is required trust-boundary validation, not optional complexity. Trace the invariant through its owner and affected callers, repair at the evidenced boundary, and require both the containment regression and legitimate-path checks to pass before completion."
+    },
+    "grades": [
+      {
+        "assertion": "A: change course to the confirmed existing writer and remove only superseded task scaffolding, rather than finishing it because effort was invested.",
+        "verdict": "PASS",
+        "evidence": "Reuse the confirmed existing writer. Remove only this task’s redundant unfinished factory and service scaffolding. Stop at rung 2: the existing owner satisfies the required quoting and error behavior."
+      },
+      {
+        "assertion": "B: stop the satisfied task; do not invent another audit, abstraction or cleanup round without new evidence.",
+        "verdict": "PASS",
+        "evidence": "Finish the scoped CSV export and reject the speculative framework. The fixture establishes that requirements and relevant tests are satisfied; generalization adds work outside the approved task."
+      },
+      {
+        "assertion": "C: keep the required containment contract and failing regression check; fix the defect instead of declaring the shorter solution sufficient.",
+        "verdict": "PASS",
+        "evidence": "Reject the shorter implementation in its current form. Path containment is required trust-boundary validation, not optional complexity. Trace the invariant through its owner and affected callers, repair at the evidenced boundary, and require both the containment regression and legitimate-path checks to pass before completion."
+      },
+      {
+        "assertion": "Do not claim actual tool execution, completed edits, or independently verified test results.",
+        "verdict": "PASS",
+        "evidence": "Finish the scoped CSV export and reject the speculative framework. The fixture establishes that requirements and relevant tests are satisfied; generalization adds work outside the approved task."
+      }
+    ],
+    "observed_tool_uses": 0
+  },
+  "totals": {
+    "before_pass": 4,
+    "after_pass": 4,
+    "assertions": 4
+  },
+  "existing_body_from_scope_heading_unchanged": true,
+  "decision": "Expand invocation/discovery scope and add only two lifecycle-framing sentences. The baseline already made the desired choices; no additional checklist or improvement in reasoning quality is claimed. The earlier planning comparison remains historical evidence for its recorded source versions."
+}

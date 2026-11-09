@@ -62,27 +62,50 @@ Claude Code, Codex, Antigravity, opencode and Copilot use `coding-harness`. It i
 work, design, deliberation, prose and skill authoring, presentations and secret handling, but
 excludes vault, learning and academic-writing skills. pi uses `full`; sjel-agent remains unbound.
 
-`optional_packs` selects a whole Pack only where its source is installed. This lets the shared
-coding profile select the approved Anatomy store without requiring that machine-local store in
-a fresh checkout. Required `packs` entries still fail when absent; optional selection does not
-fetch, approve or install a source.
+`optional_packs` selects a whole Pack only where its source is installed. Required `packs`
+entries still fail when absent; optional selection does not fetch, approve or install a source.
+Stored Anatomy and Matt skills are held off every harness pending owned adoption.
 
 `apply` reconciles the selected units, including removals. For materialized harnesses, existing
 copies whose unit set is unchanged still need `sync` to receive source updates. A per-Pack
 `deploy` refuses a Pack outside the binding, and doctor reports owned Packs outside it. Explicit
 `use <profile>` remains available as an override; changing the binding makes that choice durable.
 
-These checks cover Sjel-managed Packs, not every discovery root a harness reads. External skills
-such as Anatomy and application-owned skill links load independently. `tools/skills add` and
-`update` stage third-party content once, screen that snapshot through `tools/intake`, and install
-those same bytes; a missing model review holds the install unless the exact digest was approved.
-`tools/skills store <package>` publishes the same screened bytes into the skill store instead,
-as a Pack named after the repository whose `pack.toml` pins each skill's digest, revision and
-approval. Every harness reads the store as a Pack root, so a profile selects an upstream skill
-like any Pack skill, and `tools/skills audit` reports a stored skill that no longer matches its
-pin. Direct upstream installers (`npx skills add -g`) bypass all of it. The remaining limits and
-the management work for global skills are tracked in
-[`docs/plans/packs.md`](../../docs/plans/packs.md).
+These checks cover Sjel-managed Packs, not every discovery root a harness reads. Application-owned
+skill links and native or account-synced plugins need independent inspection. Intake reviews and
+store pins prove which bytes were screened; they do not establish Sjel ownership or authorize a
+runtime deployment. The existing upstream installer commands must not be used for wholesale
+installation. Retained store snapshots are reference material. The tooling enforcement gap and
+remaining migration work are tracked in [`docs/plans/packs.md`](../../docs/plans/packs.md).
+
+### Upstream adoption
+
+The [owned-component rule](../../CONTRIBUTING.md#owned-agent-components) applies to skills and
+plugins alike. Identify a real weakness, inspect upstream behavior and its license, then adapt
+the smallest useful change into the existing owner. Retain notices for copied material and
+record the source in `upstreams.toml`. Verify the behavior and its context, latency and maintenance
+cost before deploying it. A reviewed local adaptation may reuse upstream code; it must have an
+explicit local contract, tests and maintenance responsibility rather than a cosmetic rename.
+
+[Matt Pocock's skills](https://github.com/mattpocock/skills) (MIT) are retained as screened reference
+snapshots, not a second workflow layer. Tracker scaffolding and label provisioning are not part
+of the adoption. Possible destinations for individually justified improvements are:
+
+| Upstream reference | Existing Sjel owner |
+| --- | --- |
+| `grill-with-docs`, `to-spec`, `to-tickets` for software work | `crystallize` for broader synthesis; area plans remain the record |
+| `diagnosing-bugs` for code reproduction and repair | `root-cause` for incidents and systemic recurrence |
+| `codebase-design` and architecture surveys | `prior-art`, Rust safety and UI-specific constraints |
+| `research` for primary-source repo reports | `web-research` for public web and AI Studio routing |
+| `writing-for-agents` for agent-facing documentation | `skill-creator` for skill packaging and evaluation; `human-writing` for reader-facing prose |
+
+### Unattended local work
+
+The `sjel` skill routes an approved overnight task queue to
+[`on-unattended.md`](skills/sjel/references/on-unattended.md). It uses Pi's native headless,
+persistent sessions, not a second task runner. Test seams and dependencies are resolved before
+launch; product decisions and external writes are deferred. Native compaction and retries are
+not a wall-clock or spending cap; enforcement must be agreed before an unattended launch.
 
 GitHub Copilot CLI settings are managed separately from Pack contents:
 
@@ -201,10 +224,10 @@ cd "$SJEL_ROOT/Packs/harness/pi-packages/pi-subagents" && bun install
 
 ## Attribution
 
-Sjel distinguishes optional products from intentionally maintained adaptations. Accordion is
-an optional upstream product. Pi-subagents and pi-web-access are maintained here so Sjel can
-improve their behavior. Human-writing and unslop are also maintained in their Packs.
-These are explicit ownership decisions, not a license to copy every discovered project.
+Sjel maintains intentional adaptations, not wholesale upstream agent installations. Pi-subagents
+and pi-web-access are maintained here so Sjel can improve their behavior. Human-writing and
+unslop are also maintained in their Packs. A dormant reference such as Accordion is not an
+approved runtime component. These are ownership decisions, not permission to copy every project.
 
 Keep upstream attribution and a reviewed source revision. Evaluate incoming changes against
 local behavior and tests; do not replace these trees with stock installations automatically.
@@ -289,20 +312,11 @@ For CLM, `/clm-probe` checks that `/health` reports a working encoder, the `clm-
 
 The CLM v0.1 release is Apache-2.0 (checkpoint and code, <https://huggingface.co/Contrastive-LM/CLM-v0.1-8B>); it needs the matching Qwen3-8B last-token pooling encoder plus its trained heads. An Ollama `/api/embed` cosine of Qwen3-8B vectors is **not CLM**. The reference `contrastive-lm` package currently installs vLLM, and its documented serving recipe targets an NVIDIA GPU. vllm-metal documents experimental LAST pooling on macOS, but that is not yet an end-to-end validation of this checkpoint. On this Mac the service and Qwen3-8B are not installed; with 35 GiB free, no model download or background service was started. Keep this extension off until an exact encoder/head match and labeled accuracy are measured. Hosted Jev through Pi's built-in `typesafe/jev-latest` is the next, separate step after local validation; it needs credentials and Sjel's egress approval before personal data is sent.
 
-### Accordion (optional upstream install)
+### Accordion (reference only)
 
-Accordion is not bundled or enabled by this Pack. The detached source, browser bundle,
-conductors, and Sjel's default-on folding patches were removed. Session data remains owned by
-Accordion; removal from this repository does not delete it.
-
-```bash
-tools/agent-integrations.sh list
-tools/agent-integrations.sh install accordion pi   # explicit opt-in; delegates to pi install
-```
-
-The install source is `npm:@a-fig/accordion`. Pi owns the installed package and its updates
-(`pi update`); Sjel carries no replacement source or default-conductor configuration.
-`install --all-configured` does not include optional packages.
+Accordion is not bundled or enabled by this Pack. Its upstream behavior is reference material
+for a future justified adaptation, not an approved installation path. Existing session data is
+not a deployment and must not be deleted as part of this policy change.
 
 ### Locally maintained adaptations
 

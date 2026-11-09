@@ -3,6 +3,9 @@ import { THINKING_LEVELS, buildLaunch, type Launcher } from './launch';
 import { ModelPicker } from './picker';
 import { listModels, type PiModel } from './rpc';
 import { LearnView, VIEW_TYPE } from './view';
+import { LearningHub } from './hub';
+import type { Kind } from './path';
+import type { TFile } from 'obsidian';
 
 export interface PiLearnSettings {
   piCommand: string;
@@ -39,19 +42,28 @@ export default class PiLearnPlugin extends Plugin {
     this.registerView(VIEW_TYPE, (leaf) => new LearnView(leaf, this));
     this.addRibbonIcon('graduation-cap', 'Open Learn', () => void this.open());
     this.addCommand({ id: 'open', name: 'Open Learn', callback: () => void this.open() });
+    this.registerMarkdownCodeBlockProcessor('learning-hub', (_source, el, ctx) => {
+      ctx.addChild(new LearningHub(el, this, ctx.sourcePath));
+    });
     this.addSettingTab(new PiLearnSettingTab(this.app, this));
   }
 
-  async open() {
+  async prepare(file: TFile | null, kind: Kind) {
+    const view = await this.open();
+    if (view) await view.prepare(file, kind);
+  }
+
+  async open(): Promise<LearnView | null> {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0];
     if (existing) {
       this.app.workspace.revealLeaf(existing);
-      return;
+      return existing.view as LearnView;
     }
     const leaf = this.app.workspace.getRightLeaf(false);
-    if (!leaf) return;
+    if (!leaf) return null;
     await leaf.setViewState({ type: VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
+    return leaf.view as LearnView;
   }
 
   async save() {

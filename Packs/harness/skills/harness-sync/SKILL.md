@@ -7,6 +7,8 @@ license: MIT
 # harness-sync
 
 Sjel is the source. Every harness holds a copy or a pointer, and the two drift.
+For upstream skills or plugins, apply `CONTRIBUTING.md#owned-agent-components` before deployment:
+screening, store membership and a new name do not establish maintained ownership.
 
 One tool answers all of it: `tools/harnesses` in the Sjel repository. This skill is the judgment
 around it — which direction a change should travel, and when the answer is not `sync`.
@@ -28,7 +30,7 @@ lose good work or import junk into the source of truth.
 | A deployed copy was edited in place and the edit is worth keeping | `accept` |
 | A deployed copy was edited in place and the edit is not worth keeping | `discard` — replaces the copy with the Pack's text and keeps the replaced copy beside the ledger. It lists what it replaces, adds and removes, and refuses until given `--force` |
 | A skill exists in a harness, no Pack owns it, and it should be shared | `promote` |
-| A skill exists in a harness and belongs to that harness alone | leave it; it shows as unowned every run, which is the honest state |
+| An upstream skill exists outside Sjel ownership | inspect for deliberate adaptation or disable it; retain source only as reference |
 
 ## Procedure
 

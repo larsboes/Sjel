@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { AuditLog } from "./audit.ts";
@@ -32,7 +34,10 @@ function runtime(onAdmit: (decision: AccessDecision) => void): Runtime {
 	return { config, governed: new GovernedObsidian(client, config, onAdmit, (operation, path, model, decision) => audit.record(operation, path, model, decision)) };
 }
 
+/** In local vault mode the contract is a file under `vault_root`; Obsidian and its REST plugin need not run. */
 async function currentKnowledgeContract() {
+	const localRoot = localVaultRoot();
+	if (localRoot !== null) return loadKnowledgeContract((path) => readFile(join(localRoot, path), "utf8"));
 	const config = loadConfig();
 	const client = createClient(config);
 	return loadKnowledgeContract((path) => client.read(path));
@@ -194,7 +199,7 @@ export default function obsidianAccess(pi: ExtensionAPI) {
 		name: "obsidian_contract",
 		label: "Obsidian Contract",
 		description:
-			"Load the vault-writing contract configured for this machine from Obsidian. Use before any vault mutation. Reports when no contract is configured.",
+			"Load the vault-writing contract configured for this machine. Use before any vault mutation. Reports when no contract is configured.",
 		promptSnippet: "Load the vault-writing contract configured for this machine",
 		promptGuidelines: [
 			localRoot === null

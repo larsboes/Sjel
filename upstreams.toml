@@ -857,6 +857,13 @@ license = "MIT for source; trademarks, icons and marketing assets excluded and n
 summary = "Browser clipper with Reader, highlights and templates; vendored as the Sjel Clipper, saving into comms"
 why = "Vendored 2026-10-28 from 1.7.1-14 into capabilities/comms/clipper and detached, so a re-vendor re-applies the deltas by hand. Every save funnels through saveToObsidian(), so Reader, highlights, templates and the Interpreter stay upstream code and only that call is replaced: clips go over Chrome native messaging to comms-clip-host and then to comms-server's owner-only Unix socket, queued in browser storage when Sjel does not answer."
 
+[obsidian-plugin-registry]
+url = "https://github.com/obsidianmd/obsidian-releases"
+verdict = "adopt"
+license = "No repository license found; public registry metadata queried only, no source or snapshot redistributed"
+summary = "Official plugin ID to repository metadata for the read-only vault plugin inventory"
+why = "tools/vault-plugin-audit reads community-plugins.json on explicit online checks, then asks GitHub for upstream freshness. It installs or executes no registry content and vendors no registry snapshot. Installed plugin manifests remain the source for local versions."
+
 [obsidian-local-rest-api]
 url = "https://github.com/coddingtonbear/obsidian-local-rest-api"
 verdict = "adopt"
@@ -1077,6 +1084,20 @@ license = "MIT"
 summary = "The `skills` CLI (npx skills) that installs skills packages into each harness's own directories"
 why = "The `skills` CLI (npx skills), driven rather than vendored as the install path for non-Pack skills: it owns package resolution, the per-harness link layout and the lockfile a project restores from, and Sjel supplies only the policy layer in tools/skills. That policy exists because a global install lands in a directory that is also pi's discovery root and Codex's materialized destination, so one skill loads twice and the loser loses silently -- twelve remotion skills and 21 Pack skills produced 33 collisions in one session."
 
+[mattpocock-skills]
+url = "https://github.com/mattpocock/skills"
+verdict = "inspiration"
+license = "MIT"
+summary = "Reference techniques for improving Sjel-owned engineering skills"
+why = "Screened snapshots remain reference material rather than a standalone workflow installation. Evaluate individual techniques against an observed weakness in an existing Sjel skill, preserve required notices for copied material, and verify the adapted behavior. Tracker scaffolding, ticket proliferation and automatic upstream replacement are not adopted."
+
+[ponytail]
+url = "https://github.com/DietrichGebert/ponytail"
+verdict = "inspiration"
+license = "MIT"
+summary = "Minimality-review reference; native plugin disabled and automatic prompt repetition declined"
+why = "Selected minimality and review behavior is covered by owned prior-art and unslop guidance with bounded synthetic checks. No Ponytail code or text is copied. The native Claude plugin is disabled and its migration exception is closed. Automatic instruction repetition and the remaining command suite are not adopted; no replacement hook or plugin is planned. Retained source is reference material only. Any future substantial copying must preserve the upstream copyright and full MIT permission notice."
+
 [github-actions-artifacts]
 url = "https://github.com/actions/upload-artifact"
 verdict = "adopt"
@@ -1100,10 +1121,10 @@ why = "Renders Claude Code responses as typeset visual output through Typst, CeT
 
 [anatomy]
 url = "https://github.com/wheresryan22/anatomy"
-verdict = "adopt"
+verdict = "inspiration"
 license = "MIT"
-summary = "Isometric SVG figure skill, screened from upstream into the content-pinned skill store"
-why = "Keep the upstream implementation upstream rather than maintaining a vendored fork. tools/skills store screens one immutable snapshot, retains its binary assets and pins the accepted digest; harness profiles select the resulting Pack. research/agent-upstream-integration.md owns the integration boundary. The Sjel-specific Obsidian embedding contract stays in Packs/knowledge/plugins/interactive/README.md."
+summary = "Interactive technical figures as an explanation technique"
+why = "The presentations Pack owns interactive-figures and its original ideal-lever example. Only the design idea is adopted; no upstream instructions, code, images or assets are included. Upstream snapshots remain reference-only. The knowledge Pack owns the Obsidian embedding contract."
 
 [portable-pty]
 url = "https://github.com/wezterm/wezterm"

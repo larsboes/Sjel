@@ -1,6 +1,6 @@
 ---
 name: practice
-description: Runs an adaptive practice session on claims the student already learned, so each claim comes to mind in situations unlike the lesson. Reads claim notes (type claim) and their Because chains from the vault. Poses one problem at a time, gives one hint at a time, and retests every miss before the session ends. Use when the student asks to practice, drill, review, or test themselves on a taught topic. Also use when the student brings an outside problem to work through. Do not use for teaching new material (use teach), for flashcard recall, or for vault work with no practice in it (use obsidian).
+description: Runs an adaptive practice session on claims the student already learned, so each claim comes to mind in situations unlike the lesson. Reads claim notes (type claim) and their Because chains from the vault. Poses one problem at a time, gives one hint at a time, and retests misses or saves them explicitly for the next sitting. Use when the student asks to practice, drill, review, or test themselves on a taught topic. Also use when the student brings an outside problem to work through. Do not use for teaching new material (use teach), for flashcard recall, or for vault work with no practice in it (use obsidian).
 ---
 
 # Practice
@@ -16,9 +16,10 @@ its concept note or in the domain's `Claims/` folder, so find claims by `type`, 
 
 ## Rules
 
-1. **The target must be inactive.** Do not name the claim in the problem. Do not ask about a
-   claim that the last problem or the last feedback just used. Interleave targets: switch to a
-   different claim between problems.
+1. **The target must be inactive.** Do not name the claim in the problem. With multiple
+   claims, interleave targets: switch away from the claim the last problem or feedback used.
+   With one claim, use different surfaces and reasoning directions; state that this cannot test claim selection
+   or interleaving. With no claims, offer teaching instead of inventing practice material.
 2. **Count decision points, not steps.** A decision point is a place where the student must
    select a claim that is not yet in mind. Prefer short problems with two or more decision
    points. Avoid long problems that only test search.
@@ -33,21 +34,28 @@ its concept note or in the domain's `Claims/` folder, so find claims by `type`, 
    correct it. A misconception gets one surgical correction, not a lesson.
 6. **Solve every problem first.** Before you pose a problem, solve it and look for a shortcut
    that skips the target claims. Use only the material in the selected claims.
-7. **The student ends the problem.** A problem ends when the student solves it or asks to end
-   it. Mistakes, time, or frustration do not end it.
+7. **The student controls stopping.** A problem ends when the student solves it or asks to end
+   it. An explicit stop, Finish sitting request, or the agreed time budget ends the sitting
+   without another problem or mandatory retest. Record unfinished problems and retests as
+   pending; never report an unperformed retest as passed.
 
 ## Session arc
 
-1. **Select.** Ask which concept, claim folder, or Learning Log entry to practice. Read the
-   claim notes and follow their `## Because` links one level down.
+1. **Select.** Use the supplied target, desired outcome and time budget. Ask for missing
+   target and available minutes together, once. Read the latest matching Learning Log handoff
+   and carry outstanding retests into the selection. A target can be a concept, claim note,
+   claim folder, learning path or Learning Log entry. Read the claim notes and follow their `## Because` links one level down.
 2. **Warm up.** Pose one to three easy problems on the weakest claims to calibrate difficulty.
 3. **Main body.** Pose interleaved problems. Raise the claim count or the surface distance after
    each success. Lower one of them after a stall.
 4. **Retest.** Before the session ends, retest every miss, every problem that needed many
    hints, and every problem the student gave up. Use a new surface, never the original one.
+   If the student stops or the budget ends, carry the outstanding retests into Close instead
+   of extending the sitting.
 5. **Close.** Append one line to `Resources/Learning Log.md`:
-   `- YYYY-MM-DD · practice · <topic> · claims: [[A]], [[B]] · weak: [[C]] · next: <suggestion>`.
-   Write no other note.
+   `- YYYY-MM-DD · practice · <topic> · claims: [[A]], [[B]] · weak: [[C]] · next: <specific problem or changed-surface retest>`.
+   Add `pending: <claim links and unfinished problem, retest or contest>` when relevant.
+   A closed sitting means this handoff was saved, not that all claims passed. Write no other note.
 
 An outside problem from the student enters at step 3. Solve it, map the claims every correct
 solution uses, then run it with the same hints and retest.

@@ -320,7 +320,7 @@ const GIT_READS = new Set([
 ]);
 const GIT_LOCAL = new Set(["fetch", "add", "rm", "mv", "clone", "init"]);
 const GIT_ASK = new Set([
-  "commit", "push", "merge", "rebase", "cherry-pick", "stash", "tag", "branch", "switch", "checkout",
+  "push", "merge", "rebase", "cherry-pick", "stash", "tag", "branch", "switch", "checkout",
   "pull", "apply", "am", "revert", "reset", "restore", "submodule", "worktree", "notes", "config",
   "remote", "gc", "prune", "bisect", "update-index",
 ]);
@@ -350,6 +350,33 @@ const CURL_SENDS = new Set([
 const REMOTE_SHELLS = new Set(["ssh", "scp", "sftp", "nc", "ncat", "telnet", "ftp"]);
 const PROCESSES = new Set(["kill", "pkill", "killall", "docker", "podman", "orb"]);
 const DOCKER_READS = new Set(["ps", "images", "logs", "inspect", "version", "info", "stats", "top"]);
+const DOCKER_NESTED_READS: Record<string, string[]> = {
+  system: ["df", "info", "events"],
+  container: ["ls", "inspect", "logs", "stats", "top", "port"],
+  image: ["ls", "inspect", "history"],
+  volume: ["ls", "inspect"],
+  network: ["ls", "inspect"],
+  context: ["ls", "show", "inspect"],
+  compose: ["ps", "ls", "logs", "images", "top", "version"],
+  builder: ["du"],
+};
+const SYSTEM_READS: Record<string, string[]> = {
+  diskutil: ["list", "info"],
+  launchctl: ["list", "print", "print-disabled"],
+  systemctl: ["status", "show", "list-units", "list-unit-files", "is-active", "is-enabled", "is-failed", "list-jobs", "list-timers"],
+  csrutil: ["status"],
+};
+
+function systemRead(program: string, args: string[]): boolean {
+  if (program === "spctl") return args.length === 1 && args[0] === "--status";
+  let index = 0;
+  if (program === "systemctl") {
+    while (["--user", "--system", "--no-pager", "--all", "--plain"].includes(args[index])) index++;
+  }
+  const reads = Object.hasOwn(SYSTEM_READS, program) ? SYSTEM_READS[program] : [];
+  return reads.includes(args[index]) ||
+    program === "diskutil" && args[0] === "apfs" && ["list", "listSnapshots", "listVolumeGroups"].includes(args[1]);
+}
 const WRITERS = new Set(["cp", "mv", "mkdir", "touch", "ln", "tee", "install", "truncate", "rmdir", "unlink", "chmod", "chown", "chgrp"]);
 
 const NO_WRITE_TARGETS = new Set(["/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty"]);
@@ -416,8 +443,8 @@ function classifyRm(args: Word[], scope: Scope, unknownArgs: boolean): Verdict {
   const p = ["rm"];
   if (unknownArgs) return verdict("block", "B1", "rm with arguments chosen at run time", p);
   const flags = shortFlags(args.map((a) => a.text));
-  if (["-r", "-R", "-f", "--recursive", "--force"].some((f) => flags.has(f))) {
-    return verdict("block", "B1", "recursive or forced rm", p);
+  if (["-r", "-R", "--recursive"].some((f) => flags.has(f))) {
+    return verdict("block", "B1", "recursive rm", p);
   }
   const targets = args.filter((a) => !a.text.startsWith("-"));
   for (const t of targets) {
@@ -443,6 +470,14 @@ function classifyGit(args: Word[]): Verdict {
   const flags = shortFlags(rest);
   const has = (...f: string[]) => f.some((x) => flags.has(x) || rest.includes(x));
   if (!sub) return verdict("allow", "R2", "git without a subcommand", p);
+  if (sub === "commit") {
+    const values = new Set(["-m", "--message", "-F", "--file", "-C", "--reuse-message", "-c", "--reedit-message", "-t", "--template", "--author", "--date", "--cleanup", "--trailer", "--fixup", "--squash", "--pathspec-from-file"]);
+    for (let j = 0; j < rest.length && rest[j] !== "--"; j++) {
+      if (rest[j].length >= 4 && "--amend".startsWith(rest[j])) return verdict("block", "B2", "git commit --amend rewrites history", p);
+      if (values.has(rest[j])) j++;
+    }
+    return verdict("allow", "R2", "git commit creates a local commit", p);
+  }
   if (sub === "reset" && has("--hard", "--merge", "--keep")) return verdict("block", "B2", "git reset discards work", p);
   if (sub === "clean" && has("-f", "--force")) return verdict("block", "B2", "git clean deletes untracked files", p);
   if (sub === "checkout" && (rest.includes("--") || rest.includes(".") || has("-f", "--force"))) {
@@ -615,6 +650,7 @@ function classifyWords(words: Word[], scope: Scope, piped: boolean, unknownArgs:
     return withSubs(unknownArgs ? strictest([verdict("ask", "A6", "git with arguments chosen at run time", p), git]) : git);
   }
   if (prog === "gh") return withSubs(classifyGh(texts));
+  if (!unknownArgs && systemRead(prog, texts)) return withSubs(verdict("allow", "R1", `${prog} reads system state`, p));
   if (BLOCK_PROGRAMS[prog] === "B5" || /^mkfs(\.|$)/.test(prog)) return verdict("block", "B5", `${prog} changes disks or system state`, p);
   if (prog === "crontab" && texts.includes("-r")) return verdict("block", "B5", "crontab -r", p);
   if (prog === "defaults" && texts[0] === "write") return verdict("block", "B5", "defaults write", p);
@@ -630,7 +666,7 @@ function classifyWords(words: Word[], scope: Scope, piped: boolean, unknownArgs:
   }
   if (prog === "twine" && texts[0] === "upload") return verdict("block", "B7", "twine upload", p);
 
-  const changes = PACKAGE_CHANGES[prog];
+  const changes = Object.hasOwn(PACKAGE_CHANGES, prog) ? PACKAGE_CHANGES[prog] : undefined;
   if (changes) {
     const sub = texts.find((t) => !t.startsWith("-") || changes.has(t)) ?? "";
     if (changes.has("*") || changes.has(sub)) return verdict("ask", "A3", `${prog} ${sub} changes packages or runs downloaded code`.replace(/\s+/g, " "), p);
@@ -667,8 +703,10 @@ function classifyWords(words: Word[], scope: Scope, piped: boolean, unknownArgs:
     return withSubs(strictest([verdict("allow", "R4", "rsync on this machine", p), ...vs]));
   }
   if (PROCESSES.has(prog)) {
-    if ((prog === "docker" || prog === "podman") && DOCKER_READS.has(texts[0] ?? "")) {
-      return verdict("allow", "R1", `${prog} ${texts[0]}`, p);
+    const nestedReads = Object.hasOwn(DOCKER_NESTED_READS, texts[0]) ? DOCKER_NESTED_READS[texts[0]] : [];
+    if ((prog === "docker" || prog === "podman") &&
+        (DOCKER_READS.has(texts[0] ?? "") || nestedReads.includes(texts[1]))) {
+      return withSubs(verdict("allow", "R1", `${prog} reads container state`, p));
     }
     return withSubs(verdict("ask", "A5", `${prog} affects processes or containers`, p));
   }

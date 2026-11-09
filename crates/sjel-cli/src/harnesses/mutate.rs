@@ -1449,10 +1449,14 @@ pub fn resolve_profile_packs(
     if profile.packs.len() == 1 && profile.packs[0] == "*" {
         let available = available_packs(config, false)?;
         let available_set: BTreeSet<&String> = available.iter().collect();
+        let shared_holds = read_unit_holds_at(&config.sjel_root)?;
         for pack in &except {
-            // Named-but-absent is an error, not a no-op: a typo in an exclusion list reads as
-            // "deployed" for a Pack that is not.
-            if !available_set.contains(pack) {
+            // A globally held external Pack may be absent on a fresh checkout. Other unknown
+            // exclusions remain errors so typos cannot silently change the selection.
+            let globally_held = shared_holds
+                .get(HOLD_ALL)
+                .is_some_and(|holds| holds.contains(&format!("{pack}/")));
+            if !available_set.contains(pack) && !globally_held {
                 return Err(format!(
                     "profile '{}': except names unknown pack '{pack}'",
                     profile.name
@@ -1829,6 +1833,39 @@ mod tests {
             vec!["external"]
         );
         profile.packs.push("missing".into());
+        assert!(resolve_profile_packs(&config, &profile).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn wildcard_exclusions_allow_absent_globally_held_packs_only() {
+        let root =
+            std::env::temp_dir().join(format!("sjel-held-exclusions-{}", std::process::id()));
+        let config = replacement_config(&root);
+        fs::create_dir_all(config.sjel_root.join("Packs")).unwrap();
+        let profile: Profile =
+            toml::from_str("name = 'test'\npacks = ['*']\nexcept = ['external']\n").unwrap();
+        assert!(resolve_profile_packs(&config, &profile).is_err());
+        fs::write(
+            config.sjel_root.join("profiles.toml"),
+            "[unit_hold]\n'*' = ['external/']\n",
+        )
+        .unwrap();
+        assert!(resolve_profile_packs(&config, &profile).unwrap().is_empty());
+        let pack = config.sjel_root.join("Packs/external");
+        fs::create_dir(&pack).unwrap();
+        fs::write(
+            pack.join("pack.toml"),
+            "name = 'external'\ndescription = 'test'\nskills = []\n",
+        )
+        .unwrap();
+        assert!(resolve_profile_packs(&config, &profile).unwrap().is_empty());
+        fs::remove_dir_all(&pack).unwrap();
+        fs::write(
+            config.sjel_root.join("profiles.toml"),
+            "[unit_hold]\n'*' = ['external/one-skill']\n",
+        )
+        .unwrap();
         assert!(resolve_profile_packs(&config, &profile).is_err());
         fs::remove_dir_all(root).unwrap();
     }

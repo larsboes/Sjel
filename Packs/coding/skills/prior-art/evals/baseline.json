@@ -1,0 +1,24 @@
+{
+  "method": "Fresh owned Pi agent with supplied pre-change guidance and synthetic planning/review fixtures. No tools used. Common inherited session instructions remain; not an isolated-model or runtime-inheritance test.",
+  "source_blob": "c73116e183ff72dc8b0a5235cbbcf28cde1b00aa",
+  "total_reported_tokens": 30445,
+  "duration_ms": 54462,
+  "responses": [
+    {
+      "skill": "prior-art",
+      "id": 1,
+      "response": "1. Read src/http.ts and its identified tests to confirm where the default timeout is defined and how explicit caller timeouts interact with it.\n2. Inspect src/a.ts and src/b.ts for reliance on that default, then identify the existing assertions and focused tests affected by changing it from 5 to 10 seconds.\n\nOwnership is already established. This scoped change does not require a repository-wide prior-art or dependency search."
+    },
+    {
+      "skill": "prior-art",
+      "id": 2,
+      "response": "Establish whether extraction is necessary and define accepted ZIP features, destination policy, resource limits, overwrite behavior, and failure cleanup. Locate the owning capability and existing archive handling in libs/, capabilities/, tools/, and the active overlay; check relevant plans and upstreams.toml verdicts. Assess standard-library facilities, platform utilities, and installed dependencies before proposing another dependency.\n\nRequire evidence for traversal and absolute-path rejection, symlink containment, decompression limits, entry-count limits, and safe handling of partial extraction. Assess candidate maintenance and security history. Choose the first ladder rung that satisfies these requirements; a new archive framework is not justified merely because extraction is requested."
+    },
+    {
+      "skill": "prior-art",
+      "id": 3,
+      "response": "Trace both import paths through the shared destination-path helper to the filesystem write. Compare their root arguments, normalization, containment checks, and handling of absolute paths, traversal, and symlinks. Determine whether the failing caller bypasses a correct helper or exposes a shared defect.\n\nRepair the narrowest owner of the violated invariant. If the helper guarantees root-contained destinations, fix that helper and add regression coverage through both callers. If the helper is sound but one caller supplies the wrong root or bypasses it, repair that caller. A caller-only guard is justified only after establishing that it does not leave the same defect reachable elsewhere."
+    }
+  ],
+  "captured": "2026-11-09"
+}

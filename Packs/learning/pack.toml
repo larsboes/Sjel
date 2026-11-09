@@ -2,7 +2,7 @@
 # Pedagogy only. Vault access, the vault contract and the `quiz` pi extension stay in the
 # knowledge Pack; the skills here name `obsidian` and `quiz` and degrade without them.
 name        = "learning"
-description = "Teaching and practice that grow the Obsidian vault — probe the edge of understanding, teach one step at a time with interactive figures, and practice on claims already taught."
+description = "Teaching and practice that grow the Obsidian vault — probe the edge of understanding, teach one step at a time with interactive figures, and practice on claims already taught with budgeted sittings and resumable handoffs."
 skills      = ["teach", "practice"]
 license     = "MIT"
 links       = ["knowledge-base"]

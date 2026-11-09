@@ -1,9 +1,9 @@
 ---
-name: research
-description: Chooses the route for a research question and drafts the prompt when the answer must come from Google AI Studio with Search grounding. Routes quick cited facts to the built-in web search and fetch tools, long multi-source investigations to interceptor-research, and Google-verified answers to the user, who types the drafted prompt into AI Studio and clips the answer. Use when the user asks to research, look up, compare, fact-check or verify something on the web, asks for a prompt for AI Studio or Gemini, or asks to read back an AI Studio answer. Do not use for running a deep multi-source investigation itself (use interceptor-research), for personal or private data, or for saving knowledge into the vault (use obsidian).
+name: web-research
+description: Chooses the route for a research question and drafts the prompt when the answer must come from Google AI Studio with Search grounding. Routes quick cited facts to the built-in web search and fetch tools, long multi-source investigations to interceptor-research, and Google-verified answers to the user, who types the drafted prompt into AI Studio and clips the answer. Use when the user asks to research, look up, compare, fact-check or verify something on the web, asks for a prompt for AI Studio or Gemini, or asks to read back an AI Studio answer. Do not use for software investigation and repo research reports (use repository tools and primary sources), for running a deep multi-source investigation itself (use interceptor-research), for personal or private data, or for saving knowledge into the vault (use obsidian).
 ---
 
-# research
+# Web research
 
 Pick one route, then follow it. Cite every fact with its source URL and the date you read it.
 

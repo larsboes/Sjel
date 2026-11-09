@@ -235,7 +235,51 @@ function checkAll(only?: string): boolean {
 
 type Arm = "with_skill" | "without_skill";
 
-type ClaudeRun = {
+export type RunFlags = { caseId?: string; model?: string | null; gradeModel?: string | null; noGrade?: boolean; repeat: number };
+
+export function parseRunFlags(args: string[]): RunFlags {
+  const flags: RunFlags = { repeat: 1 };
+  const seen = new Set<string>();
+  for (let i = 0; i < args.length; i++) {
+    const option = args[i];
+    if (!["--case", "--model", "--grade-model", "--repeat", "--no-grade"].includes(option)) {
+      throw new Error(`unknown run option '${option}'`);
+    }
+    if (seen.has(option)) throw new Error(`duplicate run option '${option}'`);
+    seen.add(option);
+    if (option === "--no-grade") { flags.noGrade = true; continue; }
+    const value = args[++i];
+    if (!value?.trim() || value.startsWith("-")) throw new Error(`${option} needs a value`);
+    if (option === "--repeat") {
+      if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) < 1) {
+        throw new Error("--repeat must be a positive safe integer");
+      }
+      flags.repeat = Number(value);
+    } else if (option === "--case") flags.caseId = value;
+    else if (option === "--model") flags.model = value;
+    else flags.gradeModel = value;
+  }
+  return flags;
+}
+
+export function sampleStats(samples: number[]) {
+  if (samples.some((x) => !Number.isFinite(x))) throw new Error("samples must be finite numbers");
+  if (!samples.length) return null;
+  // Scale before summing so a finite mean does not overflow on large samples.
+  const mean = samples.reduce((sum, x) => sum + x / samples.length, 0);
+  const scale = samples.reduce((max, x) => Math.max(max, Math.abs(x)), 0);
+  const variance = samples.length > 1 && scale > 0
+    ? samples.reduce((sum, x) => sum + (x / scale - mean / scale) ** 2 / (samples.length - 1), 0)
+    : 0;
+  return {
+    n: samples.length, mean,
+    stddev: samples.length === 1 ? null : scale * Math.sqrt(variance),
+    min: samples.reduce((min, x) => Math.min(min, x), Infinity),
+    max: samples.reduce((max, x) => Math.max(max, x), -Infinity),
+  };
+}
+
+export type ClaudeRun = {
   result: string;
   durationMs: number;
   tokensIn: number;
@@ -290,7 +334,8 @@ function grade(
   output: string,
   cwd: string,
   model: string | null,
-): { assertion: string; verdict: string; evidence: string }[] {
+  call: typeof claude = claude,
+): { grades: Grade[]; run: ClaudeRun; wallMs: number } {
   const prompt = [
     "You are grading one agent output against a list of assertions, for a skill evaluation.",
     "",
@@ -314,18 +359,76 @@ function grade(
     '[{"assertion": "<the assertion text verbatim>", "verdict": "PASS" | "FAIL", "evidence": "<quote or the reason it is absent>"}]',
   ].join("\n");
 
-  const run = claude(prompt, cwd, model);
-  const text = run.result.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-  const start = text.indexOf("[");
-  const end = text.lastIndexOf("]");
-  if (start === -1 || end === -1) {
-    return assertions.map((a) => ({ assertion: a, verdict: "UNGRADED", evidence: text.slice(0, 200) }));
-  }
+  const start = Bun.nanoseconds();
+  const run = call(prompt, cwd, model);
+  return { grades: parseGrades(assertions, run.result), run, wallMs: Math.round((Bun.nanoseconds() - start) / 1e6) };
+}
+
+export type Grade = { assertion: string; verdict: "PASS" | "FAIL" | "UNGRADED"; evidence: string };
+
+export function parseGrades(assertions: string[], output: string): Grade[] {
   try {
-    return JSON.parse(text.slice(start, end + 1));
-  } catch {
-    return assertions.map((a) => ({ assertion: a, verdict: "UNGRADED", evidence: "grader returned unparseable JSON" }));
+    const payload: unknown = JSON.parse(output.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, ""));
+    const seen = new Set<string>();
+    if (!assertions.length || new Set(assertions).size !== assertions.length || !Array.isArray(payload) || payload.length !== assertions.length) {
+      throw new Error("grader must cover every requested assertion exactly once");
+    }
+    for (const item of payload) {
+      if (!item || !assertions.includes(item.assertion) || seen.has(item.assertion) ||
+          !["PASS", "FAIL"].includes(item.verdict) || typeof item.evidence !== "string" || !item.evidence.trim()) {
+        throw new Error("grader returned unknown/duplicate assertions, invalid verdicts, or empty evidence");
+      }
+      seen.add(item.assertion);
+    }
+    return payload as Grade[];
+  } catch (error) {
+    return assertions.map((assertion) => ({ assertion, verdict: "UNGRADED", evidence: `Incomplete grading: ${(error as Error).message}` }));
   }
+}
+
+export type ArmRecord = {
+  grading: "complete" | "incomplete" | "skipped";
+  pass: number | null; of: number | null;
+  task_cost_usd: number; grading_cost_usd: number; cost_usd: number;
+  duration_ms: number; grading_duration_ms: number; output_tokens: number;
+};
+export type SampleRecord = { id: string | number; sample: number; assertions: number; with_skill: ArmRecord; without_skill: ArmRecord; delta_pass?: number; delta_cost_usd?: number };
+const ARMS: Arm[] = ["with_skill", "without_skill"];
+
+export function summarizeBenchmark(rows: SampleRecord[]) {
+  const totals = (records: ArmRecord[]) => ({
+    pass: records.filter((r) => r.grading === "complete").reduce((n, r) => n + r.pass!, 0),
+    of: records.filter((r) => r.grading === "complete").reduce((n, r) => n + r.of!, 0),
+    incomplete: records.filter((r) => r.grading === "incomplete").length,
+    skipped: records.filter((r) => r.grading === "skipped").length,
+    task_cost_usd: records.reduce((n, r) => n + r.task_cost_usd, 0),
+    grading_cost_usd: records.reduce((n, r) => n + r.grading_cost_usd, 0),
+    cost_usd: records.reduce((n, r) => n + r.cost_usd, 0),
+  });
+  const armTotals = { with_skill: totals(rows.map((r) => r.with_skill)), without_skill: totals(rows.map((r) => r.without_skill)) };
+  return {
+    complete: !rows.some((r) => ARMS.some((a) => r[a].grading === "incomplete")),
+    totals: {
+      ...armTotals,
+      task_cost_usd: armTotals.with_skill.task_cost_usd + armTotals.without_skill.task_cost_usd,
+      grading_cost_usd: armTotals.with_skill.grading_cost_usd + armTotals.without_skill.grading_cost_usd,
+      cost_usd: armTotals.with_skill.cost_usd + armTotals.without_skill.cost_usd,
+    },
+    statistics: [...new Set(rows.map((r) => r.id))].map((id) => ({
+      id,
+      ...Object.fromEntries(ARMS.map((arm) => {
+        const samples = rows.filter((r) => r.id === id).map((r) => r[arm]);
+        return [arm, {
+          pass_rate: sampleStats(samples.filter((r) => r.grading === "complete" && r.pass !== null && r.of !== null && r.of > 0).map((r) => r.pass! / r.of!)),
+          task_cost_usd: sampleStats(samples.map((r) => r.task_cost_usd)),
+          grading_cost_usd: sampleStats(samples.map((r) => r.grading_cost_usd)),
+          cost_usd: sampleStats(samples.map((r) => r.cost_usd)),
+          duration_ms: sampleStats(samples.map((r) => r.duration_ms)),
+          grading_duration_ms: sampleStats(samples.filter((r) => r.grading !== "skipped").map((r) => r.grading_duration_ms)),
+        }];
+      })),
+    })),
+  };
 }
 
 function nextIteration(workspace: string): number {
@@ -337,7 +440,7 @@ function nextIteration(workspace: string): number {
   return nums.length ? Math.max(...nums) + 1 : 1;
 }
 
-function runEval(skillName: string, flags: { caseId?: string; model?: string | null; gradeModel?: string | null; noGrade?: boolean }) {
+function runEval(skillName: string, flags: RunFlags) {
   const skill = findSkill(skillName);
   const suite = readSuite(skill);
   const { problems } = checkSuite(skill, suite);
@@ -350,122 +453,144 @@ function runEval(skillName: string, flags: { caseId?: string; model?: string | n
   const cases = (suite.evals ?? []).filter((c) => !flags.caseId || String(c.id) === flags.caseId);
   if (!cases.length) throw new Error(`no case matching '${flags.caseId}'`);
 
+  const summary = executeCases(skill, cases, flags);
+  if (!summary.complete) process.exitCode = 1;
+}
+
+/** Execute supplied cases; the call parameter permits deterministic offline tests. */
+export function executeCases(skill: Skill, cases: EvalCase[], flags: RunFlags, call: typeof claude = claude) {
+  if (!Number.isSafeInteger(flags.repeat) || flags.repeat < 1) throw new Error("repeat must be a positive safe integer");
   const workspace = join(dirname(skill.dir), `${skill.name}-workspace`);
   const iteration = join(workspace, `iteration-${nextIteration(workspace)}`);
   mkdirSync(iteration, { recursive: true });
   console.log(`skill-eval: ${skill.name} -> ${iteration.replace(SJEL_ROOT + "/", "")}`);
 
-  const arms: Arm[] = ["with_skill", "without_skill"];
-  const benchmark: any[] = [];
+  const benchmark: SampleRecord[] = [];
 
   for (const c of cases) {
-    const slug = `eval-${String(c.id).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
-    const caseDir = join(iteration, slug);
-    const row: any = { id: c.id, assertions: c.assertions.length };
+    for (let sample = 1; sample <= flags.repeat; sample++) {
+      const slug = `eval-${String(c.id).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+      const caseDir = sampleDirectory(iteration, c.id, sample, flags.repeat);
+      const row = { id: c.id, sample, assertions: c.assertions.length } as SampleRecord;
 
-    for (const arm of arms) {
-      // A throwaway project dir. `with_skill` gets the skill at project level; the baseline
-      // gets no `.claude/skills/` at all, which is the one difference between the arms.
-      const armDir = join(caseDir, arm);
-      rmSync(armDir, { recursive: true, force: true });
-      mkdirSync(join(armDir, "outputs"), { recursive: true });
-      if (arm === "with_skill") {
-        cpSync(skill.dir, join(armDir, ".claude", "skills", skill.name), { recursive: true });
-        // The suite's own fixtures are not part of the skill; keep them out of the treatment.
-        rmSync(join(armDir, ".claude", "skills", skill.name, "evals"), { recursive: true, force: true });
+      for (const arm of ARMS) {
+        // A throwaway project dir. `with_skill` gets the skill at project level; the baseline
+        // gets no `.claude/skills/` at all, which is the one difference between the arms.
+        const armDir = join(caseDir, arm);
+        rmSync(armDir, { recursive: true, force: true });
+        mkdirSync(join(armDir, "outputs"), { recursive: true });
+        if (arm === "with_skill") {
+          cpSync(skill.dir, join(armDir, ".claude", "skills", skill.name), { recursive: true });
+          // The suite's own fixtures are not part of the skill; keep them out of the treatment.
+          rmSync(join(armDir, ".claude", "skills", skill.name, "evals"), { recursive: true, force: true });
+        }
+        for (const f of c.files ?? []) {
+          const dest = join(armDir, f);
+          mkdirSync(dirname(dest), { recursive: true });
+          cpSync(join(skill.dir, f), dest);
+        }
+
+        const prompt = [
+          c.prompt,
+          "",
+          `(Work in the current directory. Write any files you produce here.)`,
+        ].join("\n");
+        const t0 = Bun.nanoseconds();
+        const run = call(prompt, armDir, flags.model ?? null);
+        const wall = Math.round((Bun.nanoseconds() - t0) / 1e6);
+
+        writeFileSync(join(armDir, "outputs", "result.txt"), run.result + "\n");
+        writeFileSync(
+          join(armDir, "timing.json"),
+          JSON.stringify(
+            {
+              total_tokens: run.tokensIn + run.tokensOut + run.cacheRead,
+              output_tokens: run.tokensOut,
+              cache_read_input_tokens: run.cacheRead,
+              duration_ms: run.durationMs,
+              wall_ms: wall,
+              cost_usd: run.costUsd,
+              model: run.model,
+            },
+            null,
+            2,
+          ) + "\n",
+        );
+
+        let graded: Grade[] = [];
+        let gradingRun: ClaudeRun | null = null;
+        if (!flags.noGrade) {
+          const result = grade(c.prompt, c.assertions, run.result, armDir, flags.gradeModel ?? null, call);
+          graded = result.grades;
+          gradingRun = result.run;
+          writeFileSync(join(armDir, "grading.json"), JSON.stringify(graded, null, 2) + "\n");
+          writeFileSync(join(armDir, "grading-result.txt"), gradingRun.result + "\n");
+          writeFileSync(join(armDir, "grading-timing.json"), JSON.stringify({
+            total_tokens: gradingRun.tokensIn + gradingRun.tokensOut + gradingRun.cacheRead,
+            output_tokens: gradingRun.tokensOut,
+            cache_read_input_tokens: gradingRun.cacheRead,
+            duration_ms: gradingRun.durationMs, wall_ms: result.wallMs,
+            cost_usd: gradingRun.costUsd, model: gradingRun.model,
+          }, null, 2) + "\n");
+        }
+        const complete = graded.length === c.assertions.length && graded.length > 0 && graded.every((g) => g.verdict !== "UNGRADED");
+        const passed = graded.filter((g) => g.verdict === "PASS").length;
+        row[arm] = {
+          grading: flags.noGrade ? "skipped" : complete ? "complete" : "incomplete",
+          pass: complete ? passed : null,
+          of: complete ? c.assertions.length : null,
+          task_cost_usd: run.costUsd,
+          grading_cost_usd: gradingRun?.costUsd ?? 0,
+          cost_usd: run.costUsd + (gradingRun?.costUsd ?? 0),
+          duration_ms: run.durationMs,
+          grading_duration_ms: gradingRun?.durationMs ?? 0,
+          output_tokens: run.tokensOut,
+        };
+        writeFileSync(join(armDir, "sample.json"), JSON.stringify({ id: c.id, sample, arm, ...row[arm] }, null, 2) + "\n");
+        console.log(
+          `  ${slug} sample ${sample} [${arm}] ` +
+            (complete ? `${passed}/${graded.length} asserted` : `(${row[arm].grading})`) +
+            ` $${row[arm].cost_usd.toFixed(2)} ${run.durationMs}ms task`,
+        );
       }
-      for (const f of c.files ?? []) {
-        const dest = join(armDir, f);
-        mkdirSync(dirname(dest), { recursive: true });
-        cpSync(join(skill.dir, f), dest);
+
+      const w = row.with_skill, wo = row.without_skill;
+      if (w.pass !== null && wo.pass !== null) {
+        row.delta_pass = w.pass - wo.pass;
+        row.delta_cost_usd = Number((w.cost_usd - wo.cost_usd).toFixed(4));
       }
-
-      const prompt = [
-        c.prompt,
-        "",
-        `(Work in the current directory. Write any files you produce here.)`,
-      ].join("\n");
-      const t0 = Bun.nanoseconds();
-      const run = claude(prompt, armDir, flags.model ?? null);
-      const wall = Math.round((Bun.nanoseconds() - t0) / 1e6);
-
-      writeFileSync(join(armDir, "outputs", "result.txt"), run.result + "\n");
-      writeFileSync(
-        join(armDir, "timing.json"),
-        JSON.stringify(
-          {
-            total_tokens: run.tokensIn + run.tokensOut + run.cacheRead,
-            output_tokens: run.tokensOut,
-            cache_read_input_tokens: run.cacheRead,
-            duration_ms: run.durationMs,
-            wall_ms: wall,
-            cost_usd: run.costUsd,
-            model: run.model,
-          },
-          null,
-          2,
-        ) + "\n",
-      );
-
-      let graded: any[] = [];
-      if (!flags.noGrade) {
-        graded = grade(c.prompt, c.assertions, run.result, armDir, flags.gradeModel ?? null);
-        writeFileSync(join(armDir, "grading.json"), JSON.stringify(graded, null, 2) + "\n");
-      }
-      const passed = graded.filter((g) => g.verdict === "PASS").length;
-      row[arm] = {
-        pass: graded.length ? passed : null,
-        of: graded.length || null,
-        cost_usd: Number(run.costUsd.toFixed(4)),
-        duration_ms: run.durationMs,
-        output_tokens: run.tokensOut,
-      };
+      benchmark.push(row);
       console.log(
-        `  ${slug} [${arm}] ` +
-          (graded.length ? `${passed}/${graded.length} asserted` : "(ungraded)") +
-          ` $${run.costUsd.toFixed(2)} ${run.durationMs}ms`,
+        `  -> delta: ${row.delta_pass === undefined ? "n/a" : `${row.delta_pass > 0 ? "+" : ""}${row.delta_pass} assertions`}` +
+          (row.delta_cost_usd === undefined ? "" : `, $${row.delta_cost_usd > 0 ? "+" : ""}${row.delta_cost_usd}`),
       );
     }
-
-    const w = row.with_skill, wo = row.without_skill;
-    if (w.pass !== null && wo.pass !== null) {
-      row.delta_pass = w.pass - wo.pass;
-      row.delta_cost_usd = Number((w.cost_usd - wo.cost_usd).toFixed(4));
-    }
-    benchmark.push(row);
-    console.log(
-      `  -> delta: ${row.delta_pass === undefined ? "n/a" : `${row.delta_pass > 0 ? "+" : ""}${row.delta_pass} assertions`}` +
-        (row.delta_cost_usd === undefined ? "" : `, $${row.delta_cost_usd > 0 ? "+" : ""}${row.delta_cost_usd}`),
-    );
   }
 
-  const graded = benchmark.filter((r) => r.delta_pass !== undefined);
   const summary = {
     skill: skill.name,
     iteration: iteration.replace(SJEL_ROOT + "/", ""),
-    record: "2026-09-17",
+    record: new Date().toISOString().slice(0, 10),
+    repeat: flags.repeat,
+    statistics_note: "Descriptive statistics per case and arm only. Repetition is not statistical proof; installed global context is not isolated.",
     model: flags.model ?? "(session default)",
     grade_model: flags.gradeModel ?? "(session default)",
     arms: "with_skill = project-level .claude/skills/<name>; without_skill = same dir, no skills",
     delta_basis: "the skill added to this machine's real install; the other installed skills load in BOTH arms",
-    totals: graded.length
-      ? {
-          with_skill_pass: graded.reduce((n, r) => n + r.with_skill.pass, 0),
-          without_skill_pass: graded.reduce((n, r) => n + r.without_skill.pass, 0),
-          of: graded.reduce((n, r) => n + r.with_skill.of, 0),
-          cost_usd: Number(benchmark.reduce((n, r) => n + r.with_skill.cost_usd + r.without_skill.cost_usd, 0).toFixed(4)),
-        }
-      : null,
+    ...summarizeBenchmark(benchmark),
     cases: benchmark,
   };
   writeFileSync(join(iteration, "benchmark.json"), JSON.stringify(summary, null, 2) + "\n");
   console.log(`skill-eval: wrote ${join(iteration, "benchmark.json").replace(SJEL_ROOT + "/", "")}`);
-  if (summary.totals) {
-    const t = summary.totals;
-    console.log(
-      `skill-eval: pass ${t.with_skill_pass} with skill vs ${t.without_skill_pass} without, of ${t.of} assertions; $${t.cost_usd}`,
-    );
-  }
+  const t = summary.totals;
+  console.log(`skill-eval: with skill ${t.with_skill.pass}/${t.with_skill.of}; without ${t.without_skill.pass}/${t.without_skill.of}; $${t.cost_usd}`);
+  if (!summary.complete) console.error("skill-eval: incomplete grading; artifacts retained, run unsuccessful");
+  return summary;
+}
+
+export function sampleDirectory(iteration: string, id: string | number, sample: number, repeat: number): string {
+  const slug = `eval-${String(id).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+  return repeat === 1 ? join(iteration, slug) : join(iteration, slug, `sample-${sample}`);
 }
 
 // ── CLI ─────────────────────────────────────────────────────────────────────────────
@@ -479,11 +604,14 @@ const HELP = `tools/skill-eval — run skill evals, and check the suites.
 Flags for run:
   --case <id>          one case instead of all of them (use this while iterating; a graded
                        case is four model calls)
+  --repeat <N>         opt-in repeats (default 1; positive safe integer), separate workspaces
   --model <name>       pin the model for the task runs
   --grade-model <name> pin the model for grading (a cheaper one is usually right)
   --no-grade           run the tasks only, skip grading — cheapest way to read raw outputs
 
-A graded case costs roughly $1.50 on this machine. See the header of tools/skill-eval.ts for
+A graded case makes 4 model calls per repeat. Repetition is not statistical proof.
+Installed global context is not isolated. A graded case costs roughly $1.50 per repeat.
+See the header of tools/skill-eval.ts for
 what the delta does and does not measure.`;
 
 // Guarded so this module can be imported for its checker without the CLI running itself
@@ -491,14 +619,10 @@ what the delta does and does not measure.`;
 // split out of ci-local.ts for the same reason.
 if (import.meta.main) {
 const argv = process.argv.slice(2);
-const flag = (name: string): string | undefined => {
-  const i = argv.indexOf(name);
-  return i === -1 ? undefined : argv[i + 1];
-};
-const positional = argv.filter((a) => !a.startsWith("--"));
-const command = positional[0] ?? "list";
+const command = argv[0] ?? "list";
 
-if (argv.includes("-h") || argv.includes("--help")) {
+if ((command !== "run" && argv.some((arg) => ["-h", "--help"].includes(arg))) ||
+    (command === "run" && argv.length <= 3 && ["-h", "--help"].includes(argv.at(-1)!))) {
   console.log(HELP);
   process.exit(0);
 }
@@ -517,17 +641,12 @@ try {
     console.log(`\n${withSuites.length} suite(s), ${missing.length} of ${skills.length} skills with none.`);
     console.log("Add one with skill-creator's references/evaluation.md — 2-3 cases, assertions written AFTER the first run.");
   } else if (command === "check") {
-    const only = positional[1];
+    const only = argv[1];
     if (!checkAll(only === "--all" ? undefined : only)) process.exitCode = 1;
   } else if (command === "run") {
-    const name = positional[1];
-    if (!name) throw new Error("run needs a skill name");
-    runEval(name, {
-      caseId: flag("--case"),
-      model: flag("--model") ?? null,
-      gradeModel: flag("--grade-model") ?? null,
-      noGrade: argv.includes("--no-grade"),
-    });
+    const name = argv[1];
+    if (!name || name.startsWith("-")) throw new Error("run needs a skill name");
+    runEval(name, parseRunFlags(argv.slice(2)));
   } else {
     console.error(`skill-eval: unknown command '${command}'`);
     console.error(HELP);

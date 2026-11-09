@@ -25,7 +25,7 @@ adopts. Record no version: every dependency tracks its upstream's latest release
 ## Work on one change
 
 Until `PLAN.md` is done, every change goes straight to `main`. Branches, worktrees and pull
-requests start at `v0.1.0`. Rules: `Packs/harness/skills/sjel/references/on-changes.md`.
+requests start when the plan is done, independently of release tags. Rules: `Packs/harness/skills/sjel/references/on-changes.md`.
 
 Keep the diff inside one coherent boundary. Put reusable code and doctrine in Sjel, and use
 synthetic fixtures for data-shaped tests. Never copy an active overlay or a secret value into
@@ -623,6 +623,41 @@ questions blind. Both land in the same `tools/install.sh` prompts.
 `Packs/<name>/pack.toml` plus `skills/` is the neutral source for a togglable agent bundle. Harness
 adapters translate that source into their own installation format; harness-specific metadata never
 changes the neutral manifest or forks the canonical `SKILL.md`.
+
+### Proportionate approvals and delegation
+
+Repeated approvals for the same routine operation are a policy defect to investigate, not a
+reason to keep asking. Inspect the matched rule and actual side effects. Prefer a narrow,
+reviewed permission for the intended command and scope, with regression cases for harmful
+variants. Do not disable a guard, broaden an entire tool, or weaken secret, destructive,
+publication or data-class boundaries to reduce prompt count. Distinguish authorization cards
+from product decisions that still require the user. The command-policy cases and the agent
+plan own policy changes and their prompt-rate evidence.
+
+Delegate only when an independent investigation, parallel implementation or verification
+justifies its startup, context and reconciliation cost. Use direct tools for known targets;
+do not repeat a delegated search in the parent. Before expanding delegation, and after failed
+or redundant runs, compare usable findings and avoided work with elapsed time and reported
+usage. Reduce agents or work inline when delegation did not help. Change canonical harness
+instructions when repeated waste points to an instruction defect; retain independent review
+where it provides evidence the author cannot supply. No fixed agent count substitutes for this
+judgment, and no per-agent report is required for routine successful delegation.
+
+### Owned agent components
+
+Skills, agents, prompt workflows, hooks and harness plugins must be maintained as Sjel-owned
+components. Upstream packages are reference material, not ready-made runtime installations.
+Adapt only a justified behavior into its existing owner, or deliberately maintain a reviewed
+adaptation with a local contract and checks. Renaming or copying a package does not establish
+ownership. Upstream changes are reviewed inputs, never automatic replacements for local work.
+
+Preserve attribution and every applicable license obligation, including notices and source
+requirements. Attribution alone is insufficient. Stop an adoption when permission or license
+compatibility is unresolved. Runtime libraries and host applications remain dependencies; this
+rule governs the agent components they supply, not ownership of every underlying tool.
+
+The adoption procedure and migration boundaries live in
+[`Packs/harness/README.md`](Packs/harness/README.md#upstream-adoption).
 
 ### Public skills
 

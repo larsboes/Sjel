@@ -227,8 +227,8 @@ rule = "B7"
 # ---- A ----
 [[case]]
 command = "git commit -m 'x'"
-class = "ask"
-rule = "A2"
+class = "allow"
+rule = "R2"
 [[case]]
 command = "git push origin main"
 class = "ask"
@@ -467,6 +467,218 @@ rule = "R4"
 command = "eval \"$(ssh-agent)\""
 class = "ask"
 rule = "A6"
+
+# ---- routine local work and diagnostics ----
+[[case]]
+command = "constructor --help"
+class = "allow"
+rule = "R4"
+[[case]]
+command = "toString --help"
+class = "allow"
+rule = "R4"
+[[case]]
+command = "docker constructor x"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "rm -f notes.txt"
+class = "allow"
+rule = "R4"
+[[case]]
+command = "rm --force /tmp/scratch.txt"
+class = "allow"
+rule = "R4"
+[[case]]
+command = "rm -f ../outside.txt"
+class = "block"
+rule = "B1"
+[[case]]
+command = "rm -f ."
+class = "block"
+rule = "B1"
+[[case]]
+command = "rm -rf build"
+class = "block"
+rule = "B1"
+[[case]]
+command = "git commit --amend --no-edit"
+class = "block"
+rule = "B2"
+[[case]]
+command = "git commit --amend --only -m x"
+class = "block"
+rule = "B2"
+[[case]]
+command = "git commit -m '--amend'"
+class = "allow"
+rule = "R2"
+[[case]]
+command = "git commit -m x --amend"
+class = "block"
+rule = "B2"
+[[case]]
+command = "docker system df --verbose"
+class = "allow"
+rule = "R1"
+[[case]]
+command = "podman system df"
+class = "allow"
+rule = "R1"
+[[case]]
+command = "docker container ls -a; docker image ls; docker volume ls; docker network inspect bridge"
+class = "allow"
+rule = "R1"
+[[case]]
+command = "docker compose ps; docker builder du; docker context show"
+class = "allow"
+rule = "R1"
+[[case]]
+command = "docker system prune -af"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "docker volume rm data"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "docker compose down --volumes"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "docker ps $(rm -rf x)"
+class = "block"
+rule = "B1"
+[[case]]
+command = "docker system df; git push origin main"
+class = "ask"
+rule = "A2"
+[[case]]
+command = "docker system df; rm -rf data"
+class = "block"
+rule = "B1"
+[[case]]
+command = "diskutil list; diskutil info /; diskutil apfs list; diskutil apfs listSnapshots /"
+class = "allow"
+rule = "R1"
+[[case]]
+command = "diskutil eraseDisk APFS data /dev/disk9"
+class = "block"
+rule = "B5"
+[[case]]
+command = "diskutil apfs deleteVolume /dev/disk9s1"
+class = "block"
+rule = "B5"
+[[case]]
+command = "launchctl list; launchctl print gui/501; launchctl print-disabled gui/501"
+class = "allow"
+rule = "R1"
+[[case]]
+command = "launchctl bootout gui/501/example"
+class = "block"
+rule = "B5"
+[[case]]
+command = "systemctl --user --no-pager status example; systemctl list-units"
+class = "allow"
+rule = "R1"
+[[case]]
+command = "systemctl --user restart example"
+class = "block"
+rule = "B5"
+[[case]]
+command = "csrutil status; spctl --status"
+class = "allow"
+rule = "R1"
+[[case]]
+command = "csrutil disable; spctl --master-disable"
+class = "block"
+rule = "B5"
+[[case]]
+command = "spctl --status --master-disable"
+class = "block"
+rule = "B5"
+[[case]]
+command = "echo --master-disable | xargs spctl --status"
+class = "block"
+rule = "B5"
+[[case]]
+command = "diskutil info $(rm -rf x)"
+class = "block"
+rule = "B1"
+[[case]]
+command = "sjel storage discover --root /System/Volumes/Data --top 20 --depth 3 --json; docker system df; docker ps --format '{{.Names}}\\t{{.Status}}'; xcrun simctl list runtimes; xcrun simctl list devices; du -k -d 2 /home/u/Library/Developer /Library/Developer /home/u/Library/Caches /home/u/.cache 2>/dev/null | sort -n | tail -45"
+class = "allow"
+
+# ---- abbreviated history rewrites and diagnostic output files ----
+[[case]]
+command = "git commit --am --no-edit"
+class = "block"
+rule = "B2"
+[[case]]
+command = "git commit --ame --no-edit"
+class = "block"
+rule = "B2"
+[[case]]
+command = "git commit --amen --no-edit"
+class = "block"
+rule = "B2"
+[[case]]
+command = "git commit -m '--amen'"
+class = "allow"
+rule = "R2"
+[[case]]
+command = "git commit -m x -- --amend"
+class = "allow"
+rule = "R2"
+[[case]]
+command = "docker compose config --output /home/u/.bashrc"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "docker compose config -o /home/u/.bashrc"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "docker compose config --output=/home/u/.bashrc"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "docker compose config -o/home/u/.bashrc"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "docker compose config -o=/home/u/.bashrc"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "podman compose config --output /home/u/.bashrc"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "docker compose config --output rendered.yml"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "docker compose config --output=$TARGET"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "echo --output /home/u/.bashrc | xargs docker compose config"
+class = "ask"
+rule = "A5"
+
+[[case]]
+command = "docker compose config"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "docker compose config -qo/home/u/.bashrc --quiet=false"
+class = "ask"
+rule = "A5"
+[[case]]
+command = "docker compose config -qo /home/u/.bashrc --quiet=false"
+class = "ask"
+rule = "A5"
 
 # ---- write / edit tools: step 4, like a shell write ----
 [[write]]

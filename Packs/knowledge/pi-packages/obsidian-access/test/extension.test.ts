@@ -83,6 +83,18 @@ describe("extension contract gate", () => {
 		await expect(mutate(tools, "obsidian_create")).rejects.toThrow("requires an active model");
 	});
 
+	test("in local vault mode the contract loads from disk without the REST API", async () => {
+		const vault = mkdtempSync(join(tmpdir(), "sjel-extension-vault-"));
+		mkdirSync(join(vault, "Meta"));
+		writeFileSync(join(vault, "Meta", "Vault-Contract.md"), "# Local contract\n");
+		overlay(`${CONFIGURED}vault_root = ${JSON.stringify(vault)}\nlocal_files = true\n`);
+		delete process.env.OBSIDIAN_API_KEY;
+		const { tools, entries } = extensionFixture();
+		const result = await tools.get("obsidian_contract").execute();
+		expect(result.content[0].text).toBe("# Local contract\n");
+		expect(entries[0]).toMatchObject({ type: "obsidian-contract-loaded", data: { path: "Meta/Vault-Contract.md" } });
+	});
+
 	test("a configured contract that is missing fails closed", async () => {
 		overlay(CONFIGURED);
 		globalThis.fetch = (async () => new Response("", { status: 404 })) as unknown as typeof fetch;

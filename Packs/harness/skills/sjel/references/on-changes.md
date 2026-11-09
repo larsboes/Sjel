@@ -5,14 +5,15 @@ One focused change per commit. **A tracker entry is never a precondition for sta
 ## Choose the path
 
 Until `PLAN.md` is done, every change goes straight to `main` from the primary checkout. There
-are no work-package branches, worktrees or pull requests. When the plan is done, `main` is tagged
-`v0.1.0`, and the work-package path below applies from then on. Decided 2026-10-31.
+are no work-package branches, worktrees or pull requests. When the plan is done, the work-package
+path below applies. Release tags are independent: neither a preview nor `v0.1.0` activates this
+workflow or grants permission to create a tag.
 
 A cloud session receives its branch from the harness (`claude/`, `codex/`, `copilot/` and so on).
 That branch is its work branch: the session opens a draft PR from it rather than pushing to
 `main`.
 
-## Work package (from `v0.1.0`)
+## Work package (after the plan)
 
 1. Create the branch and worktree from current `main`:
    `sjel worktree new <area>-<slug>`. The worktree is

@@ -10,7 +10,7 @@
 # Units kept off named harnesses. "*" is every harness and a per-harness line adds to it. A
 # materialized channel matches `pack/unit`, pi matches the path from the Pack root.
 [unit_hold]
-"*" = ["knowledge/defuddle"]
+"*" = ["knowledge/defuddle", "skills/", "anatomy/"]
 claude = ["harness/agents/", "writing/agents/"]
 pi = [
     "harness/pi-packages/accordion",
@@ -60,7 +60,6 @@ skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", 
 name = "coding-harness"
 description = "Coding agents: repository work, decks and secret handling; no vault, no learning"
 packs = ["coding", "design", "cognitive-load", "deliberation", "harness", "writing", "presentations", "security"]
-optional_packs = ["anatomy"]
 skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
@@ -72,17 +71,18 @@ packs = ["writing"]
 name = "linux-cli"
 description = "Headless Linux: CLI agents only, no dashboard, native app or decks"
 packs = ["*"]
-except = ["coding", "deliberation", "design", "presentations"]
+except = ["coding", "deliberation", "design", "presentations", "skills", "anatomy"]
 skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
 name = "full"
-description = "Every Pack in the repository"
+description = "All selected owned Packs"
 packs = ["*"]
-except = []
+except = ["skills", "anatomy"]
 skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
 name = "everything"
-description = "All Packs, dormant ones included"
+description = "All owned Packs, dormant ones included"
 packs = ["*"]
+except = ["skills", "anatomy"]

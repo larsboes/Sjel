@@ -1,0 +1,165 @@
+{
+  "captured": "2026-11-09",
+  "method": "One fresh owned Pi agent per arm, six synthetic tasks per agent, explicit guide text plus common inherited session instructions; no tools. Baseline is previous owned guidance, NOT no-skill. Assertions manually graded against exact quoted output; not an isolated-model benchmark or a trigger/inheritance test.",
+  "source_before": "c73116e183ff72dc8b0a5235cbbcf28cde1b00aa",
+  "source_candidate": "7fe1689afce46574bcce1666377e76745bd7ab66",
+  "companion_guide": "unslop unchanged in both arms.",
+  "totals": {
+    "baseline_pass": 9,
+    "candidate_pass": 9,
+    "assertions": 9
+  },
+  "decision": "Keep shorter proportionate guidance: same bounded assertion coverage with fewer guide characters. No general quality, token-cost or latency gain claimed.",
+  "guidance_characters": {
+    "before": 3381,
+    "after": 3077
+  },
+  "cases": [
+    {
+      "id": 1,
+      "baseline": {
+        "response": "1. Read src/http.ts and its identified tests to confirm where the default timeout is defined and how explicit caller timeouts interact with it.\n2. Inspect src/a.ts and src/b.ts for reliance on that default, then identify the existing assertions and focused tests affected by changing it from 5 to 10 seconds.\n\nOwnership is already established. This scoped change does not require a repository-wide prior-art or dependency search.",
+        "grades": [
+          {
+            "assertion": "Inspect the owning implementation and affected callers/tests before editing.",
+            "verdict": "PASS",
+            "evidence": "Read src/http.ts and its identified tests"
+          },
+          {
+            "assertion": "Keep investigation local to the identified owner unless that inspection exposes an unresolved dependency.",
+            "verdict": "PASS",
+            "evidence": "Ownership is already established."
+          },
+          {
+            "assertion": "Do not require a repository-wide prior-art script, a new agent, or a new abstraction for this known-owner change.",
+            "verdict": "PASS",
+            "evidence": "does not require a repository-wide prior-art or dependency search."
+          }
+        ]
+      },
+      "candidate": {
+        "response": "1. Read requestWithRetry in src/http.ts and its existing tests to understand how the default timeout is applied.\n2. Inspect its calls in src/a.ts and src/b.ts for explicit overrides or assumptions about the default; identify the focused test needed to verify 10 seconds while preserving overrides.\nKeep the investigation scoped unless those files expose an unresolved ownership or dependency question.",
+        "grades": [
+          {
+            "assertion": "Inspect the owning implementation and affected callers/tests before editing.",
+            "verdict": "PASS",
+            "evidence": "Read requestWithRetry in src/http.ts and its existing tests"
+          },
+          {
+            "assertion": "Keep investigation local to the identified owner unless that inspection exposes an unresolved dependency.",
+            "verdict": "PASS",
+            "evidence": "Keep the investigation scoped unless"
+          },
+          {
+            "assertion": "Do not require a repository-wide prior-art script, a new agent, or a new abstraction for this known-owner change.",
+            "verdict": "PASS",
+            "evidence": "unless those files expose an unresolved ownership or dependency question."
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "baseline": {
+        "response": "Establish whether extraction is necessary and define accepted ZIP features, destination policy, resource limits, overwrite behavior, and failure cleanup. Locate the owning capability and existing archive handling in libs/, capabilities/, tools/, and the active overlay; check relevant plans and upstreams.toml verdicts. Assess standard-library facilities, platform utilities, and installed dependencies before proposing another dependency.\n\nRequire evidence for traversal and absolute-path rejection, symlink containment, decompression limits, entry-count limits, and safe handling of partial extraction. Assess candidate maintenance and security history. Choose the first ladder rung that satisfies these requirements; a new archive framework is not justified merely because extraction is requested.",
+        "grades": [
+          {
+            "assertion": "Require an actual search for an existing owner/implementation and installed dependencies before selecting a new framework.",
+            "verdict": "PASS",
+            "evidence": "Locate the owning capability and existing archive handling"
+          },
+          {
+            "assertion": "Consider standard-library or platform facilities without claiming their mere availability proves safe extraction.",
+            "verdict": "PASS",
+            "evidence": "Assess standard-library facilities, platform utilities, and installed dependencies"
+          },
+          {
+            "assertion": "Preserve checks for archive entries escaping the destination; do not trade trust-boundary validation for brevity.",
+            "verdict": "PASS",
+            "evidence": "traversal and absolute-path rejection, symlink containment"
+          }
+        ]
+      },
+      "candidate": {
+        "response": "Establish the extraction owner and requirements: supported ZIP features, destination policy, overwrite behavior, resource limits, and failure cleanup. Inspect relevant repository areas, callers, tests, owner docs, upstreams.toml, and the active overlay for existing extraction support.\nCompare standard-library, platform-native, and installed-dependency facilities against those requirements. Require evidence for traversal and symlink containment, decompression limits, malformed-archive handling, and partial-output safety. Check dependency verdicts and PRD invariants before adding a framework. Choose the earliest build-ladder rung that meets the requirements. Ownership and available reuse remain unresolved in this fixture; no search has run.",
+        "grades": [
+          {
+            "assertion": "Require an actual search for an existing owner/implementation and installed dependencies before selecting a new framework.",
+            "verdict": "PASS",
+            "evidence": "Inspect relevant repository areas, callers, tests, owner docs, upstreams.toml, and the active overlay"
+          },
+          {
+            "assertion": "Consider standard-library or platform facilities without claiming their mere availability proves safe extraction.",
+            "verdict": "PASS",
+            "evidence": "Compare standard-library, platform-native, and installed-dependency facilities"
+          },
+          {
+            "assertion": "Preserve checks for archive entries escaping the destination; do not trade trust-boundary validation for brevity.",
+            "verdict": "PASS",
+            "evidence": "Require evidence for traversal and symlink containment"
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "baseline": {
+        "response": "Trace both import paths through the shared destination-path helper to the filesystem write. Compare their root arguments, normalization, containment checks, and handling of absolute paths, traversal, and symlinks. Determine whether the failing caller bypasses a correct helper or exposes a shared defect.\n\nRepair the narrowest owner of the violated invariant. If the helper guarantees root-contained destinations, fix that helper and add regression coverage through both callers. If the helper is sound but one caller supplies the wrong root or bypasses it, repair that caller. A caller-only guard is justified only after establishing that it does not leave the same defect reachable elsewhere.",
+        "grades": [
+          {
+            "assertion": "Trace the shared helper and both callers before choosing the repair.",
+            "verdict": "PASS",
+            "evidence": "Trace both import paths through the shared destination-path helper"
+          },
+          {
+            "assertion": "Prefer fixing a shared invariant when the evidence shows both paths need it, rather than assuming a caller-only patch is sufficient.",
+            "verdict": "PASS",
+            "evidence": "If the helper is sound but one caller supplies the wrong root or bypasses it, repair that caller."
+          },
+          {
+            "assertion": "Retain focused regression coverage for affected imports without requiring unrelated full-workspace work.",
+            "verdict": "PASS",
+            "evidence": "add regression coverage through both callers."
+          }
+        ]
+      },
+      "candidate": {
+        "response": "Trace the failing import through the shared destination-path helper, then inspect the other import's inputs and containment checks. Establish whether the helper promises root containment and what causes the escape.\nIf the shared helper violates that invariant, repair it there so both imports receive protection. Keep a regression check for the escape and checks that legitimate destinations still work through both paths. A caller-only guard is justified only if evidence isolates the defect to that caller's handling rather than the shared helper. The report alone does not establish that boundary.",
+        "grades": [
+          {
+            "assertion": "Trace the shared helper and both callers before choosing the repair.",
+            "verdict": "PASS",
+            "evidence": "Trace the failing import through the shared destination-path helper, then inspect the other import's inputs"
+          },
+          {
+            "assertion": "Prefer fixing a shared invariant when the evidence shows both paths need it, rather than assuming a caller-only patch is sufficient.",
+            "verdict": "PASS",
+            "evidence": "If the shared helper violates that invariant, repair it there"
+          },
+          {
+            "assertion": "Retain focused regression coverage for affected imports without requiring unrelated full-workspace work.",
+            "verdict": "PASS",
+            "evidence": "Keep a regression check for the escape and checks that legitimate destinations still work through both paths."
+          }
+        ]
+      }
+    }
+  ],
+  "companion_source_candidate": "d6ccc4df03a110a8c9e5e7f8071b5f683f17ae7a",
+  "rejected_candidate": {
+    "source": "14ef691be6cd82d40df88d1709682bd402e2c548",
+    "reason": "Synthetic cases passed, but independent review found the explicit PRD/dependency and zero-unsafe constraints had been dropped. Restored before this final probe."
+  },
+  "source_contract_checks": [
+    {
+      "before": "Do not add a new crate without checking `upstreams.toml` and PRD invariants.",
+      "after": "Check PRD invariants and upstream verdicts before adding dependencies.",
+      "verdict": "PASS"
+    },
+    {
+      "before": "Adhere strictly to zero-unsafe invariants, proportionate tests, and single source of truth.",
+      "after": "Keep zero-unsafe,\nproportionate-test and single-source-of-truth invariants.",
+      "verdict": "PASS"
+    }
+  ]
+}

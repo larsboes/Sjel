@@ -16,6 +16,18 @@ discover the exact target rather than relying on a static validation list.
 Record skipped checks and pre-existing failures separately. A failing unrelated doctor item does
 not invalidate a focused change, but it must not be described as passing.
 
+## Reuse verification output
+
+Run Rust verification through `sjel cargo`. Its default reuses checkout-scoped output and selects
+a stable writable fallback when the inherited cache cannot be used. Reuse that cache across
+checks, tests and Clippy rather than creating a target per command to avoid Cargo's lock. Use a
+separate target only for incompatible build configurations or a measured concurrency need; add
+its disposable output to the deployment's guarded retention policy before building.
+
+For a genuinely one-shot check, `CARGO_INCREMENTAL=0 sjel cargo check --locked` avoids retaining
+incremental state. Keep incremental compilation for repeated development checks; changing the
+setting can require recompilation. Never clean or relink live release trees as cache maintenance.
+
 ## Claiming that the gates pass
 
 Say "the gates pass" only after all of these pass: `cargo test --workspace --locked`,

@@ -1,71 +1,53 @@
 ---
 name: prior-art
 description: >-
-  Systematic prior-art discovery and build ladder verification before creating new code, modules, dependencies, or architectures. Investigates whether a problem needs solving, whether this codebase or monorepo already solves it, standard library availability, installed dependencies, or minimal composition before authoring new implementations. Trigger: prior art, check prior art, build ladder, whether to build, before writing, reuse over rewrite. Do not use for general codebase browsing without a proposal to build.
+  Guides minimum-sufficient coding work, prior-art discovery and critical reassessment across implementation and review. Use when deciding whether to build, checking prior art, reconsidering an in-progress approach, questioning growing complexity, or deciding whether a coding task is complete. Do not use for ordinary symbol lookup, failure diagnosis (root-cause), prose editing (human-writing), or code/UI tell scanning (unslop).
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
-# Prior Art & The Build Ladder
+# Prior Art and the Build Ladder
 
-Before authoring a new component, crate, dependency, or feature, check whether an equivalent already exists.
-Never default to building from scratch without running the build ladder and executing a real prior-art search.
+Read the affected implementation, its callers and existing checks before choosing a solution.
+A short diff is not evidence that the change is understood.
 
-## The 7-Rung Build Ladder
+Use the ladder before building and at meaningful implementation or review checkpoints.
+Reassess when evidence changes the approach, not after every edit.
 
-Stop at the first rung that holds:
+## Scope the investigation
 
-1. **Needs to exist at all?**
-   - Question the premise: Is the feature solving a real problem or premature optimization/avoidance?
-   - Can the workflow or requirement be satisfied without adding any code?
+For a small change with a known owner, inspect that owner, relevant callers and nearby tests.
+Expand the search only when this leaves an ownership, reuse or dependency question unresolved.
+A repository-wide scan or delegated investigation is not a prerequisite for every edit.
 
-2. **This codebase already has it?**
-   - Search Sjel monorepo: `libs/`, `capabilities/`, `tools/`, and the active overlay.
-   - Run the prior-art search script:
-     ```bash
-     Packs/coding/skills/prior-art/scripts/search-prior-art "<concept_or_symbol>"
-     ```
-   - Find the command, tool or capability that owns it: `sjel search "<concept>"`.
-   - Check `upstreams.toml` for prior verdicts, evaluations, or rejected prior art.
+For a new component, dependency or public boundary, search the relevant repository areas and
+installed dependencies before proposing a build. Include the active overlay when it can own
+the behavior. In Sjel, use `sjel search <concept>`, `tools/sjel-context on <path>`, owner docs and
+`upstreams.toml`; inspect scoped source directly for implementation evidence.
+Do not turn a limited search into a claim that no equivalent exists anywhere.
 
-3. **Standard library?**
-   - Rust: `std::sync`, `std::collections`, `std::time`, `std::path`, `std::fs`.
-   - Node / Web / TS: Web APIs (`fetch`, `URL`, `crypto`, `Intl`), standard ECMAScript.
-   - Do not pull an external dependency for something standard library provides cleanly.
+## The build ladder
 
-4. **Platform-native?**
-   - Operating system tools: macOS / Linux command-line utilities, kernel facilities, keychain, system services.
+Stop at the first rung that meets the actual requirements:
 
-5. **An already-installed dependency?**
-   - Check existing dependencies in `Cargo.lock` or `bun.lock`:
-     ```bash
-     cargo tree -i "<crate_name>"
-     ```
-   - Can an existing workspace dependency (e.g. `serde_json`, `chrono`, `reqwest`, `rusqlite`, `tokio`) solve it directly?
-   - Do not add a new crate without checking `upstreams.toml` and PRD invariants.
+1. **Necessary?** Drop an unneeded feature instead of implementing it.
+2. **Already present?** Reuse the existing owner rather than add a parallel implementation.
+3. **Standard library?** Prefer its supported primitive.
+4. **Platform-native?** Use the operating system, database or UI platform facility.
+5. **Installed dependency?** Reuse an appropriate dependency before adding another.
+6. **Simple composition?** Combine existing primitives without a new framework.
+7. **Build?** Implement the smallest justified solution when the earlier rungs do not hold.
 
-6. **One line / simple composition?**
-   - Compose existing primitives, helper functions, or pipelines before creating an abstract framework.
+Prefer understandable code, not minimum character count. Preserve trust-boundary validation,
+data-loss handling, accessibility and explicitly requested behavior.
+Check PRD invariants and upstream verdicts before adding dependencies. Keep zero-unsafe,
+proportionate-test and single-source-of-truth invariants.
 
-7. **Minimum code that works.**
-   - Only when rungs 1 through 6 fail, implement the minimum viable solution.
-   - Adhere strictly to zero-unsafe invariants, proportionate tests, and single source of truth.
+For a bug, trace the shared invariant and affected callers before choosing the repair boundary.
+Fix a shared defect at its owner; a caller-only fix is appropriate only when the evidence
+isolates the defect there. Keep a focused check for the failure and legitimate behavior.
 
-## Running Prior Art Investigation
+## Report the evidence
 
-To run a prior-art investigation:
-
-```bash
-# 1. Search symbols, paths, crates, and upstreams:
-Packs/coding/skills/prior-art/scripts/search-prior-art "<query>"
-
-# 2. Find the owning command, tool or capability:
-sjel search "<query>"
-
-# 3. Check for related decisions in the plans:
-grep -in -C 2 "<query>" PLAN.md docs/plans/*.md ARCHITECTURE.md
-```
-
-Report findings ranked by the ladder rung:
-1. **Decision**: Which rung stops the ladder (Reuse / Compose / Build)?
-2. **Found prior art**: Concrete file paths, symbols, or crate references discovered.
-3. **Action**: Adopt directly, compose with existing utilities, or proceed with minimal new code.
+For an investigation, name the stopping rung, the paths or facilities checked, and the proposed
+reuse, composition or build. Report searches and checks that actually ran; mark unresolved scope.
+An ordinary bounded edit needs only its reuse decision and relevant check, not a ritual report.

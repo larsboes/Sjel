@@ -2,7 +2,8 @@ import { Component, ItemView, MarkdownRenderer, Modal, Notice, TFile, WorkspaceL
 import type PiLearnPlugin from './main';
 import { askCard, quizCard, reviewCard } from './cards';
 import { QUESTIONS_PROTOCOL, THINKING_LEVELS, buildLaunch, splitModel } from './launch';
-import { parsePath, pathGraph, progress, sittingPrompt, type Kind } from './path';
+import { parsePath, pathGraph, progress, resumePoint, sittingPrompt, type Kind, type SittingBrief } from './path';
+import { isLearningNote, isLearningPath, learningPaths } from './catalog';
 import { ModelPicker } from './picker';
 import { PiRpc, modelKey, type PiEvent, type PiModel } from './rpc';
 
@@ -34,6 +35,7 @@ export class LearnView extends ItemView {
   private pathFile: TFile | null = null;
   /** The open note when it is not a path note: the concept a sitting starts from. */
   private focusFile: TFile | null = null;
+  private plannedFocus: TFile | null = null;
   private planOpen = false;
   private paintSeq = 0;
   private models: PiModel[] = [];
@@ -48,6 +50,8 @@ export class LearnView extends ItemView {
   private stickToBottom = true;
   private dialogs = new Map<string, PendingDialog>();
   private resetModal: Modal | null = null;
+  private activity: HTMLDetailsElement | null = null;
+  private replyFailed = false;
 
   /** Not `titleEl`: ItemView owns that name, and a field declaration resets it. */
   private pathTitleEl!: HTMLElement;
@@ -65,6 +69,12 @@ export class LearnView extends ItemView {
   private teachBtn!: HTMLButtonElement;
   private practiceBtn!: HTMLButtonElement;
   private finishBtn!: HTMLButtonElement;
+  private planner!: HTMLDetailsElement;
+  private targetSel!: HTMLSelectElement;
+  private outcomeInput!: HTMLInputElement;
+  private minutesInput!: HTMLInputElement;
+  private modeSel!: HTMLSelectElement;
+  private startBtn!: HTMLButtonElement;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: PiLearnPlugin) {
     super(leaf);
@@ -108,6 +118,24 @@ export class LearnView extends ItemView {
     this.practiceBtn.onclick = () => void this.sitting('practice');
     this.finishBtn = controls.createEl('button', { cls: 'pi-learn-chip', text: 'Finish sitting' });
     this.finishBtn.onclick = () => void this.finishSitting();
+    this.planner = head.createEl('details', { cls: 'pi-learn-planner' });
+    this.planner.createEl('summary', { text: 'Session planner' });
+    const field = (label: string) => {
+      const wrapper = this.planner.createEl('label');
+      wrapper.createSpan({ text: label });
+      return wrapper;
+    };
+    this.targetSel = field('Path or topic').createEl('select', { attr: { 'aria-label': 'Path or topic' } });
+    this.refreshTargets();
+    this.targetSel.onchange = () => void this.trackPath(this.app.workspace.getActiveFile());
+    this.outcomeInput = field('Desired outcome').createEl('input', { attr: { type: 'text', placeholder: 'What should become possible?', 'aria-label': 'Desired outcome' } });
+    this.minutesInput = field('Available minutes').createEl('input', { attr: { type: 'number', min: '1', step: '1', placeholder: 'Ask me at the start', 'aria-label': 'Available minutes' } });
+    this.modeSel = field('Mode').createEl('select', { attr: { 'aria-label': 'Sitting mode' } });
+    this.modeSel.createEl('option', { text: 'Teach', attr: { value: 'teach' } });
+    this.modeSel.createEl('option', { text: 'Practice', attr: { value: 'practice' } });
+    this.modeSel.onchange = () => { this.kind = this.modeSel.value as Kind; this.paintControls(); };
+    this.startBtn = this.planner.createEl('button', { text: 'Start planned sitting', cls: 'mod-cta' });
+    this.startBtn.onclick = () => void this.sitting(this.modeSel.value as Kind);
     this.statusEl = root.createDiv({ cls: 'pi-learn-status', attr: { role: 'status' } });
     this.statusEl.hide();
 
@@ -136,8 +164,7 @@ export class LearnView extends ItemView {
 
     const foot = dock.createDiv({ cls: 'pi-learn-foot' });
     this.modelBtn = foot.createEl('button', { cls: 'pi-learn-chip pi-learn-model', text: 'model', attr: { 'aria-label': 'Choose the model' } });
-    this.modelBtn.onclick = () =>
-      new ModelPicker(this.app, this.models, (key) => void this.pickModel(key), false).open();
+    this.modelBtn.onclick = () => this.chooseModel();
     this.thinkSel = foot.createEl('select', { cls: 'pi-learn-select dropdown', attr: { 'aria-label': 'Thinking' } });
     this.thinkSel.createEl('option', { text: 'thinking', value: '' });
     this.thinkSel.onchange = () => void this.pickThinking(this.thinkSel.value);
@@ -149,6 +176,16 @@ export class LearnView extends ItemView {
         if (f instanceof TFile && f.path === this.pathFile?.path) void this.paintPath();
       }),
     );
+    this.registerEvent(this.app.metadataCache.on('changed', () => {
+      this.refreshTargets();
+      if (!this.sittingActive) void this.trackPath(this.app.workspace.getActiveFile());
+    }));
+    this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
+      if (this.targetSel.value === oldPath) {
+        this.refreshTargets();
+        this.targetSel.value = file.path;
+      }
+    }));
     await this.trackPath(this.app.workspace.getActiveFile());
     await this.paintPath();
     this.paintBadge();
@@ -169,6 +206,8 @@ export class LearnView extends ItemView {
   private clearTranscript() {
     if (this.live?.timer !== null && this.live?.timer !== undefined) window.clearTimeout(this.live.timer);
     this.live = null;
+    this.activity = null;
+    this.replyFailed = false;
     for (const c of this.components) c.unload();
     this.components = [];
     this.streamEl.empty();
@@ -177,27 +216,49 @@ export class LearnView extends ItemView {
 
   /* ───────────── learning path context ───────────── */
 
-  private isPath(file: TFile): boolean {
-    const headings = this.app.metadataCache.getFileCache(file)?.headings ?? [];
-    return headings.some((h) => h.level === 2 && h.heading === 'Learning Path');
+  private refreshTargets() {
+    const selected = this.targetSel.value;
+    this.targetSel.empty();
+    this.targetSel.createEl('option', { text: 'Follow the open concept or path', attr: { value: '' } });
+    this.targetSel.createEl('option', { text: 'New topic', attr: { value: '__new__' } });
+    for (const file of learningPaths(this.app)) this.targetSel.createEl('option', { text: file.basename, attr: { value: file.path } });
+    if (this.plannedFocus) this.targetSel.createEl('option', { text: this.plannedFocus.basename, attr: { value: this.plannedFocus.path } });
+    this.targetSel.value = selected || '';
   }
 
-  /**
-   * The context follows the open note. A path note is the path. Any other note is the focus, and
-   * its path is a learning path that links to it or that it links to; it has none when no path
-   * does. Notes outside Markdown leave the context as it is.
-   */
+  /** Stage a target without starting a model-backed sitting. */
+  async prepare(file: TFile | null, kind: Kind) {
+    if (this.sittingActive) {
+      this.notice('Finish the current sitting before planning another.');
+      return;
+    }
+    this.plannedFocus = file && isLearningNote(this.app, file) ? file : null;
+    this.refreshTargets();
+    this.targetSel.value = file ? file.path : '__new__';
+    this.lastTopic = '';
+    this.kind = kind;
+    this.modeSel.value = kind;
+    this.input.value = '';
+    await this.trackPath(file);
+    this.planner.open = true;
+    this.paintControls();
+    (file ? this.outcomeInput : this.input).focus();
+  }
+
   private async trackPath(file: TFile | null) {
-    if (!file || file.extension !== 'md') return;
-    if (this.isPath(file)) {
-      this.pathFile = file;
-      this.focusFile = null;
-    } else {
+    if (this.sittingActive || this.transitioning) return;
+    if (this.targetSel.value === '__new__') file = null;
+    else if (this.targetSel.value) {
+      const target = this.app.vault.getAbstractFileByPath(this.targetSel.value);
+      file = target instanceof TFile ? target : null;
+    }
+    this.pathFile = null;
+    this.focusFile = null;
+    if (file?.extension === 'md' && isLearningPath(this.app, file)) this.pathFile = file;
+    else if (file?.extension === 'md' && isLearningNote(this.app, file)) {
       const links = this.app.metadataCache.resolvedLinks;
-      const paths = this.app.vault.getMarkdownFiles().filter((f) => f !== file && this.isPath(f));
       this.focusFile = file;
-      this.pathFile =
-        paths.find((p) => links[p.path]?.[file.path]) ?? paths.find((p) => links[file.path]?.[p.path]) ?? null;
+      this.pathFile = learningPaths(this.app).find((p) => links[p.path]?.[file!.path] || links[file!.path]?.[p.path]) ?? null;
     }
     await this.paintPath();
   }
@@ -231,9 +292,10 @@ export class LearnView extends ItemView {
     const path = parsePath(markdown);
     if (path) {
       const p = progress(path);
+      const next = resumePoint(path);
       this.pathTitleEl.createDiv({
         cls: 'pi-learn-title-sub',
-        text: `${p.held} of ${path.nodes.length} held${focus ? ` · at ${focus.basename}` : p.current ? ' · resuming' : ''}`,
+        text: `${p.held} of ${path.nodes.length} held${focus ? ` · at ${focus.basename}` : next.node ? ` · ${next.reason === 'current' ? 'resume' : 'next'}: ${next.node.label}` : ` · ${next.reason}`}`,
       });
       for (const n of path.nodes) {
         this.dotsEl.createSpan({ cls: `pi-learn-dot is-${n.state}`, attr: { 'aria-label': `${n.label}: ${n.state}`, title: `${n.label} · ${n.state}` } });
@@ -311,7 +373,8 @@ export class LearnView extends ItemView {
   private async paintModel() {
     const pi = this.ensurePi();
     const state = await pi.command({ type: 'get_state' }).catch(() => null);
-    this.modelBtn.setText(state?.model ? modelKey(state.model) : 'model');
+    this.modelBtn.setText(state?.model?.id ?? 'Choose model');
+    this.modelBtn.setAttr('title', state?.model ? modelKey(state.model) : 'Choose the model');
     const levels: string[] = (await pi.command({ type: 'get_available_thinking_levels' }).catch(() => null))?.levels ?? THINKING_LEVELS;
     this.thinkSel.empty();
     for (const l of levels) this.thinkSel.createEl('option', { text: `thinking ${l}`, value: l });
@@ -327,6 +390,10 @@ export class LearnView extends ItemView {
     else this.plugin.settings.practiceModel = key;
     await this.plugin.save();
     await this.paintModel();
+  }
+
+  private chooseModel() {
+    new ModelPicker(this.app, this.models, (key) => void this.pickModel(key), false).open();
   }
 
   private async pickThinking(level: string) {
@@ -352,16 +419,32 @@ export class LearnView extends ItemView {
   private async sitting(kind: Kind) {
     if (this.transitioning || this.disposed || this.stopping) return;
     const topic = this.input.value.trim() || (!this.pathFile && !this.focusFile ? this.lastTopic : '');
-    const path = this.pathFile ? `[[${this.pathFile.basename}]]` : null;
-    const focus = this.focusFile ? `[[${this.focusFile.basename}]]` : null;
+    const path = this.pathFile ? `[[${this.pathFile.path.replace(/\.md$/, '')}]]` : null;
+    const focus = this.focusFile ? `[[${this.focusFile.path.replace(/\.md$/, '')}]]` : null;
     if (!path && !focus && !topic) {
       this.input.focus();
       this.notice('Open a note or a learning path, or type a topic first.');
       return;
     }
+    const minutes = this.minutesInput.value.trim();
+    if (minutes && (!Number.isInteger(Number(minutes)) || Number(minutes) < 1)) {
+      this.notice('Enter a positive whole number of minutes.');
+      this.minutesInput.focus();
+      return;
+    }
+    const brief: SittingBrief = { outcome: this.outcomeInput.value, minutes: minutes ? Number(minutes) : undefined };
     this.transitioning = true;
     this.paintControls();
     try {
+      if (kind === 'teach' && this.pathFile && !this.focusFile) {
+        const graph = parsePath(await this.app.vault.cachedRead(this.pathFile));
+        const next = graph && resumePoint(graph);
+        if (!next?.node) {
+          this.notice(next?.reason === 'complete' ? 'This path is complete. Choose Practice or a new topic.' : 'No ready step. Open the path and check its prerequisites, syntax and current nodes.');
+          return;
+        }
+        brief.next = `${next.node.id}: ${next.node.label}`;
+      }
       if (this.sittingActive && !(await this.confirmReset())) return;
       if (this.disposed) return;
       const pi = this.ensurePi();
@@ -373,6 +456,7 @@ export class LearnView extends ItemView {
       }
       this.cancelDialogs();
       this.kind = kind;
+      this.modeSel.value = kind;
       await this.applyKind();
     } catch (err) {
       this.notice(`Could not start the sitting: ${(err as Error).message}`, true);
@@ -384,16 +468,16 @@ export class LearnView extends ItemView {
     if (this.disposed) return;
     this.clearTranscript();
     this.sittingActive = true;
+    this.planner.open = false;
     this.lastTopic = topic;
     this.closing = false;
     this.paintBadge();
     this.paintControls();
     const label = this.focusFile?.basename ?? this.pathFile?.basename.replace(/\s+—\s+Learning Path$/, '') ?? topic;
     this.divider(`${kind === 'teach' ? 'Teaching' : 'Practice'} · ${label}`);
-    const extra = (path || focus) && topic ? ` ${topic}` : '';
     this.input.value = '';
     this.grow();
-    await this.prompt(sittingPrompt(kind, path, focus, topic) + extra, null);
+    await this.prompt(sittingPrompt(kind, path, focus, topic, brief), null);
   }
 
   private async send() {
@@ -411,6 +495,8 @@ export class LearnView extends ItemView {
     const pi = this.ensurePi();
     if (shown !== null) this.bubble(shown);
     const wasStreaming = this.streaming;
+    this.replyFailed = false;
+    this.activity = null;
     this.setStreaming(true);
     try {
       const result = await pi.command(
@@ -461,8 +547,8 @@ export class LearnView extends ItemView {
       this.closeFailed = false;
       this.paintControls();
       await this.prompt(
-        `Finish this ${this.kind} sitting using the active skill's Close procedure. Resolve any grading contest first; in practice, retest outstanding misses before closing. Complete the required claim review, note and learning-path updates, and Learning Log entry that apply to this sitting. Do not invent mastery or record a completed session when the closing checks or writes fail. Summarize what was saved and the next step. Only after the closing procedure and required writes succeed, end the final reply with ${CLOSED_MARKER}. If anything remains unfinished, ask for it and do not emit that marker.`,
-        'Finish sitting',
+        `Finish this ${this.kind} sitting using the active skill's Close procedure. Treat Finish as a request to stop teaching or posing problems now. Save an honest partial handoff when a gate, contest, problem or retest remains; list each unresolved item rather than requiring another question. Complete the required claim review, note and learning-path updates, and Learning Log entry that apply to this sitting. Do not invent mastery or record a completed session when the closing checks or writes fail. Summarize what was saved and the next step. Only after the closing procedure and required writes succeed, end the final reply with ${CLOSED_MARKER}. Unfinished learning may be recorded as pending and still close the sitting. A failed required write or a claim saved without required review is a closing failure: report it and do not emit that marker. Save already reviewed material and defer unreviewed claims when stopping.`,
+        null,
       );
     } catch (err) {
       this.closing = false;
@@ -597,12 +683,38 @@ export class LearnView extends ItemView {
       if (message.stopReason === 'stop' && final.includes(CLOSED_MARKER)) this.closeConfirmed = true;
     }
     if (final) live.text = final.replaceAll(CLOSED_MARKER, '').trimEnd();
-    if (message.stopReason === 'error' && message.errorMessage) live.text += `\n\n> [!error] ${message.errorMessage}`;
+    if (message.stopReason === 'error') {
+      this.replyFailed = true;
+      this.showReplyError(message.errorMessage || 'The provider returned no reply.');
+    }
     if (!live.text.trim()) {
       live.el.remove();
       return;
     }
+    this.activity = null;
     void this.renderLive(live);
+  }
+
+  private showReplyError(raw: string) {
+    this.activity = null;
+    const error = this.streamEl.createDiv({ cls: 'pi-learn-error', attr: { role: 'alert' } });
+    error.createDiv({ cls: 'pi-learn-error-title', text: this.closing ? 'Could not finish the sitting' : 'The model could not respond' });
+    let reason = raw;
+    const jsonStart = raw.indexOf('{');
+    if (jsonStart !== -1) {
+      try {
+        const body = JSON.parse(raw.slice(jsonStart));
+        reason = body.error?.message ?? body.message ?? raw;
+      } catch { /* Non-JSON provider errors remain readable as plain text. */ }
+    }
+    error.createEl('p', { text: reason });
+    error.createEl('p', { cls: 'pi-learn-error-help', text: 'Choose an available model, then send your message again or retry Finish sitting.' });
+    const actions = error.createDiv({ cls: 'pi-learn-error-actions' });
+    actions.createEl('button', { text: 'Choose model' }).onclick = () => this.chooseModel();
+    const details = actions.createEl('details');
+    details.createEl('summary', { text: 'Technical details' });
+    details.createEl('pre', { text: raw });
+    this.scrollDown();
   }
 
   private toolStarted(name: string, args: Record<string, any>) {
@@ -786,23 +898,33 @@ export class LearnView extends ItemView {
     this.badgeEl.empty();
     this.badgeEl.toggleClass('is-busy', this.streaming);
     this.badgeEl.createSpan({ cls: 'pi-learn-spinner' });
-    this.badgeEl.createSpan({ text: this.sittingActive ? this.kind === 'teach' ? 'Teaching' : 'Practice' : 'Ready' });
+    this.badgeEl.createSpan({ text: this.replyFailed ? 'Reply failed' : this.closing ? 'Finishing' : this.streaming ? 'Working' : this.sittingActive ? 'Your turn' : 'Ready' });
   }
 
   private bubble(text: string) {
+    this.activity = null;
     this.streamEl.querySelector('.pi-learn-empty')?.remove();
     this.streamEl.createDiv({ cls: 'pi-learn-msg is-user', text });
     this.scrollDown();
   }
 
   private divider(label: string) {
+    this.activity = null;
     this.streamEl.createDiv({ cls: 'pi-learn-divider', text: label });
   }
 
   private toolLine(icon: string, label: string, cls = '') {
-    const line = this.streamEl.createDiv({ cls: `pi-learn-tool ${cls}`.trim() });
+    if (!this.activity) {
+      this.activity = this.streamEl.createEl('details', { cls: 'pi-learn-activity' });
+      this.activity.createEl('summary');
+    }
+    const line = this.activity.createDiv({ cls: `pi-learn-tool ${cls}`.trim(), attr: { title: label } });
     setIcon(line.createSpan({ cls: 'pi-learn-tool-icon' }), icon);
     line.createSpan({ text: label });
+    const count = this.activity.querySelectorAll('.pi-learn-tool').length;
+    const failed = this.activity.querySelectorAll('.is-error').length;
+    this.activity.querySelector('summary')!.setText(`Activity · ${count} ${count === 1 ? 'step' : 'steps'}${failed ? ` · ${failed} failed` : ''}`);
+    this.activity.toggleClass('has-error', failed > 0);
     this.scrollDown();
   }
 
@@ -815,12 +937,17 @@ export class LearnView extends ItemView {
   private paintControls() {
     if (!this.sendBtn) return;
     const locked = this.transitioning || this.stopping || this.disposed;
+    const planningLocked = locked || this.sittingActive;
+    for (const field of [this.targetSel, this.outcomeInput, this.minutesInput, this.modeSel, this.startBtn]) {
+      field.disabled = planningLocked;
+      field.title = this.sittingActive ? 'Finish the current sitting before planning another' : '';
+    }
     this.teachBtn.disabled = locked || this.closing;
     this.practiceBtn.disabled = locked || this.closing;
     this.teachBtn.setAttr('aria-pressed', String(this.sittingActive && this.kind === 'teach'));
     this.practiceBtn.setAttr('aria-pressed', String(this.sittingActive && this.kind === 'practice'));
     this.finishBtn.disabled = locked || !this.sittingActive || this.closing;
-    this.finishBtn.setAttr('title', !this.sittingActive ? 'Start a sitting first' : this.closing ? 'Complete any closing questions in the chat' : 'Complete the skill’s closing procedure and save its learning records');
+    this.finishBtn.setAttr('title', !this.sittingActive ? 'Start a sitting first' : this.closing ? 'Saving learning records and the next step' : 'Complete the skill’s closing procedure and save its learning records');
     this.finishBtn.setText(this.closing ? 'Finishing…' : 'Finish sitting');
     this.sendBtn.disabled = locked;
     const stop = this.streaming && !this.input.value.trim();

@@ -1,6 +1,6 @@
 # See schemas/pack.toml.example for the field reference.
 name        = "security"
-description = "Guard secrets and credentials from agent visibility, and supply them where the agent legitimately needs one. Pi agent extensions that block reading .env, .secrets, and Bitwarden items at the tool-call boundary while allowing commands that use those secrets, and that give providers their API keys from the login keychain instead of the environment. Ships a Claude Code secrets-guard skill for the same doctrine, and a vendor-audit skill that vets third-party software before it runs."
+description = "Keep routine local work unprompted while guarding destructive commands, privilege and external writes. Pi extensions protect secret files, provide safe credential use and resolve provider keys from the OS keychain. Claude Code receives the secrets-guard workflow; vendor-audit vets third-party software before it runs."
 skills      = ["secrets-guard", "vendor-audit"]
 personal    = ["config/secrets-guard.toml"]
 license     = "MIT"

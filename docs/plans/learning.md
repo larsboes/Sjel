@@ -108,8 +108,24 @@ it opens without errors, lists pi's models, and its header follows the open note
   sitting has run, and the five-plus-five sessions below remain the evidence that decides the
   remaining candidates.
 
+Implemented locally, 2026-11-08: `learning-hub` renders a general home from path graphs,
+claim notes and Learning Log handoffs. The sidebar planner accepts target, outcome, minutes and
+mode; excludes non-learning notes; pins active context; and selects prerequisite-ready nodes.
+`teach` and `practice` accept the brief once and save pending work on an explicit stop, with a
+single-claim practice branch. Shared CSS roles keep vault customizations in one snippet.
+Verification: plugin `bun run check`, `tools/pi-learn.test.ts`, `tools/obsidian-plugin.test.ts`,
+skill validators and the hub/planner in Obsidian on macOS. A model-backed sitting on these
+changes and Windows/WSL rendering remain unverified; the real-session pilot stays open.
+
 Open, in order. The stage 1 sessions come first: the UI items below are candidates, and observed
 friction in the Learning Log decides which of them are built.
+
+Implemented locally, 2026-11-08: sidebar messages no longer shrink inside the transcript;
+tool activity is expandable; provider failures show a readable reason, model picker and
+collapsed technical details. Waiting, working and finishing have distinct labels. Finish no
+longer adds a duplicate user bubble, and the model footer wraps in narrow panels. Verification:
+plugin typecheck and 42 tests pass; build installed in the vault. Repository-level plugin tests
+could not start (`EPERM` from Bun). Visual confirmation after the owner reloads remains open.
 
 1. **Real sittings.** Run the five teach and five practice sittings of stage 1 in the plugin.
    Record friction in the Learning Log line. Done when the log has ten lines and each UI item

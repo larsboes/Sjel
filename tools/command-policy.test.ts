@@ -69,17 +69,25 @@ describe("command policy extension", () => {
     expect(await h({ toolName: "bash", input: { command: "git status" } }, c)).toBeUndefined();
   });
 
+  test("routine local work and diagnostics need no UI", async () => {
+    const h = load();
+    const c = { cwd: "/home/u/proj", hasUI: false };
+    for (const command of ["git commit -m x", "rm -f notes.txt", "docker system df", "diskutil list", "launchctl list"]) {
+      expect(await h({ toolName: "bash", input: { command } }, c)).toBeUndefined();
+    }
+  });
+
   test("ask without a UI refuses", async () => {
     const h = load();
-    const r = await h({ toolName: "bash", input: { command: "git commit -m x" } }, { cwd: "/home/u/proj", hasUI: false });
+    const r = await h({ toolName: "bash", input: { command: "git push origin main" } }, { cwd: "/home/u/proj", hasUI: false });
     expect(r?.block).toBe(true);
   });
 
   test("a session grant covers the exact call and nothing else", async () => {
     const h = load();
-    expect(await h({ toolName: "bash", input: { command: "git commit -m x" } }, ctx(["Allow this exact call for this session"]))).toBeUndefined();
-    expect(await h({ toolName: "bash", input: { command: "git commit -m x" } }, ctx([]))).toBeUndefined();
-    const other = await h({ toolName: "bash", input: { command: "git commit -m y" } }, ctx(["Deny"]));
+    expect(await h({ toolName: "bash", input: { command: "git push origin main" } }, ctx(["Allow this exact call for this session"]))).toBeUndefined();
+    expect(await h({ toolName: "bash", input: { command: "git push origin main" } }, ctx([]))).toBeUndefined();
+    const other = await h({ toolName: "bash", input: { command: "git push origin topic" } }, ctx(["Deny"]));
     expect(other?.block).toBe(true);
   });
 

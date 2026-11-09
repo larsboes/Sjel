@@ -1,0 +1,143 @@
+#!/usr/bin/env -S uv run --script
+"""Read-only installed Obsidian plugin inventory and optional upstream freshness checks."""
+
+import argparse
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+import urllib.request
+
+REGISTRY = "https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugins.json"
+REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def read_json(path):
+    with path.open(encoding="utf-8") as source:
+        return json.load(source)
+
+
+def vault_root():
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "Packs/knowledge/skills/obsidian/scripts/vault"), "root"],
+        check=True, capture_output=True, text=True,
+    )
+    return Path(result.stdout.strip())
+
+
+def registry(path, online):
+    if path:
+        entries = read_json(path)
+    elif online:
+        with urllib.request.urlopen(REGISTRY, timeout=20) as response:
+            entries = json.load(response)
+    else:
+        return {}
+    if not isinstance(entries, list):
+        raise ValueError("plugin registry must be an array")
+    repositories = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError("invalid plugin registry entry")
+        plugin, repo = entry.get("id"), entry.get("repo")
+        if not isinstance(plugin, str) or not isinstance(repo, str) or not REPOSITORY.fullmatch(repo):
+            raise ValueError("invalid plugin registry id or repository")
+        if plugin in repositories:
+            raise ValueError("duplicate plugin id in registry")
+        repositories[plugin] = repo
+    return repositories
+
+
+def github(repository):
+    result = subprocess.run(
+        ["gh", "api", f"repos/{repository}"],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode:
+        return {"upstream_status": "unavailable"}
+    try:
+        data = json.loads(result.stdout)
+        if not isinstance(data.get("archived"), bool) or not isinstance(data.get("pushed_at"), str):
+            raise ValueError("missing repository metadata")
+        release = subprocess.run(
+            ["gh", "api", f"repos/{repository}/releases/latest"],
+            capture_output=True, text=True, timeout=30,
+        )
+        latest = json.loads(release.stdout).get("tag_name") if release.returncode == 0 else None
+        return {
+            "upstream_status": "checked" if latest else "release-unavailable",
+            "archived": data["archived"], "pushed_at": data["pushed_at"],
+            "latest_release": latest,
+        }
+    except (ValueError, TypeError, AttributeError):
+        return {"upstream_status": "invalid-response"}
+
+
+def audit(vault, repositories, online=False, query=github):
+    plugins = vault / ".obsidian/plugins"
+    if vault.is_symlink() or (vault / ".obsidian").is_symlink():
+        raise ValueError("vault and .obsidian must not be symlinks")
+    if not plugins.is_dir() or plugins.is_symlink():
+        raise ValueError("vault needs a real .obsidian/plugins directory")
+    enabled_path = vault / ".obsidian/community-plugins.json"
+    if enabled_path.is_symlink():
+        raise ValueError("enabled-plugin list must not be a symlink")
+    enabled = read_json(enabled_path)
+    if not isinstance(enabled, list) or any(not isinstance(item, str) for item in enabled):
+        raise ValueError("enabled-plugin list must be an array of ids")
+    rows = []
+    seen = set()
+    checked = {}
+    for plugin in sorted(plugins.iterdir()):
+        if plugin.name.startswith("."):
+            continue
+        row = {"id": plugin.name, "enabled": plugin.name in enabled}
+        seen.add(plugin.name)
+        manifest = plugin / "manifest.json"
+        if plugin.is_symlink() or not plugin.is_dir() or manifest.is_symlink():
+            row["status"] = "refused-path"
+        else:
+            try:
+                data = read_json(manifest)
+                if not isinstance(data, dict) or data.get("id") != plugin.name or not isinstance(data.get("version"), str):
+                    raise ValueError("manifest id/version mismatch")
+                row.update(status="installed", version=data["version"])
+            except (OSError, ValueError):
+                row["status"] = "invalid-manifest"
+        repo = repositories.get(plugin.name)
+        row["repository"] = repo
+        if repo and online and row["status"] == "installed":
+            if repo not in checked:
+                checked[repo] = query(repo)
+            row.update(checked[repo])
+        else:
+            row["upstream_status"] = "not-checked" if repo else "unmapped"
+        rows.append(row)
+    rows.extend({"id": plugin, "enabled": True, "status": "enabled-but-missing", "upstream_status": "not-checked"}
+                for plugin in sorted(set(enabled) - seen))
+    return rows
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--vault", type=Path)
+    parser.add_argument("--registry", type=Path, help="local official registry snapshot")
+    parser.add_argument("--online", action="store_true", help="fetch official registry and query GitHub via gh")
+    args = parser.parse_args()
+    try:
+        rows = audit(args.vault or vault_root(), registry(args.registry, args.online), args.online)
+        json.dump({"plugins": rows, "online": args.online,
+                   "boundary": "Freshness metadata only; not a code or security audit. No vault files changed."}, sys.stdout, indent=2)
+        print()
+        incomplete = any(row["status"] != "installed" or
+                         (args.online and row["upstream_status"] != "checked") for row in rows)
+        return 2 if incomplete else 0
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(f"vault-plugin-audit: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

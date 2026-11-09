@@ -111,8 +111,11 @@ changed what the model did, and it did so while being *cheaper and faster* — t
 a substitute for working it out, not an addition to it. And the delta is two assertions on one
 case, which is a demonstration that the loop works, not a benchmark of the skill.
 
-32 of 34 skills still have no suite. That is the outstanding work, and it is now measurable
-rather than a matter of opinion.
+`tools/skill-eval list` reports current suite coverage. `skills/unslop/evals/` contains synthetic
+read-only complexity cases covering redundant indirection, public extension contracts, security
+guards and already-simple code. The existing guide satisfied those cases without additional
+complexity instructions. These bounded responses are regression evidence, not an end-to-end
+benchmark; the native eval runner's limitations are tracked in `docs/plans/tooling.md`.
 
 ## Attribution
 
@@ -217,6 +220,10 @@ See the SKILL.md Provenance section for detail, and `upstreams.toml
 [vibecoded-design-tells]` for the verdict. The repo's own MIT note applies here too: the
 licence covers the code/docs vendored into `skills/`; the raw Reddit harvest (`corpus.jsonl`,
 charts, CSVs) was never copied into Sjel, so its separate data terms apply to nothing here.
+
+[Ponytail](https://github.com/DietrichGebert/ponytail) (MIT, `upstreams.toml [ponytail]`) supplied
+a comparison lens for the complexity fixtures, not another instruction block or runtime workflow.
+No Ponytail code or text is copied into this skill.
 
 ### skill-creator
 

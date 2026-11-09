@@ -18,7 +18,7 @@ The Learn plugin renders `quiz` and `ask` as cards in Obsidian.
   In Claude Code, `teach` uses `AskUserQuestion`: the item plus a confidence question per
   round, the thinking in the option note.
 - **`practice`**: practice on claims already taught: interleaved problems that never name
-  their target, one hint at a time, and a retest of every miss. Reads claim notes, writes only
+  their target, one hint at a time, and a retest of every miss or an explicit pending retest when the sitting stops. Reads claim notes, writes only
   the Learning Log line.
 
 ## Figures
@@ -39,7 +39,10 @@ npx skills add wheresryan22/anatomy -g -a pi claude-code
 
 [`plugins/pi-learn/`](plugins/pi-learn/README.md) runs teach and practice sittings with pi in
 Obsidian's sidebar, beside the notes they write. It holds the sitting controls, keeps answered
-cards readable, and runs the skill's closing procedure on request. Build and install it with
+cards readable, and runs the skill's closing procedure on request. Its `learning-hub` Markdown block projects
+paths, prerequisite-aware next steps, claims and recent handoffs from the vault. The session
+planner supplies a target, desired outcome and time budget; browsing notes leaves an active
+sitting's context fixed. Build and install it with
 `tools/obsidian-plugin pi-learn install`; `bun run check` in the plugin directory typechecks it
 and runs its DOM tests.
 

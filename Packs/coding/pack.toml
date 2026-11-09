@@ -1,4 +1,4 @@
 name        = "coding"
-description = "Engineering craftsmanship: systems-grade Rust and native GPUI desktop development."
+description = "Engineering craftsmanship: systems-grade Rust, native GPUI, and proportionate prior-art investigation and coding-lifecycle reassessment."
 skills      = ["effective-rust", "gpui", "prior-art"]
 license     = "MIT"

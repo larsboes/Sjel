@@ -7,7 +7,7 @@
 # Builds the plugins that have src/main.ts: interactive (knowledge Pack), pi-learn (learning Pack).
 # The first line of dist/main.js records the SHA-256 of src/. tools/obsidian-plugin.test.ts
 # fails when src/ changes without a rebuild. Install keeps the previous bundle in
-# .obsidian/<name>-plugin.prev/, outside the plugins folder so Obsidian does not load it.
+# .obsidian/<name>-plugin.prev.XXXXXX/, outside the plugins folder. Existing backups remain.
 # bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 set -euo pipefail
 
@@ -41,11 +41,13 @@ build() {
 install_plugin() {
   vault="$(python3 "$SJEL_ROOT/Packs/knowledge/skills/obsidian/scripts/vault" root)"
   dest="$vault/.obsidian/plugins/$NAME"
-  prev="$vault/.obsidian/$NAME-plugin.prev"
+  prev=""
   mkdir -p "$dest"
   if [ -f "$dest/main.js" ]; then
-    rm -rf "$prev" && mkdir -p "$prev"
-    cp "$dest"/main.js "$dest"/manifest.json "$dest"/styles.css "$prev"/ 2>/dev/null || true
+    prev="$(mktemp -d "$vault/.obsidian/$NAME-plugin.prev.XXXXXX")"
+    for file in main.js manifest.json styles.css; do
+      [ ! -f "$dest/$file" ] || cp "$dest/$file" "$prev/"
+    done
   fi
   cp "$PLUGIN/dist/main.js" "$PLUGIN/manifest.json" "$PLUGIN/styles.css" "$dest/"
   echo "installed into $dest; reload the plugin in Obsidian to activate it"

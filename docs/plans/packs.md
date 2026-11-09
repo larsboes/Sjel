@@ -62,15 +62,10 @@ drifting copies.
    Limits: publication is not
    crash-atomic across layouts (backups are restored on ordinary failure, the lock is written
    last), and approval records still do not prove who read the findings.
-3. **External skills use the same profile selection.** `tools/skills store` publishes a screened,
-   digest-pinned Pack. `optional_packs` selects an installed external source without making a
-   fresh checkout depend on a machine-local store (`35d866ed`). Anatomy is stored and verified;
-   All six bound harnesses are current. The legacy global `SKILL.md` and Claude link
-   are removed, so they no longer form a second discovery channel; helper-file cleanup remains.
-   The four materialized destinations were completed from an unrestricted terminal and the
-   matrix was re-read on 2026-11-08. Replacement failures return an error before recording
-   success and successful installs verify destination bytes (`35d866ed`). Unchecked: loading Anatomy in a fresh
-   vault-started Pi session. Application-owned skill links remain independently installed.
+3. **Reference storage is not owned adoption.** The store and profile infrastructure was built
+   in P7. Unchanged Anatomy and Matt snapshots remain verified references, excluded from runtime
+   deployment under section 5. The old global Anatomy channel was removed; helper cleanup and
+   independent application-supplied discovery remain part of the ownership audit.
 
 Fixed in `383cb67`: `sync` ignored the profile, the doctor warned for units the profile leaves
 out, and its Claude Code fix hint named the `tools/packs.sh` shim. A ledger now records the
@@ -116,10 +111,49 @@ no profile until the next `use <profile>` on that machine.
    - Recommendation (an estimate, not measured): the store. It closes defect 3 and the vault
      case with the engine that exists, and the P6 digest binds each copy to its approval.
 
-Decided 2026-11-03: coding harnesses use `coding-harness`; pi keeps `full`. Profile reconciliation
-precedes installer hardening. Approved external skills use the content-pinned store.
+Coding harnesses use `coding-harness`; pi keeps `full`. Content-pinned upstream snapshots are
+reference material; runtime selection follows the owned-component decision in section 5.
 
 ## 5. Work packages
+
+Decided 2026-11-08: skills and harness plugins must be owned, maintained adaptations, not wholesale
+upstream installations. This supersedes the store-deployment choice for unchanged skills.
+`CONTRIBUTING.md#owned-agent-components` owns the rule. Matt and Anatomy store snapshots remain
+reference material and are held off every harness. Matt's native Claude and Codex plugins are
+disabled; tracker setup and label provisioning are cancelled. `web-research` remains Sjel-owned.
+
+Decided 2026-11-09: retire Ponytail from runtime and close its temporary migration exception.
+The native Claude plugin is disabled at user scope. Automatic instruction repetition and the
+remaining command suite are explicitly not adopted; no replacement hook or plugin is planned.
+Retained source and its MIT notice are reference material only. No Ponytail code or text was copied.
+
+Selected behavior remains in existing owners: `prior-art` covers minimum-sufficient coding
+through planning, implementation and review; `unslop` needs no additional complexity block.
+Decided 2026-11-09: broaden `prior-art` triggers and add only two sentences for meaningful
+checkpoints, not a new checklist or per-edit loop. The lifecycle probe passed all four assertions
+with both previous and expanded guidance; the baseline already made the desired decisions, so
+no reasoning-quality gain is claimed. Its ladder and safety body is unchanged. The earlier
+planning/review comparison passed 18 assertions for each recorded version. Evidence and
+limitations live in each skill's `evals/`.
+Common inherited context remains a confound, and runtime triggering was not tested. Pi resolves
+both owned sources without diagnostics. Materialized copies remain unchanged to avoid deploying
+unrelated concurrent edits. Metadata and suite checks, self-model freshness, publication hygiene
+and diff checks passed. Doctor still reports an invalid Packs backup source root. Full-workspace
+checks did not run.
+
+Decided 2026-11-09: disable the native Claude `claude-security`, `code-simplifier`,
+`frontend-design`, `plugin-dev` and `skill-creator` plugins, plus Matt's separately enabled Codex
+bundle. The security scanner is no longer available through that plugin; it was not ported.
+Its installed proprietary licence is not eligible for a public Sjel/Pi adaptation. Only the six
+enablement values changed; other Claude settings and Codex configuration matched their
+pre-change fingerprints. Packages and caches remain installed. Tool connectors, language
+servers, Interceptor and account-managed components were not changed. Existing sessions may
+retain loaded behavior until restarted.
+
+Open: audit other native and account-synced plugins and application-bundled skills; classify each
+as owned adaptation, a dependency behind an owned adapter, or unadopted agent behavior requiring
+migration or disabling. Existing unadopted components are unresolved violations, not implicit
+exceptions. The wider migration is not complete. Full-workspace checks did not run.
 
 | # | Work | Done when |
 |---|---|---|

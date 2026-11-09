@@ -27,6 +27,8 @@ so set it only for a vault with no confidential notes.
   point of need, never loaded up front.
 - **`defuddle`** — clean markdown out of a web page for review and knowledge
   extraction. It does not write to the vault or create a clipping inbox.
+- **`web-research`** selects web and AI Studio routes for public information. Software
+  investigation and repo research reports belong to the upstream `research` skill, when installed.
 
 ## Why one skill instead of eight
 

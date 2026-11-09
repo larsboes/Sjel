@@ -1,0 +1,65 @@
+{
+  "skill_name": "prior-art",
+  "note": "Cases 1–3 are the earlier planning comparison recorded in comparison.json. Case 4 covers coding-lifecycle checkpoints, recorded in lifecycle-comparison.json. Neither isolates inherited context or measures runtime skill selection or end-to-end implementation.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Synthetic fixture: src/http.ts owns requestWithRetry; src/a.ts and src/b.ts call it. The requested change is only the default timeout from 5 to 10 seconds. The owning function and its existing tests are identified. State the first two actions before editing. Do not execute tools or implement the change.",
+      "assertions": [
+        "Inspect the owning implementation and affected callers/tests before editing.",
+        "Keep investigation local to the identified owner unless that inspection exposes an unresolved dependency.",
+        "Do not require a repository-wide prior-art script, a new agent, or a new abstraction for this known-owner change."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Synthetic Sjel-shaped repository, ownership not yet established: add extraction of ZIP archives supplied by untrusted users. Someone proposes a new archive framework. State the evidence needed before choosing a dependency or writing an extractor. Do not execute tools or implement it.",
+      "assertions": [
+        "Require an actual search for an existing owner/implementation and installed dependencies before selecting a new framework.",
+        "Consider standard-library or platform facilities without claiming their mere availability proves safe extraction.",
+        "Preserve checks for archive entries escaping the destination; do not trade trust-boundary validation for brevity."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Synthetic fixture: two import paths call one shared destination-path helper. A report says one import can escape its allowed root. The proposed quick fix adds a guard only to that caller. Explain the next investigation and the smallest justified repair boundary. Do not execute tools or implement it.",
+      "assertions": [
+        "Trace the shared helper and both callers before choosing the repair.",
+        "Prefer fixing a shared invariant when the evidence shows both paths need it, rather than assuming a caller-only patch is sufficient.",
+        "Retain focused regression coverage for affected imports without requiring unrelated full-workspace work."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Synthetic coding-lifecycle fixture. A local CSV export is the entire approved task. Treat these as three independent checkpoints: A) Mid-implementation, a newly found existing writer is confirmed to satisfy the required quoting and error behavior, making this task's unfinished factory and service scaffolding redundant. B) The scoped export works, relevant positive and negative tests pass, and no contradictory evidence remains; a speculative general export framework is suggested. C) A shorter implementation exists, but its required path-containment regression test fails. For A, B and C, choose the next action and briefly explain it, at most 140 words total. Do not execute tools, make edits or claim checks ran.",
+      "assertions": [
+        "A: change course to the confirmed existing writer and remove only superseded task scaffolding, rather than finishing it because effort was invested.",
+        "B: stop the satisfied task; do not invent another audit, abstraction or cleanup round without new evidence.",
+        "C: keep the required containment contract and failing regression check; fix the defect instead of declaring the shorter solution sufficient.",
+        "Do not claim actual tool execution, completed edits, or independently verified test results."
+      ]
+    }
+  ],
+  "trigger_tests": {
+    "should_trigger": [
+      "Should we add a dependency for this parser?",
+      "Check prior art before building a new module.",
+      "Halfway through implementation, the approach is growing too complex. Reconsider what is actually needed.",
+      "The task works and checks pass. Should this coding change stop here?"
+    ],
+    "should_not_trigger": [
+      "Where is this symbol defined? (near-miss: ordinary code lookup, no build decision)",
+      "Make this paragraph less formal. (near-miss: human-writing)"
+    ]
+  },
+  "baseline": {
+    "captured": "2026-11-09",
+    "method": "Previous owned skill snapshot supplied to a fresh owned Pi agent; no tools. Common inherited session guidance is present in both arms.",
+    "finding": "Core choices were already sound. The candidate removes unnecessary mandatory broad-search instructions and reduces loaded guidance; no broad quality or speed gain is assumed.",
+    "evidence": "evals/baseline.json"
+  },
+  "results": {
+    "planning_comparison": "evals/comparison.json",
+    "lifecycle_comparison": "evals/lifecycle-comparison.json"
+  }
+}

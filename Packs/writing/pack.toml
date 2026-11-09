@@ -13,7 +13,7 @@
 # `codex/` is absent here; the merged Packs brought only skills and, from academic-writing, the
 # `agents/` directory of eight review lenses.
 name        = "writing"
-description = "What an agent produces for a human reader, and how the agent's own skills get authored: human-voiced prose with a CI-gateable tell linter, academic drafting and cite-checking with an adversarial multi-skeptic review pass, code and web UI stripped of AI tells, and the meta-skill that authors and audits agent skills."
+description = "What an agent produces for a human reader, and how the agent's own skills get authored: human-voiced prose with a CI-gateable tell linter, academic drafting and cite-checking with an adversarial multi-skeptic review pass, code and web UI review with behavioral regression fixtures, and the meta-skill that authors and audits agent skills."
 skills      = ["skill-creator", "human-writing", "academic-writing", "unslop"]
 # `skill-creator` carries `writing-skills` forward and supersedes it. A `retired_skills` entry
 # lets an adapter remove a prior installation it owns — needed because `writing-skills` was

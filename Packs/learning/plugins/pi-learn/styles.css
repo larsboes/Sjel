@@ -6,11 +6,13 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
+  min-width: 0;
   padding: 0 !important;
   overflow: hidden;
 }
 
-/* Small uppercase labels, the one typographic accent of the view. */
+/* Quiet labels leave the lesson as the main reading surface. */
 .pi-learn-label,
 .pi-learn-card-label,
 .pi-learn-badge,
@@ -18,25 +20,29 @@
 .pi-learn-divider,
 .pi-learn-hint,
 .pi-learn-meter {
-  font-family: var(--pl-label);
+  font-family: var(--font-interface);
   font-size: var(--font-ui-smaller);
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
   color: var(--text-muted);
 }
 .pi-learn-label,
 .pi-learn-card-label,
 .pi-learn-badge,
 .pi-learn-chip,
-.pi-learn-divider { text-transform: uppercase; }
+.pi-learn-divider { text-transform: none; }
 
 /* ── head ── */
 
 .pi-learn-head {
+  flex: none;
+  min-width: 0;
+  max-height: 50%;
+  overflow-y: auto;
   padding: var(--size-4-3) var(--pl-gap) var(--size-4-2);
   border-bottom: 1px solid var(--background-modifier-border);
 }
-.pi-learn-head-row { display: flex; align-items: center; gap: var(--size-4-2); }
-.pi-learn-title { flex: 1; min-width: 0; }
+.pi-learn-head-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--size-4-2); }
+.pi-learn-title { flex: 1 1 180px; min-width: 0; }
 .pi-learn-title-name {
   font-family: var(--font-interface);
   font-size: var(--font-ui-large);
@@ -48,7 +54,7 @@
   cursor: pointer;
 }
 .pi-learn-title-name.is-none { color: var(--text-faint); cursor: default; }
-.pi-learn-title-sub { font-size: var(--font-ui-smaller); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pi-learn-title-sub { font-size: var(--font-ui-smaller); color: var(--text-muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; margin-top: 3px; }
 
 .pi-learn button.pi-learn-chip {
   display: inline-flex;
@@ -56,7 +62,7 @@
   gap: 4px;
   height: 22px;
   padding: 0 8px;
-  border-radius: 11px;
+  border-radius: var(--radius-s);
   background: transparent;
   box-shadow: none;
   border: 1px solid var(--background-modifier-border);
@@ -107,6 +113,7 @@
 .pi-learn-plan svg { max-width: 100%; height: auto; }
 
 .pi-learn-status {
+  flex: none;
   padding: var(--size-4-1) var(--pl-gap);
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
@@ -116,19 +123,26 @@
 /* ── stream ── */
 
 .pi-learn-stream {
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
   padding: var(--pl-gap);
   display: flex;
   flex-direction: column;
   gap: var(--pl-gap);
 }
+.pi-learn-stream > * { flex: none; min-width: 0; max-width: 100%; }
 
 .pi-learn-empty { margin: auto 0; display: flex; flex-direction: column; gap: var(--size-4-1); text-align: center; }
 .pi-learn-empty-title { font-family: var(--font-interface); font-size: var(--font-ui-medium); font-weight: var(--font-semibold); color: var(--text-normal); }
 .pi-learn-empty-note { text-align: center; font-size: var(--font-ui-smaller); color: var(--text-faint); margin-top: var(--size-4-2); }
 
-.pi-learn-msg { font-size: var(--font-text-size); line-height: var(--line-height-normal); user-select: text; }
+.pi-learn-msg { font-size: var(--font-ui-medium); line-height: 1.6; user-select: text; overflow-wrap: anywhere; }
+.pi-learn-msg :is(pre, table) { max-width: 100%; overflow-x: auto; }
+.pi-learn-msg pre { white-space: pre; }
 .pi-learn-msg.is-user {
   align-self: flex-end;
   max-width: 88%;
@@ -152,7 +166,7 @@
   font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
-  margin: calc(-1 * var(--size-4-2)) 0;
+  padding-block: var(--size-4-1);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -161,6 +175,24 @@
 .pi-learn-tool.is-error { color: var(--text-error); }
 .pi-learn-tool-icon { display: inline-flex; flex: none; }
 .pi-learn-tool-icon svg { width: 12px; height: 12px; }
+.pi-learn-tool > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pi-learn-activity { color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.pi-learn-activity > summary { cursor: pointer; padding-block: var(--size-4-1); }
+.pi-learn-activity.has-error > summary { color: var(--text-error); }
+.pi-learn-error {
+  border-left: 2px solid var(--text-error);
+  padding: var(--size-4-2) var(--size-4-3);
+  background: var(--background-primary-alt);
+  font-size: var(--font-ui-small);
+  overflow-wrap: anywhere;
+}
+.pi-learn-error-title { font-weight: var(--font-semibold); color: var(--text-error); }
+.pi-learn-error p { margin: var(--size-4-2) 0; }
+.pi-learn-error-help { color: var(--text-muted); }
+.pi-learn-error-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--size-4-2); }
+.pi-learn-error-actions details { min-width: 0; max-width: 100%; }
+.pi-learn-error-actions summary { cursor: pointer; color: var(--text-muted); }
+.pi-learn-error-actions pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--font-ui-smaller); user-select: text; }
 
 /* ── cards ── */
 
@@ -307,6 +339,8 @@
 /* ── dock: composer and footer, kept clear of the status bar ── */
 
 .pi-learn-dock {
+  flex: none;
+  min-width: 0;
   padding: var(--size-4-2) var(--pl-gap) calc(var(--size-4-3) + var(--pi-learn-statusbar, 28px));
   border-top: 1px solid var(--background-modifier-border);
 }
@@ -322,6 +356,7 @@
 .pi-learn-composer:focus-within { border-color: var(--background-modifier-border-focus); }
 .pi-learn-input {
   flex: 1;
+  min-width: 0;
   min-height: 28px;
   resize: none;
   padding: 5px 0;
@@ -343,7 +378,7 @@
 .pi-learn button.pi-learn-send svg { width: 16px; height: 16px; }
 .pi-learn.is-streaming button.pi-learn-send { background: var(--interactive-normal); color: var(--text-normal); }
 
-.pi-learn-foot { display: flex; align-items: center; gap: var(--size-4-2); margin-top: var(--size-4-2); }
+.pi-learn-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--size-4-2); margin-top: var(--size-4-2); min-width: 0; }
 .pi-learn-select {
   max-width: 48%;
   height: 22px;
@@ -360,6 +395,71 @@
 .pi-learn-select + .pi-learn-select { max-width: 30%; }
 .pi-learn-meter { margin-left: auto; color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-.pi-learn button.pi-learn-model { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; display: block; text-align: left; }
+.pi-learn button.pi-learn-model { flex: 1 1 100px; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; display: block; text-align: left; }
 .pi-learn-suggest-name { font-family: var(--font-monospace); font-size: var(--font-ui-small); }
 .pi-learn-suggest-meta { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+
+/* Shared roles fall back to the current theme when no vault snippet is present. */
+.pi-learn,
+.learn-hub,
+.learning-hub {
+  --learn-space: var(--learn-gap, var(--size-4-3));
+  --learn-border: var(--learn-rule, var(--background-modifier-border));
+  --learn-highlight: var(--learn-accent, var(--interactive-accent));
+  --learn-corner: var(--learn-radius, var(--radius-s));
+}
+.pi-learn { --pl-gap: var(--learn-space); }
+.pi-learn button.pi-learn-send { background: var(--learn-highlight); }
+.pi-learn-composer:focus-within { border-color: var(--learn-highlight); }
+.pi-learn-planner {
+  margin-top: var(--learn-space);
+  padding-top: var(--learn-space);
+  border-top: 1px solid var(--learn-border);
+  font-size: var(--font-ui-small);
+  max-height: 45vh;
+  overflow-y: auto;
+}
+.pi-learn-planner summary,
+.learn-hub summary { cursor: pointer; font-weight: var(--font-semibold); }
+.pi-learn-planner label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+  margin-block: var(--size-4-2);
+  color: var(--text-muted);
+}
+.pi-learn-planner :is(input, select) { width: 100%; min-width: 0; color: var(--text-normal); }
+.pi-learn-planner button { margin-block: var(--size-4-2); }
+.pi-learn :is(input, select, button, summary):focus-visible,
+.learn-hub :is(a, button, summary):focus-visible {
+  outline: 2px solid var(--learn-highlight);
+  outline-offset: 3px;
+}
+.markdown-preview-view.learning-hub .markdown-preview-sizer,
+.markdown-source-view.learning-hub .cm-sizer {
+  max-width: var(--learn-width, 1080px);
+  margin-inline: auto;
+}
+.markdown-preview-view.learning-hub .metadata-container,
+.markdown-preview-view.learning-hub .inline-title { display: none; }
+.learning-hub h1 { font-family: var(--font-interface); font-size: 1.85em; }
+.learning-hub h2 { font-family: var(--font-interface); font-size: 1.1em; }
+.learn-hub-toolbar,
+.learn-hub-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--learn-space); }
+.learn-hub-toolbar { justify-content: space-between; }
+.learn-hub-path {
+  padding: var(--learn-space) 0;
+  border-top: 1px solid var(--learn-border);
+}
+.learn-hub-path-title { font-size: 1.12em; font-weight: var(--font-semibold); overflow-wrap: anywhere; }
+.learn-hub-summary { color: var(--text-muted); margin-block: var(--size-4-2); }
+.learn-hub-progress { font-variant-numeric: tabular-nums; }
+.learn-hub button { border-radius: var(--learn-corner); white-space: normal; height: auto; min-height: 30px; }
+.learn-hub button:disabled { opacity: 0.6; cursor: default; }
+.learn-hub-practice { margin-block: var(--learn-space); border-block: 1px solid var(--learn-border); padding-block: var(--learn-space); }
+.learn-hub-practice li { margin-block: var(--size-4-2); }
+.learn-hub-practice li button { margin-inline-start: var(--learn-space); }
+@media (max-width: 600px) {
+  .learn-hub-toolbar { align-items: flex-start; flex-direction: column; }
+  .learning-hub h1 { font-size: 1.5em; }
+}

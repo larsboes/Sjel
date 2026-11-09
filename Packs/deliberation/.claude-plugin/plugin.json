@@ -1,9 +1,0 @@
-{
-  "name": "deliberation",
-  "description": "Five ways to work a decision: produce candidate options when there are none, crystallize an unstructured mess into a precise document, convene a council that debates the options, red-team the proposal that wins, and root-cause the failure when one happens anyway.",
-  "author": {
-    "name": "Lars Boes",
-    "url": "https://github.com/larsboes/Sjel"
-  },
-  "license": "MIT"
-}

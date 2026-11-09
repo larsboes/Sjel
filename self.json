@@ -3667,7 +3667,7 @@
     },
     {
       "name": "r2d2_sqlite",
-      "verdict": "adopt"
+      "verdict": "reject"
     },
     {
       "name": "radicale",
@@ -3719,6 +3719,10 @@
     },
     {
       "name": "semver",
+      "verdict": "adopt"
+    },
+    {
+      "name": "setup-uv",
       "verdict": "adopt"
     },
     {

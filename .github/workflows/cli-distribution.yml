@@ -1,4 +1,4 @@
-name: CLI-only Linux distribution
+name: CLI-only distribution
 
 on:
   workflow_dispatch:
@@ -13,10 +13,16 @@ on:
     paths:
       - tools/distribution/**
       - .github/workflows/cli-distribution.yml
+      - Cargo.toml
+      - Cargo.lock
+      - crates/**
   pull_request:
     paths:
       - tools/distribution/**
       - .github/workflows/cli-distribution.yml
+      - Cargo.toml
+      - Cargo.lock
+      - crates/**
 
 permissions:
   contents: read
@@ -27,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
@@ -59,11 +65,11 @@ jobs:
         shell: bash
         run: |
           archive=$(find "$RUNNER_TEMP/sjel-cli-dist" -maxdepth 1 -name 'sjel-cli-*.tar.gz' -print)
-          digest=$(sha256sum "$archive" | cut -d' ' -f1)
+          digest=$(shasum -a 256 "$archive" | cut -d' ' -f1)
           update=$(find "$RUNNER_TEMP/sjel-cli-update" -maxdepth 1 -name 'sjel-cli-*.tar.gz' -print)
-          update_digest=$(sha256sum "$update" | cut -d' ' -f1)
+          update_digest=$(shasum -a 256 "$update" | cut -d' ' -f1)
           bash tools/distribution/cli-smoke.sh "$archive" "$digest" "$update" "$update_digest"
-      - name: Retain testable Linux archive
+      - name: Retain tested CLI archive
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sjel-cli-${{ matrix.runner }}

@@ -25,7 +25,7 @@ reqwest = "0.13"
 rayon = "1"
 proptest = "1"
 regex = "1"
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 libsql = { version = "0.10.0", default-features = false, features = ["core"] }
 serde = "1.0"
 serde_json = "1.0"

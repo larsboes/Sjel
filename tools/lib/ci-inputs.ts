@@ -14,7 +14,6 @@ const SELF = ["self.json", "upstreams.toml", "**/service.toml", "crates/*/**", "
 export const GATES: Record<string, { cmd: string[]; inputs: string[]; cheap: boolean }> = {
   "generator-inputs-tracked": gate("check-generator-inputs-tracked", [...GENERATOR, "**/.gitignore", ".gitignore"]),
   "architecture-fresh": gate("check-architecture-fresh", [...GENERATOR, "libs/*/**", "ARCHITECTURE.md", "upstreams.toml", "systems.toml"], false),
-  "marketplace-fresh": gate("check-marketplace-fresh", ["tools/generate-marketplace.ts", "Packs/*/pack.toml", "Packs/*/.claude-plugin/**", ".claude-plugin/**", "profiles.toml", ...CLI], false),
   "service-tomls": gate("check-service-tomls", ["**/service.toml", "schemas/service.toml.example", "**/*.rs", "**/*.ts", "**/*.py"]),
   "route-schemas": gate("check-route-schemas", ["tools/route-schema-baseline.txt", "crates/*/src/*.rs", "capabilities/*/src/*.rs", "**/service.toml", "Cargo.toml"]),
   "manifest-integrity": gate("check-manifest-integrity", ["**/service.toml", "crates/*/**", "services/*/**", "capabilities/*/**"]),

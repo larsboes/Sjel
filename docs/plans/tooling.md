@@ -8,6 +8,13 @@ then move it to Done here.
 Entry format: what was needed, what the agent did instead, and the smallest tooling change that
 covers it.
 
+## Harness delivery
+
+Claude Code Pack installation uses the profile-aware harness adapter only. The native marketplace
+catalogue, per-Pack manifests, generator and freshness gate are retired; project hooks and the
+automatic-memory setting remain in `.claude/settings.json`. Attribution references to upstream
+plugin metadata remain intact. CI selection regressions cover the remaining gate registry.
+
 ## CLI installation and release delivery
 
 Decided 2026-11-09: deliver a checkout-free CLI and coding-harness installation before desktop
@@ -19,7 +26,7 @@ and branch policy.
 Implemented (`7b219631`), not released: `tools/distribution/prepare.ts cli` packages coding-only resources
 and frozen production extension dependencies; `cli-install.sh` and `cli-management.sh` provide
 explicit updates, integrity checks and retained-version recovery. The Linux workflow targets
-Ubuntu 24.04 x86-64 and ARM64 and runs `cli-smoke.sh` in an isolated home. Commands, requirements
+Ubuntu 24.04 x86-64/ARM64 and macOS 15 ARM64 and runs `cli-smoke.sh` in an isolated home. Commands, requirements
 and the HTTPS/checksum trust model are owned by
 [Operations](../../website/content/operations/index.md#cli-only-coding-installation).
 
@@ -57,9 +64,23 @@ Git blocked; Pi settings remain unchanged across the update. The repository test
 rebuilt `sjel-cli` during review; the other release binaries were reused. The initial Linux
 workflow compiled both architectures but refused archive hardlinks during installation. Payload
 materialization now breaks those links before archiving; 17 distribution tests with 942 assertions
-pass on macOS and network-disabled Linux ARM64. Local formatting, publication and selected
-repository gates pass. Fresh real-binary Linux smoke and full Rust CI remain pending; no tag or
-publication is authorized. Doctor retains the unrelated Packs backup-source failure.
+pass on macOS and network-disabled Linux ARM64. Real Linux x86-64/ARM64 builds and install,
+update and rollback smoke pass at `4d99bce5` (Actions run `42615269707`). Fresh patched-source
+builds, macOS smoke and full CI remain release gates. A `v0.0.2` draft is the next delivery;
+public publication remains a separate approval. Doctor retains the unrelated Packs backup-source
+failure.
+
+## CI integration
+
+The shell-test job installs uv through the pinned official action. Permission-gate tests use a
+remote write that still requires approval, not newly permitted local commits. Storage process-group
+termination separates options from its negative group identifier for GNU and BSD kill. Focused
+agent/status Rust suites pass (65 and 112 tests), and CI-selection regressions pass (113 tests).
+
+Bundled SQLite is upgraded to the patched `libsqlite3-sys` through rusqlite. `sjel-store` keeps
+r2d2 but owns the file-backed manager because the external adapter prevents the dependency upgrade.
+Its 14 tests and strict Clippy pass; the root lockfile security scan reports no unfiltered issues.
+Fresh full CI remains required before tagging.
 
 ## Signed macOS helper
 

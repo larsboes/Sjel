@@ -346,12 +346,19 @@ license = "MIT"
 summary = "Rust SQLite binding with bundled SQLite that is Sjel's database since Postgres was retired"
 why = "The database since Postgres was retired (PRD Q45, 2026-08-27): 462 of 464 live columns are SQLite-native and the write rate is 0.30 commits/s, so single-writer WAL with a busy_timeout is ample. Taken with `bundled` so a deployment does not depend on the SQLite an OS image happens to ship, and its blocking API is the one the sync call sites are written against."
 
-[r2d2_sqlite]
-url = "https://github.com/ivanceras/r2d2-sqlite"
+[setup-uv]
+url = "https://github.com/astral-sh/setup-uv"
 verdict = "adopt"
 license = "MIT"
-summary = "r2d2 pool manager for SQLite that applies connection settings in one place for Sjel's store"
-why = "The r2d2 manager for rusqlite, whose `with_init` applies journal_mode, busy_timeout and foreign_keys to every connection in one place instead of at 134 call sites. foreign_keys is the one that fails silently, because SQLite parses REFERENCES either way and does not enforce it."
+summary = "Pinned official uv setup action for Python-backed CI shell tests"
+why = "The shell test job needs uv just as local development does. The official action installs that existing tool without introducing a separate Python package-management path; its revision is pinned in the workflow and caching is disabled."
+
+[r2d2_sqlite]
+url = "https://github.com/ivanceras/r2d2-sqlite"
+verdict = "reject"
+license = "MIT"
+summary = "SQLite pool adapter replaced by sjel-store's file-backed connection manager"
+why = "Its dependency bound prevents upgrading to the patched bundled SQLite. Sjel needs only file-backed connections and shared connection initialization; sjel-store implements that small r2d2 interface without copied upstream code."
 
 [libsql]
 url = "https://github.com/tursodatabase/libsql"

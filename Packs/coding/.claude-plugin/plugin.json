@@ -1,9 +1,0 @@
-{
-  "name": "coding",
-  "description": "Engineering craftsmanship: systems-grade Rust and native GPUI desktop development.",
-  "author": {
-    "name": "Lars Boes",
-    "url": "https://github.com/larsboes/Sjel"
-  },
-  "license": "MIT"
-}

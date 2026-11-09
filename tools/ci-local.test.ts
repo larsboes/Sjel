@@ -211,7 +211,7 @@ describe("fast checks over synthetic roots", () => {
     expect(f.run().exitCode).toBe(0);
     expect(f.calls()).toContain("cargo fmt --all --check");
     expect(f.calls()).toContain("gates gates --ids");
-    expect(f.calls()).not.toMatch(/TEST-RAN|FORBIDDEN|clippy|cargo test|architecture-fresh|marketplace-fresh|skill-eval/);
+    expect(f.calls()).not.toMatch(/TEST-RAN|FORBIDDEN|clippy|cargo test|architecture-fresh|skill-eval/);
   });
 
   test("GPUI impact selects its format check, and format failure blocks", () => {

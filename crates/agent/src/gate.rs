@@ -409,7 +409,7 @@ mod tests {
         // A command the policy asks about, so the refusal comes from the missing overlay rather
         // than from a rule that blocks it outright.
         let Verdict::Deny(reason) =
-            gate.tool_call(&call("bash", json!({"command": "git commit -m x"})))
+            gate.tool_call(&call("bash", json!({"command": "git push origin main"})))
         else {
             panic!("a write with nowhere to record a decision must be refused");
         };
@@ -420,13 +420,13 @@ mod tests {
     fn a_granted_call_is_allowed_without_asking_again() {
         let dir = scratch("granted");
         let gate = gate(&dir);
-        let bash = call("bash", json!({"command": "git commit -m x"}));
+        let bash = call("bash", json!({"command": "git push origin main"}));
         gate.grants.note_pending("a1", key(&bash));
         assert!(gate.grants.allow_for_session("a1"));
         assert_eq!(gate.tool_call(&bash), Verdict::Allow);
         // The grant is for those exact arguments: another command asks (and here, has no overlay).
         assert!(matches!(
-            gate.tool_call(&call("bash", json!({"command": "git push origin main"}))),
+            gate.tool_call(&call("bash", json!({"command": "git push upstream main"}))),
             Verdict::Deny(_)
         ));
     }

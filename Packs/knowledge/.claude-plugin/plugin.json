@@ -1,9 +1,0 @@
-{
-  "name": "knowledge",
-  "description": "Knowledge work on the learning vault — subject notes under the vault contract, the wiki layer, research, and clean web capture.",
-  "author": {
-    "name": "Lars Boes",
-    "url": "https://github.com/larsboes/Sjel"
-  },
-  "license": "MIT"
-}

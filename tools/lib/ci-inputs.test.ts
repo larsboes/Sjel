@@ -322,9 +322,9 @@ describe("UI package discovery and external dependencies", () => {
 });
 
 describe("gates and full verification", () => {
-  test("registry preserves every former repo-gates command", () => {
+  test("registry contains every supported repo-gates command", () => {
     expect(Object.values(GATES).map((g) => g.cmd.join(" ")).sort()).toEqual([
-      "tools/check-generator-inputs-tracked.sh", "tools/check-architecture-fresh.sh", "tools/check-marketplace-fresh.sh",
+      "tools/check-generator-inputs-tracked.sh", "tools/check-architecture-fresh.sh",
       "tools/check-service-tomls.sh", "tools/check-route-schemas.sh", "tools/check-manifest-integrity.sh",
       "tools/check-doc-self-references.sh", "tools/check-skill-metadata.sh", "tools/check-skill-metadata.test.sh",
       "tools/check-presentations-theme-contract.sh", "tools/check-presentations-theme-contract.test.sh", "tools/skill-eval check --all",
@@ -340,7 +340,7 @@ describe("gates and full verification", () => {
     const plan = select(["docs/plans/unrelated.md"]);
     expect(plan.gates).toEqual(["doc-self-references", "publication-hygiene"]);
     expect(plan.bun).toEqual(["readers/doc.test.ts"]);
-    for (const id of ["architecture-fresh", "marketplace-fresh", "service-tomls", "store-transactions", "persistence-orphans", "self"]) {
+    for (const id of ["architecture-fresh", "service-tomls", "store-transactions", "persistence-orphans", "self"]) {
       expect(plan.gates).not.toContain(id);
     }
   });
@@ -348,8 +348,7 @@ describe("gates and full verification", () => {
   test.each([
     ["crates/thing/README.md", "architecture-fresh"],
     ["ARCHITECTURE.md", "architecture-fresh"],
-    ["Packs/demo/pack.toml", "marketplace-fresh"],
-    ["Packs/demo/.claude-plugin/plugin.json", "marketplace-fresh"],
+    ["Packs/demo/pack.toml", "architecture-fresh"],
     ["crates/thing/service.toml", "service-tomls"],
     ["Packs/demo/skills/example/SKILL.md", "skill-metadata"],
     ["Packs/demo/skills/example/SKILL.md", "skill-metadata-test"],
@@ -377,7 +376,7 @@ describe("gates and full verification", () => {
   test("Cargo and sjel-cli implementation changes reach all CLI-backed gates", () => {
     for (const file of ["Cargo.toml", "Cargo.lock", "crates/sjel-cli/src/main.rs", ".cargo/config.toml"]) {
       const gates = select([file]).gates;
-      for (const id of ["marketplace-fresh", "self", "persistence-orphans"]) expect(gates).toContain(id);
+      for (const id of ["self", "persistence-orphans"]) expect(gates).toContain(id);
     }
   });
 

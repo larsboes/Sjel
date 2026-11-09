@@ -66,10 +66,10 @@
 //!
 //! ## Dependency rule
 //!
-//! Its dependency surface stays intentionally narrow: `rusqlite`, `r2d2` and
-//! `r2d2_sqlite` are the complete database stack shared by store-owning
-//! capabilities. Path resolution is NOT here — `sjel_config::database_path`
-//! owns where the file lives, because that is overlay knowledge.
+//! Its dependency surface stays intentionally narrow: `rusqlite` and `r2d2`
+//! are the complete database stack shared by store-owning capabilities. Path resolution
+//! is NOT here — `sjel_config::database_path` owns where the file lives, because that is
+//! overlay knowledge.
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -78,11 +78,36 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{Connection, Row, Transaction, TransactionBehavior};
 
 /// So a capability needs one database dependency, not two that can disagree.
 pub use rusqlite;
+
+/// Opens and validates file-backed connections for the shared pool.
+#[derive(Debug)]
+pub struct SqliteConnectionManager {
+    path: PathBuf,
+}
+
+impl r2d2::ManageConnection for SqliteConnectionManager {
+    type Connection = Connection;
+    type Error = rusqlite::Error;
+
+    fn connect(&self) -> Result<Connection, Self::Error> {
+        let conn = Connection::open(&self.path)?;
+        conn.set_prepared_statement_cache_capacity(STATEMENT_CACHE_SIZE);
+        conn.execute_batch(CONNECTION_PRAGMAS)?;
+        Ok(conn)
+    }
+
+    fn is_valid(&self, conn: &mut Connection) -> Result<(), Self::Error> {
+        conn.query_row("SELECT 1", [], |_| Ok(()))
+    }
+
+    fn has_broken(&self, _conn: &mut Connection) -> bool {
+        false
+    }
+}
 
 /// A pooled SQLite connection. Derefs to [`rusqlite::Connection`], so a call
 /// site holding one reads as if it held the connection itself.
@@ -226,10 +251,9 @@ fn pool_for_key(key: &Path) -> Result<Pool, Box<dyn Error>> {
         return Ok(existing.clone());
     }
 
-    let manager = SqliteConnectionManager::file(key).with_init(|conn: &mut Connection| {
-        conn.set_prepared_statement_cache_capacity(STATEMENT_CACHE_SIZE);
-        conn.execute_batch(CONNECTION_PRAGMAS)
-    });
+    let manager = SqliteConnectionManager {
+        path: key.to_path_buf(),
+    };
     let pool = r2d2::Pool::builder()
         .max_size(MAX_CONNECTIONS)
         .min_idle(Some(0))
@@ -559,20 +583,35 @@ mod tests {
     fn every_connection_gets_the_pragmas() {
         let path = temp_database("pragmas");
         let pool = open_pool(&path, "pragma_probe", |_| Ok(())).unwrap();
-        let conn = pool.get().unwrap();
+        let connections = [pool.get().unwrap(), pool.get().unwrap()];
+        for conn in &connections {
+            let journal: String = conn
+                .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(journal.to_lowercase(), "wal");
+            let foreign_keys: i64 = conn
+                .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(foreign_keys, 1, "REFERENCES is unenforced without this");
+            let busy: i64 = conn
+                .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(busy, 5_000);
+        }
+    }
 
-        let journal: String = conn
-            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(journal.to_lowercase(), "wal");
-        let foreign_keys: i64 = conn
-            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(foreign_keys, 1, "REFERENCES is unenforced without this");
-        let busy: i64 = conn
-            .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(busy, 5_000);
+    #[test]
+    fn connection_manager_reports_open_errors_and_validates_connections() {
+        use r2d2::ManageConnection;
+        let path = temp_database("manager");
+        let manager = super::SqliteConnectionManager { path: path.clone() };
+        let mut conn = manager.connect().unwrap();
+        manager.is_valid(&mut conn).unwrap();
+        assert!(!manager.has_broken(&mut conn));
+        let invalid = super::SqliteConnectionManager {
+            path: path.join("missing/db"),
+        };
+        assert!(invalid.connect().is_err());
     }
 
     /// The parent directory is created by `open`, not by importing this crate.

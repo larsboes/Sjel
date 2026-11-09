@@ -1,9 +1,0 @@
-{
-  "name": "cognitive-load",
-  "description": "Shape agent output for a constrained reader: the ADHD output style, which leads with the next action and restates state every turn, and ASD-STE100 controlled language for strings an agent must parse without ambiguity.",
-  "author": {
-    "name": "Lars Boes",
-    "url": "https://github.com/larsboes/Sjel"
-  },
-  "license": "MIT"
-}

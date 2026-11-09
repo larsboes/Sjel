@@ -21,7 +21,7 @@ contains "$out" "pack deploy"
 # tools is in the list because it is indexed. The index itself is asserted by the unit tests
 # in tools/sjel-cli/src/search.rs, which `cargo test --workspace` runs.
 contains "$out" "search <words...>              Search commands, tools, capabilities, Packs and code"
-contains "$out" "storage <report|discover|installed|reclaim|target>"
+contains "$out" "storage <browse|report|discover|installed|reclaim|target>"
 contains "$out" "gates"
 contains "$out" "test"
 contains "$out" "cargo <args...>"

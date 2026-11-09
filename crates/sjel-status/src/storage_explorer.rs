@@ -317,7 +317,7 @@ impl ProcessGroup {
         #[cfg(unix)]
         {
             let status = std::process::Command::new("/bin/kill")
-                .args(["-KILL", &format!("-{id}")])
+                .args(["-KILL", "--", &format!("-{id}")])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())

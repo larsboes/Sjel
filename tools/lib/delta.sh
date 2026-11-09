@@ -118,7 +118,7 @@ EOF
   log="$(git -C "$SJEL_ROOT" log --oneline "$from..$to" 2>/dev/null || true)"
   if [ -n "$log" ]; then
     n="$(printf '%s\n' "$log" | wc -l | tr -d ' ')"
-    printf '%s\n' "$log" | head -"$cap" | sed 's/^/  /'
+    printf '%s\n' "$log" | sed -n "1,${cap}s/^/  /p"
     [ "$n" -gt "$cap" ] && echo "  … +$((n - cap)) more"
   else
     echo "  (none)"

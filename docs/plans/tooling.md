@@ -83,7 +83,9 @@ Its 14 tests and strict Clippy pass; the root lockfile security scan reports no 
 Full Rust tests and security scanning pass at `ed070ee8`; strict CI found an iterator-conversion
 lint after the dependency upgrade, and a shell fixture could terminate its listing producer early.
 Both are corrected, including removal of the marketplace-only CLI route. Fresh full CI remains
-required before tagging.
+required before tagging. Release and update previews drain the full history stream when capping
+commit output. A 200-commit fixture checks fifteen displayed rows, the explicit remainder and
+successful completion under errexit and pipefail.
 
 ## Signed macOS helper
 

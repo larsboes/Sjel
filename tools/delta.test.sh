@@ -60,12 +60,12 @@ OUT="$(print_manifest_delta "$FROM" "$TO")"
 
 fails=0
 want() {  # want <description> <substring that must appear>
-  if printf '%s' "$OUT" | grep -qF -- "$2"; then :; else
+  if printf '%s' "$OUT" | grep -F -- "$2" >/dev/null; then :; else
     echo "FAIL: $1 (missing: $2)"; fails=$((fails + 1))
   fi
 }
 absent() {  # absent <description> <substring that must NOT appear>
-  if printf '%s' "$OUT" | grep -qF -- "$2"; then
+  if printf '%s' "$OUT" | grep -F -- "$2" >/dev/null; then
     echo "FAIL: $1 (unexpected: $2)"; fails=$((fails + 1))
   fi
 }
@@ -77,6 +77,22 @@ want   "upstream baz added"       "+ baz"
 want   "foo verdict changed"      "~ foo: adopt → overlay"
 absent "bar verdict unchanged"    "~ bar"
 want   "toolchain jq added"       "+ jq"
+
+tree="$(git -C "$SCRATCH" rev-parse "$TO^{tree}")"
+tip="$TO"
+padding="$(printf '%01024d' 0)"
+for i in $(seq 1 200); do
+  tip="$(printf 'history fixture %s %s\n' "$i" "$padding" | git -C "$SCRATCH" commit-tree "$tree" -p "$tip")"
+done
+OUT="$(set -e; print_manifest_delta "$TO" "$tip")"
+status=$?
+if [ "$status" -ne 0 ]; then
+  echo "FAIL: capped large history exits $status under errexit and pipefail"
+  fails=$((fails + 1))
+fi
+want "large history reports its remainder" "… +185 more"
+rows="$(printf '%s\n' "$OUT" | grep -c 'history fixture')"
+[ "$rows" -eq 15 ] || { echo "FAIL: expected 15 commit rows, got $rows"; fails=$((fails + 1)); }
 
 if [ "$fails" -gt 0 ]; then
   echo "delta.sh: $fails check(s) failed"

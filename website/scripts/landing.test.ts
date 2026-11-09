@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { renderLanding } from "./landing.ts";
 import { THEME_INIT_SCRIPT } from "./style.ts";
 
@@ -14,6 +15,27 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe("landing page", () => {
+  test("puts the installer in the hero and near the top of the README with publication warnings", () => {
+    const command = "curl -LsSf https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh";
+    const html = renderLanding({ units: [], upstreams: [] });
+    const hero = html.slice(html.indexOf('<div class="hero">'), html.indexOf("<main>"));
+    expect(hero).toContain(`<code>${command}</code>`);
+    expect(hero).toContain('class="btn primary" href="#install"');
+    expect(hero).toContain('id="install" role="region" aria-labelledby="install-title"');
+    expect(hero).toContain("Awaiting public release.");
+    expect(hero).toContain("This URL is not live yet.");
+    expect(hero).toContain('href="docs/operations/index.html#cli-only-coding-installation"');
+    expect(hero).not.toContain("git clone");
+    expect(hero).not.toContain("tools/demo-up");
+    expect(hero.indexOf(command)).toBeLessThan(hero.indexOf('<p class="lede">'));
+    const readme = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
+    const firstSection = readme.slice(0, readme.indexOf("## What it is"));
+    expect(firstSection).toContain(command);
+    expect(firstSection).toContain("## Install the CLI");
+    expect(firstSection.indexOf(command)).toBeLessThan(firstSection.indexOf('<a href="LICENSE">'));
+    expect(firstSection).toContain("Awaiting public release: this URL is not live yet.");
+  });
+
   test("every capability is listed and links to its reference page, an unmapped one under Platform", () => {
     const html = renderLanding({
       units: [

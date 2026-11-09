@@ -45,6 +45,10 @@ and `releases/download/v0.0.3/install.sh`. No separate hosting or Pages routing 
 `prepare.ts` renders a POSIX stdin entry point around the existing Bash lifecycle installer,
 with the artifact version as its default. The versioned runtime retains latest-version discovery
 for later explicit updates. Shared bootstrap assets are checksummed and merged across platforms.
+The command appears directly below the README introduction and in the website hero, with an
+adjacent publication warning and links to installation options. The hero's primary action leads
+to the installer rather than source/demo setup. Browser layout checks place the command fully
+inside desktop (1512×827) and narrow (375×844) viewports, with no page-level horizontal overflow.
 
 Curl and GNU wget are supported without disabling TLS verification or allowing HTTP redirects.
 Downloader configuration files are ignored. Prerequisites are checked before creating the install

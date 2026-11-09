@@ -10,6 +10,17 @@
 
 <p align="center"><b>A private layer under the tools you already use. It connects the areas of your life and keeps them on your own machines.</b></p>
 
+## Install the CLI
+
+macOS ARM64 and Linux x86-64/ARM64. **Awaiting public release: this URL is not live yet.**
+
+~~~sh
+curl -LsSf https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh
+~~~
+
+No source checkout or Rust toolchain is needed. This installs the CLI and coding resources, not
+the desktop app or node services. [wget, pinned versions and setup details](#install).
+
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
   <a href="https://github.com/larsboes/Sjel/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/larsboes/Sjel/actions/workflows/ci.yml/badge.svg"></a>
@@ -21,7 +32,7 @@
 <p align="center">
   <a href="#where-it-stands">Where it stands</a> ·
   <a href="#how-it-works">How it works</a> ·
-  <a href="#install">Install</a> ·
+  <a href="#install-the-cli">Install</a> ·
   <a href="#measured">Measured</a> ·
   <a href="research/README.md">Research</a> ·
   <a href="PLAN.md">Plan</a>

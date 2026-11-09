@@ -162,10 +162,14 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 400 16px/1.6 va
 .btn.ghost { border: 1px solid var(--line); color: var(--fg); background: transparent; }
 .btn.ghost:hover { background: var(--teal-tint); border-color: var(--teal); color: var(--teal); }
 
-.quickstart { margin-top: 1.75rem; background: var(--card); border: 1px solid var(--line); border-radius: 2px; overflow: hidden; max-width: 48rem; box-shadow: 0 4px 20px rgba(0,0,0,0.04); }
+.quickstart { margin: 1.75rem 0; background: var(--card); border: 1px solid var(--line); border-radius: 2px; overflow: hidden; max-width: 48rem; box-shadow: 0 4px 20px rgba(0,0,0,0.04); }
 .quickstart-head { display: flex; align-items: center; justify-content: space-between; padding: .5rem .85rem; background: var(--code); border-bottom: 1px solid var(--line); font: 500 .74rem var(--mono); color: var(--fg); text-transform: uppercase; letter-spacing: .06em; }
 .quickstart-head span.sub { font-size: .72rem; color: var(--dim); text-transform: none; letter-spacing: normal; }
-.quickstart pre { margin: 0; padding: .85rem 1rem; background: var(--term-bg); font: .8rem/1.65 var(--mono); color: var(--term-fg); border: none; }
+.quickstart pre { margin: 0; padding: .85rem 1rem; background: var(--term-bg); font: .8rem/1.65 var(--mono); color: var(--term-fg); border: none; overflow-x: auto; }
+.quickstart { scroll-margin-top: 5rem; }
+.quickstart-head { flex-wrap: wrap; gap: .4rem; }
+.quickstart-note { margin: 0; padding: .65rem 1rem; font-size: .82rem; color: var(--dim); }
+.quickstart a { color: var(--teal); text-underline-offset: .15em; }
 .quickstart pre .p { color: var(--teal); font-weight: 600; }
 .com { color: var(--dim-subtle); }
 .mark { justify-self: center; width: min(100%, 22rem); }
@@ -453,25 +457,25 @@ ${THEME_SCRIPT}
       <div>
         <p class="eyebrow">Local-first kernel · Rust · macOS &amp; iOS</p>
         <h1>Your life data, at home.</h1>
+        <div class="quickstart blueprint" id="install" role="region" aria-labelledby="install-title">
+          <div class="quickstart-head">
+            <span id="install-title">Install the CLI</span>
+            <span class="sub">macOS ARM64 · Linux x86-64/ARM64</span>
+          </div>
+          <p class="quickstart-note"><strong>Awaiting public release.</strong> This URL is not live yet.</p>
+          <pre class="term"><code>curl -LsSf ${REPO}/releases/latest/download/install.sh | sh</code></pre>
+          <p class="quickstart-note">CLI and coding resources only. No source checkout or Rust toolchain.
+            <a href="docs/operations/index.html#cli-only-coding-installation">wget, pinned versions and setup</a> ·
+            <a href="docs/index.html">Documentation</a>
+          </p>
+        </div>
         <p class="lede">Sjel connects the fragmented areas of your life—travel, calendar, finance, contacts, notes, and documents—into one private SQLite system on hardware you control. A data-class gate keeps combined analysis safe at home, so models only see what you explicitly admit.</p>
         <div class="cta">
-          <a class="btn primary" href="docs/index.html">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-            Read the docs
-          </a>
+          <a class="btn primary" href="#install">Install the CLI</a>
           <a class="btn ghost" href="${REPO}">
             ${GITHUB_ICON}
             <span>GitHub</span>
           </a>
-        </div>
-        <div class="quickstart blueprint">
-          <div class="quickstart-head">
-            <span>Try the seeded demo</span>
-            <span class="sub">No personal credentials needed</span>
-          </div>
-          <pre class="term"><span class="p">$</span> git clone https://github.com/larsboes/Sjel.git &amp;&amp; cd Sjel
-<span class="p">$</span> tools/demo-up    <span class="com"># run seeded demo stack &amp; mock services</span>
-<span class="p">$</span> tools/doctor     <span class="com"># verify machine toolchain &amp; local health</span></pre>
         </div>
       </div>
       <div class="mark"><img src="hedgehog.svg" alt="The Sjel hedgehog" width="600" height="407"></div>

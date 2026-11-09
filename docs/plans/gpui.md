@@ -637,11 +637,14 @@ NSH Mail caches its filtered row projection with `computed`; three focused Mail 
 pass, including retained rows, filter changes and removal. Frame-time and device
 checks remain open.
 
-Decided 2026-11-07: GPUI Fast draws the Mac app, and [NSH](https://github.com/longbridge/nsh)
-draws new phone screens with UIKit views. GPUI draws every pixel itself, which suits the desktop.
-On the phone it has to rebuild text selection, input methods and accessibility that UIKit already
-has. NSH's GPUI backend runs on the same `gpui-fast` the Mac app uses, so one NSH screen also
-opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-stack.md).
+Decided 2026-11-09, superseding the NSH trial of 2026-11-07: GPUI Fast draws the Mac app and
+[NSH](https://github.com/longbridge/nsh) draws the phone with UIKit views. GPUI draws every pixel
+itself, which suits the desktop. On the phone it has to rebuild text selection, input methods and
+accessibility that UIKit already has. NSH's GPUI backend runs on the same `gpui-fast` the Mac app
+uses, so an NSH screen also opens inside the Mac app. No Mac page moves to NSH before items 5 and
+6 below pass. Generated UI follows [Generated views](#generated-views-priority-3). Rejected
+alternatives, the red-team findings and the council:
+[`research/ui-stack.md`](../../research/ui-stack.md#2026-11-09-the-long-term-stack-and-how-generated-ui-runs).
 
 ### Built
 
@@ -732,7 +735,43 @@ so it resolves to the Mac app's 0.1.14.
    Swift verification results are recorded below. CoreSimulator refuses its service connection;
    XcodeGen cannot replace its generated project under the current permissions, so simulator
    rendering and a linked host build have not passed.
-5. **The Mac window's content** was not looked at (`SJEL_NSH_TRIAL=1`). Whether Mac pages move to
-   NSH is not decided.
-6. **A smaller `ui/`.** The phone's GPUI shell and phone-only views are removed. GPUI pages
-   still used by the Mac remain behind the `gpui` feature; a desktop migration is not decided.
+5. **A Sjel-owned NSH facade.** NSH screens reach NSH only through `ui/src/nsh_ui.rs`, which
+   already holds the shared controls and `snapshot`. Screen state moves from process-wide statics
+   (`static ... OnceLock`, a global `set_host`, as in `ui/src/nsh_today.rs`) to state owned by
+   each `AppView`. Done when `grep -rn "use nsh_" apps/gpui/ui/src` matches only the facade and
+   `theme/nsh.rs` (58 lines in 16 files on 2026-11-09), and NSH Mail opens in two Mac windows
+   under `SJEL_NSH_TRIAL=mail` without one window's actions changing the other.
+6. **Measure NSH Mail inside GPUI against GPUI Mail.** `apps/gpui/bench-scroll` passes only
+   `SJEL_GPUI_*` variables, so it cannot launch the NSH trial yet. Extend it to build with
+   `--features nsh-trial` and set `SJEL_NSH_TRIAL=mail`, then scroll both Mail pages on the same
+   data. NSH passes when its p95 frame cost is within 10 % of GPUI Mail's, it has no more frames
+   over the 8.3 ms budget, and every row action is reachable by keyboard and VoiceOver. The
+   10 % threshold is an estimate. Also look at the Mac window's content, which nobody
+   has done (`SJEL_NSH_TRIAL=1`).
+7. **Decide the Mac from item 6.** Pass: each area converges on one NSH screen, one area at a time,
+   and the area's GPUI page is deleted in the same change; GPUI keeps the shell and any surface a
+   measurement shows NSH cannot carry. Fail: the Mac stays GPUI, each shared area keeps two
+   screens over the same `core` view-models, and the result goes into
+   [`research/ui-stack.md`](../../research/ui-stack.md) with its numbers.
+8. **A smaller `ui/`.** The phone's GPUI shell and phone-only views are removed. GPUI pages
+   still used by the Mac remain behind the `gpui` feature until item 7 decides.
+
+### Generated views (Priority 3)
+
+An agent-generated view is a document that a catalog schema validates, rendered on the Mac and the
+phone by Sjel's own components. No model-written TSX, JavaScript or HTML runs. Decided 2026-11-09.
+Why NSH TSX packages and web-view HTML were rejected is in
+[`research/ui-stack.md`](../../research/ui-stack.md#council).
+
+The schema and its validation go in `apps/gpui/core`, because both devices share them, and the
+components go in `ui/src` behind the NSH facade (item 5). A view node names a read route from
+`route-manifest` and its parameters, and the renderer fetches it through `device::Source`. A view
+never calls a write route. A write reaches the user only as a proposal, which goes through the
+capability's existing write mode and its Allow. The model gets the schema and pseudonymized
+examples. Mail or feed text inside a view is rendered as text and never interpreted.
+
+Work starts when `route-manifest` carries a response schema for each route a view may read (today
+it has only an optional `request_schema`) and the read allow-list is explicit. Done when one view
+document renders on the Mac and the phone, a schema-invalid document is refused with an error that
+names the failing node, a document that names a write route is refused, and a saved view survives
+an app restart.

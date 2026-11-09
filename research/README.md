@@ -36,7 +36,8 @@ deleted, when a source turns out wrong.
 - [Can the phone read Sjel's data without this Mac?](offline-on-the-phone.md): five routes to an
   offline copy, measured against this machine's 275 MB / 108-table database, and what decides each.
 - [Which UI stack carries Sjel to every platform?](ui-stack.md): GPUI, GPUI Kit, GPUI Fast,
-  `gpui-mobile`, Zed's `gpui_ios` and NSH as of 2026-11-07, and why the phone gets an NSH trial.
+  `gpui-mobile`, Zed's `gpui_ios` and NSH as of 2026-11-07; the long-term stack, the rejected
+  alternatives, a red-team pass and a council on the Mac and generated UI as of 2026-11-09.
 
 ## Ideas
 

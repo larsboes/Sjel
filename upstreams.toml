@@ -938,24 +938,70 @@ revisit = "Decide after stage 2 of docs/plans/gpui.md section 11: adopt if bench
 url = "https://github.com/longbridge/gpui-mobile"
 verdict = "fork"
 license = "GPL-3.0-or-later OR AGPL-3.0-or-later OR Apache-2.0"
-summary = "GPUI platform crate for iOS and Android that a Swift or Kotlin host embeds; Sjel's current phone renderer"
-why = "Only GPUI platform for a Swift-hosted app: Zed's gpui_ios owns the app lifecycle. GPUI Kit 0.9.1 needs gpui-pre 0.3.12, and upstream main was still on 0.3.10 on 2026-11-09, so Sjel pins a fork at 0.3.12 that re-vendors gpui-pre-wgpu with its offscreen patch. It is a bridge until the NSH trial decides the phone (docs/plans/gpui.md section 11)."
-revisit = "Return to the upstream rev when it reaches the snapshot GPUI Kit pins. Remove the dependency when the last phone screen leaves GPUI."
+summary = "GPUI platform crate for iOS and Android that a Swift or Kotlin host embeds; Sjel's former phone renderer"
+why = "Only GPUI platform for a Swift-hosted app: Zed's gpui_ios owns the app lifecycle. GPUI Kit 0.9.1 needs gpui-pre 0.3.12, and upstream main was still on 0.3.10 on 2026-11-09, so Sjel pins a fork at 0.3.12 that re-vendors gpui-pre-wgpu with its offscreen patch. Removed in b59879d0 when the last phone screen moved to NSH (docs/plans/gpui.md section 11)."
+revisit = "Reopen only if NSH stops shipping and the phone returns to GPUI."
 
 [gpui-pre-ios]
 url = "https://github.com/zed-industries/zed/tree/main/crates/gpui_ios"
 verdict = "watch"
 license = "Apache-2.0"
-summary = "Zed's own iOS platform for GPUI, published as gpui-pre-ios; the fallback if the NSH trial fails"
+summary = "Zed's own iOS platform for GPUI, published as gpui-pre-ios; the fallback if NSH stops shipping"
 why = "Maintained in the Zed repository with native UIKit text input, and published at 0.3.11 since 2026-10-19. It owns UIApplication and the scene delegate, so Sjel's Swift host would invert: Rust starts the app and calls RoomPlan, audio and pairing through FFI."
-revisit = "Decide if the NSH trial in docs/plans/gpui.md section 11 fails."
+revisit = "Decide if NSH stops shipping or loses its UIKit backend."
 
 [nsh]
 url = "https://github.com/longbridge/nsh"
 verdict = "adopt"
 license = "Apache-2.0"
-summary = "Rust UI framework that renders with each platform's own views; the phone's renderer for new screens"
+summary = "Rust UI framework that renders with each platform's own views; the phone's renderer"
 why = "Renders with UIKit and Android views, embeds into an existing iOS app as NshAppView and into a GPUI app on the gpui-fast GPUI Kit selects, so one screen can serve the phone natively and the Mac. v0.4.0 on 2026-11-04, created 2026-10-14; evidence in research/ui-stack.md. Sjel pins a main rev: the published nsh-platform-ios 0.4.0 includes a file outside its package, and the v0.4.0 GPUI backend does not compile against gpui-fast 0.1.13 (both checked 2026-11-07)."
+
+
+[dioxus-native]
+url = "https://github.com/dioxuslabs/blitz"
+verdict = "watch"
+license = "Apache-2.0"
+summary = "Rust React-style UI drawn on the GPU by the Blitz HTML/CSS engine; a candidate desktop renderer"
+why = "Read 2026-11-09: Blitz is in beta and Dioxus 0.8 is in alpha, and it draws its own pixels, so it does not answer the phone's need for platform text input. Comparison in research/ui-stack.md."
+revisit = "Evaluate if Blitz reaches a stable release and the Mac measurement in docs/plans/gpui.md section 11 fails for both GPUI and NSH."
+
+[valdi]
+url = "https://github.com/Snapchat/Valdi"
+verdict = "watch"
+license = "MIT"
+summary = "Snap's TypeScript UI framework compiled to native iOS, Android and macOS views"
+why = "Read 2026-11-09: open-source beta since 2025-11 after eight years inside Snapchat, built with Bazel, with no Rust core, so Sjel's core would sit behind a bridge. Comparison in research/ui-stack.md."
+revisit = "Evaluate if NSH stops shipping and Valdi leaves beta."
+
+[compose-multiplatform]
+url = "https://github.com/JetBrains/compose-multiplatform"
+verdict = "reject"
+license = "Apache-2.0"
+summary = "JetBrains' Kotlin UI framework for Android, iOS and the JVM desktop"
+why = "Stable on iOS and desktop (read 2026-11-09), but Kotlin on the JVM: a second language and a JVM resident beside a Rust core. Comparison in research/ui-stack.md."
+
+[tauri]
+url = "https://github.com/tauri-apps/tauri"
+verdict = "reject"
+license = "Apache-2.0"
+summary = "Rust app shell around the system web view; the retired dashboard's shell"
+why = "Sjel's Tauri dashboard retired in d9c77aae. A web view suits generated HTML but not dense data with platform text input, and model-written HTML runs model JavaScript (research/ui-stack.md, 2026-11-09)."
+
+[a2ui]
+url = "https://github.com/a2ui-project/a2ui"
+verdict = "watch"
+license = "Apache-2.0"
+summary = "Open format in which an agent streams UI as data that a client renders from a trusted component catalog"
+why = "Same shape as Sjel's planned generated views (docs/plans/gpui.md, Generated views): data validated against a catalog, no agent code. It has no Rust renderer, so Sjel builds its own; read 2026-11-09."
+revisit = "Evaluate its schema as the view document format when the generated-views work in docs/plans/gpui.md starts."
+
+[mcp-apps]
+url = "https://github.com/modelcontextprotocol/ext-apps"
+verdict = "reject"
+license = "NOASSERTION (GitHub)"
+summary = "MCP extension that ships interactive HTML widgets as ui:// resources run in a host iframe"
+why = "Launched 2026-01-26. Rejected as Sjel's generated-view format because the widget is HTML and JavaScript that runs in a web view, which docs/plans/gpui.md rules out for model-written UI (research/ui-stack.md, 2026-11-09)."
 
 [rune]
 url = "https://github.com/anomalyco/rune"

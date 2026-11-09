@@ -49,8 +49,9 @@ even when compilation and unit tests pass.
 ## Priority 3: agent features and expansion
 
 - Agent UI, terminal conveniences, plugins, Pi comparison, retrieval and optimization loops:
-  [`agent.md`](docs/plans/agent.md). Existing containment remains; additional harness support
-  follows [`containment.md`](docs/plans/containment.md).
+  [`agent.md`](docs/plans/agent.md). Generated views follow the catalog in
+  [`gpui.md` §11](docs/plans/gpui.md#generated-views-priority-3). Existing containment remains;
+  additional harness support follows [`containment.md`](docs/plans/containment.md).
 - Pack deployment levels and account synchronization: [`packs.md`](docs/plans/packs.md).
   Defects in current installation integrity can rise to Priority 0 or 1.
 - New learning surfaces and automation: [`learning.md`](docs/plans/learning.md).
@@ -81,7 +82,7 @@ Dated decisions that span areas. Area decisions are in each area plan.
 | Decision | Date |
 |---|---|
 | The dashboard retires. GPUI is the one app. | 2026-10-22 |
-| GPUI Fast renders the desktop. The phone runs a trial of NSH, with `gpui-mobile` as the bridge until it decides ([`gpui.md` §11](docs/plans/gpui.md#11-ui-stack)). | 2026-11-07 |
+| GPUI Fast renders the Mac and NSH renders the phone. `gpui-mobile` is removed (`b59879d0`). No Mac page moves to NSH until a Sjel-owned NSH facade exists and `bench-scroll` measures NSH Mail inside GPUI against GPUI Mail on Sjel data. If it matches, the target is one NSH screen per area. Generated UI is a declarative catalog that Sjel's components render, built in Priority 3. Model-written TSX packages and HTML do not run. Supersedes the NSH trial decision of 2026-11-07 ([`gpui.md` §11](docs/plans/gpui.md#11-ui-stack), [research](research/ui-stack.md#2026-11-09-the-long-term-stack-and-how-generated-ui-runs)). | 2026-11-09 |
 | Generic tables (`DataTable`), rich-text/Markdown readers (`TextView`), and date/time pickers (`Calendar`, `DatePicker`, `TimeField`) use the installed `gpui-kit` and `nsh-base` primitives styled through `apps/gpui/ui/src/primitives`, heavy media uses native OS views (`PDFKit`, `MapLibre`), and custom layout code stays reserved for Sjel-specific surfaces ([`gpui.md` §7](docs/plans/gpui.md#7-ui-and-ux-roadmap)). | 2026-11-08 |
 | Target one database per capability or agent. | 2026-10-23 |
 | The Obsidian vault holds learning only: `teach`, `practice`, claim notes and subject knowledge. Every other note, fact and link source moves into Sjel data; the inventory is in [`storage.md`](docs/plans/storage.md#vault-holds-learning-only). Supersedes "knowledge stays in the vault until moving it hurts" (2026-10-23). | 2026-11-08 |

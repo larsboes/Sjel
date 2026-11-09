@@ -42,12 +42,12 @@ use sjel_gpui_core::terminal::Host;
 use sjel_gpui_ui::agent_seat::AgentSeat;
 use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
 use sjel_gpui_ui::interior::RoomPlanHistory;
+use sjel_gpui_ui::nsh_today::{self, TodayEvent};
 use sjel_gpui_ui::people::{People, PeopleEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
 use sjel_gpui_ui::sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 use sjel_gpui_ui::soundscape::Soundscape;
 use sjel_gpui_ui::terminal::{TerminalDeck, TerminalEvent};
-use sjel_gpui_ui::nsh_today::{self, TodayEvent};
 use sjel_gpui_ui::{
     mobile_tab_bar, step_terminal_font_size, AccentColor, AppearanceSettings, BackgroundTone,
     Density, NavItem, NotifyPrefs, Palette, SoundscapePrefs, TerminalFont, ThemeContext, ThemeMode,

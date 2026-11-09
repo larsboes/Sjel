@@ -31,13 +31,13 @@ pub mod media;
 pub mod music;
 pub mod nav;
 #[cfg(feature = "nsh")]
+pub mod nsh_capture;
+#[cfg(feature = "nsh")]
 pub mod nsh_documents;
 #[cfg(feature = "nsh")]
 pub mod nsh_mail;
 #[cfg(feature = "nsh")]
 pub mod nsh_today;
-#[cfg(feature = "nsh")]
-pub mod nsh_capture;
 pub mod packs;
 pub mod pdf_kit;
 pub mod people;

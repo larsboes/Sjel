@@ -20,6 +20,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
 use crate::nsh_capture::capture_screen;
 use crate::nsh_mail::mail_screen;
+use crate::nsh_people::people_screen;
 use crate::nsh_today::today_screen;
 
 /// The native component that shows a PDF at a file path (`ios/src/nsh.rs` registers it).
@@ -31,6 +32,7 @@ pub enum NshPage {
     #[default]
     Today,
     Capture,
+    People,
     Documents,
     Mail,
 }
@@ -447,6 +449,7 @@ pub fn NshHostScreen() -> impl IntoElement {
         .child(view().flex_1().child(dynamic(move || match page.get() {
             NshPage::Today => today_screen().into_element(),
             NshPage::Capture => capture_screen().into_element(),
+            NshPage::People => people_screen().into_element(),
             NshPage::Documents => documents_screen().into_element(),
             NshPage::Mail => mail_screen().into_element(),
         })))

@@ -6,10 +6,10 @@ use super::*;
 /// `SJEL_REGISTER=places` opens the Places side of the People tab, and `SJEL_PERSON=Ada` opens the
 /// card of the first person whose name contains that text. Both exist so a screenshot can reach a
 /// page a hand did not navigate to, like `SJEL_DAY` and `SJEL_TAB`; a phone never sets either.
-pub(crate) fn launch_register() -> sjel_gpui_ui::people::Register {
+pub(crate) fn launch_register() -> sjel_gpui_ui::nsh_people::Register {
     match std::env::var("SJEL_REGISTER").unwrap_or_default().as_str() {
-        "places" => sjel_gpui_ui::people::Register::Places,
-        _ => sjel_gpui_ui::people::Register::People,
+        "places" => sjel_gpui_ui::nsh_people::Register::Places,
+        _ => sjel_gpui_ui::nsh_people::Register::People,
     }
 }
 
@@ -42,7 +42,7 @@ pub(crate) fn launch_tab() -> Tab {
     match std::env::var("SJEL_TAB").unwrap_or_default().as_str() {
         "projects" => Tab::Projects,
         "calendar" => Tab::Calendar,
-        "people" => Tab::People,
+        "people" => nsh_tab(Tab::People),
         "interior" => Tab::Interior,
         "inbox" => nsh_tab(Tab::Inbox),
         "travel" => Tab::Travel,
@@ -61,6 +61,7 @@ fn nsh_tab(tab: Tab) -> Tab {
         use sjel_gpui_ui::nsh_documents::{set_nsh_page, NshPage};
         set_nsh_page(match tab {
             Tab::Inbox => NshPage::Capture,
+            Tab::People => NshPage::People,
             Tab::Documents => NshPage::Documents,
             Tab::Mail => NshPage::Mail,
             _ => NshPage::Today,

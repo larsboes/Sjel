@@ -37,6 +37,8 @@ pub mod nsh_documents;
 #[cfg(feature = "nsh")]
 pub mod nsh_mail;
 #[cfg(feature = "nsh")]
+pub mod nsh_people;
+#[cfg(feature = "nsh")]
 pub mod nsh_today;
 pub mod packs;
 pub mod pdf_kit;

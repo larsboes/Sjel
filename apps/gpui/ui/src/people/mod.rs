@@ -7,7 +7,6 @@
 mod actions;
 mod detail;
 mod forms;
-mod register;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -30,7 +29,6 @@ use actions::*;
 use forms::{Form, FormKind};
 
 pub use actions::bind_keys;
-pub use register::*;
 
 pub mod page {
     pub use super::*;
@@ -577,4 +575,24 @@ mod tests {
             cx.notify();
         });
     }
+}
+
+/// A person's initials in a round badge, as the Mac's list and card draw them.
+pub fn initials_badge(initials: &str, palette: Palette) -> gpui::AnyElement {
+    use gpui::{div, prelude::*, px, rgb, rgba};
+    div()
+        .flex_none()
+        .size(px(32.))
+        .rounded_full()
+        .bg(rgba(crate::tint(palette.accent, 0x22)))
+        .border_1()
+        .border_color(rgba(crate::tint(palette.accent, 0x44)))
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_xs()
+        .font_weight(gpui::FontWeight::BOLD)
+        .text_color(rgb(palette.accent))
+        .child(initials.to_owned())
+        .into_any_element()
 }

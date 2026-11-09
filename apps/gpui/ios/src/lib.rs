@@ -43,7 +43,6 @@ use sjel_gpui_ui::agent_seat::AgentSeat;
 use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
 use sjel_gpui_ui::interior::RoomPlanHistory;
 use sjel_gpui_ui::nsh_today::{self, TodayEvent};
-use sjel_gpui_ui::people::{People, PeopleEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
 use sjel_gpui_ui::sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 use sjel_gpui_ui::soundscape::Soundscape;
@@ -169,6 +168,8 @@ enum Event {
     OpenEdge(Seat),
     /// What the NSH Today screen asked for (`sjel_gpui_ui::nsh_today`).
     Today(TodayEvent),
+    /// An NSH screen asked for a newer copy of the Mac's data.
+    RefreshCopy,
 }
 
 pub struct Capabilities {
@@ -216,10 +217,6 @@ pub struct Capabilities {
     terminal_note: Option<SharedString>,
     /// Shared Interior scan history and review, with local captures joined to Mac revisions.
     interior: gpui::Entity<RoomPlanHistory>,
-    /// The People and Places registers over the same copy (`sjel_gpui_ui::people`). Read-only:
-    /// the registry's writes are the operator's, so this tab draws and never offers a control that
-    /// would have to be refused.
-    people: gpui::Entity<People>,
     /// The copy last opened, kept so a refresh that fails cannot blank a page that is readable.
     copy: Option<Arc<Mirror>>,
     /// True while a copy is being fetched, so one tap cannot start a second fetch.
@@ -317,7 +314,6 @@ impl Capabilities {
         .detach();
         // People and Places read the same copy, so one fetch feeds both pages. Refresh asks for a
         // newer copy: there is nothing to sync, because nothing here writes.
-        let people = cx.new(|_| People::new(Density::Mobile));
         let mail = cx.new(|cx| {
             sjel_gpui_ui::mail::Mail::new(
                 sjel_gpui_core::data::Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)),
@@ -352,17 +348,11 @@ impl Capabilities {
         // The register and the card a screenshot needs, for the same reason `SJEL_DAY` exists: a
         // page a hand did not navigate to still has to be photographable (`launch_register`,
         // `launch_person`).
-        people.update(cx, |people, cx| {
-            people.set_register(launch_register(), cx);
-            if let Some(name) = launch_person() {
-                people.open_named(&name, cx);
-            }
-        });
-        cx.subscribe(&people, |view, _, event, cx| match event {
-            PeopleEvent::Refresh => view.refresh_copy(cx),
-            PeopleEvent::Editing(open) => keyboard(*open),
-        })
-        .detach();
+        sjel_gpui_ui::nsh_people::set_register(launch_register());
+        if let Some(name) = launch_person() {
+            sjel_gpui_ui::nsh_people::open_named(&name);
+        }
+        sjel_gpui_ui::nsh_people::set_refresh(|| crate::host::announce(Event::RefreshCopy));
         // The NSH capture screen writes the phone's own replica, so it needs nothing from the Mac.
         // A capture that landed reloads the queue, which syncs if this launch reached the Mac.
         sjel_gpui_ui::nsh_capture::set_wrote(|| crate::host::announce(Event::Wrote));
@@ -443,7 +433,6 @@ impl Capabilities {
             travel: cx.new(|cx| sjel_gpui_ui::travel::Travel::new(None, Density::Mobile, cx)),
             projects: None,
             calendar,
-            people,
             interior,
             mail,
             documents,
@@ -1132,8 +1121,6 @@ impl Render for Capabilities {
             .update(cx, |travel, cx| travel.set_palette(palette, cx));
         self.calendar
             .update(cx, |calendar, cx| calendar.set_palette(palette, cx));
-        self.people
-            .update(cx, |people, cx| people.set_palette(palette, cx));
         self.interior
             .update(cx, |history, cx| history.set_palette(palette, cx));
         self.soundscape
@@ -1611,7 +1598,6 @@ impl Render for Capabilities {
                     })
                     .when(is_travel, |page| page.child(self.travel.clone()))
                     .when(is_calendar, |page| page.child(self.calendar.clone()))
-                    .when(is_people, |page| page.child(self.people.clone()))
                     .when(is_documents, |page| {
                         page.child(
                             div()

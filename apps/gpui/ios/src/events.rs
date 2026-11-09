@@ -22,9 +22,7 @@ impl Capabilities {
                         self.calendar.update(cx, |calendar, cx| {
                             calendar.set_copy(Some(copy.clone()), None, cx)
                         });
-                        self.people.update(cx, |people, cx| {
-                            people.set_copy(Some(copy.clone()), None, cx)
-                        });
+                        sjel_gpui_ui::nsh_people::set_copy(Some(copy.clone()), None);
                         nsh_today::set_copy(Some(copy), None);
                     }
                     // A refresh that fails leaves the copy already on screen alone:
@@ -34,17 +32,14 @@ impl Capabilities {
                             self.calendar.update(cx, |calendar, cx| {
                                 calendar.set_copy(None, Some(error.clone()), cx)
                             });
-                            self.people.update(cx, |people, cx| {
-                                people.set_copy(None, Some(error.clone()), cx)
-                            });
+                            sjel_gpui_ui::nsh_people::set_copy(None, Some(error.clone()));
                             nsh_today::set_copy(None, Some(error));
                         } else {
                             let note = format!("Could not fetch a newer copy: {error}");
                             self.calendar.update(cx, |calendar, cx| {
                                 calendar.set_note(Some(note.clone()), cx)
                             });
-                            self.people
-                                .update(cx, |people, cx| people.set_note(Some(note.clone()), cx));
+                            sjel_gpui_ui::nsh_people::set_note(Some(note.clone()));
                             nsh_today::set_note(Some(note));
                         }
                     }
@@ -347,6 +342,7 @@ impl Capabilities {
             Event::SelectTab(tab) => self.select_tab(tab, cx),
             Event::OpenEdge(seat) => self.open_edge(seat, cx),
             Event::Today(event) => self.on_today(event, cx),
+            Event::RefreshCopy => self.refresh_copy(cx),
         }
     }
 }

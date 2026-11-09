@@ -67,6 +67,7 @@ the same code.
 
 | Part | Today |
 |---|---|
+| CLI and coding tooling | Checkout-free preview for macOS ARM64 and Ubuntu 24.04-class Linux x86-64/ARM64. See [Install](#install). |
 | Mac app | 25 main pages. Travel, Map, Inventory and Wishlist are partly built ([route matrix](docs/plans/gpui.md#1-route-matrix)). |
 | iPhone app | The same GPUI code inside a UIKit host, on TestFlight as `Sjel Life`. It pairs with the Mac over Bonjour and keeps a local LibSQL copy that syncs both ways. |
 | Public page | [larsboes.github.io/Sjel](https://larsboes.github.io/Sjel/). Screenshots of the native app are open ([`restructure.md` §4](docs/plans/restructure.md#4-the-public-page)). |
@@ -140,12 +141,49 @@ smart. Using and maintaining it may not require that smartness.
 | Pseudonymizer in front of cloud model calls and admitted agent reads | Implemented for `comms` cloud calls and capabilities that admit the agent gate. The [access policy](website/content/architecture/security.md#agent-access-policy) controls admission. |
 | Data about other people sent to a cloud model pseudonymized, or synced end-to-end encrypted | Target |
 | Model selection: device model or local decision engine, with heuristic fallback | Selection and fallback paths implemented. Available models depend on the device and configured services. |
-| Small install with optional downloadable capabilities | Release preparation exists for Mac DMGs, node archives and native iOS archives. First-run setup and a clean-user install remain open ([#235](https://github.com/larsboes/Sjel/issues/235)). |
+| Small install with optional downloadable capabilities | CLI-only preview archives are built and smoke-tested. Mac DMG, node and native iOS delivery remain preparation paths. First-run setup and clean-user acceptance remain open ([#235](https://github.com/larsboes/Sjel/issues/235)). |
 | iCloud connection, encrypted by Sjel | Relay built and tested (`apps/mac`). Nothing syncs through it yet. |
 
 ## Install
 
-There is no packaged release yet. To prepare a source-based node on macOS or Linux:
+### CLI and coding tooling (preview)
+
+The CLI installs without a source checkout or Rust toolchain. It includes coding Packs and
+harness integration helpers, not the desktop app, node services, model weights or credentials.
+Pi, Claude Code and other harness executables must be installed and authenticated separately.
+
+`v0.0.2` is a [draft release](https://github.com/larsboes/Sjel/releases), not a public download.
+The following example requires GitHub CLI authentication with maintainer access to the draft.
+It selects macOS ARM64; the [CLI installation guide](website/content/operations/index.md#cli-only-coding-installation)
+lists Linux archives, system requirements and installation options.
+
+~~~sh
+archive=sjel-cli-v0.0.2-aarch64-apple-darwin.tar.gz
+gh release download v0.0.2 --repo larsboes/Sjel \
+  --pattern "$archive" --pattern cli-install.sh --pattern SHA256SUMS \
+  --dir sjel-cli-preview
+cd sjel-cli-preview
+digest=$(awk -v name="$archive" '$2 == name {print $1}' SHA256SUMS)
+bash cli-install.sh --archive "$archive" --sha256 "$digest"
+export PATH="$HOME/.local/bin:$PATH"
+sjel --version
+sjel harnesses list
+~~~
+
+The PATH change applies to the current shell. For later shells, add `~/.local/bin` to the shell
+configuration if it is not already present. Installation does not change harness settings.
+After Pi is installed, `sjel pack use pi coding-harness` explicitly activates its coding profile.
+Other harnesses use `sjel harnesses use coding-harness --harness <id>`.
+
+`sjel self status` inspects the installation and `sjel self rollback` restores a retained runtime.
+`sjel self check` and `sjel self update` use the public release channel, which is not available
+while the release remains a draft. Local-archive updates and recovery limits are documented in
+the installation guide. There is no anonymous one-command installation until a public release
+exists.
+
+### Source-based node
+
+To prepare a node with capability services on macOS or Linux:
 
 ~~~sh
 git clone https://github.com/larsboes/Sjel.git
@@ -158,7 +196,9 @@ selection. Follow the [shell-only installation workflow](website/content/operati
 for prerequisites, authentication, startup and reboot checks. Enabling an optional capability does
 not start it or remove unused code from the checkout.
 
-Then build the Mac app:
+### Desktop and iPhone
+
+The CLI preview does not install either app. From a source checkout, build the Mac app:
 
 ~~~sh
 cd apps/gpui

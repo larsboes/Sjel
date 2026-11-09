@@ -23,11 +23,12 @@ Preview releases use successive `v0.0.x` tags; existing tags remain immutable. A
 checklist, not completion of `PLAN.md`, gates `v0.1.0`. This does not change the primary-checkout
 and branch policy.
 
-Implemented (`7b219631`), not released: `tools/distribution/prepare.ts cli` packages coding-only resources
-and frozen production extension dependencies; `cli-install.sh` and `cli-management.sh` provide
-explicit updates, integrity checks and retained-version recovery. The Linux workflow targets
-Ubuntu 24.04 x86-64/ARM64 and macOS 15 ARM64 and runs `cli-smoke.sh` in an isolated home. Commands, requirements
-and the HTTPS/checksum trust model are owned by
+Delivered as draft `v0.0.2` at `fca5dd79`: coding-only resources, frozen production extension
+dependencies, explicit updates, integrity checks and retained-version recovery (`7b219631`).
+The root README and Operations guide document authenticated draft downloads, platform selection,
+prerequisites and explicit profile activation; installer behavior and tagged assets are unchanged.
+The distribution workflow targets Ubuntu 24.04 x86-64/ARM64 and macOS 15 ARM64 and runs
+`cli-smoke.sh` in an isolated home. Commands, requirements and the HTTPS/checksum trust model are owned by
 [Operations](../../website/content/operations/index.md#cli-only-coding-installation).
 
 The existing Bun distribution owner was extended rather than introducing another release
@@ -39,16 +40,14 @@ drift-checked reconciliation. Runtime recovery does not imply database rollback.
 
 Open acceptance before publication:
 
-1. Run the Linux workflow from committed source and inspect both architecture artifacts. Local
-   Linux ARM64 lifecycle fixtures are not evidence that the real Rust binaries run on Linux.
-   Rehearse installation, a compatible update and recovery on a clean Linux user account; verify
-   extension loading in an installed harness, not only profile registration. Older glibc and
-   musl targets are not supported by the Ubuntu 24.04 build claim.
-2. Cut the next unused `v0.0.x` tag from clean, fully checked source and create the matching draft
-   assets. `publish-draft.ts` merges shared bootstrap assets across platforms. Publishing remains
-   explicit. Verify official-channel discovery and one real download/update after publication;
-   mocked HTTP checks do not establish live-channel acceptance. No independent release-signature
-   system is implemented; current authentication relies on GitHub HTTPS and trusted checksums.
+1. Rehearse installation, a compatible update and recovery on a clean Linux user account; verify
+   extension loading in an installed harness, not only profile registration. CI's real-binary
+   isolated-home smoke passes on all three supported platforms, but does not launch a harness.
+   Older glibc and musl targets are not supported by the Ubuntu 24.04 build claim.
+2. Publishing remains explicit. Verify official-channel discovery and one real download/update
+   after publication; mocked HTTP checks do not establish live-channel acceptance. No independent
+   release-signature system is implemented; current authentication relies on GitHub HTTPS and
+   trusted checksums.
 3. Reassess third-party source/notice obligations for bundled production dependencies before
    public distribution. Keep `friend_ready: false` until the applicable clean-user checks pass.
    CLI delivery does not wait for desktop readiness; desktop first-run and recovery acceptance
@@ -57,18 +56,15 @@ Open acceptance before publication:
 The change-workflow reference, `AGENTS.md` and `CONTRIBUTING.md` now keep release tags independent
 of the branch workflow. Primary-checkout work continues until `PLAN.md` is done.
 
-Verification: focused packaging, lifecycle and draft-publication tests pass on macOS and in a
-network-disabled Linux ARM64 container. Production-dependency archives from existing Mac binaries
-pass isolated-home installation, coding-profile deployment, update and recovery with Cargo and
-Git blocked; Pi settings remain unchanged across the update. The repository test preload also
-rebuilt `sjel-cli` during review; the other release binaries were reused. The initial Linux
-workflow compiled both architectures but refused archive hardlinks during installation. Payload
-materialization now breaks those links before archiving; 17 distribution tests with 942 assertions
-pass on macOS and network-disabled Linux ARM64. Real Linux x86-64/ARM64 builds and install,
-update and rollback smoke pass at `4d99bce5` (Actions run `42615269707`). Fresh patched-source
-builds, macOS smoke and full CI remain release gates. A `v0.0.2` draft is the next delivery;
-public publication remains a separate approval. Doctor retains the unrelated Packs backup-source
-failure.
+Verification at `fca5dd79`: full CI (`42624847992`), Security (`42624849577`), CodeQL
+(`42624849319`) and three-platform real-binary build/install/update/rollback smoke (`42624852266`)
+pass. All three downloaded archive checksums match their clean, rebuilt source catalogues.
+The annotated tag and seven uploaded draft assets are verified; public publication has not occurred.
+The documented GitHub draft download and local installation commands pass in an isolated macOS home,
+including version output, harness listing and installation status. Actual harness loading remains unchecked.
+
+Uninstall and retained-version pruning are not implemented. Lifecycle additions require a separate
+specification and a new immutable preview version.
 
 ## CI integration
 
@@ -80,10 +76,9 @@ agent/status Rust suites pass (65 and 112 tests), and CI-selection regressions p
 Bundled SQLite is upgraded to the patched `libsqlite3-sys` through rusqlite. `sjel-store` keeps
 r2d2 but owns the file-backed manager because the external adapter prevents the dependency upgrade.
 Its 14 tests and strict Clippy pass; the root lockfile security scan reports no unfiltered issues.
-Full Rust tests and security scanning pass at `ed070ee8`; strict CI found an iterator-conversion
-lint after the dependency upgrade, and a shell fixture could terminate its listing producer early.
-Both are corrected, including removal of the marketplace-only CLI route. Fresh full CI remains
-required before tagging. Release and update previews drain the full history stream when capping
+Full CI and security scanning pass at `fca5dd79`, including the iterator-conversion lint fix,
+complete shell-fixture listing consumption and removal of the marketplace-only CLI route.
+Release and update previews drain the full history stream when capping
 commit output. A 200-commit fixture checks fifteen displayed rows, the explicit remainder and
 successful completion under errexit and pipefail.
 

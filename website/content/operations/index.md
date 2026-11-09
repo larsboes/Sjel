@@ -12,8 +12,9 @@ health. The [generated architecture](../../../ARCHITECTURE.md) describes public 
 
 ## Release preparation and later testing
 
-The target delivery is a notarized Mac DMG, a native iOS app distributed through TestFlight,
-and a prebuilt headless node with optional capability packages. Source installation remains
+CLI-only preview archives are prepared independently of desktop and node delivery. The target
+app delivery is a notarized Mac DMG, a native iOS app distributed through TestFlight, and a
+prebuilt headless node with optional capability packages. Source installation remains
 the developer path. These release tools prepare files; they do not establish that a new user
 can complete setup. Track the remaining acceptance work in [#235](https://github.com/larsboes/Sjel/issues/235).
 
@@ -26,30 +27,56 @@ node services, model weights, credentials or a source checkout. Every packaged h
 Harness executables such as Pi or Claude Code are separate installations. Extension runtime
 requirements still apply when those extensions are selected.
 
-The [CLI Linux workflow](../../../.github/workflows/cli-distribution.yml) builds x86-64 and ARM64
-archives on Ubuntu 24.04 runners. It rehearses installation, a compatible update and rollback in
-an isolated home, then retains the preview files as workflow artifacts. It does not create a tag
-or publish a release. These GNU/Linux builds target Ubuntu 24.04-class glibc systems, not Alpine
-or other musl distributions; compatibility with older distributions requires a separate build
-and test. Source compilation remains on the build machine, not the installation machine.
+The [CLI distribution workflow](../../../.github/workflows/cli-distribution.yml) builds these
+archives and rehearses installation, a compatible update and rollback in isolated homes:
 
-After downloading and unpacking an official workflow artifact into a new directory, installation
-uses Bash, tar, gzip and SHA-256 tooling. Online downloads also need curl and CA certificates.
-The following example selects x86-64; ARM64 uses `aarch64` instead:
+| Host | Archive |
+| --- | --- |
+| macOS ARM64, built on macOS 15 | `sjel-cli-v0.0.2-aarch64-apple-darwin.tar.gz` |
+| Ubuntu 24.04-class Linux x86-64 | `sjel-cli-v0.0.2-x86_64-unknown-linux-gnu.tar.gz` |
+| Ubuntu 24.04-class Linux ARM64 | `sjel-cli-v0.0.2-aarch64-unknown-linux-gnu.tar.gz` |
+
+GNU/Linux builds target glibc, not Alpine or other musl distributions. Older distributions and
+macOS Intel are not supported by these preview assets. Source compilation remains on the build
+machine, not the installation machine. The workflow retains artifacts; tagging and draft creation
+are separate maintainer actions.
+
+Bootstrap installation uses Bash, tar, gzip and either `sha256sum` or `shasum`. Online downloads
+also need curl and CA certificates. Harness executables and their extension runtimes are separate
+prerequisites; the installer does not install or authenticate them.
+
+`v0.0.2` is a draft in [GitHub Releases](https://github.com/larsboes/Sjel/releases). Downloading it
+requires authenticated maintainer access; the public release URLs do not serve draft assets.
+The following example uses an authenticated GitHub CLI and selects Linux x86-64. Set `archive`
+to the matching filename above for another supported host:
 
 ```bash
-sha256sum --check SHA256SUMS
 archive=sjel-cli-v0.0.2-x86_64-unknown-linux-gnu.tar.gz
+gh release download v0.0.2 --repo larsboes/Sjel \
+  --pattern "$archive" --pattern cli-install.sh --pattern SHA256SUMS \
+  --dir sjel-cli-preview
+cd sjel-cli-preview
 digest=$(awk -v name="$archive" '$2 == name {print $1}' SHA256SUMS)
 bash cli-install.sh --archive "$archive" --sha256 "$digest"
 export PATH="$HOME/.local/bin:$PATH"
 sjel --version
 sjel harnesses list
+```
+
+Alternatively, download the matching archive, `cli-install.sh` and `SHA256SUMS` from the draft
+release page into one directory, then run the commands from `digest=...` onward there. The installer
+checks the selected archive against its digest; the combined release checksum file also names
+other platforms, which need not be downloaded. Obtain the installer and checksum metadata from
+the official authenticated release, not an unrelated mirror.
+
+The PATH change affects the current shell only. Persist `~/.local/bin` in the shell configuration
+if needed. After Pi is installed and authenticated, activate its coding resources explicitly:
+
+```bash
 sjel pack use pi coding-harness
 ```
 
-The last command explicitly changes the Pi profile; installation alone changes no harness
-settings. Other supported harnesses can be selected through `sjel harnesses use coding-harness
+This command changes the Pi profile; installation alone changes no harness settings. Other supported harnesses can be selected through `sjel harnesses use coding-harness
 --harness <id>`. Review drift before synchronizing existing deployments.
 
 Direct installation defaults to `${XDG_DATA_HOME:-~/.local/share}/sjel` and `~/.local/bin/sjel`.
@@ -71,7 +98,8 @@ Checks report availability without installing. Online discovery requires an offi
 release with `CLI_VERSION`, platform archives and `SHA256SUMS`; preparation alone does not make
 that channel available. Local testing also supports `sjel self update --archive FILE --sha256
 TRUSTED_DIGEST`. Rollback switches the retained runtime only; it does not undo database changes
-or harness copies, delete the damaged release, or restart active agent sessions.
+or harness copies, delete the damaged release, or restart active agent sessions. Retained versions
+consume disk space; no uninstall or retained-version pruning command is provided in this preview.
 
 Download authenticity relies on the official GitHub HTTPS release channel and its SHA-256
 metadata, not an independent publisher signature. A digest from an untrusted source is not

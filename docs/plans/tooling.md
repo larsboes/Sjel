@@ -56,7 +56,7 @@ root; PATH instructions do not edit shell configuration. Truncated script bodies
 an installation. The distribution workflow rehearses the generated entry point and defaults to
 `v0.0.3`; `v0.0.2` assets remain unchanged. A new tag or public release has not been created.
 
-Verification: 34 installer/packaging/publication/notice tests with 1031 assertions pass on macOS
+Verification: 38 installer/packaging/publication/notice tests with 1045 assertions pass on macOS
 and network-disabled Linux ARM64. Three-platform rebuilt bootstrap/install/update/rollback CI
 passes at `b33ad149` (`42654301653`), as does full CI (`42654299933`). Installed Pi 1.5.0 loads
 all four registered extensions and both packaged extension entry points, runs startup handlers,
@@ -72,9 +72,14 @@ and complete cached source for the compiled Rust dependency graph. Existing Java
 remain inside the bundled packages; missing or unreviewed grants fail packaging. The missing
 `boolbase@1.0.0` ISC notice is restored from its pinned upstream grant. SDK peers are omitted,
 so an installed harness supplies its own API rather than receiving another bundled harness.
-Local macOS inventory covers 192 registry crates; fresh
-three-platform artifacts with these additions and public-channel acceptance remain pending.
-Actionlint is unavailable locally.
+The inventory consumes the actual build's Cargo `compiler-artifact` records, including cached
+artifacts and workspace-unified features. A selected-package tree omitted compiled dependencies;
+`a3e6814d` artifacts are therefore not publication-eligible despite passing lifecycle tests and
+full CI. Preflight against that ARM build's compiler log accounts for 374 compiled packages and
+355 registry sources. Five Rust crate archives omit grants; version-scoped upstream supplements
+restore them, including Xberg's native-library inventory. Source paths outside the checkout and
+unrecognized registries fail the build. Fresh corrected three-platform artifacts and public-channel
+acceptance remain pending. Actionlint is unavailable locally.
 
 ### Open acceptance before publication
 

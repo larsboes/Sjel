@@ -39,6 +39,24 @@ function cliFixture(scratch: string) {
 }
 
 describe("release preparation (no installation)", () => {
+  test("a successful compiler exit without artifact records cannot produce a release", () => {
+    const scratch = mkdtempSync(join(tmpdir(), "sjel-missing-build-records-"));
+    try {
+      const { fixture, target } = cliFixture(scratch);
+      const commands = join(scratch, "commands");
+      mkdirSync(commands);
+      writeFileSync(join(commands, "cargo"), '#!/bin/sh\nprintf \'%s\\n\' \'{"reason":"build-finished","success":true}\'\n');
+      chmodSync(join(commands, "cargo"), 0o755);
+      const output = join(scratch, "output");
+      const result = Bun.spawnSync([process.execPath, join(fixture, "tools/distribution/prepare.ts"), "cli", "--version", "v0.0.3", "--target-dir", target, "--out", output, "--build"], {
+        cwd: fixture, env: { ...process.env, PATH: `${commands}:${process.env.PATH}` }, stdout: "pipe", stderr: "pipe",
+      });
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr.toString()).toContain("Cargo dependency inventory is empty");
+      expect(existsSync(output)).toBe(false);
+    } finally { rmSync(scratch, { recursive: true, force: true }); }
+  });
+
   test("Linux cache hardlinks are materialized before archiving", () => {
     const stage = mkdtempSync(join(tmpdir(), "sjel-hardlinks-"));
     try {

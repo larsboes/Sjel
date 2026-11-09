@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { chmodSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import { collectRustSources, completeJavaScriptNotices, writeRustNotices } from "./cli-notices.ts";
+import { completeJavaScriptNotices, type RustSource, writeRustNotices } from "./cli-notices.ts";
 
 export const cliBinaries = ["sjel-cli", "sjel-claude-config", "sjel-mcp"];
 const helpers = ["harnesses", "packs.sh", "packs-claude", "packs-codex", "packs-copilot", "packs-opencode", "packs-pi", "updates", "audit", "agent-integrations.sh", "host-patch.sh", "skills", "pack-drift-hook", "copilot", "inference-keys", "materialize-inference-key", "local-build", "sjel-context", "self", "ignore-policy", "protection-zones", "toolchain-check", "doctor", "model-check"];
@@ -150,7 +150,7 @@ export function verifyLocalImports(stage: string) {
   }
 }
 
-export function writeCliPayload(root: string, stage: string, target: string, version: string, platform: string, build: boolean, selection = selectCliSources(root), includeRustNotices = build) {
+export function writeCliPayload(root: string, stage: string, target: string, version: string, platform: string, build: boolean, selection = selectCliSources(root), sources: RustSource[] = []) {
   for (const binary of cliBinaries) {
     regularFile(target, `release/${binary}`);
     if (!(lstatSync(join(target, "release", binary)).mode & 0o111)) throw new Error(`CLI binary is not executable: ${binary}`);
@@ -201,8 +201,7 @@ export function writeCliPayload(root: string, stage: string, target: string, ver
   put(stage, "distribution.json", JSON.stringify({ schema: 1, kind: "cli", version, platform, source_builds: false, core: [] }, null, 2) + "\n");
   put(stage, "CLI_VERSION", version + "\n");
   put(stage, "CLI_PLATFORM", platform + "\n");
-  const sources = includeRustNotices ? collectRustSources(root, platform) : [];
-  if (includeRustNotices) writeRustNotices(stage, sources, version, platform);
+  if (sources.length) writeRustNotices(stage, sources, version, platform);
   const sums = payloadFiles(stage).map((path) => `${createHash("sha256").update(readFileSync(join(stage, path))).digest("hex")}  ${path}\n`).join("");
   put(stage, "PAYLOAD_SHA256SUMS", sums);
   return sources;

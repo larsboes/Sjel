@@ -1,35 +1,44 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface RustSource { name: string; version: string; license: string; directory: string }
 
-export function dependencyNames(tree: string): Array<{ name: string; version: string }> {
+export function dependencyNames(output: string, root: string): Array<{ name: string; version: string }> {
   const packages = new Map<string, { name: string; version: string }>();
-  for (const line of tree.split("\n").filter(Boolean)) {
-    const match = /^([A-Za-z0-9_-]+) v([0-9][^ ()|]*)(?: \(\*\))?(?: \([^)]*\))?\|/.exec(line);
-    if (!match) throw new Error(`unrecognized Cargo dependency row: ${line}`);
+  const checkout = realpathSync(root);
+  for (const line of output.split("\n").filter(Boolean)) {
+    const message = JSON.parse(line);
+    if (message.reason !== "compiler-artifact") continue;
+    if (typeof message.package_id !== "string") throw new Error("Cargo artifact has no package identity");
+    if (message.package_id.startsWith("path+")) {
+      const path = realpathSync(fileURLToPath(message.package_id.slice(5).split("#")[0]));
+      if (path !== checkout && !path.startsWith(checkout + sep)) throw new Error("compiled local dependency escapes the source checkout");
+      continue;
+    }
+    const match = /^registry\+https:\/\/github\.com\/rust-lang\/crates\.io-index#([A-Za-z0-9_-]+)@([0-9][^\s]*)$/.exec(message.package_id);
+    if (!match) throw new Error("unsupported compiled Cargo package source");
     packages.set(`${match[1]}-${match[2]}`, { name: match[1], version: match[2] });
   }
   if (!packages.size) throw new Error("Cargo dependency inventory is empty");
   return [...packages.values()].sort((a, b) => `${a.name}-${a.version}`.localeCompare(`${b.name}-${b.version}`));
 }
 
-export function registrySources(root: string, tree: string, cargoHome: string): RustSource[] {
+export function registrySources(root: string, dependencies: Array<{ name: string; version: string }>, cargoHome: string): RustSource[] {
   const lock = Bun.TOML.parse(readFileSync(join(root, "Cargo.lock"), "utf8"));
   const registry = join(cargoHome, "registry", "src");
   const indexes = readdirSync(registry).filter((name) => name.startsWith("index.crates.io-"));
-  return dependencyNames(tree).flatMap(({ name, version }) => {
+  return dependencies.map(({ name, version }) => {
     const packages = lock.package.filter((entry: any) => entry.name === name && entry.version === version);
     if (packages.length !== 1) throw new Error(`ambiguous or missing locked dependency: ${name} ${version}`);
-    if (!packages[0].source) return [];
     if (packages[0].source !== "registry+https://github.com/rust-lang/crates.io-index") throw new Error(`unsupported dependency source: ${name}`);
     const directory = indexes.map((index) => join(registry, index, `${name}-${version}`)).find((path) => existsSync(join(path, "Cargo.toml")));
     if (!directory) throw new Error(`crate source missing: ${name} ${version}`);
     const manifest = Bun.TOML.parse(readFileSync(join(directory, "Cargo.toml"), "utf8")).package;
     const license = manifest.license;
     if (typeof license !== "string" || !license.trim()) throw new Error(`crate license missing: ${name}`);
-    return [{ name, version, license, directory }];
+    return { name, version, license, directory };
   });
 }
 
@@ -43,6 +52,13 @@ function noticeFiles(directory: string, prefix = ""): string[] {
   }).sort();
 }
 
+const rustSupplements = [
+  { name: "alloc-stdlib", versions: ["0.2.4", "0.3.0"], license: "BSD-3-Clause", files: ["rust-alloc-no-stdlib.LICENSE"] },
+  { name: "html-to-markdown-rs", versions: ["3.21.2"], license: "MIT", files: ["html-to-markdown-rs-3.21.2.LICENSE"] },
+  { name: "qcms", versions: ["0.3.0"], license: "MIT", files: ["qcms-0.3.0.COPYING"] },
+  { name: "xberg", versions: ["1.3.10"], license: "MIT", files: ["xberg-1.3.10.LICENSE", "xberg-1.3.10.THIRD_PARTY_LICENSES.md"] },
+];
+
 export function writeRustNotices(stage: string, sources: RustSource[], version: string, platform: string) {
   if (!sources.length) throw new Error("Rust dependency notices cannot be empty");
   const rows = ["# Rust dependency notices", "", `Corresponding source: sjel-source-${version}-${platform}.tar.gz in the same GitHub Release.`, "", "JavaScript dependency notices remain alongside each bundled package in node_modules.", ""];
@@ -55,7 +71,8 @@ export function writeRustNotices(stage: string, sources: RustSource[], version: 
       const relative = path.slice(resolve(source.directory).length + 1);
       if (!paths.includes(relative)) paths.push(relative);
     }
-    if (!paths.some((path) => /license|licence|copying|copyright|notice/i.test(path))) throw new Error(`crate has no license notice: ${source.name}`);
+    const supplemental = rustSupplements.find((entry) => entry.name === source.name && entry.versions.includes(source.version) && entry.license === source.license)?.files ?? [];
+    if (!paths.some((path) => /license|licence|copying|copyright|notice/i.test(path)) && !supplemental.length) throw new Error(`crate has no license notice: ${source.name}`);
     const id = `${source.name}-${source.version}`;
     rows.push(`## ${id}`, "", `SPDX: ${source.license}`, `Source: https://crates.io/api/v1/crates/${source.name}/${source.version}/download`, "");
     for (const path of paths) {
@@ -63,6 +80,12 @@ export function writeRustNotices(stage: string, sources: RustSource[], version: 
       mkdirSync(dirname(destination), { recursive: true });
       cpSync(join(source.directory, path), destination);
       rows.push(`- THIRD_PARTY/rust/${id}/${path}`);
+    }
+    for (const name of supplemental) {
+      const destination = join(stage, "THIRD_PARTY", "rust", id, name);
+      mkdirSync(dirname(destination), { recursive: true });
+      cpSync(join(import.meta.dir, "notices", name), destination);
+      rows.push(`- THIRD_PARTY/rust/${id}/${name}`);
     }
     rows.push("");
   }
@@ -89,11 +112,8 @@ export function completeJavaScriptNotices(directories: string[]) {
   for (const directory of directories) visit(join(directory, "node_modules"));
 }
 
-export function collectRustSources(root: string, platform: string): RustSource[] {
-  const result = Bun.spawnSync(["cargo", "tree", "--locked", "--offline", "--edges", "normal,build", "--target", platform,
-    "--prefix", "none", "--format", "{p}|{l}", "-p", "sjel-cli", "-p", "sjel-claude-config", "-p", "sjel-mcp"], { cwd: root, stdout: "pipe", stderr: "pipe" });
-  if (result.exitCode) throw new Error(`Cargo dependency inventory failed: ${result.stderr.toString()}`);
-  return registrySources(root, result.stdout.toString(), process.env.CARGO_HOME ?? join(homedir(), ".cargo"));
+export function compiledRustSources(root: string, output: string, cargoHome = process.env.CARGO_HOME ?? join(homedir(), ".cargo")): RustSource[] {
+  return registrySources(root, dependencyNames(output, root), cargoHome);
 }
 
 export function writeCorrespondingSource(root: string, output: string, scratch: string, sources: RustSource[]) {
@@ -105,7 +125,7 @@ export function writeCorrespondingSource(root: string, output: string, scratch: 
     if (result.exitCode) throw new Error("cannot archive tracked corresponding source");
   }
   for (const crate of sources) cpSync(crate.directory, join(source, "vendor", `${crate.name}-${crate.version}`), { recursive: true, dereference: false });
-  writeFileSync(join(source, "SOURCE.md"), "# Corresponding source\n\nSjel source is the release commit. Rust dependency source for this platform is under vendor/.\nCargo.lock pins all dependencies. The binary archive retains the executable JavaScript dependencies and their notices.\nBuild the CLI binaries with cargo build --locked --release --bin sjel-cli --bin sjel-claude-config --bin sjel-mcp.\n");
+  writeFileSync(join(source, "SOURCE.md"), "# Corresponding source\n\nSjel source is the release commit. Rust dependency source for this platform is under vendor/.\nCargo.lock pins all dependencies. Supplemental dependency grants and their provenance are under tools/distribution/notices/. The binary archive retains the executable JavaScript dependencies and their notices.\nBuild the CLI binaries with cargo build --locked --release --bin sjel-cli --bin sjel-claude-config --bin sjel-mcp.\n");
   const result = Bun.spawnSync(["tar", "-czf", output, "sjel-source"], { cwd: scratch, stdout: "inherit", stderr: "inherit" });
   if (result.exitCode) throw new Error("cannot compress corresponding source");
 }

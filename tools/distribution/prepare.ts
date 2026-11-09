@@ -5,7 +5,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { cliBinaries, selectCliSources, standaloneInstaller, writeCliPayload } from "./cli-payload.ts";
-import { writeCorrespondingSource } from "./cli-notices.ts";
+import { compiledRustSources, writeCorrespondingSource } from "./cli-notices.ts";
 
 const root = resolve(import.meta.dir, "../..");
 const core = ["sjel-status", "devices", "entities", "store"];
@@ -156,14 +156,26 @@ function parse(args: string[]): Options {
 }
 
 function build(options: Options) {
-  if (!options.build) return;
+  if (!options.build) return [];
   if (options.kind === "macos") process.env.MACOSX_DEPLOYMENT_TARGET = minimumMacOS();
   const targets = options.kind === "cli" ? cliBinaries : options.kind === "capability" ? [binaryName(options.capability)]
     : options.kind === "macos" ? [...binaries, "sjel-desktop-launcher"] : binaries;
-  run(["cargo", "build", "--locked", "--release", "--target-dir", options.target, ...targets.flatMap((name) => ["--bin", name])]);
+  const command = ["cargo", "build", "--locked", "--release", "--target-dir", options.target, ...targets.flatMap((name) => ["--bin", name])];
+  if (options.kind === "cli") {
+    const result = Bun.spawnSync([...command, "--message-format=json"], { cwd: root, stdout: "pipe", stderr: "inherit" });
+    const output = result.stdout.toString();
+    for (const line of output.split("\n").filter(Boolean)) {
+      const message = JSON.parse(line);
+      if (message.reason === "compiler-message" && message.message?.rendered) console.error(message.message.rendered);
+    }
+    if (result.exitCode !== 0) throw new Error(`CLI build failed (${result.exitCode})`);
+    return compiledRustSources(root, output);
+  }
+  run(command);
   if (options.kind === "macos") {
     run(["cargo", "build", "--locked", "--release", "--manifest-path", "apps/gpui/Cargo.toml", "--package", "sjel-gpui", "--target-dir", options.target]);
   }
+  return [];
 }
 
 function runtime(options: Options, stage: string) {
@@ -268,14 +280,14 @@ function main() {
   const source = { repository: "https://github.com/larsboes/Sjel", commit: revision.stdout.toString().trim(),
     dirty: changes.stdout.length !== 0, rebuilt: options.build };
   const cliSelection = options.kind === "cli" ? selectCliSources(root) : undefined;
-  build(options);
+  const compiledSources = build(options);
   mkdirSync(options.out, { recursive: true });
   if (options.kind === "cli") writeFileSync(join(options.out, "READINESS.txt"), "CLI PREPARATION ARTIFACT — NOT YET CLEARED FOR A FRIEND TEST\nNo CLI installation, explicit self-update or rollback was tested by producing these files.\nLinux clean-user testing is deferred. No node services or desktop app are included.\n" + ((options.build || options.prepareDependencies) ? "Pi production dependencies prepared with frozen lockfiles and lifecycle scripts disabled.\n" : "Fixture only: Pi package dependencies unprepared; dependency-backed packages are omitted and held.\n"));
   else writeFileSync(join(options.out, "READINESS.txt"), "PREPARATION ARTIFACT — NOT YET CLEARED FOR A FRIEND TEST\nNo installation was tested by producing these files.\nMac first-run create/connect-node UI, writable runtime placement, browser login and update/rollback integration must be completed before a clean-user trial.\nUse website/content/operations/index.md#release-preparation-and-later-testing for the owner rehearsal.\n");
   const stage = mkdtempSync(join(tmpdir(), "sjel-release-"));
   try {
     if (options.kind === "cli") {
-      const sources = writeCliPayload(root, join(stage, "sjel"), options.target, options.version, platform, options.build || options.prepareDependencies, cliSelection, options.build);
+      const sources = writeCliPayload(root, join(stage, "sjel"), options.target, options.version, platform, options.build || options.prepareDependencies, cliSelection, compiledSources);
       if (options.build) writeCorrespondingSource(root, join(options.out, `sjel-source-${options.version}-${platform}.tar.gz`), stage, sources);
       run(["tar", "-czf", join(options.out, `sjel-cli-${options.version}-${platform}.tar.gz`), "sjel"], stage);
       writeFileSync(join(options.out, "CLI_VERSION"), options.version + "\n");

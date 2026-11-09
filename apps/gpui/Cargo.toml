@@ -25,7 +25,7 @@ unsafe_code = "deny"
 [workspace.dependencies]
 sjel-gpui-core = { path = "core" }
 sjel-gpui-ui = { path = "ui" }
-gpui-kit = { version = "=0.9.0", default-features = false, features = ["component"] }
+gpui-kit = { version = "=0.9.1", default-features = false, features = ["component"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
@@ -59,13 +59,13 @@ cpal = "0.18"
 
 [dependencies.nsh-platform-gpui]
 git = "https://github.com/longbridge/nsh"
-rev = "058a745ad2"
+rev = "1894697155"
 default-features = false
 optional = true
 
 [dependencies.nsh-base]
 git = "https://github.com/longbridge/nsh"
-rev = "058a745ad2"
+rev = "1894697155"
 optional = true
 
 [target.'cfg(target_os = "macos")'.dependencies]

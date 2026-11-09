@@ -939,7 +939,7 @@ url = "https://github.com/longbridge/gpui-mobile"
 verdict = "fork"
 license = "GPL-3.0-or-later OR AGPL-3.0-or-later OR Apache-2.0"
 summary = "GPUI platform crate for iOS and Android that a Swift or Kotlin host embeds; Sjel's current phone renderer"
-why = "Only GPUI platform for a Swift-hosted app: Zed's gpui_ios owns the app lifecycle. GPUI Kit 0.9.0 needs gpui-pre 0.3.11, and the Longbridge compatibility fork was on 0.3.10 on 2026-11-07, so Sjel pins a fork at 0.3.11 and sends the bump upstream. It is a bridge until the NSH trial decides the phone (docs/plans/gpui.md section 11)."
+why = "Only GPUI platform for a Swift-hosted app: Zed's gpui_ios owns the app lifecycle. GPUI Kit 0.9.1 needs gpui-pre 0.3.12, and upstream main was still on 0.3.10 on 2026-11-09, so Sjel pins a fork at 0.3.12 that re-vendors gpui-pre-wgpu with its offscreen patch. It is a bridge until the NSH trial decides the phone (docs/plans/gpui.md section 11)."
 revisit = "Return to the upstream rev when it reaches the snapshot GPUI Kit pins. Remove the dependency when the last phone screen leaves GPUI."
 
 [gpui-pre-ios]
@@ -956,6 +956,14 @@ verdict = "adopt"
 license = "Apache-2.0"
 summary = "Rust UI framework that renders with each platform's own views; the phone's renderer for new screens"
 why = "Renders with UIKit and Android views, embeds into an existing iOS app as NshAppView and into a GPUI app on the gpui-fast GPUI Kit selects, so one screen can serve the phone natively and the Mac. v0.4.0 on 2026-11-04, created 2026-10-14; evidence in research/ui-stack.md. Sjel pins a main rev: the published nsh-platform-ios 0.4.0 includes a file outside its package, and the v0.4.0 GPUI backend does not compile against gpui-fast 0.1.13 (both checked 2026-11-07)."
+
+[rune]
+url = "https://github.com/anomalyco/rune"
+verdict = "watch"
+license = "MIT"
+summary = "GPU-rendered Rust UI framework with a headless mode an agent can render, inspect and drive"
+why = "Pre-release, created 2026-10-22, pinned by dev rev only. It draws its own pixels on macOS, Windows, Linux and the web and its dev branch had no iOS or Android crate on 2026-11-09, the gap that moved Sjel's phone screens from GPUI to NSH (docs/plans/gpui.md section 11). Sjel's NSH screens already run headless under nsh-testing, which presses views and checks navigation without a display."
+revisit = "Evaluate if NSH stops shipping, or if Rune ships an iOS backend with the platform's own text input, selection and accessibility."
 
 [nimble]
 url = "https://ollama.com/library/nimble"

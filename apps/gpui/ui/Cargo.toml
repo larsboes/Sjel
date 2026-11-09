@@ -39,18 +39,18 @@ required-features = ["native-maps"]
 
 [dependencies.nsh-core]
 git = "https://github.com/longbridge/nsh"
-rev = "058a745ad2"
+rev = "1894697155"
 optional = true
 
 [dependencies.nsh-base]
 git = "https://github.com/longbridge/nsh"
-rev = "058a745ad2"
+rev = "1894697155"
 optional = true
 
 [dev-dependencies]
 gpui-kit = { workspace = true, features = ["test-support"] }
-nsh-engine = { git = "https://github.com/longbridge/nsh", rev = "058a745ad2", default-features = false }
-nsh-testing = { git = "https://github.com/longbridge/nsh", rev = "058a745ad2", default-features = false }
+nsh-engine = { git = "https://github.com/longbridge/nsh", rev = "1894697155", default-features = false }
+nsh-testing = { git = "https://github.com/longbridge/nsh", rev = "1894697155", default-features = false }
 # Keeps `Repo` off this machine's real sjel.db in the Projects window tests (core's Cargo.toml).
 sjel-gpui-core = { workspace = true, features = ["test-support"] }
 

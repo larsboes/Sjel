@@ -423,12 +423,13 @@ build was performed for this handoff.
 
 ## 6. One UI crate, every platform
 
-1. **GPUI pins.** Done 2026-11-07: `gpui-kit =0.9.0` and `gpui-pre =0.3.11`
-   (`apps/gpui/Cargo.toml`) with the `gpui-mobile` fork `larsboes/gpui-mobile` rev `bbedd2d`
-   (`ios/Cargo.toml`), one matching set. The three move together by hand in one commit, with
+1. **GPUI pins.** `gpui-kit =0.9.1`, `gpui-pre =0.3.12` and `gpui-fast` 0.1.14
+   (`apps/gpui/Cargo.toml`) with the `gpui-mobile` fork `larsboes/gpui-mobile` rev `98f6466`
+   (`ios/Cargo.toml`), one matching set. The fork re-vendors `gpui-pre-wgpu` at each snapshot
+   with its offscreen patch unchanged. The three move together by hand in one commit, with
    `cargo test` on core and ui and `ios/run-sim` before and after. Dependabot ignores them
-   (`.github/dependabot.yml`). Open: a return to the upstream rev once it carries 0.3.11.
-   `longbridge/gpui-mobile` #46 makes the same change and was checked on Android. #47, from the
+   (`.github/dependabot.yml`). Open: a return to the upstream rev once it carries 0.3.12.
+   `longbridge/gpui-mobile` #46 makes the 0.3.11 change and was checked on Android. #47, from the
    fork, duplicates it.
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
    seventeen more modules (`documents`, `pdf_kit`, `feed`, `scout`, `clipper`, `context`,
@@ -655,7 +656,7 @@ opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-s
 
 | What | Where | Commit |
 |---|---|---|
-| Pins: `gpui-kit` 0.9.0, `gpui-pre` 0.3.11, `gpui-mobile` fork | §6 item 1 | `d2970986` |
+| Pins: `gpui-kit` 0.9.1, `gpui-pre` 0.3.12, `gpui-mobile` fork | §6 item 1 | this section's commit |
 | Crates reach GPUI only through the Kit (`extern crate gpui_kit as gpui;`) | each crate root | `21966ff8` |
 | GPUI Fast is the Mac default; `--no-default-features` builds `gpui-pre` | `apps/gpui/Cargo.toml` | `fdf3f6cb` |
 | Frame cost on both renderers | §9 | `c28ffb23` |
@@ -683,9 +684,9 @@ NSH screen), `apps/gpui/ios/run-device <udid>` on a cabled or network-paired iPh
 window: `cargo run --release --features nsh-trial` in `apps/gpui` with `SJEL_NSH_TRIAL=1` (or
 `SJEL_NSH_TRIAL=mail`).
 
-NSH comes from git rev `058a745ad2` (`upstreams.toml`, `nsh`): the published 0.4.0 crates do not
-build for this app. The rev moved to `058a745ad2` on 2026-11-08 (virtualized `Each` scroll views,
-backdrop caching, and zip 9 bump in updater), passing `tools/audit` cleanly.
+NSH comes from git rev `1894697155` (`upstreams.toml`, `nsh`): the published 0.4.0 crates do not
+build for this app. NSH's GPUI backend requires `gpui-fast` 0.1.13 or a compatible later release,
+so it resolves to the Mac app's 0.1.14.
 
 ### Open, in order
 

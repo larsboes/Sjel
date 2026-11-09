@@ -357,9 +357,9 @@ impl Capabilities {
                         crate::host::show_nsh();
                     }
                     MapEvent::Refresh => self.travel.update(cx, |travel, cx| travel.refresh(cx)),
-                    MapEvent::Resolve => self
+                    MapEvent::Resolve(id) => self
                         .travel
-                        .update(cx, |travel, cx| travel.resolve_current_plan(true, cx)),
+                        .update(cx, |travel, cx| travel.resolve_trip_places(&id, cx)),
                     MapEvent::Open(route) => {
                         sjel_gpui_ui::nsh_map::hide();
                         #[cfg(target_os = "ios")]

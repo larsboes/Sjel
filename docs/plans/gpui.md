@@ -672,7 +672,7 @@ opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-s
 | NSH Settings: the shell describes pairing, found Macs, room scan, alerts and appearance as `SettingsState` and answers `SettingsAction` | `ui/src/nsh_settings.rs`, `ios/src/settings.rs` | `79a07b08` |
 | NSH screens follow the appearance settings: palette tokens as theme overrides, forced light or dark, and a host cover that paints the safe-area bands. Touch density has no NSH token and applies to GPUI pages only | `ui/src/theme/nsh.rs`, `ios/src/nsh.rs`, `host/App.swift` | `7ee75fc3` |
 | NSH Calendar replaces the phone's GPUI day view: list and 24-hour grid, free time, new entries, a sheet per entry with quarter-hour moves in place of the long-press drag, undo and two-tap delete | `ui/src/nsh_calendar.rs` | `0dd6807e` |
-| NSH draws the phone's global and per-trip maps with OpenStreetMap, the shared tile cache, anchored pan/pinch, filters and stop details; GPUI Travel still owns trip reads and editing | `ui/src/nsh_map.rs`, `ui/src/travel/` | this section's commit |
+| NSH draws the phone's global and per-trip maps with OpenStreetMap, the shared tile cache, anchored pan/pinch, filters and stop details; coordinate retries target the inspected stop's trip; GPUI Travel still owns trip reads and editing | `ui/src/nsh_map.rs`, `ui/src/travel/` | `849fbb92`, this section's commit |
 
 Trial result, 2026-11-07, on a paired iPhone: the list fills from the Mac, a long press on the
 text opens the system menu, and VoiceOver reads the list and the reader.

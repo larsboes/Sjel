@@ -691,6 +691,26 @@ impl Travel {
         )
     }
 
+    /// Resolves places for a map stop's trip without leaving the global map.
+    pub fn resolve_trip_places(&mut self, id: &str, cx: &mut Context<Self>) {
+        let on_map = match &self.route {
+            TravelRoute::Map => true,
+            TravelRoute::Trip {
+                id: current,
+                section: TripSection::Map,
+            } => current == id,
+            _ => false,
+        };
+        if self.resolving
+            || !on_map
+            || !self.plans.iter().any(|p| p.id == id) && !self.details.contains_key(id)
+        {
+            return;
+        }
+        self.selected = Some(id.to_owned());
+        self.resolve_current_plan(true, cx);
+    }
+
     /// Explicit request (from map or trip page) to resolve missing coordinates or refresh all.
     pub fn resolve_current_plan(&mut self, refresh: bool, cx: &mut Context<Self>) {
         if self.resolving {

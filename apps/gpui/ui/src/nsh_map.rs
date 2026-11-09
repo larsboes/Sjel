@@ -25,7 +25,7 @@ use crate::travel::{LocationMarker, PlaceCategory};
 pub enum MapEvent {
     Show,
     Refresh,
-    Resolve,
+    Resolve(String),
     Open(TravelRoute),
 }
 
@@ -755,8 +755,10 @@ pub fn MapScreen() -> impl IntoElement {
                             drop(open_url(url.clone()));
                         }));
                     } else {
-                        list =
-                            list.child(action("Resolve coordinates", || emit(MapEvent::Resolve)));
+                        let id = marker.plan_id.clone();
+                        list = list.child(action("Resolve coordinates", move || {
+                            emit(MapEvent::Resolve(id.clone()))
+                        }));
                     }
                     let id = marker.plan_id.clone();
                     list = list.child(action("Open trip", move || {
@@ -861,11 +863,12 @@ mod tests {
         use nsh_engine::EngineConfig;
         use nsh_testing::Headless;
         hide();
+        let (events, received) = std::sync::mpsc::channel();
+        set_host(move |event| {
+            events.send(event).unwrap();
+        });
         set_scene(MapScene {
-            route: TravelRoute::Trip {
-                id: "test-trip".into(),
-                section: TripSection::Map,
-            },
+            route: TravelRoute::Map,
             title: "Trip map".into(),
             markers: vec![
                 LocationMarker {
@@ -882,7 +885,7 @@ mod tests {
                     category: PlaceCategory::Station,
                 },
                 LocationMarker {
-                    plan_id: "test-trip".into(),
+                    plan_id: "other-trip".into(),
                     place: Place {
                         name: "Hotel".into(),
                         ..Default::default()
@@ -919,6 +922,13 @@ mod tests {
             .texts()
             .iter()
             .any(|text| text.contains("Coordinates not available")));
+        app.press("text:Stay").unwrap();
+        app.press("text:2. Hotel · Coordinates not available")
+            .unwrap();
+        app.press("text:Resolve coordinates").unwrap();
+        assert!(
+            matches!(received.try_recv().unwrap(), MapEvent::Resolve(id) if id == "other-trip")
+        );
         app.press("text:Online tiles").unwrap();
         app.wait_for("text:Cached only").unwrap();
         assert!(!state().snap.online);

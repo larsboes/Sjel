@@ -5,6 +5,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { cliBinaries, selectCliSources, standaloneInstaller, writeCliPayload } from "./cli-payload.ts";
+import { writeCorrespondingSource } from "./cli-notices.ts";
 
 const root = resolve(import.meta.dir, "../..");
 const core = ["sjel-status", "devices", "entities", "store"];
@@ -274,7 +275,8 @@ function main() {
   const stage = mkdtempSync(join(tmpdir(), "sjel-release-"));
   try {
     if (options.kind === "cli") {
-      writeCliPayload(root, join(stage, "sjel"), options.target, options.version, platform, options.build || options.prepareDependencies, cliSelection);
+      const sources = writeCliPayload(root, join(stage, "sjel"), options.target, options.version, platform, options.build || options.prepareDependencies, cliSelection, options.build);
+      if (options.build) writeCorrespondingSource(root, join(options.out, `sjel-source-${options.version}-${platform}.tar.gz`), stage, sources);
       run(["tar", "-czf", join(options.out, `sjel-cli-${options.version}-${platform}.tar.gz`), "sjel"], stage);
       writeFileSync(join(options.out, "CLI_VERSION"), options.version + "\n");
       const installer = readFileSync(join(root, "tools/distribution/cli-install.sh"), "utf8");

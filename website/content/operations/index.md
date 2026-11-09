@@ -24,8 +24,15 @@ The `cli` delivery contains the prebuilt CLI, Claude configuration and MCP helpe
 `coding-harness` Pack selection, and its Pi extension dependencies. It does not contain GPUI,
 node services, model weights, credentials or a source checkout. Every packaged harness binds to
 `coding-harness`, including Pi; the source installation's profile bindings remain unchanged.
-Harness executables such as Pi or Claude Code are separate installations. Extension runtime
-requirements still apply when those extensions are selected.
+Harness executables such as Pi or Claude Code are separate installations. Their SDK peer
+dependencies are not bundled; the installed harness supplies them. Pi 1.5.0 is the tested host.
+Extension runtime requirements still apply when those extensions are selected.
+
+Built CLI archives include `THIRD_PARTY.md` and complete Rust dependency notices under
+`THIRD_PARTY/rust`; JavaScript notices remain alongside the bundled modules. Each platform also
+has a `sjel-source-<version>-<platform>.tar.gz` release asset containing the committed Sjel source
+and the source of its compiled Rust dependencies. These source assets are separate downloads,
+not required to install the prebuilt CLI.
 
 #### Standalone installer for the next preview
 

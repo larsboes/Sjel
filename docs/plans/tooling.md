@@ -56,19 +56,32 @@ root; PATH instructions do not edit shell configuration. Truncated script bodies
 an installation. The distribution workflow rehearses the generated entry point and defaults to
 `v0.0.3`; `v0.0.2` assets remain unchanged. A new tag or public release has not been created.
 
-Verification: 26 installer/packaging/publication tests with 1007 assertions pass on macOS and
-network-disabled Linux ARM64; 113 CI-selection tests and shell/doc checks pass. The generated
-stdin bootstrap passes real-binary macOS install/update/rollback using reused CI binaries; those
-local fixtures retain `source.rebuilt: false` and are not publication-eligible. Fresh three-platform
-CI and a live public-channel test remain pending. Actionlint is unavailable locally. Real harness
-loading remains a separate acceptance item below.
+Verification: 34 installer/packaging/publication/notice tests with 1031 assertions pass on macOS
+and network-disabled Linux ARM64. Three-platform rebuilt bootstrap/install/update/rollback CI
+passes at `b33ad149` (`42654301653`), as does full CI (`42654299933`). Installed Pi 1.5.0 loads
+all four registered extensions and both packaged extension entry points, runs startup handlers,
+and registers the packaged tools without a model request. Synthetic load and startup failures
+are rejected. The check also passes with SDK peers omitted from a fresh dependency installation.
+`cli-smoke.sh` enables this independent
+SDK check when `SJEL_PI_PACKAGE` names an existing Pi installation; its child receives only an
+isolated HOME, PATH and smoke settings, not host authentication or model configuration.
+
+Public builds include complete Rust dependency notices under `THIRD_PARTY/rust` and a
+`THIRD_PARTY.md` index. A separate platform-specific source archive carries the committed source
+and complete cached source for the compiled Rust dependency graph. Existing JavaScript notices
+remain inside the bundled packages; missing or unreviewed grants fail packaging. The missing
+`boolbase@1.0.0` ISC notice is restored from its pinned upstream grant. SDK peers are omitted,
+so an installed harness supplies its own API rather than receiving another bundled harness.
+Local macOS inventory covers 192 registry crates; fresh
+three-platform artifacts with these additions and public-channel acceptance remain pending.
+Actionlint is unavailable locally.
 
 ### Open acceptance before publication
 
-1. Rehearse installation, a compatible update and recovery on a clean Linux user account; verify
-   extension loading in an installed harness, not only profile registration. CI's real-binary
-   isolated-home smoke passes on all three supported platforms, but does not launch a harness.
-   Older glibc and musl targets are not supported by the Ubuntu 24.04 build claim.
+1. Fresh three-platform CI must verify the final notice/source-bearing artifacts. Real-binary
+   isolated-home installation, update and rollback pass on all supported platforms; real installed
+   Pi loading passes on macOS. Older glibc and musl targets are not supported by the Ubuntu 24.04
+   build claim.
 2. Publishing remains explicit. Verify official-channel discovery and one real download/update
    after publication; mocked HTTP checks do not establish live-channel acceptance. No independent
    release-signature system is implemented; current authentication relies on GitHub HTTPS and
@@ -86,7 +99,8 @@ Verification at `fca5dd79`: full CI (`42624847992`), Security (`42624849577`), C
 pass. All three downloaded archive checksums match their clean, rebuilt source catalogues.
 The annotated tag and seven uploaded draft assets are verified; public publication has not occurred.
 The documented GitHub draft download and local installation commands pass in an isolated macOS home,
-including version output, harness listing and installation status. Actual harness loading remains unchecked.
+including version output, harness listing and installation status. Pi loading acceptance now passes
+against the subsequent `v0.0.3` artifacts as described above.
 
 Uninstall and retained-version pruning are not implemented. Lifecycle additions require a separate
 specification and a new immutable preview version.

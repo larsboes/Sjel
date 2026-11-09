@@ -48,7 +48,7 @@ jobs:
         run: '[[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]'
       - name: Test archive preparation and lifecycle without the source-build preload
         working-directory: tools/distribution
-        run: bun test prepare.test.ts cli-install.test.ts publish-draft.test.ts
+        run: bun test prepare.test.ts cli-install.test.ts publish-draft.test.ts cli-notices.test.ts
       - name: Build CLI-only archive
         run: >-
           bun tools/distribution/prepare.ts cli --version "$RELEASE_VERSION"

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Rehearse a CLI archive in an isolated home; never use the host's harness settings.
 set -euo pipefail
+SMOKE_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ "$#" -ne 2 ] && [ "$#" -ne 4 ]; then
   printf '%s\n' 'Usage: bash tools/distribution/cli-smoke.sh ARCHIVE TRUSTED_SHA256 [UPDATE_ARCHIVE UPDATE_SHA256]' >&2
   exit 2
@@ -38,6 +39,10 @@ printf '{}\n' > "$HOME/.pi/agent/settings.json"
 "$CLI" pack status pi
 INSTALLED_ROOT="$(cd -P "$XDG_DATA_HOME/sjel" && pwd)"
 grep -Fq "$INSTALLED_ROOT/current/Packs" "$HOME/.pi/agent/settings.json"
+if [ -n "${SJEL_PI_PACKAGE:-}" ]; then
+  env -i HOME="$HOME" PATH="$PATH" PI_CODING_AGENT_DIR="$HOME/.pi/agent" SJEL_CLI_SMOKE=1 \
+    bun "$SMOKE_DIR/cli-harness-smoke.ts" "$INSTALLED_ROOT/current" "$SJEL_PI_PACKAGE"
+fi
 if [ "$#" -eq 4 ]; then
   ORIGINAL_VERSION="$("$CLI" --version)"
   cp "$HOME/.pi/agent/settings.json" "$SCRATCH/settings-before-update.json"

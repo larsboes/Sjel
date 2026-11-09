@@ -18,6 +18,7 @@ export const GATES: Record<string, { cmd: string[]; inputs: string[]; cheap: boo
   "route-schemas": gate("check-route-schemas", ["tools/route-schema-baseline.txt", "crates/*/src/*.rs", "capabilities/*/src/*.rs", "**/service.toml", "Cargo.toml"]),
   "manifest-integrity": gate("check-manifest-integrity", ["**/service.toml", "crates/*/**", "services/*/**", "capabilities/*/**"]),
   "doc-self-references": gate("check-doc-self-references", ["**/*.md"]),
+  "doc-links": gate("check-doc-links", ["**/*.md", "tools/check-doc-links.ts"]),
   "skill-metadata": gate("check-skill-metadata", METADATA),
   "skill-metadata-test": gate("check-skill-metadata.test", METADATA, false),
   "presentations-theme-contract": gate("check-presentations-theme-contract", PALETTE),

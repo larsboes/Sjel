@@ -149,10 +149,6 @@ archive includes the managed path resolver; its extracted-path regression passes
   route to list or read them. Comms `/captures` and `/feed` do not hold clips. A session read one
   with a hand-written length-prefixed JSON client. Smallest change: a `sjel clips [list|show <key>]`
   command over the socket's `documents` and `document` requests, plus a read-only MCP route.
-- **Check relative links and anchors in tracked Markdown.** No gate does. On 2026-11-09 a
-  one-off scan found 71 broken links, most left by the move of `capabilities/` and `libs/` into
-  `crates/` and `services/`. Smallest change: a link and heading-anchor walk beside
-  `tools/check-doc-self-references.sh`, run by `tools/doctor` and CI.
 - **Stage only this session's hunks.** Other sessions leave uncommitted edits in shared files
   (`upstreams.toml`, this plan). Committing one session's change needed a hand-built reverse
   patch against a snapshot of the file. Smallest change: snapshot a file at a session's first
@@ -469,10 +465,6 @@ archive includes the managed path resolver; its extracted-path regression passes
   noticed. The agent compared tracked files against the people registry with an ad hoc Python
   script. Smallest change: the publication hygiene check in `tools/doctor` flags two adjacent
   registry tokens in a tracked file, and prints only the file and a count.
-- **Broken relative links in docs.** When the plans moved to `docs/plans/`, the agent checked
-  every relative Markdown link with a shell loop. No gate checks that a link target or its
-  `#anchor` exists. Smallest change: a `tools/check-doc-links.sh` beside
-  `check-doc-self-references.sh`, in the same CI repo gates.
 - **Selective verification and build resources.** The shared planner, selected runners,
   daily/release full verification and local format receipts are published; commands
   live in `CONTRIBUTING.md#change-aware-ci`. Ordinary pushes select affected work;
@@ -535,6 +527,9 @@ archive includes the managed path resolver; its extracted-path regression passes
 
 ## Done
 
+- `tools/check-doc-links.sh` fails a Markdown file whose relative link names a missing path or a
+  heading the target lacks. It runs in the repo gates for every `*.md` change
+  (`tools/lib/ci-inputs.ts`). `tools/doctor` does not run it yet.
 - Storage's launcher accepts an explicitly selected, executable `SJEL_STORAGE_BIN` for isolated
   verification; arguments and child status are preserved, and invalid overrides refuse without
   compiling. The launcher regression passes. Pi's held-package fixture canonicalizes its root

@@ -92,8 +92,9 @@ no profile until the next `use <profile>` on that machine.
    links into `Packs/`), or keep project level as a hook that deploys to the user-level root.
    Tracked copies duplicate the source in git. Links contradict the "copies, never symlinks"
    rule for deployment (`tools/packs.sh` header). The hook works only where hooks run.
-2. **Account copies.** Keep the six account-synced skills and manage them as a destination, or
-   remove them from the account and rely on Pack deployment alone.
+2. **Account copies.** Decided 2026-11-09: remove the six from the claude.ai account and rely on
+   Pack deployment alone. Done when `ls ~/.claude/skills/synced/*/` in a new session lists none of
+   `council`, `crystallize`, `asd-ste100`, `skill-creator`, `obsidian` or `teach`.
 3. **Profile per level.** Whether the user level and the project level may carry different
    profiles on one machine, and which one wins for a skill both select.
 4. **Approved external skills.** Whether an approved upstream skill is installed project-locally

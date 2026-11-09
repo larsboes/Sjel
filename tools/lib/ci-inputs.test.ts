@@ -326,7 +326,7 @@ describe("gates and full verification", () => {
     expect(Object.values(GATES).map((g) => g.cmd.join(" ")).sort()).toEqual([
       "tools/check-generator-inputs-tracked.sh", "tools/check-architecture-fresh.sh",
       "tools/check-service-tomls.sh", "tools/check-route-schemas.sh", "tools/check-manifest-integrity.sh",
-      "tools/check-doc-self-references.sh", "tools/check-skill-metadata.sh", "tools/check-skill-metadata.test.sh",
+      "tools/check-doc-self-references.sh", "tools/check-doc-links.sh", "tools/check-skill-metadata.sh", "tools/check-skill-metadata.test.sh",
       "tools/check-presentations-theme-contract.sh", "tools/check-presentations-theme-contract.test.sh", "tools/skill-eval check --all",
       "tools/check-publication-hygiene.sh", "tools/check-bun-install-policy.sh", "tools/check-store-transactions.sh",
       "tools/check-obsidian-plugins.sh", "tools/self check", "tools/persistence-orphans.test.sh",
@@ -338,7 +338,7 @@ describe("gates and full verification", () => {
     plant("readers/doc.test.ts", 'export const path = "docs/plans/unrelated.md";');
     plant("unrelated.test.ts", "export const x = 1;");
     const plan = select(["docs/plans/unrelated.md"]);
-    expect(plan.gates).toEqual(["doc-self-references", "publication-hygiene"]);
+    expect(plan.gates).toEqual(["doc-links", "doc-self-references", "publication-hygiene"]);
     expect(plan.bun).toEqual(["readers/doc.test.ts"]);
     for (const id of ["architecture-fresh", "service-tomls", "store-transactions", "persistence-orphans", "self"]) {
       expect(plan.gates).not.toContain(id);
@@ -391,7 +391,7 @@ describe("gates and full verification", () => {
     plant("Packs/demo/skills/example/evals/evals.json", JSON.stringify({ evals: [{ files: ["../../../../docs/example.md"] }] }));
     plant("docs/example.md", "fixture");
     const gates = select(["docs/example.md"]).gates;
-    expect(gates).toEqual(["doc-self-references", "publication-hygiene", "skill-eval"]);
+    expect(gates).toEqual(["doc-links", "doc-self-references", "publication-hygiene", "skill-eval"]);
   });
 
   test("publication hygiene is selected even for no changes and inert docs", () => {

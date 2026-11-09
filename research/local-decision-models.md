@@ -156,9 +156,11 @@ CLM leaves this candidate list and its local checkpoint is gone: the 4.5 GB MLX 
   this Mac, for a job the 4B rule reserves for small single-call scorers.
 
 The adapter, the corpora, the item-level results and the parity record stay; only the weights went.
-The re-open recipe and its rebuild block are in
-[`capabilities/documents/README.md`](../crates/documents/README.md#experimental-clm-loopback-adapter--trial-closed-weights-removed),
-and the adapter refuses to start with the weights absent rather than downloading them.
+The re-open recipe and its rebuild block were in the documents README until `e24923c8` removed
+the section. Read them with `git show e24923c8^:capabilities/documents/README.md`. The README now
+records the runtime as declined
+([`crates/documents/README.md`](../crates/documents/README.md#considered-and-declined)). The
+adapter refuses to start with the weights absent rather than downloading them.
 
 Two observations led to it:
 

@@ -455,7 +455,7 @@ separate fixes. See the [doctor guide](doctor.md).
 - [Doctor diagnostics](doctor.md): report modes, check owners, and failure investigation.
 - [Service persistence](persistence.md): start and stop behavior, generated host units, and image
   identity in backups.
-- [Store backup contract](../../../capabilities/store/README.md#commands): live SQLite snapshots and
+- [Store backup contract](../../../services/store/README.md#commands): live SQLite snapshots and
   isolated restore verification.
 
 ## Patch first

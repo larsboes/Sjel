@@ -86,7 +86,8 @@ acceptance remain pending. Actionlint is unavailable locally.
 1. Fresh three-platform CI must verify the final notice/source-bearing artifacts. Real-binary
    isolated-home installation, update and rollback pass on all supported platforms; real installed
    Pi loading passes on macOS. Older glibc and musl targets are not supported by the Ubuntu 24.04
-   build claim.
+   build claim. Check generated metadata against the candidate's committed inputs, isolated from
+   concurrent working-tree edits.
 2. Publishing remains explicit. Verify official-channel discovery and one real download/update
    after publication; mocked HTTP checks do not establish live-channel acceptance. No independent
    release-signature system is implemented; current authentication relies on GitHub HTTPS and

@@ -3694,6 +3694,10 @@
       "verdict": "reject"
     },
     {
+      "name": "rune",
+      "verdict": "watch"
+    },
+    {
       "name": "rusqlite",
       "verdict": "adopt"
     },

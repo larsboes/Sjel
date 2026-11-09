@@ -29,6 +29,13 @@ fn today_documents_and_mail_render_and_switch_in_the_phone_host() {
         app.press("text:Today").expect("the Today tab responds");
         app.wait_for("text:TODAY")
             .expect("Today renders its heading");
+        nsh_documents::set_nsh_page(NshPage::Map);
+        app.wait_for("text:Map & Places")
+            .expect("the map renders in the shared host");
+        assert_readable_heading(&app, "Map & Places", appearance);
+        app.press("text:Today")
+            .expect("the map can return to Today");
+        app.wait_for("text:TODAY").unwrap();
     }
 }
 

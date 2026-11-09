@@ -173,6 +173,7 @@ enum Event {
     RefreshCopy,
     /// A refresh or a write on the NSH Calendar screen (`sjel_gpui_ui::nsh_calendar`).
     Calendar(CalendarEvent),
+    Map(sjel_gpui_ui::nsh_map::MapEvent),
     /// A press on the NSH Settings screen (`sjel_gpui_ui::nsh_settings`).
     Settings(sjel_gpui_ui::nsh_settings::SettingsAction),
 }
@@ -302,6 +303,7 @@ impl Capabilities {
         // the Mac (`core/src/mirror.rs`).
         nsh_calendar::open_day(launch_day());
         nsh_calendar::set_host(|event| crate::host::announce(Event::Calendar(event)));
+        sjel_gpui_ui::nsh_map::set_host(|event| crate::host::announce(Event::Map(event)));
         // People and Places read the same copy, so one fetch feeds both pages. Refresh asks for a
         // newer copy: there is nothing to sync, because nothing here writes.
         let mail = cx.new(|cx| {
@@ -423,7 +425,13 @@ impl Capabilities {
             found: Vec::new(),
             joining: false,
             active_tab: launch_tab(),
-            travel: cx.new(|cx| sjel_gpui_ui::travel::Travel::new(None, Density::Mobile, cx)),
+            travel: cx.new(|cx| {
+                let mut travel = sjel_gpui_ui::travel::Travel::new(None, Density::Mobile, cx);
+                if std::env::var("SJEL_TAB").as_deref() == Ok("map") {
+                    travel.open_route(sjel_gpui_core::travel::TravelRoute::Map, cx);
+                }
+                travel
+            }),
             projects: None,
             interior,
             mail,

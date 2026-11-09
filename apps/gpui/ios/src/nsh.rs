@@ -85,6 +85,7 @@ pub fn mount(container: &objc2_ui_kit::UIView) -> bool {
     docs::set_close(|| docs::set_nsh_page(docs::NshPage::Today));
     mail::set_close(|| docs::set_nsh_page(docs::NshPage::Today));
     docs::set_switch_tab(|target| {
+        sjel_gpui_ui::nsh_map::hide();
         crate::host::hide_nsh();
         match target {
             "today" => crate::host::announce(crate::Event::SelectTab(crate::Tab::Today)),

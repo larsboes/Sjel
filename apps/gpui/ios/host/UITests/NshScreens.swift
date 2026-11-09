@@ -2,6 +2,22 @@ import XCTest
 import UIKit
 
 final class NshScreens: XCTestCase {
+  func testMapRendersAndReturnsToTrips() {
+    let app = XCUIApplication()
+    app.launchEnvironment["SJEL_TAB"] = "map"
+    app.launchEnvironment["SJEL_SIDEBAR"] = "off"
+    app.launch()
+    defer { attach("nsh-map"); app.terminate() }
+    assertHeading(app, "Map & Places")
+    let zoom = app.buttons["Zoom in"].firstMatch
+    XCTAssertTrue(zoom.waitForExistence(timeout: 10))
+    zoom.tap()
+    app.buttons["Online tiles"].firstMatch.tap()
+    XCTAssertTrue(app.buttons["Cached only"].firstMatch.waitForExistence(timeout: 5))
+    app.buttons["Trips"].firstMatch.tap()
+    XCTAssertFalse(app.buttons["Zoom in"].firstMatch.waitForExistence(timeout: 3))
+  }
+
   func testDocumentsRenders() {
     assertScreen("documents", heading: "Documents")
   }

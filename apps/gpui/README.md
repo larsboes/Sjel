@@ -80,9 +80,11 @@ the Mac shell or the phone's signed device client. Successful reads are saved lo
 timestamps. Open a trip while connected once to retain its items for offline reading. Refresh
 failures keep the previous answer visible.
 
-The default map uses OpenStreetMap raster tiles, GPUI images and labelled stops, without a webview or
-another rendering dependency. Drag to pan; the scroll wheel and a trackpad pinch zoom, both about
-the pointer rather than the centre. Fit trip and the zoom buttons sit on the map. The map takes the
+The Mac map uses OpenStreetMap raster tiles, GPUI images and labelled stops, without a webview or
+another rendering dependency. The phone draws its global and per-trip maps with NSH
+(`ui/src/nsh_map.rs`), using the same projection, tile loader and disk cache. GPUI Travel still
+owns trip reads and editing. On the Mac, drag to pan; the scroll wheel and a trackpad pinch zoom,
+both about the pointer rather than the centre. Fit trip and the zoom buttons sit on the map. The map takes the
 wheel while the pointer is over it, so the page scrolls when the pointer is anywhere else. On
 desktop the stops list sits beside the map; on iPhone it sits below. Selecting a stop recenters the
 map and highlights its marker. Lines connect saved stage endpoints; they are not calculated road
@@ -91,12 +93,13 @@ camera the gesture has already left is cancelled. Attribution stays visible. Vie
 cached on disk; **Cached only** prevents new tile requests. Loading and map errors appear over the
 map, and missing areas offer retry.
 
-**Imagery is never thrown away mid-gesture.** The camera is a fractional zoom, and both map paths
+Cached imagery stays in place during gestures. The camera is a fractional zoom, and both map paths
 draw what is already on screen with the gesture applied: a tile of a coarser level is drawn at
 `256 · 2^(zoom − tile.zoom)`, and a tile that is missing is covered by its nearest cached ancestor
-upscaled, so a zoom or a pan never reveals a blank square. Requests go out once the gesture has been
-quiet for 140 ms (`MAP_SETTLE` in `ui/src/travel/map.rs`). Kept tiles are bounded at four levels
-around the current one, 400 tiles in all. The loading chip is reserved for "nothing to look at
+upscaled when that ancestor is cached. Requests go out once the gesture has been
+quiet for 140 ms on the Mac (`MAP_SETTLE` in `ui/src/travel/map.rs`), or the fingers lift on the
+phone. A phone pinch keeps the ground beneath the fingers while their midpoint moves. Kept tiles
+are bounded at four levels around the current one, 400 tiles in all. The Mac's loading chip is reserved for "nothing to look at
 yet"; it does not blink over imagery that is already there.
 
 This cache covers areas already viewed, not a downloaded city or country. OpenStreetMap's
@@ -275,7 +278,8 @@ whether a finger reached it.
 
 `ios/run-sim` selects the newest installed iOS runtime with an available iPhone.
 `ios/run-sim --smoke` asserts that Documents and Mail render contrasting text and that
-opening NSH from Today reaches Documents. It runs three XCTest cases in each actual simulator
+opening NSH from Today reaches Documents. A fourth case opens Map, changes zoom and connection
+mode, and returns to Trips. It runs four XCTest cases in each actual simulator
 appearance, light and dark, then restores the original appearance. It keeps result bundles
 and screenshots on failure as well as success. Set `SJEL_IOS_RESULTS` to a fresh directory to
 choose where results go; otherwise the command prints their temporary paths. These tests

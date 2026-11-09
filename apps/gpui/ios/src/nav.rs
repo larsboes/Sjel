@@ -59,9 +59,13 @@ impl Capabilities {
         match phone_screen(&target) {
             Screen::Tab(tab) => self.select_tab(tab, cx),
             Screen::Travel(route) => {
-                self.select_tab(Tab::Travel, cx);
+                #[cfg(target_os = "ios")]
+                crate::host::hide_nsh();
+                sjel_gpui_ui::nsh_map::hide();
+                self.active_tab = Tab::Travel;
                 self.travel
                     .update(cx, |travel, cx| travel.open_route(route, cx));
+                cx.notify();
             }
             Screen::Terminal => self.open_edge(Seat::Terminal, cx),
             Screen::Mac(what) => {
@@ -175,7 +179,20 @@ impl Capabilities {
         self.active_tab = tab;
         match tab {
             Tab::Mail => self.mail.update(cx, |mail, cx| mail.load(cx)),
-            Tab::Travel => self.travel.update(cx, |travel, cx| travel.activate(cx)),
+            Tab::Travel => self.travel.update(cx, |travel, cx| {
+                travel.activate(cx);
+                #[cfg(target_os = "ios")]
+                if matches!(
+                    travel.route(),
+                    sjel_gpui_core::travel::TravelRoute::Map
+                        | sjel_gpui_core::travel::TravelRoute::Trip {
+                            section: sjel_gpui_core::travel::TripSection::Map,
+                            ..
+                        }
+                ) {
+                    sjel_gpui_ui::nsh_map::show(None);
+                }
+            }),
             Tab::Inbox => sjel_gpui_ui::nsh_capture::load(),
             Tab::Documents => self.documents.update(cx, |docs, cx| docs.load(cx)),
             Tab::Interior => {

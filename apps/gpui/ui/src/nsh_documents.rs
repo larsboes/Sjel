@@ -34,6 +34,7 @@ pub enum NshPage {
     #[default]
     Today,
     Calendar,
+    Map,
     Capture,
     People,
     Settings,
@@ -56,6 +57,9 @@ fn page_router() -> &'static PageRouter {
 
 /// Switches [`NshHostScreen`] to `page` (`Documents` or `Mail`).
 pub fn set_nsh_page(page: NshPage) {
+    if page != NshPage::Map {
+        crate::nsh_map::hide();
+    }
     *page_router()
         .current
         .lock()
@@ -400,7 +404,11 @@ pub fn NshHostScreen() -> impl IntoElement {
     };
     let tab_item =
         move |label: &'static str, target_page: Option<NshPage>, route_name: &'static str| {
-            let is_active = move || target_page.map(|tp| page.get() == tp).unwrap_or(false);
+            let is_active = move || {
+                target_page
+                    .map(|tp| page.get() == tp)
+                    .unwrap_or(route_name == "travel" && page.get() == NshPage::Map)
+            };
             button()
                 .flex_1()
                 .py_2()
@@ -453,6 +461,7 @@ pub fn NshHostScreen() -> impl IntoElement {
         .child(view().flex_1().child(dynamic(move || match page.get() {
             NshPage::Today => today_screen().into_element(),
             NshPage::Calendar => calendar_screen().into_element(),
+            NshPage::Map => crate::nsh_map::map_screen().into_element(),
             NshPage::Capture => capture_screen().into_element(),
             NshPage::People => people_screen().into_element(),
             NshPage::Settings => settings_screen().into_element(),

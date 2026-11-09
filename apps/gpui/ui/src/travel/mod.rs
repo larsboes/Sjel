@@ -245,6 +245,8 @@ impl Travel {
         }
         self.loading = true;
         self.error = None;
+        #[cfg(all(target_os = "ios", feature = "nsh"))]
+        self.sync_nsh_map();
         let work = shell::run(async {
             let saved = travel::saved_plans().await;
             // Read with the snapshot: the map can only be instant on a second open if the
@@ -277,6 +279,8 @@ impl Travel {
                         // Resolve while the network read is still in flight, so a trip opens
                         // with its stops whether or not the Mac answers.
                         view.resolve_coordinates(cx);
+                        #[cfg(all(target_os = "ios", feature = "nsh"))]
+                        view.sync_nsh_map();
                     }
                     None => view.error = Some("Reading saved trips stopped.".into()),
                 }
@@ -340,6 +344,8 @@ impl Travel {
                 view.presence_loaded = false;
                 view.load_people_presence(cx, false);
                 view.resolve_coordinates(cx);
+                #[cfg(all(target_os = "ios", feature = "nsh"))]
+                view.sync_nsh_map();
                 cx.notify();
             });
         })
@@ -874,6 +880,11 @@ impl Travel {
             }
         }
         self.activate(cx);
+        #[cfg(all(target_os = "ios", feature = "nsh"))]
+        if self.section() == TripSection::Map {
+            self.sync_nsh_map();
+            crate::nsh_map::show(None);
+        }
         cx.notify();
     }
 
@@ -893,6 +904,11 @@ impl Travel {
         }
         if section == TripSection::Map {
             self.load_map(cx);
+            #[cfg(all(target_os = "ios", feature = "nsh"))]
+            {
+                self.sync_nsh_map();
+                crate::nsh_map::show(self.selected_stop.as_ref().and_then(|p| p.coordinate()));
+            }
         }
         cx.notify();
     }
@@ -906,6 +922,11 @@ impl Travel {
     }
 
     fn fit_trip(&mut self, cx: &mut Context<Self>) {
+        #[cfg(all(target_os = "ios", feature = "nsh"))]
+        if self.section() == TripSection::Map {
+            self.sync_nsh_map();
+            return;
+        }
         if self.viewport.0 < 1. {
             self.fit_pending = true;
             return;

@@ -346,6 +346,31 @@ impl Capabilities {
             }
             // An entry landed in the replica: the queue moved, so the Mac can have it now.
             Event::Calendar(CalendarEvent::Wrote) => self.maybe_sync(cx),
+            Event::Map(event) => {
+                use sjel_gpui_ui::nsh_map::MapEvent;
+                match event {
+                    MapEvent::Show => {
+                        sjel_gpui_ui::nsh_documents::set_nsh_page(
+                            sjel_gpui_ui::nsh_documents::NshPage::Map,
+                        );
+                        #[cfg(target_os = "ios")]
+                        crate::host::show_nsh();
+                    }
+                    MapEvent::Refresh => self.travel.update(cx, |travel, cx| travel.refresh(cx)),
+                    MapEvent::Resolve => self
+                        .travel
+                        .update(cx, |travel, cx| travel.resolve_current_plan(true, cx)),
+                    MapEvent::Open(route) => {
+                        sjel_gpui_ui::nsh_map::hide();
+                        #[cfg(target_os = "ios")]
+                        crate::host::hide_nsh();
+                        self.active_tab = Tab::Travel;
+                        self.travel
+                            .update(cx, |travel, cx| travel.open_route(route, cx));
+                        cx.notify();
+                    }
+                }
+            }
         }
     }
 }

@@ -61,6 +61,37 @@ fn scroll_direction_factor() -> f64 {
 }
 
 impl Travel {
+    #[cfg(all(target_os = "ios", feature = "nsh"))]
+    pub(super) fn sync_nsh_map(&self) {
+        if self.section() != TripSection::Map {
+            return;
+        }
+        let (title, markers, connections) = if matches!(self.route, TravelRoute::Map) {
+            (
+                "Map & Places".to_owned(),
+                super::markers::build_location_markers(&self.plans, &self.details, None),
+                self.plans.iter().flat_map(|p| p.connections()).collect(),
+            )
+        } else if let Some(plan) = self.current() {
+            (
+                plan.title.clone(),
+                super::markers::build_current_plan_markers(plan, self.details.get(&plan.id), None),
+                plan.connections(),
+            )
+        } else {
+            ("Trip map".to_owned(), Vec::new(), Vec::new())
+        };
+        crate::nsh_map::set_scene(crate::nsh_map::MapScene {
+            route: self.route.clone(),
+            title,
+            markers,
+            connections,
+            status: self.status.clone(),
+            error: self.error.clone(),
+            loading: self.loading,
+        });
+    }
+
     pub(super) fn category_chips(&self, cx: &mut Context<Self>) -> AnyElement {
         let mut row = div().flex().flex_wrap().items_center().gap_1();
         let all_active = self.selected_category_filter.is_none();
@@ -669,6 +700,11 @@ impl Travel {
 
     /// Requests what the current camera needs, now.
     pub(super) fn load_map(&mut self, cx: &mut Context<Self>) {
+        #[cfg(all(target_os = "ios", feature = "nsh"))]
+        if self.section() == TripSection::Map {
+            self.sync_nsh_map();
+            return;
+        }
         if self.center.is_none() {
             // No inferred city or device location: start with a world overview.
             self.center = Some(Coordinate {

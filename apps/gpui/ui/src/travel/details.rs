@@ -156,5 +156,7 @@ impl Travel {
             self.load_people_presence(cx, false);
         }
         self.resolve_coordinates(cx);
+        #[cfg(all(target_os = "ios", feature = "nsh"))]
+        self.sync_nsh_map();
     }
 }

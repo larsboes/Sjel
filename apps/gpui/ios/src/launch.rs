@@ -45,7 +45,7 @@ pub(crate) fn launch_tab() -> Tab {
         "people" => nsh_tab(Tab::People),
         "interior" => Tab::Interior,
         "inbox" => nsh_tab(Tab::Inbox),
-        "travel" => Tab::Travel,
+        "travel" | "map" => Tab::Travel,
         "settings" => nsh_tab(Tab::Settings),
         "mail" => nsh_tab(Tab::Mail),
         "documents" => nsh_tab(Tab::Documents),

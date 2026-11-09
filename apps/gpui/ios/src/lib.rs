@@ -40,8 +40,8 @@ use sjel_gpui_core::shell::{self, NodeHealth};
 use sjel_gpui_core::sync::{self, Report};
 use sjel_gpui_core::terminal::Host;
 use sjel_gpui_ui::agent_seat::AgentSeat;
-use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
 use sjel_gpui_ui::interior::RoomPlanHistory;
+use sjel_gpui_ui::nsh_calendar::{self, CalendarEvent};
 use sjel_gpui_ui::nsh_today::{self, TodayEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
 use sjel_gpui_ui::sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
@@ -171,6 +171,8 @@ enum Event {
     Today(TodayEvent),
     /// An NSH screen asked for a newer copy of the Mac's data.
     RefreshCopy,
+    /// A refresh or a write on the NSH Calendar screen (`sjel_gpui_ui::nsh_calendar`).
+    Calendar(CalendarEvent),
     /// A press on the NSH Settings screen (`sjel_gpui_ui::nsh_settings`).
     Settings(sjel_gpui_ui::nsh_settings::SettingsAction),
 }
@@ -192,8 +194,6 @@ pub struct Capabilities {
     board: Option<Board>,
     /// The Mac's Projects page over the replica (`sjel_gpui_ui::projects`), once the store opens.
     projects: Option<gpui::Entity<Projects>>,
-    /// The Calendar page over the Mac's read-only copy (`sjel_gpui_ui::calendar`).
-    calendar: gpui::Entity<Calendar>,
     /// The Mail triage proposals synced from the Mac (`sjel_gpui_ui::mail`).
     mail: gpui::Entity<sjel_gpui_ui::mail::Mail>,
     /// The Document library and PDF reader (`sjel_gpui_ui::documents`).
@@ -300,21 +300,8 @@ impl Capabilities {
         // The Calendar page, and the copy it reads. A copy already on disk is opened before the
         // Mac answers, so the calendar holds the last sync's data on a launch that never reaches
         // the Mac (`core/src/mirror.rs`).
-        let calendar = cx.new(|_| Calendar::at(launch_day(), Density::Mobile));
-        cx.subscribe(&calendar, |view, _, event, cx| match event {
-            // Newer data: a sync when this phone has a store to sync, the Mac's copy otherwise.
-            CalendarEvent::Refresh => {
-                if view.board.is_some() {
-                    view.maybe_sync(cx);
-                } else {
-                    view.refresh_copy(cx);
-                }
-            }
-            // An entry landed in the replica: the queue moved, so the Mac can have it now.
-            CalendarEvent::Wrote => view.maybe_sync(cx),
-            CalendarEvent::Editing(open) => keyboard(*open),
-        })
-        .detach();
+        nsh_calendar::open_day(launch_day());
+        nsh_calendar::set_host(|event| crate::host::announce(Event::Calendar(event)));
         // People and Places read the same copy, so one fetch feeds both pages. Refresh asks for a
         // newer copy: there is nothing to sync, because nothing here writes.
         let mail = cx.new(|cx| {
@@ -438,7 +425,6 @@ impl Capabilities {
             active_tab: launch_tab(),
             travel: cx.new(|cx| sjel_gpui_ui::travel::Travel::new(None, Density::Mobile, cx)),
             projects: None,
-            calendar,
             interior,
             mail,
             documents,
@@ -628,12 +614,9 @@ impl Capabilities {
         }
         let Some(client) = self.client.clone() else {
             // A refresh needs the Mac. Saying so is better than a button that does nothing.
-            self.calendar.update(cx, |calendar, cx| {
-                calendar.set_note(
-                    Some("Pair with your Mac in Settings to fetch a copy.".to_owned()),
-                    cx,
-                )
-            });
+            nsh_calendar::set_note(Some(
+                "Pair with your Mac in Settings to fetch a copy.".to_owned(),
+            ));
             return;
         };
         self.copying = true;
@@ -777,8 +760,6 @@ impl Render for Capabilities {
             .update(cx, |docs, cx| docs.set_palette(palette, cx));
         self.travel
             .update(cx, |travel, cx| travel.set_palette(palette, cx));
-        self.calendar
-            .update(cx, |calendar, cx| calendar.set_palette(palette, cx));
         self.interior
             .update(cx, |history, cx| history.set_palette(palette, cx));
         self.soundscape
@@ -830,7 +811,6 @@ impl Render for Capabilities {
                         page.child(needs_mac("needs-mac-mail", "Mail", palette, cx))
                     })
                     .when(is_travel, |page| page.child(self.travel.clone()))
-                    .when(is_calendar, |page| page.child(self.calendar.clone()))
                     .when(is_documents, |page| {
                         page.child(
                             div()

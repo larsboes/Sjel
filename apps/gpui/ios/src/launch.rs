@@ -41,7 +41,7 @@ pub(crate) fn launch_day() -> chrono::NaiveDate {
 pub(crate) fn launch_tab() -> Tab {
     match std::env::var("SJEL_TAB").unwrap_or_default().as_str() {
         "projects" => Tab::Projects,
-        "calendar" => Tab::Calendar,
+        "calendar" => nsh_tab(Tab::Calendar),
         "people" => nsh_tab(Tab::People),
         "interior" => Tab::Interior,
         "inbox" => nsh_tab(Tab::Inbox),
@@ -63,6 +63,7 @@ fn nsh_tab(tab: Tab) -> Tab {
             Tab::Inbox => NshPage::Capture,
             Tab::People => NshPage::People,
             Tab::Settings => NshPage::Settings,
+            Tab::Calendar => NshPage::Calendar,
             Tab::Documents => NshPage::Documents,
             Tab::Mail => NshPage::Mail,
             _ => NshPage::Today,

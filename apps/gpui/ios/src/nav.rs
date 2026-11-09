@@ -48,8 +48,7 @@ impl Capabilities {
     pub(super) fn open_link(&mut self, link: &str, cx: &mut Context<Self>) {
         if let Some(day) = reminders::link_day(link) {
             self.select_tab(Tab::Calendar, cx);
-            self.calendar
-                .update(cx, |calendar, cx| calendar.open_day(day, cx));
+            nsh_calendar::open_day(day);
         } else if let Some(target) = route::parse_deep_link(link) {
             self.open_target(target, cx);
         }
@@ -82,8 +81,7 @@ impl Capabilities {
         match event {
             TodayEvent::OpenDay(day) => {
                 self.select_tab(Tab::Calendar, cx);
-                self.calendar
-                    .update(cx, |calendar, cx| calendar.open_day(day, cx));
+                nsh_calendar::open_day(day);
             }
             TodayEvent::OpenProject(name) => {
                 self.select_tab(Tab::Projects, cx);
@@ -114,6 +112,17 @@ impl Capabilities {
     pub(super) fn select_tab(&mut self, tab: Tab, cx: &mut Context<Self>) {
         // Today, Documents and Mail are NSH screens over the GPUI view; the tab under them stays
         // where it was.
+        #[cfg(target_os = "ios")]
+        if tab == Tab::Calendar {
+            sjel_gpui_ui::nsh_documents::set_nsh_page(
+                sjel_gpui_ui::nsh_documents::NshPage::Calendar,
+            );
+            crate::host::show_nsh();
+            if self.copy.is_none() && !self.copying {
+                self.refresh_copy(cx);
+            }
+            return;
+        }
         #[cfg(target_os = "ios")]
         if tab == Tab::Settings {
             sjel_gpui_ui::nsh_documents::set_nsh_page(

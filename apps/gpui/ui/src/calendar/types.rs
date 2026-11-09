@@ -46,17 +46,6 @@ pub fn sync_status_mark(status: &CalendarSyncStatus, palette: Palette) -> AnyEle
         .into_any_element()
 }
 
-/// What the mobile day page asks its host to do. The host owns the network, the copy on disk, and the sync.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum CalendarEvent {
-    /// The person asked for newer data: a sync into the store, or a newer copy when there is none.
-    Refresh,
-    /// An entry was written here and is waiting for the Mac, so the host may sync now.
-    Wrote,
-    /// The new-entry form opened (`true`) or closed, so the host can show or hide the keyboard.
-    Editing(bool),
-}
-
 /// A calendar action handled by the application that owns navigation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CalendarIntent {
@@ -66,40 +55,11 @@ pub enum CalendarIntent {
     OpenInbox,
 }
 
-/// Where the week on screen was read from, which is also what the page may do with it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Origin {
-    /// This device's own store: the phone's replica, or the Mac's database. Writes land here.
-    Store,
-    /// The Mac's read-only copy, because the store holds no calendar yet.
-    Copy,
-    /// Neither answered.
-    Unread,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum DayViewMode {
-    #[default]
-    List,
-    Grid,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum View {
     Day,
     Month,
     Week,
-}
-
-/// The new-entry form for mobile day view: a title, times, and commitment chips.
-pub(crate) struct Composer {
-    pub(crate) input: Entity<InputState>,
-    pub(crate) all_day: bool,
-    pub(crate) start: String,
-    pub(crate) end: String,
-    pub(crate) commitment: &'static str,
-    /// The listener that saves on Enter, held for as long as the form is open.
-    pub(crate) _subscription: Subscription,
 }
 
 /// The desktop new-entry form's fields.

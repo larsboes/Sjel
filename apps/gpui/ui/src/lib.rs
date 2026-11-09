@@ -31,6 +31,8 @@ pub mod media;
 pub mod music;
 pub mod nav;
 #[cfg(feature = "nsh")]
+pub mod nsh_calendar;
+#[cfg(feature = "nsh")]
 pub mod nsh_capture;
 #[cfg(feature = "nsh")]
 pub mod nsh_documents;

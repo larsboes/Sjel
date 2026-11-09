@@ -670,7 +670,8 @@ opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-s
 | NSH Capture replaces the phone's GPUI Inbox; the Mac keeps its triage page | `ui/src/nsh_capture.rs`, `ui/src/inbox/` | `dcb59cf1` |
 | NSH People & Places replaces the phone's GPUI register; the Mac keeps its editable page | `ui/src/nsh_people.rs`, `ui/src/people/mod.rs` | `3de1a88a` |
 | NSH Settings: the shell describes pairing, found Macs, room scan, alerts and appearance as `SettingsState` and answers `SettingsAction` | `ui/src/nsh_settings.rs`, `ios/src/settings.rs` | `79a07b08` |
-| NSH screens follow the appearance settings: palette tokens as theme overrides, forced light or dark, and a host cover that paints the safe-area bands. Touch density has no NSH token and applies to GPUI pages only | `ui/src/theme/nsh.rs`, `ios/src/nsh.rs`, `host/App.swift` | this section's commit |
+| NSH screens follow the appearance settings: palette tokens as theme overrides, forced light or dark, and a host cover that paints the safe-area bands. Touch density has no NSH token and applies to GPUI pages only | `ui/src/theme/nsh.rs`, `ios/src/nsh.rs`, `host/App.swift` | `7ee75fc3` |
+| NSH Calendar replaces the phone's GPUI day view: list and 24-hour grid, free time, new entries, a sheet per entry with quarter-hour moves in place of the long-press drag, undo and two-tap delete | `ui/src/nsh_calendar.rs` | this section's commit |
 
 Trial result, 2026-11-07, on a paired iPhone: the list fills from the Mac, a long press on the
 text opens the system menu, and VoiceOver reads the list and the reader.
@@ -713,7 +714,7 @@ so it resolves to the Mac app's 0.1.14.
    (`docs::set_switch_tab` -> `Event::SelectTab` / `Event::OpenEdge` in `ios/src/nsh.rs`, `events.rs`)
    for GPUI views. Open: device check on paired iPhone.
 5. **Retire the phone's GPUI pages**, all of them now (decided 2026-11-09), in waves: wave 1
-   Today, capture, People & Places, Settings and pairing (done); wave 2 Calendar, Travel,
+   Today, capture, People & Places, Settings and pairing (done); wave 2 Calendar (done), Travel,
    Projects, Interior; wave 3 the edge (Agent seat, terminal, soundscape, activity). `ios/src`'s GPUI shell and
    `gpui-mobile` go when the last one has moved. Android comes from NSH's Android backend.
 6. **The Mac window's content** was not looked at (`SJEL_NSH_TRIAL=1`). Whether Mac pages move to

@@ -18,6 +18,7 @@ use sjel_gpui_core::originals::Originals;
 use sjel_gpui_core::shell::{self, DocumentDetail, DocumentSummary};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
+use crate::nsh_calendar::calendar_screen;
 use crate::nsh_capture::capture_screen;
 use crate::nsh_mail::mail_screen;
 use crate::nsh_people::people_screen;
@@ -32,6 +33,7 @@ pub const PDF_COMPONENT: &str = "sjel.pdf";
 pub enum NshPage {
     #[default]
     Today,
+    Calendar,
     Capture,
     People,
     Settings,
@@ -430,7 +432,7 @@ pub fn NshHostScreen() -> impl IntoElement {
         .child(tab_item("Today", Some(NshPage::Today), "today"))
         .child(tab_item("Mail", Some(NshPage::Mail), "mail"))
         .child(tab_item("Docs", Some(NshPage::Documents), "documents"))
-        .child(tab_item("Calendar", None, "calendar"))
+        .child(tab_item("Calendar", Some(NshPage::Calendar), "calendar"))
         .child(tab_item("Travel", None, "travel"))
         .child(tab_item("Agent", None, "agent"));
 
@@ -450,6 +452,7 @@ pub fn NshHostScreen() -> impl IntoElement {
         }))
         .child(view().flex_1().child(dynamic(move || match page.get() {
             NshPage::Today => today_screen().into_element(),
+            NshPage::Calendar => calendar_screen().into_element(),
             NshPage::Capture => capture_screen().into_element(),
             NshPage::People => people_screen().into_element(),
             NshPage::Settings => settings_screen().into_element(),

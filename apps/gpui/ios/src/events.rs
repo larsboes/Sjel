@@ -19,9 +19,7 @@ impl Capabilities {
                 match outcome {
                     Ok(copy) => {
                         self.copy = Some(copy.clone());
-                        self.calendar.update(cx, |calendar, cx| {
-                            calendar.set_copy(Some(copy.clone()), None, cx)
-                        });
+                        nsh_calendar::set_copy(Some(copy.clone()), None);
                         sjel_gpui_ui::nsh_people::set_copy(Some(copy.clone()), None);
                         nsh_today::set_copy(Some(copy), None);
                     }
@@ -29,16 +27,12 @@ impl Capabilities {
                     // it is still true, only older, and the page says how old.
                     Err(error) => {
                         if self.copy.is_none() {
-                            self.calendar.update(cx, |calendar, cx| {
-                                calendar.set_copy(None, Some(error.clone()), cx)
-                            });
+                            nsh_calendar::set_copy(None, Some(error.clone()));
                             sjel_gpui_ui::nsh_people::set_copy(None, Some(error.clone()));
                             nsh_today::set_copy(None, Some(error));
                         } else {
                             let note = format!("Could not fetch a newer copy: {error}");
-                            self.calendar.update(cx, |calendar, cx| {
-                                calendar.set_note(Some(note.clone()), cx)
-                            });
+                            nsh_calendar::set_note(Some(note.clone()));
                             sjel_gpui_ui::nsh_people::set_note(Some(note.clone()));
                             nsh_today::set_note(Some(note));
                         }
@@ -56,9 +50,7 @@ impl Capabilities {
                         sjel_gpui_ui::nsh_capture::set_store(Some(store.clone()));
                         let repo = self.repo_for(store);
                         nsh_today::set_store(Some(repo.clone()));
-                        self.calendar.update(cx, |calendar, cx| {
-                            calendar.set_store(Some(repo.clone()), cx)
-                        });
+                        nsh_calendar::set_store(Some(repo.clone()));
                         // The reminder rebuild reads the same store: an entry written on
                         // the phone is a reminder on the same phone, without the Mac.
                         self.repo = Some(repo);
@@ -245,7 +237,7 @@ impl Capabilities {
                     projects.update(cx, |projects, cx| projects.reload(cx));
                 }
                 // A pull lands entries too, and the ids a create answered with.
-                self.calendar.update(cx, |calendar, cx| calendar.load(cx));
+                nsh_calendar::load();
                 // A sync is what moves a capture from "waiting" to "on the Mac".
                 sjel_gpui_ui::nsh_capture::load();
                 let (pending, paired) = (
@@ -344,6 +336,16 @@ impl Capabilities {
             Event::Today(event) => self.on_today(event, cx),
             Event::RefreshCopy => self.refresh_copy(cx),
             Event::Settings(action) => self.on_settings(action, cx),
+            // Newer data: a sync when this phone has a store to sync, the Mac's copy otherwise.
+            Event::Calendar(CalendarEvent::Refresh) => {
+                if self.board.is_some() {
+                    self.maybe_sync(cx);
+                } else {
+                    self.refresh_copy(cx);
+                }
+            }
+            // An entry landed in the replica: the queue moved, so the Mac can have it now.
+            Event::Calendar(CalendarEvent::Wrote) => self.maybe_sync(cx),
         }
     }
 }

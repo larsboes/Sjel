@@ -46,7 +46,7 @@ pub(crate) fn launch_tab() -> Tab {
         "interior" => Tab::Interior,
         "inbox" => nsh_tab(Tab::Inbox),
         "travel" => Tab::Travel,
-        "settings" => Tab::Settings,
+        "settings" => nsh_tab(Tab::Settings),
         "mail" => nsh_tab(Tab::Mail),
         "documents" => nsh_tab(Tab::Documents),
         _ => nsh_tab(Tab::Today),
@@ -62,6 +62,7 @@ fn nsh_tab(tab: Tab) -> Tab {
         set_nsh_page(match tab {
             Tab::Inbox => NshPage::Capture,
             Tab::People => NshPage::People,
+            Tab::Settings => NshPage::Settings,
             Tab::Documents => NshPage::Documents,
             Tab::Mail => NshPage::Mail,
             _ => NshPage::Today,

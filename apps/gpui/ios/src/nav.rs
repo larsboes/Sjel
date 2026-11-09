@@ -115,6 +115,15 @@ impl Capabilities {
         // Today, Documents and Mail are NSH screens over the GPUI view; the tab under them stays
         // where it was.
         #[cfg(target_os = "ios")]
+        if tab == Tab::Settings {
+            sjel_gpui_ui::nsh_documents::set_nsh_page(
+                sjel_gpui_ui::nsh_documents::NshPage::Settings,
+            );
+            crate::host::show_nsh();
+            notify::report();
+            return;
+        }
+        #[cfg(target_os = "ios")]
         if tab == Tab::People {
             sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::People);
             crate::host::show_nsh();

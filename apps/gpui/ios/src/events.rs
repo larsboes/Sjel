@@ -343,6 +343,7 @@ impl Capabilities {
             Event::OpenEdge(seat) => self.open_edge(seat, cx),
             Event::Today(event) => self.on_today(event, cx),
             Event::RefreshCopy => self.refresh_copy(cx),
+            Event::Settings(action) => self.on_settings(action, cx),
         }
     }
 }

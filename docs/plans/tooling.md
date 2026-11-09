@@ -80,7 +80,10 @@ agent/status Rust suites pass (65 and 112 tests), and CI-selection regressions p
 Bundled SQLite is upgraded to the patched `libsqlite3-sys` through rusqlite. `sjel-store` keeps
 r2d2 but owns the file-backed manager because the external adapter prevents the dependency upgrade.
 Its 14 tests and strict Clippy pass; the root lockfile security scan reports no unfiltered issues.
-Fresh full CI remains required before tagging.
+Full Rust tests and security scanning pass at `ed070ee8`; strict CI found an iterator-conversion
+lint after the dependency upgrade, and a shell fixture could terminate its listing producer early.
+Both are corrected, including removal of the marketplace-only CLI route. Fresh full CI remains
+required before tagging.
 
 ## Signed macOS helper
 

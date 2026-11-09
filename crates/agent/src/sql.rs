@@ -111,11 +111,7 @@ impl Tool for SqlQuery {
             .map_err(|e| format!("query_only: {e}"))?;
 
         let mut statement = connection.prepare(single).map_err(|e| format!("{e}"))?;
-        let columns: Vec<String> = statement
-            .column_names()
-            .into_iter()
-            .map(str::to_owned)
-            .collect();
+        let columns: Vec<String> = statement.column_names().map(str::to_owned).collect();
         let mut rows = statement.query([]).map_err(|e| format!("{e}"))?;
 
         let mut out = String::new();

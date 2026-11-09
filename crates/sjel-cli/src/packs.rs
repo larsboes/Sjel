@@ -553,47 +553,6 @@ pub fn all_packs(root: &Path) -> Result<Vec<String>, String> {
     engine::available_packs(&config, true)
 }
 
-/// `sjel packs list` — the public Packs no dedicated deployer owns, one per line. It is the
-/// read `tools/generate-marketplace.ts` needs and has no launcher of its own, so it is named
-/// here rather than in the tools/ namespace: the marketplace is its only caller.
-pub fn list_public(root: &Path, args: &[String]) -> ExitCode {
-    match args.first().map(String::as_str) {
-        None | Some("list") => {}
-        Some("-h" | "--help") => {
-            println!("usage: sjel packs list — public Packs, one per line");
-            return ExitCode::SUCCESS;
-        }
-        Some(other) => {
-            eprintln!("packs: unknown verb '{other}'");
-            return ExitCode::from(1);
-        }
-    }
-    let config = DeployConfig {
-        sjel_root: root.to_path_buf(),
-        pack_roots: Some(vec![root.join("Packs")]),
-        destination: PathBuf::new(),
-        state_file: PathBuf::new(),
-        adapter: "marketplace".to_string(),
-        state_env_var: None,
-        tree_convention: None,
-        flat_file_convention: None,
-        skip_manifest_skills: false,
-        validate_adapter_files: None,
-    };
-    match engine::available_packs(&config, false) {
-        Ok(packs) => {
-            for pack in packs {
-                println!("{pack}");
-            }
-            ExitCode::SUCCESS
-        }
-        Err(message) => {
-            eprintln!("packs: {message}");
-            ExitCode::from(1)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -246,9 +246,13 @@ assert m["upstream"]["url"] == "https://github.com/remotion-dev/skills.git", m
 PY
 run "$SCRATCH" verify
 [ "$status" -eq 0 ] || { echo "FAIL: a fresh store should verify, got $status"; fails=$((fails + 1)); }
-"$(dirname "$SKILLS")/packs-claude" list 2>/dev/null | grep -qx 'skills' || {
-  echo "FAIL: a harness does not list the store Pack"; fails=$((fails + 1))
-}
+listing=$("$(dirname "$SKILLS")/packs-claude" list 2>&1)
+list_status=$?
+if [ "$list_status" -ne 0 ] || ! printf '%s\n' "$listing" | grep -x 'skills' >/dev/null; then
+  echo "FAIL: a harness does not list the store Pack (exit $list_status)"
+  printf '%s\n' "$listing"
+  fails=$((fails + 1))
+fi
 printf 'tampered\n' >> "$STORE/skills/skills/staged-skill/SKILL.md"
 run "$SCRATCH" verify
 [ "$status" -eq 1 ] || { echo "FAIL: a tampered store should fail verify, got $status"; fails=$((fails + 1)); }

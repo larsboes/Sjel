@@ -44,47 +44,32 @@ pub(crate) fn launch_tab() -> Tab {
         "calendar" => Tab::Calendar,
         "people" => Tab::People,
         "interior" => Tab::Interior,
-        "inbox" => Tab::Inbox,
+        "inbox" => nsh_tab(Tab::Inbox),
         "travel" => Tab::Travel,
         "settings" => Tab::Settings,
-        "mail" => mail_tab(),
-        "documents" => documents_tab(),
-        _ => today_tab(),
+        "mail" => nsh_tab(Tab::Mail),
+        "documents" => nsh_tab(Tab::Documents),
+        _ => nsh_tab(Tab::Today),
     }
 }
 
-/// Today is the NSH screen the app opens on (`nav.rs`, `select_tab`).
-fn today_tab() -> Tab {
+/// Opens the NSH screen that draws `tab` (`nav.rs`, `select_tab`). The GPUI page under it stays
+/// on Today.
+fn nsh_tab(tab: Tab) -> Tab {
     #[cfg(target_os = "ios")]
     {
-        sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Today);
-        crate::host::show_nsh();
-    }
-    Tab::Today
-}
-
-/// Documents is an NSH screen over Today when the build has NSH (`nav.rs`, `select_tab`).
-fn documents_tab() -> Tab {
-    #[cfg(target_os = "ios")]
-    {
-        sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Documents);
+        use sjel_gpui_ui::nsh_documents::{set_nsh_page, NshPage};
+        set_nsh_page(match tab {
+            Tab::Inbox => NshPage::Capture,
+            Tab::Documents => NshPage::Documents,
+            Tab::Mail => NshPage::Mail,
+            _ => NshPage::Today,
+        });
         crate::host::show_nsh();
         Tab::Today
     }
     #[cfg(not(target_os = "ios"))]
-    Tab::Documents
-}
-
-/// Mail is an NSH screen over Today when the build has NSH (`nav.rs`, `select_tab`).
-fn mail_tab() -> Tab {
-    #[cfg(target_os = "ios")]
-    {
-        sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Mail);
-        crate::host::show_nsh();
-        Tab::Today
-    }
-    #[cfg(not(target_os = "ios"))]
-    Tab::Mail
+    tab
 }
 
 /// `SJEL_SIDEBAR=soundscape|activity` opens the right edge at launch on that seat. A phone never sets

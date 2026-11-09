@@ -58,8 +58,7 @@ impl Capabilities {
                         // The Calendar tab writes to the same store, and reads it as
                         // soon as its change feed has been read once — until then the
                         // Mac's copy keeps drawing the day (`ui/src/calendar.rs`).
-                        self.inbox
-                            .update(cx, |inbox, cx| inbox.set_store(Some(store.clone()), cx));
+                        sjel_gpui_ui::nsh_capture::set_store(Some(store.clone()));
                         let repo = self.repo_for(store);
                         nsh_today::set_store(Some(repo.clone()));
                         self.calendar.update(cx, |calendar, cx| {
@@ -78,7 +77,7 @@ impl Capabilities {
                 if let Some(projects) = &self.projects {
                     projects.update(cx, |projects, cx| projects.set_blocked(blocked, cx));
                 }
-                self.inbox.update(cx, |inbox, cx| inbox.load(cx));
+                sjel_gpui_ui::nsh_capture::load();
                 nsh_today::set_records(records);
                 nsh_today::set_travel(board.pending(), self.client.is_some());
                 self.board = Some(board);
@@ -253,7 +252,7 @@ impl Capabilities {
                 // A pull lands entries too, and the ids a create answered with.
                 self.calendar.update(cx, |calendar, cx| calendar.load(cx));
                 // A sync is what moves a capture from "waiting" to "on the Mac".
-                self.inbox.update(cx, |inbox, cx| inbox.load(cx));
+                sjel_gpui_ui::nsh_capture::load();
                 let (pending, paired) = (
                     self.board.as_ref().map_or(0, Board::pending),
                     self.client.is_some(),
@@ -272,7 +271,7 @@ impl Capabilities {
                 if let Some(projects) = &self.projects {
                     projects.update(cx, |projects, cx| projects.set_blocked(blocked, cx));
                 }
-                self.inbox.update(cx, |inbox, cx| inbox.load(cx));
+                sjel_gpui_ui::nsh_capture::load();
                 nsh_today::set_records(records);
                 nsh_today::set_travel(pending, paired);
                 self.synced = Some(

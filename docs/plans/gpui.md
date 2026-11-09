@@ -666,7 +666,8 @@ opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-s
 | Originals: SHA-256 checked, PDFKit view, "Keep offline" | `core/src/originals.rs`, `host/Documents.swift` | `4c9910e6` |
 | Mac NSH trial (`SJEL_NSH_TRIAL=1`) registers `sjel.pdf` + `Originals` | `src/nsh_trial.rs` | `81cd6935` |
 | NSH Mail triage screen, one screen for phone and Mac (`NshHostScreen`) | `ui/src/nsh_mail.rs`, `core/src/shell/feed_mail.rs`, `ios/src/`, `src/nsh_trial.rs` | `5b63b531` |
-| NSH Today is the phone's landing screen; GPUI Today removed; ticks write the replica | `ui/src/nsh_today.rs`, `ios/src/nav.rs`, `events.rs` | this section's commit |
+| NSH Today is the phone's landing screen; GPUI Today removed; ticks write the replica | `ui/src/nsh_today.rs`, `ios/src/nav.rs`, `events.rs` | `e88e1adf` |
+| NSH Capture replaces the phone's GPUI Inbox; the Mac keeps its triage page | `ui/src/nsh_capture.rs`, `ui/src/inbox/` | this section's commit |
 
 Trial result, 2026-11-07, on a paired iPhone: the list fills from the Mac, a long press on the
 text opens the system menu, and VoiceOver reads the list and the reader.
@@ -709,7 +710,7 @@ so it resolves to the Mac app's 0.1.14.
    (`docs::set_switch_tab` -> `Event::SelectTab` / `Event::OpenEdge` in `ios/src/nsh.rs`, `events.rs`)
    for GPUI views. Open: device check on paired iPhone.
 5. **Retire the phone's GPUI pages**, all of them now (decided 2026-11-09), in waves: wave 1
-   Today (done), capture, People & Places, Settings and pairing; wave 2 Calendar, Travel,
+   Today and capture (done), People & Places, Settings and pairing; wave 2 Calendar, Travel,
    Projects, Interior; wave 3 the edge (Agent seat, terminal, soundscape, activity). `ios/src`'s GPUI shell and
    `gpui-mobile` go when the last one has moved. Android comes from NSH's Android backend.
 6. **The Mac window's content** was not looked at (`SJEL_NSH_TRIAL=1`). Whether Mac pages move to

@@ -41,7 +41,6 @@ use sjel_gpui_core::sync::{self, Report};
 use sjel_gpui_core::terminal::Host;
 use sjel_gpui_ui::agent_seat::AgentSeat;
 use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
-use sjel_gpui_ui::inbox::{Inbox, InboxEvent};
 use sjel_gpui_ui::interior::RoomPlanHistory;
 use sjel_gpui_ui::people::{People, PeopleEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
@@ -191,8 +190,6 @@ pub struct Capabilities {
     projects: Option<gpui::Entity<Projects>>,
     /// The Calendar page over the Mac's read-only copy (`sjel_gpui_ui::calendar`).
     calendar: gpui::Entity<Calendar>,
-    /// The capture field over the phone's own replica (`sjel_gpui_ui::inbox`).
-    inbox: gpui::Entity<Inbox>,
     /// The Mail triage proposals synced from the Mac (`sjel_gpui_ui::mail`).
     mail: gpui::Entity<sjel_gpui_ui::mail::Mail>,
     /// The Document library and PDF reader (`sjel_gpui_ui::documents`).
@@ -366,15 +363,9 @@ impl Capabilities {
             PeopleEvent::Editing(open) => keyboard(*open),
         })
         .detach();
-        // The capture field writes the phone's own replica, so it needs nothing from the Mac: it is
-        // built empty and filled when the store opens.
-        let inbox = cx.new(|_| Inbox::new(Density::Mobile));
-        cx.subscribe(&inbox, |view, _, event, cx| match event {
-            // A capture landed in the queue: the Mac can have it now if this launch reached it.
-            InboxEvent::Wrote => view.maybe_sync(cx),
-            InboxEvent::Editing(open) => keyboard(*open),
-        })
-        .detach();
+        // The NSH capture screen writes the phone's own replica, so it needs nothing from the Mac.
+        // A capture that landed reloads the queue, which syncs if this launch reached the Mac.
+        sjel_gpui_ui::nsh_capture::set_wrote(|| crate::host::announce(Event::Wrote));
         let copy_events = events.clone();
         shell::spawn(async move {
             let _ = copy_events.unbounded_send(Event::Copy(open_copy()));
@@ -454,7 +445,6 @@ impl Capabilities {
             calendar,
             people,
             interior,
-            inbox,
             mail,
             documents,
             soundscape,
@@ -1146,8 +1136,6 @@ impl Render for Capabilities {
             .update(cx, |people, cx| people.set_palette(palette, cx));
         self.interior
             .update(cx, |history, cx| history.set_palette(palette, cx));
-        self.inbox
-            .update(cx, |inbox, cx| inbox.set_palette(palette, cx));
         self.soundscape
             .update(cx, |drawer, cx| drawer.set_palette(palette, cx));
         if let Some(projects) = &self.projects {
@@ -1621,7 +1609,6 @@ impl Render for Capabilities {
                     .when(is_mail && !paired, |page| {
                         page.child(needs_mac("needs-mac-mail", "Mail", palette, cx))
                     })
-                    .when(is_inbox, |page| page.child(self.inbox.clone()))
                     .when(is_travel, |page| page.child(self.travel.clone()))
                     .when(is_calendar, |page| page.child(self.calendar.clone()))
                     .when(is_people, |page| page.child(self.people.clone()))

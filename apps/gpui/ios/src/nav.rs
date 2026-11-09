@@ -115,6 +115,15 @@ impl Capabilities {
         // Today, Documents and Mail are NSH screens over the GPUI view; the tab under them stays
         // where it was.
         #[cfg(target_os = "ios")]
+        if tab == Tab::Inbox {
+            sjel_gpui_ui::nsh_documents::set_nsh_page(
+                sjel_gpui_ui::nsh_documents::NshPage::Capture,
+            );
+            crate::host::show_nsh();
+            sjel_gpui_ui::nsh_capture::load();
+            return;
+        }
+        #[cfg(target_os = "ios")]
         if tab == Tab::Today {
             sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Today);
             crate::host::show_nsh();
@@ -142,7 +151,7 @@ impl Capabilities {
         match tab {
             Tab::Mail => self.mail.update(cx, |mail, cx| mail.load(cx)),
             Tab::Travel => self.travel.update(cx, |travel, cx| travel.activate(cx)),
-            Tab::Inbox => self.inbox.update(cx, |inbox, cx| inbox.load(cx)),
+            Tab::Inbox => sjel_gpui_ui::nsh_capture::load(),
             Tab::Documents => self.documents.update(cx, |docs, cx| docs.load(cx)),
             Tab::Interior => {
                 self.interior.update(cx, |history, cx| history.refresh(cx));

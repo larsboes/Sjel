@@ -18,6 +18,7 @@ use sjel_gpui_core::originals::Originals;
 use sjel_gpui_core::shell::{self, DocumentDetail, DocumentSummary};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
+use crate::nsh_capture::capture_screen;
 use crate::nsh_mail::mail_screen;
 use crate::nsh_today::today_screen;
 
@@ -29,6 +30,7 @@ pub const PDF_COMPONENT: &str = "sjel.pdf";
 pub enum NshPage {
     #[default]
     Today,
+    Capture,
     Documents,
     Mail,
 }
@@ -444,6 +446,7 @@ pub fn NshHostScreen() -> impl IntoElement {
         }))
         .child(view().flex_1().child(dynamic(move || match page.get() {
             NshPage::Today => today_screen().into_element(),
+            NshPage::Capture => capture_screen().into_element(),
             NshPage::Documents => documents_screen().into_element(),
             NshPage::Mail => mail_screen().into_element(),
         })))

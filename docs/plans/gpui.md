@@ -647,7 +647,7 @@ opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-s
 
 | What | Where | Commit |
 |---|---|---|
-| Pins: `gpui-kit` 0.9.1, `gpui-pre` 0.3.12; NSH on the phone | §6 item 1 | this section's commit |
+| Pins: `gpui-kit` 0.9.1, `gpui-pre` 0.3.12; NSH on the phone | §6 item 1 | `b59879d0` |
 | Crates reach GPUI only through the Kit (`extern crate gpui_kit as gpui;`) | each crate root | `21966ff8` |
 | GPUI Fast is the Mac default; `--no-default-features` builds `gpui-pre` | `apps/gpui/Cargo.toml` | `fdf3f6cb` |
 | Frame cost on both renderers | §9 | `c28ffb23` |
@@ -664,10 +664,10 @@ opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-s
 | NSH screens follow the appearance settings: palette tokens as theme overrides, forced light or dark, and a host cover that paints the safe-area bands. Touch density has no NSH token and applies to GPUI pages only | `ui/src/theme/nsh.rs`, `ios/src/nsh.rs`, `host/App.swift` | `7ee75fc3` |
 | NSH Calendar replaces the phone's GPUI day view: list and 24-hour grid, free time, new entries, a sheet per entry with quarter-hour moves in place of the long-press drag, undo and two-tap delete | `ui/src/nsh_calendar.rs` | `0dd6807e` |
 | NSH draws the phone's global and per-trip maps with OpenStreetMap, the shared tile cache, anchored pan/pinch, filters and stop details; coordinate retries target the inspected stop's trip; phone trip reads use the signed device source and saved cache | `ui/src/nsh_map.rs`, `ui/src/travel/` | `849fbb92`, `00922f7a` |
-| NSH Trips and Connections, saved reads and OpenStreetMap offline packs; trip writes remain unavailable on the phone | `ui/src/nsh_travel.rs`, `core/src/travel/` | this section's commit |
-| NSH Projects writes the local replica: hubs, task filters/sorts/board, notes, content editing, due date, priority and confirmed deletion | `ui/src/nsh_projects.rs`, `core/src/tasks.rs` | this section's commit |
-| NSH Interior: local capture/archive, native USDZ previews, revision review, comparisons, inventory links, placements with expected revisions and layout planning | `ui/src/nsh_interior.rs`, `core/src/interior/` | this section's commit |
-| NSH side panel: Agent, authenticated Terminal, Soundscape and Activity; GPUI phone coordinator and `gpui-mobile` removed | `ui/src/nsh_{edge,agent,terminal,soundscape}.rs`, `ios/src/`, `host/App.swift` | this section's commit |
+| NSH Trips and Connections, saved reads and OpenStreetMap offline packs; trip writes remain unavailable on the phone | `ui/src/nsh_travel.rs`, `core/src/travel/` | `b59879d0` |
+| NSH Projects writes the local replica: hubs, task filters/sorts/board, notes, content editing, due date, priority and confirmed deletion | `ui/src/nsh_projects.rs`, `core/src/tasks.rs` | `b59879d0` |
+| NSH Interior: local capture/archive, native USDZ previews, revision review, comparisons, inventory links, placements with expected revisions and layout planning | `ui/src/nsh_interior.rs`, `core/src/interior/` | `b59879d0` |
+| NSH side panel: Agent, authenticated Terminal, Soundscape and Activity; GPUI phone coordinator and `gpui-mobile` removed | `ui/src/nsh_{edge,agent,terminal,soundscape}.rs`, `ios/src/`, `host/App.swift` | `b59879d0` |
 
 Trial result, 2026-11-07, on a paired iPhone: the list fills from the Mac, a long press on the
 text opens the system menu, and VoiceOver reads the list and the reader.

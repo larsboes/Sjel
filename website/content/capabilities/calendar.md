@@ -1,10 +1,10 @@
 # Calendar architecture & contracts
 
 Calendar owns temporal entries, bounded recurring rhythms, planning context, and reviewed Google
-imports and exports. Start with the [capability README](../../../capabilities/calendar/README.md) for
-its purpose; use the [model](../../../capabilities/calendar/src/model.rs),
-[store](../../../capabilities/calendar/src/store.rs), and
-[HTTP routes](../../../capabilities/calendar/src/server.rs) for implementation details.
+imports and exports. Start with the [capability README](../../../crates/calendar/README.md) for
+its purpose; use the [model](../../../crates/calendar/src/model.rs),
+[store](../../../crates/calendar/src/store.rs), and
+[HTTP routes](../../../crates/calendar/src/server.rs) for implementation details.
 
 ## 1. Temporal data model
 
@@ -25,7 +25,7 @@ Kinds remain extensible tokens. Commitment is a closed set: `possible`, `planned
 
 ## 2. Materialized forward-only rhythms
 
-[`rhythm.rs`](../../../capabilities/calendar/src/rhythm.rs) materializes matching dates from the
+[`rhythm.rs`](../../../crates/calendar/src/rhythm.rs) materializes matching dates from the
 later of `valid_from` and today, through `valid_until` inclusive. There is no fixed 90-day
 materialization horizon. Unique `(rhythm_id, starts_at)` slots make repeated materialization
 idempotent.
@@ -36,19 +36,19 @@ does not overwrite that edit.
 
 ## 3. Conflict evaluation doctrine
 
-The [correlation layer](../../../capabilities/calendar/src/correlate.rs) returns evidence and a soft
+The [correlation layer](../../../crates/calendar/src/correlate.rs) returns evidence and a soft
 feasibility verdict: `free`, `needs-travel-day`, or `conflicts`. It does not filter candidates out.
 An empty day is available by default.
 
-The [impact function](../../../capabilities/calendar/src/correlate/feasibility.rs) takes the cheaper
+The [impact function](../../../crates/calendar/src/correlate/feasibility.rs) takes the cheaper
 of a kind's impact and its commitment ceiling. A `possible` entry cannot block a day; a `planned`
 entry can cost a travel day; only `committed` entries can reach `conflicts`. Unknown kinds are
 neutral. Planning context supplies information without becoming a time block.
 
 ## 4. Google Calendar synchronization
 
-[`google_sync`](../../../capabilities/calendar/src/google_sync.rs) separates transport from the
-import/export decisions in [`google.rs`](../../../capabilities/calendar/src/google.rs).
+[`google_sync`](../../../crates/calendar/src/google_sync.rs) separates transport from the
+import/export decisions in [`google.rs`](../../../crates/calendar/src/google.rs).
 
 - Import review previews a bounded window, then re-fetches selected events and rejects changed
   revisions before writing non-blocking drafts. Imports deduplicate by Google event ID. An imported entry at `possible` may be refreshed; raising it to `planned` or

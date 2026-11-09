@@ -1,6 +1,6 @@
 # punctuality-ingest
 
-The scheduled producer for [`crates/punctuality`](../punctuality/). It runs the
+The scheduled producer for [`crates/punctuality`](../../crates/punctuality/). It runs the
 punctuality CLI once per day and lets the capability's ingest ledger decide whether to
 merge a newly published month or rebuild after an upstream correction.
 

@@ -6,7 +6,7 @@ persistent unit. Containers use the runtime's restart policy rather than a secon
 
 ## Platform implementations
 
-The [persistence renderer](../../../tools/sjel-cli/src/persist.rs) writes macOS user agents under
+The [persistence renderer](../../../crates/sjel-cli/src/persist.rs) writes macOS user agents under
 `~/Library/LaunchAgents/com.sjel.<name>.plist`. Linux uses user units under
 `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`, with `sjel-<name>.service` and, for scheduled jobs,
 `sjel-<name>.timer`. These filenames are generated contracts, including the retained `sjel` prefix.
@@ -46,7 +46,7 @@ arguments for its complete command reference.
 The API and scheduler claim a capability atomically in the backup ledger. Direct
 `tools/backup.sh` runs also take a deployment-local kernel lock; overlapping runs are refused
 before they can share a maintenance hold. See the
-[backup contract](../../../capabilities/backup/README.md#concurrent-runs-and-interruption).
+[backup contract](../../../crates/backup/README.md#concurrent-runs-and-interruption).
 
 On an ordinary failure or handled signal, the script attempts to resume a capability it held and
 remove its unfinished destination archive. A foreground command can delay signal handling.
@@ -68,7 +68,7 @@ that image's repository digest. A newly pulled image under the same tag may diff
 an existing container is running.
 
 Argument drift covers ports, mounts, capabilities, and network settings; it does not detect a
-moved image digest. The [container-refresh capability](../../../capabilities/container-refresh/README.md)
+moved image digest. The [container-refresh capability](../../../services/container-refresh/README.md)
 pulls declared channels and recreates running containers when the digest changes. Held or stopped
 containers remain stopped.
 

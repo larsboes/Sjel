@@ -1,6 +1,6 @@
 # entities-sync
 
-The scheduled Journal sync for [`crates/entities`](../entities/). Every 6 hours it runs
+The scheduled Journal sync for [`crates/entities`](../../crates/entities/). Every 6 hours it runs
 `entities-server sync-journal`, which reads the Journal through the `projects` HTTP surface and
 sets each person's `last_contact` to the latest dated entry that links their name. The date only
 moves forward, so a later day typed on the People page stays.

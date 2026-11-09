@@ -149,6 +149,21 @@ archive includes the managed path resolver; its extracted-path regression passes
   route to list or read them. Comms `/captures` and `/feed` do not hold clips. A session read one
   with a hand-written length-prefixed JSON client. Smallest change: a `sjel clips [list|show <key>]`
   command over the socket's `documents` and `document` requests, plus a read-only MCP route.
+- **Check relative links and anchors in tracked Markdown.** No gate does. On 2026-11-09 a
+  one-off scan found 71 broken links, most left by the move of `capabilities/` and `libs/` into
+  `crates/` and `services/`. Smallest change: a link and heading-anchor walk beside
+  `tools/check-doc-self-references.sh`, run by `tools/doctor` and CI.
+- **Stage only this session's hunks.** Other sessions leave uncommitted edits in shared files
+  (`upstreams.toml`, this plan). Committing one session's change needed a hand-built reverse
+  patch against a snapshot of the file. Smallest change: snapshot a file at a session's first
+  edit and stage the difference from that snapshot.
+- **Regenerate `ARCHITECTURE.md` from the index.** `tools/generate-architecture.sh` reads the
+  working tree, so another session's uncommitted `upstreams.toml` rows enter the output.
+  Smallest change: an option that reads each input with `git show :<path>`.
+- **Show which session holds which work.** `PLAN.md` says to take work no other session holds,
+  but nothing records a hold. On 2026-11-09 one session migrated the phone's remaining screens
+  while another decided the phone's renderer. Smallest change: a hold record per area plan that
+  `sjel` lists and `tools/doctor` reports when it is stale.
 
 - **Native-plugin activation control.** Sjel's Pack holds do not cover native marketplace or
   account-managed plugins. The scoped cleanup used Claude's native disable command; Codex exposes

@@ -88,10 +88,10 @@ Not everything becomes Rust. The menu bar companion and the CloudKit relay in `a
 Swift, and so is the iOS host that owns the window. The `tools/` scripts are a mix of shell and
 TypeScript.
 
-The phone is the current priority ([`PLAN.md`](PLAN.md#priority-1-the-phone-app-used-every-day)).
-It should be the daily tool for six areas: the Sjel agent, other coding agents through a terminal
-on the Mac, travel, documents, mail and calendar. After that, the repository shrinks into one
-workspace with flat `crates/` ([`restructure.md`](docs/plans/restructure.md)).
+The current priority is unification and less maintenance, then finishing the daily workflows
+([`PLAN.md`](PLAN.md#priority-1-unify-and-reduce-maintenance)). The phone is the daily tool for
+six areas: the Sjel agent, other coding agents through a terminal on the Mac, travel, documents,
+mail and calendar.
 
 ## Two surfaces: calm on the glass, open in the terminal
 

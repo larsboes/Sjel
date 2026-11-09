@@ -345,7 +345,7 @@ coding task, each measured against the existing path.
 ### Pi daily use and managed configuration
 
 Pi stays the daily agent during the evaluation. `sjel pi plan|apply|check|rollback`
-([`crates/sjel-cli/src/pi_config.rs`](../../tools/sjel-cli/src/pi_config.rs), `6eef2c79`) owns
+([`crates/sjel-cli/src/pi_config.rs`](../../crates/sjel-cli/src/pi_config.rs), `6eef2c79`) owns
 the keys in [`tools/templates/pi/settings.base.json`](../../tools/templates/pi/settings.base.json)
 plus an overlay fragment. Credentials stay in the keychain and in oMLX's own settings. Open:
 model and keybinding keys.

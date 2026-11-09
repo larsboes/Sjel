@@ -3,7 +3,7 @@
 Generative audio that follows what you are doing. This process is the **conductor**: it owns
 what should be playing. The native app makes the sound
 (`apps/gpui/core/src/soundscape/`, see
-[the GPUI README](../../apps/gpui/README.md#soundscape-a-window-with-its-own-synth)).
+[the GPUI README](../../apps/gpui/README.md#soundscape-a-slideover-with-its-own-synth)).
 
 ## Why this shape: the conductor is here, the synth is not
 

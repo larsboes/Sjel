@@ -42,9 +42,9 @@ health_path = "/health"
 autostart = "true"
 ```
 
-For working examples, read [punctuality](../../../capabilities/punctuality/service.toml), the scheduled
-[entities sync](../../../capabilities/entities-sync/service.toml), and the data-only
-[store](../../../capabilities/store/service.toml).
+For working examples, read [punctuality](../../../crates/punctuality/service.toml), the scheduled
+[entities sync](../../../services/entities-sync/service.toml), and the data-only
+[store](../../../services/store/service.toml).
 
 ### Manifest rules
 

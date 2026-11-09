@@ -1,6 +1,6 @@
 # entities-google-sync
 
-The scheduled Google Contacts sync for [`crates/entities`](../entities/). Every 12 hours it
+The scheduled Google Contacts sync for [`crates/entities`](../../crates/entities/). Every 12 hours it
 runs `entities-server sync-google`, which reads contacts with the `contacts.readonly` scope and
 applies them to the entity store. The token is in the overlay's `entities.env`. Nothing is written
 back to Google.

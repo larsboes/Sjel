@@ -2,14 +2,14 @@
 
 Capabilities that use the shared relational store open the same SQLite file and own distinct
 table prefixes. Other state, such as mounted media or a vault, retains its own storage contract.
-The [store capability](../../../capabilities/store/README.md) owns the shared file's backup contract;
-[`sjel-store`](../../../libs/sjel-store/README.md) owns connection and migration behavior.
+The [store capability](../../../services/store/README.md) owns the shared file's backup contract;
+[`sjel-store`](../../../crates/sjel-store/README.md) owns connection and migration behavior.
 
 ## Database specifications
 
-[`sjel-config`](../../../libs/sjel-config/src/lib.rs) resolves `SJEL_DB_PATH`, then
+[`sjel-config`](../../../crates/sjel-config/src/lib.rs) resolves `SJEL_DB_PATH`, then
 `<overlay>/data/sjel/sjel.db`, with a temporary scratch file as its fallback when no overlay
-resolves. [`sjel-store`](../../../libs/sjel-store/src/lib.rs) applies these settings to each pooled
+resolves. [`sjel-store`](../../../crates/sjel-store/src/lib.rs) applies these settings to each pooled
 connection:
 
 ```sql

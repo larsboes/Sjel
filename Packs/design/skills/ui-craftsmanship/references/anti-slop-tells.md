@@ -33,7 +33,7 @@ Derived from empirical audits of AI-generated web interfaces (`JCarterJohnson/vi
 
 ## 7. Emojis as UI Icons
 * **Code Signature**: Using 🚀, 💡, ⚡️, 📊 directly inside buttons, cards, or navigation items.
-* **Fix**: Clean, monochrome SVG vector icons with consistent stroke weight (`Icon.svelte`).
+* **Fix**: Clean, monochrome SVG vector icons with consistent stroke weight (Sjel uses Tabler Icons, `tabler-icons` in `upstreams.toml`).
 
 ## 8. Generic Sans-Serif Defaults
 * **Code Signature**: Defaulting to `Inter`, `Geist`, or `Roboto` without font-feature-settings.

@@ -51,12 +51,12 @@ The [wire-contract tests](../tools/pi-clm-classifier.test.ts) use synthetic resp
 registration, answer conversion and rejection of malformed responses. They do not run the
 encoder or heads, establish classification accuracy, or prove that a real service has passed the
 probe. This adapter is also separate from the shared Rust
-[inference-role resolver](../libs/inference/README.md); its existence does not make CLM available
+[inference-role resolver](../crates/inference/README.md); its existence does not make CLM available
 to a capability through that resolver.
 
 ## What belongs in code, and what could use a model
 
-For [Media](../capabilities/media/README.md), Rust should retain ownership of measurements, file
+For [Media](../crates/media/README.md), Rust should retain ownership of measurements, file
 identity, approved organization rules, path checks and any eventual file operations. Reuse the
 existing metadata and exact-byte machinery rather than asking a model to invent dates or decide
 whether files are identical.
@@ -122,7 +122,7 @@ small synthetic results, not a measured production error rate. No result is wire
 and the shared review/fusion behavior has not been implemented.
 
 The frozen inputs and reports are in
-[`capabilities/documents/eval/`](../capabilities/documents/eval/):
+[`capabilities/documents/eval/`](../crates/documents/eval/):
 `clm-corpus-combined-holdout-v1.json`, `clm-eval-combined-holdout-v1-2026-10-22.json`,
 `apple-fm-eval-combined-holdout-v1-2026-10-22.json`,
 `rule-baseline-v2-holdout-v1-2026-10-22.json`, and
@@ -157,7 +157,7 @@ CLM leaves this candidate list and its local checkpoint is gone: the 4.5 GB MLX 
 
 The adapter, the corpora, the item-level results and the parity record stay; only the weights went.
 The re-open recipe and its rebuild block are in
-[`capabilities/documents/README.md`](../capabilities/documents/README.md#experimental-clm-loopback-adapter--trial-closed-weights-removed),
+[`capabilities/documents/README.md`](../crates/documents/README.md#experimental-clm-loopback-adapter--trial-closed-weights-removed),
 and the adapter refuses to start with the weights absent rather than downloading them.
 
 Two observations led to it:

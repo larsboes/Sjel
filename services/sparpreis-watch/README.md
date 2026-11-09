@@ -1,7 +1,7 @@
 # sparpreis-watch
 
 The Sparpreis price watch (travel PRD R4). Every 12 hours it runs the `sparpreis-watch` verb of
-[`tools/sjel-cli`](../../tools/sjel-cli/README.md). It searches the rail fares again for each
+[`tools/sjel-cli`](../../crates/sjel-cli/README.md). It searches the rail fares again for each
 upcoming trip plan, appends the result to the plan, and exits.
 
 What it watches, per upcoming plan:

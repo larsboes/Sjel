@@ -221,7 +221,7 @@ and nothing else:
   extensions, skills, prompts or context files, in-memory session and settings, `noTools:
   "builtin"` with an allowlist of the broker tools, and an empty working directory.
 - **Sjel** ([`runSjel`](../../../tools/lib/agent-eval-live.ts)) spawns `sjel-agent-eval`
-  ([`libs/agent/src/bin/eval.rs`](../../../libs/agent/src/bin/eval.rs)), the agent loop with
+  ([`libs/agent/src/bin/eval.rs`](../../../crates/sjel-agent/src/bin/eval.rs)), the agent loop with
   proxy tools only. Each call travels over stdio to the broker. `sjel-agent` itself is unusable
   here because it always adds `tools::coding`, which includes a shell.
 

@@ -1,6 +1,6 @@
 # sqld — the libSQL primary
 
-The database server other devices hold an [embedded replica](../../libs/sjel-turso/README.md) of.
+The database server other devices hold an [embedded replica](../../crates/sjel-turso/README.md) of.
 This machine is the primary; a phone is the first replica, and a home server takes the primary role
 later without changing anything here except one setting.
 
@@ -42,7 +42,7 @@ Two machine facts, both in the deployment record rather than here, because this 
 
 `sqld` reads both from its environment, and `tools/service-runner.sh` passes the overlay's
 deployment settings into every process it starts. The private half of that key pair lives in the
-macOS Keychain; see [`libs/libsql-auth`](../../libs/libsql-auth/README.md).
+macOS Keychain; see [`libs/libsql-auth`](../../crates/libsql-auth/README.md).
 
 `sjel setup apply turso --host-here --confirm` does the whole job in one command: it installs the
 binary if it is missing, mints a credential from the Keychain key, writes the public half and the

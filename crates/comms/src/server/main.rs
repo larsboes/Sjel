@@ -1159,7 +1159,10 @@ mod route_manifest_tests {
     #[test]
     fn the_manifest_covers_every_served_route() {
         let mut missing = route_manifest::undeclared_routes(include_str!("main.rs"), super::ROUTES);
-        missing.extend(route_manifest::undeclared_routes(include_str!("clips.rs"), super::ROUTES));
+        missing.extend(route_manifest::undeclared_routes(
+            include_str!("clips.rs"),
+            super::ROUTES,
+        ));
         assert!(missing.is_empty(), "served but undocumented: {missing:?}");
         assert!(super::AGENT_ROUTES.closes("POST", "/triage/mail-evidence/replay"));
     }

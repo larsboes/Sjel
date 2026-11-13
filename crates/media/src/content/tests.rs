@@ -1,12 +1,12 @@
 use super::*;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     fs,
     os::unix::fs::{DirBuilderExt, PermissionsExt},
     path::PathBuf,
     sync::{
-        Arc,
         atomic::{AtomicU64, Ordering},
+        Arc,
     },
 };
 
@@ -151,12 +151,10 @@ fn replay_is_idempotent_and_preserves_rejection() {
         decide(&scratch.ledger, &scratch.library, proposal.id, &reject).unwrap(),
         rejected
     );
-    assert!(
-        list(&scratch.ledger, "pending", 0)
-            .unwrap()
-            .items
-            .is_empty()
-    );
+    assert!(list(&scratch.ledger, "pending", 0)
+        .unwrap()
+        .items
+        .is_empty());
     assert_eq!(list(&scratch.ledger, "rejected", 0).unwrap().items.len(), 1);
     let accept = decision(&proposal, ContentAction::Accept, &["Chosen name"], &[]);
     assert!(decide(&scratch.ledger, &scratch.library, proposal.id, &accept).is_err());
@@ -179,13 +177,11 @@ fn acceptance_uses_chosen_names_and_normalized_retries_refuse_conflicts() {
     assert_eq!(accepted.state, ContentState::Accepted);
     assert_eq!(accepted.tags, ["Family", "Wildlife"]);
     assert_eq!(accepted.collections, ["Album", "Trip"]);
-    assert!(
-        !accepted
-            .tags
-            .iter()
-            .chain(&accepted.collections)
-            .any(|v| v == "raw_classifier_animal")
-    );
+    assert!(!accepted
+        .tags
+        .iter()
+        .chain(&accepted.collections)
+        .any(|v| v == "raw_classifier_animal"));
     let retry = decision(
         &proposal,
         ContentAction::Accept,
@@ -334,11 +330,9 @@ fn corrupt_original_prevents_atomic_staging_and_acceptance_without_repairing_byt
     let path = scratch.root.join("originals").join(&second);
     fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
     fs::write(&path, b"corrupt synthetic bytes!!").unwrap();
-    assert!(
-        scratch
-            .stage(vec![image(&first, 0.8), image(&second, 0.8)])
-            .is_err()
-    );
+    assert!(scratch
+        .stage(vec![image(&first, 0.8), image(&second, 0.8)])
+        .is_err());
     assert!(scratch.all().is_empty());
     scratch.stage(vec![image(&first, 0.8)]).unwrap();
     let pending = scratch.all().pop().unwrap();
@@ -465,18 +459,14 @@ fn queue_paginates_without_duplicates_and_validates_filters() {
     assert_eq!(second.items.len(), 1);
     assert!(second.items[0].id > cursor);
     assert!(second.next_after.is_none());
-    assert!(
-        list(&scratch.ledger, "pending", second.items[0].id)
-            .unwrap()
-            .items
-            .is_empty()
-    );
-    assert!(
-        list(&scratch.ledger, "accepted", 0)
-            .unwrap()
-            .items
-            .is_empty()
-    );
+    assert!(list(&scratch.ledger, "pending", second.items[0].id)
+        .unwrap()
+        .items
+        .is_empty());
+    assert!(list(&scratch.ledger, "accepted", 0)
+        .unwrap()
+        .items
+        .is_empty());
     assert!(list(&scratch.ledger, "bogus", 0).is_err());
     assert!(list(&scratch.ledger, "all", -1).is_err());
     assert!(detail(&scratch.ledger, i64::MAX).unwrap().is_none());

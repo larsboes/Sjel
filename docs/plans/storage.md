@@ -150,15 +150,24 @@ about the expanded archive refers to the whole archive, not this filtered intake
 5. Fresh Git history starts without a remote; review files and ignore rules before the first
    commit or remote. The retained original history can contain non-knowledge material.
 
-### Vault holds learning only
+### One vault for prose
 
-Decided 2026-11-08 (`PLAN.md`, Decisions). The vault keeps learning notes: `teach`,
-`practice`, claim notes and subject knowledge, plus the Obsidian plugins that render them. Everything else that reads or
-writes the vault moves to Sjel data or retires. Counted 2026-11-08 with `git grep -i -E
-"\bvault\b|obsidian"`: about 300 lines in 40 Markdown files and 108 code files outside
-`crates/vault/`.
+Prose lives in one folder of Markdown files, and the files are the authority for their text.
+Obsidian is one editor for them, and Sjel's web catalog can carry another ([product page](../../website/content/product.md#the-vault)). Typed facts stay in Sjel's
+stores. Open, in order:
 
-State on 2026-11-08, after a pass over code and overlay config:
+1. Give each top folder of the vault a default data class. Frontmatter can raise it and cannot
+   lower it. Done when the index refuses a note whose frontmatter lowers its folder's class.
+2. Move the Markdown tree under `<overlay>/data/projects/` into the vault and make
+   `crates/projects` read the files as the authority. Today the store is the authority and the
+   tree is a rendered copy (`crates/projects/README.md`). Done when an edit in any editor appears in
+   `projects list` and no write from Sjel overwrites a newer file.
+3. Deny cloud harnesses read access to every folder above class `c1`, and prove it with a test
+   per harness.
+4. A Sjel search returns the path of a matching note.
+
+The table records what an earlier pass moved out of the vault. Rows marked done stay as they
+are. Only prose returns to the vault.
 
 | Component | State |
 |---|---|
@@ -174,13 +183,12 @@ State on 2026-11-08, after a pass over code and overlay config:
 
 ### One home per fact
 
-Decided 2026-11-08 (`PLAN.md`, Decisions). A note in Sjel data holds only what no live source
-holds:
+A note in Sjel data holds only what no live source holds:
 
 1. A fact about Sjel (architecture, a decision, a lesson about the harness) lives in the
    repository: code, `PLAN.md`, `docs/plans/`, a skill or `CONTRIBUTING.md`. A copy in a note
    goes stale when the repository changes.
-2. Subject knowledge lives in the vault, where `teach` writes it.
+2. Prose and subject knowledge live in the vault.
 3. Status lives in the record that owns it: a task closes, a calendar entry passes, a ledger row
    settles. Note prose keeps only durable facts.
 

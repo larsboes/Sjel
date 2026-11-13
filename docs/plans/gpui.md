@@ -636,13 +636,13 @@ NSH Mail caches its filtered row projection with `computed`; three focused Mail 
 pass, including retained rows, filter changes and removal. Frame-time and device
 checks remain open.
 
-Decided 2026-11-09, superseding the NSH trial of 2026-11-07: GPUI Fast draws the Mac app and
-[NSH](https://github.com/longbridge/nsh) draws the phone with UIKit views. GPUI draws every pixel
-itself, which suits the desktop. On the phone it has to rebuild text selection, input methods and
-accessibility that UIKit already has. NSH's GPUI backend runs on the same `gpui-fast` the Mac app
-uses, so an NSH screen also opens inside the Mac app. No Mac page moves to NSH before items 5 and
-6 below pass. Generated UI follows [Generated views](#generated-views-priority-3). Rejected
-alternatives, the red-team findings and the council:
+The GPUI pages on the Mac and the NSH screens on the phone are frozen: they get fixes and no
+new pages. New surfaces come from the web catalog in
+[Views from the web catalog](#views-from-the-web-catalog). GPUI Fast draws the Mac app and
+[NSH](https://github.com/longbridge/nsh) draws the phone with UIKit views. The Swift host on the
+phone stays: it owns the device key, the local copy, notifications and RoomPlan. Items 5 and 6
+below wait for the outcome of the catalog. Rejected alternatives, the red-team findings and the
+council:
 [`research/ui-stack.md`](../../research/ui-stack.md#2026-11-09-the-long-term-stack-and-how-generated-ui-runs).
 
 ### Built
@@ -755,28 +755,32 @@ so it resolves to the Mac app's 0.1.14.
 8. **A smaller `ui/`.** The phone's GPUI shell and phone-only views are removed. GPUI pages
    still used by the Mac remain behind the `gpui` feature until item 7 decides.
 
-### Generated views (Priority 3)
+### Views from the web catalog
 
-An agent-generated view is a document that a catalog schema validates, rendered on the Mac and the
-phone by Sjel's own components. No model-written TSX, JavaScript or HTML runs. This builds the
-direction in
-[`projects-ui.md` §2](../../website/content/architecture/projects-ui.md#2-generative-and-intelligent-ui-evolution)
-(Product Rule 6: screens come from the typed data). Decided 2026-11-09. Why NSH TSX packages and
-web-view HTML were rejected is in [`research/ui-stack.md`](../../research/ui-stack.md#council). The
-document format is chosen when the work starts, from OpenUI Lang 1.0 (`open-intelligent-ui` in
-`upstreams.toml`) and A2UI (`a2ui`).
+A view is a document that a catalog schema validates. It names catalog components and binds them
+to read routes from `route-manifest`. No model-written TSX, JavaScript or HTML runs
+([product page](../../website/content/product.md#views), Product Rule 6). The catalog is a small
+set of Svelte components, built into one bundle with no network access. The bundle renders in a
+browser, in a web view inside the native shells, and in agent harnesses that support MCP Apps.
+The retired dashboard (`d9c77aae^`) holds reusable parts: `dashboard/src/lib/ui`,
+`dashboard/src/lib/genui`, and the Vega-Lite and MapLibre wiring. Its route pages do not return.
 
-The schema and its validation go in `apps/gpui/core`, because both devices share them, and the
-components go in `ui/src` behind the NSH facade (item 5). A view node names a read route from
-`route-manifest` and its parameters, and the renderer fetches it through `device::Source`. A view
-never calls a write route. A write reaches the user only as a proposal, which goes through the
-capability's existing write mode and follows Product Rule 5. The view is generated on the best
-model the device can reach (Product Rule 1). A cloud model gets only the schema and pseudonymized
-examples (Product Rule 4). Mail or feed text inside a view is rendered as text and never
-interpreted.
+A view never calls a write route. A write reaches the user only as a proposal, which goes through
+the capability's existing write mode. A cloud model gets only the schema and pseudonymized
+examples. Mail or feed text inside a view is rendered as text and never interpreted.
 
-Work starts when `route-manifest` carries a response schema for each route a view may read (today
-it has only an optional `request_schema`) and the read allow-list is explicit. Done when one view
-document renders on the Mac and the phone, a schema-invalid document is refused with an error that
-names the failing node, a document that names a write route is refused, and a saved view survives
-an app restart.
+Open, in order:
+
+1. Derived views. An object list and an object view render from the registry declaration of
+   `projects`, in a browser tab that the node serves, with no model. Done when a schema-invalid
+   document is refused with an error that names the failing node, and a document that names a
+   write route is refused.
+2. The same bundle in a web view inside the phone's Swift host, fed from the local copy.
+3. Saved views. A model composes a view once and it reloads without a model after an app
+   restart.
+4. Live views inside an agent conversation.
+5. The view document format. Candidates: A2UI behind an adapter, and OpenUI Lang
+   (`open-intelligent-ui` in `upstreams.toml`). Not chosen. Neither has been read for this item.
+
+By 2026-12-09, measure daily use of item 1 against the frozen pages and mark one of the two for
+removal.

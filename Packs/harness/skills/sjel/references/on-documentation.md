@@ -1,6 +1,14 @@
 # Documentation and skill maintenance
 
+One owner per fact. State a fact once, in the document that owns its subject, in the present
+tense. Every other place links to the owner and does not restate it. Prefer a value derived from
+a manifest, a schema or a tool over a sentence that repeats it. When two documents disagree, fix
+the owner and delete the copy.
+
 Keep each fact with its owner:
+
+- `website/content/product.md`: what Sjel is, which problems it solves, the build rule and the
+  shape of the architecture.
 
 - Root README: human-facing Sjel architecture and durable repository doctrine.
 - Capability or Pack README: purpose, verdict, tradeoffs, provenance, and local decisions.
@@ -10,8 +18,8 @@ Keep each fact with its owner:
 - Skill reference: reusable agent procedure or slow-changing decision test.
 - Runtime tool: ports, inventories, health, issue state, graph size, and other changing facts.
 
-- `PLAN.md` and `docs/plans/<area>.md`: priority, open work with a done-when check, decisions not
-  yet built.
+- `PLAN.md`: the order of work, and nothing else.
+- `docs/plans/<area>.md`: open work with a done-when check.
 - `website/content/capabilities/<name>.md`: a capability's technical manual (interface contracts, data
   flows, Mermaid diagrams, guarantees). The capability README stays a lean entry point with the
   why and a link to the manual.
@@ -45,7 +53,7 @@ durable rule into the skill or the area plan that owns it.
 ## Plans
 
 - A shipped work package shrinks to one line that names its commit. The commit holds the detail.
-- Plans live in `PLAN.md` (order, state, decisions) and one file per area in `docs/plans/`. A
+- Plans live in `PLAN.md` (order) and one file per area in `docs/plans/` (open work). A
   README or manifest describes what is built and why. It holds no open-work list: move that to the
   area plan or an issue.
 
@@ -57,8 +65,11 @@ the conversation.
 - Name the project, the user, a capability or the agent. "Operator" names the role of whoever
   runs a deployment, never a person who decided something.
 - No "you", "I" or "we", and no dialogue between an assistant and its owner.
-- A decision carries its date, not who made it or how it was asked: "Decided 2026-10-25", never
-  "(operator, 2026-10-25)".
+- State a decision as how things are. Write no "Decided" label, no date and no name on it. Git
+  records when it changed. A date belongs only on a measurement or a deadline. Remove such a
+  label from every paragraph an edit touches.
+- One sentence carries one idea, in the active voice, with the actor named. Use one term for one
+  thing across the repository.
 - State facts with their source (a path, a command, a commit). Mark an estimate or an unverified
   claim as such.
 

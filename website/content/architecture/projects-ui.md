@@ -44,7 +44,7 @@ The step following figure embeds is **Generative UI from the typed core**
 Rather than streaming unstructured markdown or generating insecure arbitrary HTML, intelligent agents in
 Sjel compose structured interfaces out of an audited, declarative component catalog. The build
 plan and its done-when are in
-[`docs/plans/gpui.md`, Generated views](../../../docs/plans/gpui.md#generated-views-priority-3)
+[`docs/plans/gpui.md`, Generated views](../../../docs/plans/gpui.md#views-from-the-web-catalog)
 (decided 2026-11-09).
 
 ### Architectural Principles

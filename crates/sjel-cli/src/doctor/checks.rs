@@ -44,7 +44,7 @@ const CONTEXT: [&str; 4] = [
 
 /// Sections that read a deployment: the overlay, machine.toml, services, data and backups. A
 /// repository checkout has none of these, so each reports itself skipped rather than failing.
-const DEPLOYMENT: [&str; 22] = [
+const DEPLOYMENT: [&str; 23] = [
     "Machine identity",
     "Shadowed binaries (tools/lib/tool-dirs)",
     "Global Bun/npm install policy",
@@ -55,6 +55,7 @@ const DEPLOYMENT: [&str; 22] = [
     "Capabilities (enabled set)",
     "Capabilities (external references)",
     "Boot persistence (autostart + schedule set)",
+    "Running builds (service-runner.sh stale)",
     "Signed macOS helper",
     "Scheduled producers (did they run)",
     "Shared store (SQLite)",
@@ -90,6 +91,7 @@ fn entries() -> Vec<Entry> {
             "Boot persistence (autostart + schedule set)",
             boot_persistence,
         ),
+        One("Running builds (service-runner.sh stale)", running_builds),
         One("Signed macOS helper", fda_helper),
         One("Scheduled producers (did they run)", scheduled_producers),
         One("Shared store (SQLite)", shared_store),
@@ -1058,6 +1060,41 @@ fn fda_helper(ctx: &mut Ctx) {
             String::from_utf8_lossy(&output.stdout).trim()
         )),
         Err(error) => ctx.bad(format!("cannot inspect the signed helper: {error}")),
+    }
+}
+
+/// A running process keeps the binary it started with: `start` builds only a stopped
+/// capability, and the watchdog only calls `start`. Only `stale` (binary newer than the
+/// process) warns. `unbuilt` is a coarse workspace-mtime signal that no-op builds never clear.
+fn running_builds(ctx: &mut Ctx) {
+    let runner = tool(ctx, "service-runner.sh");
+    if !runner.exists() {
+        ctx.warn(format!("missing {}", runner.display()));
+        return;
+    }
+    let o = cmd(&runner, &["stale"]);
+    let mut serving = 0;
+    let mut seen = false;
+    for line in o.stdout.lines().filter(|l| !l.is_empty()) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let (name, state) = (cols[0], cols.get(1).copied().unwrap_or(""));
+        seen = true;
+        match state {
+            "stale" => ctx.warn(format!(
+                "'{name}' serves an older binary than the one on disk (tools/service-runner.sh refresh {name})"
+            )),
+            "current" | "unbuilt" => serving += 1,
+            _ => {}
+        }
+    }
+    if !seen {
+        ctx.warn("service-runner.sh stale returned nothing — running builds unverified");
+        return;
+    }
+    if serving > 0 {
+        ctx.ok(format!(
+            "{serving} running process(es) serve the binary on disk (tools/service-runner.sh refresh also builds changed sources)"
+        ));
     }
 }
 

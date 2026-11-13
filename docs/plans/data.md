@@ -165,20 +165,63 @@ Open:
   historical state.
 - **Every route has an owner that accepts it.** Documents and local Media attachments have
   HTTP handover contracts; Finance and Notes still record `pending`. Media refuses binary-plist
-  placeholders rather than claiming they are usable originals. Attachment blobs have no backup
-  contract yet; the shared-store backup covers metadata only. Retain source originals until a
-  byte-inclusive backup and restore have been verified. Done when a real mixed-folder run and
-  retry retain provenance, store no bytes twice and leave no unaccounted-for file; Finance and
-  Notes acceptance and attachment backup remain open.
+  placeholders rather than claiming they are usable originals. Media's manifest now backs up
+  local attachment originals separately from the shared-store metadata, excluding incomplete
+  uploads; mounted-volume libraries are outside that contract. Retain source originals until
+  byte-inclusive backup and restore checks pass. Done when a real mixed-folder run and retry
+  retain provenance, store no bytes twice and leave no unaccounted-for file; Finance and Notes
+  acceptance remain open. The first live Media backup passed receipt SHA-256 verification and
+  an isolated restore; all 137 restored originals matched their digest filenames, and a checksum
+  comparison against the source found no missing, extra or changed files. The shared-store
+  backup covers metadata separately. Source removal is not authorized by these checks.
   Live local intake accepted 136 originals, explicitly skipped 33 Apple placeholders and 7
   excluded entries, and retained every source. The repeat run reported all 176 entries unchanged.
-  A separate screenshot intake and retry stored one original. App/gallery acceptance and
-  byte-inclusive attachment restore have not run.
+  A separate screenshot intake and retry stored one original. App/gallery acceptance remains
+  unverified.
 - **Import from the app.** The GPUI Import page runs plan, run and status. Done when an import of
   a real folder from the app matches `sjel-import status`.
 - **Media `To Sort/`.** 229 files (53 GB) in `Library/To Sort/` have no reviewed destinations,
   because both structure drafts in the overlay target removed Inbox trees. The categories are a
   human decision. Then `organize` can act.
+
+### Content-aware media sorting
+
+Decided 2026-11-09: build local content-aware proposals inside Media, not a second photo-manager
+catalog. Reuse native or reviewed OSS analysis. Original bytes remain immutable; local attachments
+keep their digest filenames. Sorting creates reviewed tags and collections, not blob moves.
+Similarity is advisory and never authorizes deletion. Cloud image processing requires separate
+approval. The 33 unusable import placeholders were explicitly abandoned and trashed; their
+originals were not recovered, and this does not authorize other source removal.
+
+Built: the versioned native probe emits previews of the exact classified frames. Media stages
+immutable digest-bound evidence and explicit tag/collection decisions in `media_content_proposals`.
+Identical replay preserves terminal decisions; changed evidence starts pending. The native Media
+page provides a bounded queue, selected-item previews, candidate-to-choice buttons, editable chosen
+names and explicit save/reject. No source paths from reports are read or persisted.
+
+A real batch of 8 images and 4 videos staged 12 pending proposals with 20 previews; replay inserted
+none. No real proposal was accepted or rejected. Rust tests cover atomic staging, explicit names,
+terminal retries/conflicts, changed evidence, original corruption, failed items and pagination.
+Native tests cover previews, extensionless sources and long-GOP frame timing. Backend/API and
+client-core tests, a synthetic headless preview/input/stale-state test, and both UI-default and
+GPUI Fast desktop build checks passed. An additive shared-store backup passed isolated restore;
+the owner's API returned the same 12 pending proposal summaries. All 137 originals still matched
+the verified Media restore byte-for-byte. Dataless refusal and concurrent source-change rejection
+in the native probe remain inspection-only. Desktop installation and the Media refresh completed;
+the current service and shell proxy both returned the 12 pending items. Live native visual acceptance,
+classification usefulness and real terminal-decision backup/restore have not been verified.
+
+Next work, not undecided design:
+
+1. Review labels locally against the actual media and record useful, misleading and absent
+   categories. Private pixels and inferred labels must not enter agent/cloud prompts. Validate
+   live native empty/loading/error/stale/busy states before app acceptance; the synthetic headless
+   test covers typing and refusal to submit stale evidence, not live app acceptance.
+2. Verify a mixed batch end to end, including real explicit decisions, retry after interruption,
+   unsupported codecs, changed sources, proposal backup/restore and unchanged original bytes.
+3. Replace stale filesystem organization drafts only after their categories are approved; they
+   do not apply to attachment blob paths. A general gallery, collection browser and editing of
+   terminal metadata decisions are outside this first review slice.
 
 ### Web clipping into Sjel
 

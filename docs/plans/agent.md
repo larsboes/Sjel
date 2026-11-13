@@ -144,6 +144,17 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
 The Pi implementation and Rust classifier share the case table (`b0d94cae`); tests are
 `tools/command-policy.test.ts` and `crates/sjel-agent/tests/policy_cases.rs`.
 
+Pi-specific session file scopes and 60-second permission/decision deferral are implemented
+(commit pending). The current interfaces and limits live in
+[`Packs/security/README.md`](../../Packs/security/README.md#pi-session-permissions) and
+[`Packs/knowledge/README.md`](../../Packs/knowledge/README.md#extensions).
+No classifier model or account-wide bypass is introduced. The Rust gate remains unchanged.
+Checked: 65 focused permission, question and Pack-extension tests pass, including the installed
+Pi typecheck; one non-applicable fallback test is skipped. Live acceptance remains: reload Pi,
+exercise one scoped backup, one unanswered approval, and one partially answered decision round.
+RPC asks currently defer immediately because the editor handoff has no cancellation API.
+Live TUI/RPC acceptance and full-workspace checks have not run.
+
 Decided 2026-11-08: ordinary local work and diagnostics run without approval; destructive loss,
 privilege, secrets and external writes keep their guards. New local commits and non-recursive
 in-scope `rm -f` run; amendments and recursive deletion remain Block. Nested container reads and
@@ -202,7 +213,7 @@ Then add `web`, `subagents`, `mcp`, `skills` and `rust` to `plugins.rs` `KNOWN`,
 - A notification when a run waits for approval. It carries no tool output and no file contents.
 - Later: the run drives the main column, see [`gpui.md`](gpui.md#5-finder-and-right-edge).
 - Later: a run answers with a view document, not only text, under
-  [`gpui.md` Generated views](gpui.md#generated-views-priority-3).
+  [`gpui.md` Generated views](gpui.md#views-from-the-web-catalog).
 
 ## 6. Terminal from the phone
 

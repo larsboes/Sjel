@@ -74,17 +74,24 @@ cat > "$SCRATCH/mock/launchctl" <<'SH'
 #!/bin/bash
 case "$1" in
   submit)
-    [ ! -f "$MOCK_ROOT/deny-access" ] || exit 0
+    [ ! -f "$MOCK_ROOT/probe-not-started" ] || exit 0
     shift
     while [ "$1" != -- ]; do
       case "$1" in -o) out="$2" ;; -e) err="$2" ;; esac
       shift 2
     done
     shift
+    if [ -f "$MOCK_ROOT/deny-access" ]; then
+      printf 'sjel-fda-probe-started\nsjel-fda-access-denied\n' > "$out"
+      exit 0
+    fi
     "$@" > "$out" 2> "$err"
     ;;
   print)
-    if [ "${2##*/}" = old.custom.label ]; then
+    if [ "${2##*/}" = com.apple.user-only ]; then
+      case "$2" in user/*) ;; *) exit 1 ;; esac
+      printf 'program = /usr/libexec/test-agent\n'
+    elif [ "${2##*/}" = old.custom.label ]; then
       printf 'program = %s\n' "$(cat "$MOCK_ROOT/extra-loaded")"
     else
       printf 'program = %s\n' "$(cat "$MOCK_ROOT/loaded")"
@@ -93,6 +100,7 @@ case "$1" in
   list)
     printf 'PID\tStatus\tLabel\n1\t0\tcom.sjel.example\n'
     [ ! -f "$MOCK_ROOT/extra-loaded" ] || printf '2\t0\told.custom.label\n'
+    [ ! -f "$MOCK_ROOT/user-domain-job" ] || printf '3\t0\tcom.apple.user-only\n'
     ;;
   load) plutil -extract ProgramArguments.0 raw -o - "$2" > "$MOCK_ROOT/loaded" ;;
   remove|unload) exit 0 ;;
@@ -152,7 +160,14 @@ touch "$SCRATCH/deny-access"
 if "$TOOL" migrate > "$SCRATCH/probe-result" 2>&1; then fail "unproved access migrated"; fi
 [ -f "$legacy" ] || fail "old helper deleted before proof"
 [ "$(plutil -extract ProgramArguments.0 raw -o - "$plist")" = "$legacy" ] || fail "job changed before proof"
+grep -Fq 'access was denied' "$SCRATCH/probe-result" || fail "access denial not distinguished"
 rm "$SCRATCH/deny-access"
+touch "$SCRATCH/probe-not-started"
+if "$TOOL" migrate > "$SCRATCH/probe-not-started-result" 2>&1; then fail "unfinished probe migrated"; fi
+grep -Fq 'not known to be denied' "$SCRATCH/probe-not-started-result" || fail "unfinished probe mistaken for denial"
+[ -f "$legacy" ] || fail "old helper deleted after unfinished probe"
+[ "$(plutil -extract ProgramArguments.0 raw -o - "$plist")" = "$legacy" ] || fail "job changed after unfinished probe"
+rm "$SCRATCH/probe-not-started"
 touch "$SCRATCH/migration-failure"
 if "$TOOL" migrate > "$SCRATCH/migration-result" 2>&1; then fail "failed migration accepted"; fi
 [ -f "$legacy" ] || fail "old helper deleted after failed migration"
@@ -169,6 +184,7 @@ printf '%s\n' "$legacy" > "$SCRATCH/extra-loaded"
 if "$TOOL" migrate > "$SCRATCH/extra-loaded-result" 2>&1; then fail "loaded non-Sjel consumer ignored"; fi
 [ -f "$legacy" ] || fail "old helper deleted with loaded non-Sjel consumer"
 rm "$SCRATCH/extra-loaded"
+touch "$SCRATCH/user-domain-job"
 "$TOOL" migrate
 [ ! -e "$legacy" ] || fail "old helper retained after verified migration"
 [ "$(plutil -extract ProgramArguments.0 raw -o - "$plist")" = "$EXPECTED_HELPER" ] || fail "job did not move"

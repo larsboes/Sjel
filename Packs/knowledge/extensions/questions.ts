@@ -20,8 +20,8 @@
  * Non-interactive modes (-p, json, rpc-without-tui): both tools return a graceful error instead
  * of hanging — the model should fall back to asking in plain text.
  *
- * An RPC client that renders `ask` and `quiz` itself sets `PI_QUESTIONS_CLIENT` to
- * `HOST_PROTOCOL`. See `fromHost` for the exchange.
+ * RPC clients opt into quiz rendering through `PI_QUESTIONS_CLIENT=HOST_PROTOCOL`.
+ * RPC ask defers immediately because the editor handoff cannot time out or abort.
  */
 
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
@@ -246,7 +246,7 @@ function hostRenders(ctx: ExtensionContext): boolean {
  */
 async function fromHost<T extends object>(
 	ctx: ExtensionContext,
-	widget: "ask" | "quiz" | "quiz-review",
+	widget: "quiz" | "quiz-review",
 	params: unknown,
 	empty: T,
 ): Promise<T> {
@@ -301,10 +301,24 @@ interface AskAnswer {
 	skipped: boolean;
 }
 
+interface AskDraft {
+	id: string;
+	phase: "options" | "note" | "free";
+	optionIndex: number;
+	text: string;
+}
+
+const ASK_IDLE_MS = 60_000;
+const DEFER_INSTRUCTION = "Continue independent work only. Do not assume a recommendation, treat deferral as denial, or re-ask unresolved decisions until the user returns. Use /decisions to resume; returning does not execute anything automatically. The queue is in memory: reset/reload loses it, but the original transcript remains.";
+
 interface AskResult {
 	topic: string;
 	answers: AskAnswer[];
 	cancelled: boolean;
+	deferred?: boolean;
+	deferReason?: "idle" | "aborted" | "disposed" | "rpc-unsupported";
+	unresolvedIds?: string[];
+	draft?: AskDraft;
 }
 
 const AskParams = Type.Object({
@@ -360,9 +374,13 @@ function askError(message: string, details: AskResult): { content: { type: "text
 async function runAsk(
 	params: { topic: string; questions: AskQuestion[] },
 	ctx: ExtensionContext,
+	signal?: AbortSignal,
+	previous?: AskResult,
+	deferredOnly = false,
 ): Promise<{ content: { type: "text"; text: string }[]; details: AskResult }> {
 	const { topic } = params;
-	const questions = params.questions as AskQuestion[];
+	const completed = previous?.answers.filter((a) => !a.skipped) ?? [];
+	const questions = params.questions.filter((q) => !completed.some((a) => a.id === q.id));
 	const empty: AskResult = { topic, answers: [], cancelled: true };
 
 	if (ctx.mode !== "tui" && !hostRenders(ctx)) {
@@ -387,16 +405,50 @@ async function runAsk(
 		}
 	}
 
-	const result = hostRenders(ctx)
-		? await fromHost(ctx, "ask", params, empty)
+	const result: AskResult = signal?.aborted || hostRenders(ctx) || deferredOnly
+		? { topic, answers: completed, cancelled: false, deferred: true,
+			deferReason: signal?.aborted ? "aborted" : hostRenders(ctx) ? "rpc-unsupported" : previous?.deferReason ?? "idle", draft: previous?.draft }
 		: await ctx.ui.custom<AskResult>((tui, theme, _kb, done) => {
 		let qIndex = 0;
 		let optionIndex = questions[0].recommendedIndex ?? 0;
 		let phase: "options" | "note" | "free" = "options";
 		const cache = new ScreenCache();
-		const answers: AskAnswer[] = [];
+		const answers: AskAnswer[] = [...completed];
 		const editor = new Editor(tui, editorTheme(theme));
 		const win = new BodyWindow();
+		let settled = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		function cleanup() {
+			clearTimeout(timer);
+			signal?.removeEventListener("abort", onAbort);
+		}
+		function finish(cancelled: boolean, deferReason?: AskResult["deferReason"]) {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			done({
+				topic, answers, cancelled, deferred: deferReason !== undefined, deferReason,
+				draft: deferReason || cancelled ? {
+					id: questions[qIndex].id, phase, optionIndex, text: editor.getText(),
+				} : undefined,
+			});
+		}
+		function onAbort() { finish(false, "aborted"); }
+		function resetIdle() {
+			clearTimeout(timer);
+			if (!settled) timer = setTimeout(() => finish(false, "idle"), ASK_IDLE_MS);
+		}
+		function restoreDraft() {
+			const draft = previous?.draft;
+			if (draft?.id !== questions[qIndex].id) return;
+			phase = draft.phase;
+			optionIndex = draft.optionIndex;
+			editor.setText(draft.text);
+		}
+		restoreDraft();
+		signal?.addEventListener("abort", onAbort, { once: true });
+		if (signal?.aborted) onAbort();
+		else resetIdle();
 
 		function refresh() {
 			cache.clear();
@@ -450,11 +502,12 @@ async function runAsk(
 			if (qIndex < questions.length - 1) {
 				qIndex++;
 				optionIndex = questions[qIndex].recommendedIndex ?? 0;
+				restoreDraft();
 				win.reset();
 				refresh();
 				return;
 			}
-			done({ topic, answers, cancelled: false });
+			finish(false);
 		}
 
 		function skip() {
@@ -480,6 +533,8 @@ async function runAsk(
 		};
 
 		function handleInput(data: string) {
+			if (settled) return;
+			resetIdle();
 			// Both editor phases route keystrokes to the editor. Missing `free` here was a real bug: the
 			// typed answer was parsed as option keys instead, and `o` then Enter landed back in the note
 			// phase with nothing recorded.
@@ -496,7 +551,7 @@ async function runAsk(
 			}
 
 			if (matchesKey(data, Key.escape)) {
-				done({ topic, answers, cancelled: true });
+				finish(true);
 				return;
 			}
 			// Scrolling is a hand action, so it sits ahead of the option keys: every option key is
@@ -612,7 +667,7 @@ async function runAsk(
 			}
 
 			const foot: string[] = [];
-			addPrefixed(foot, w, " ", theme.fg("dim", hint));
+			addPrefixed(foot, w, " ", theme.fg("dim", hint + " · defer after 60 sec idle · /decisions resumes"));
 			const view = win.cut(body, widgetRows(tui) - head.length - foot.length - 1);
 			head[0] = topRule(w, view, theme);
 			const lines = [...head, ...view.lines, ...foot, theme.fg("accent", "─".repeat(w))];
@@ -632,20 +687,24 @@ async function runAsk(
 				cache.clear();
 			},
 			handleInput,
+			dispose: () => finish(false, "disposed"),
 		};
 	});
 
+	result.unresolvedIds = params.questions.filter((q) => !result.answers.some((a) => a.id === q.id && !a.skipped)).map((q) => q.id);
 	const answered = result.answers.filter((a) => !a.skipped);
 	const overruled = result.answers.filter((a) => a.followedRecommendation === false).length;
 	const freeText = result.answers.filter((a) => a.freeText).length;
-	const header = result.cancelled
-		? `Decision round stopped early: ${answered.length}/${questions.length} answered.`
-		: `Decision round complete: ${answered.length}/${questions.length} answered${
+	const header = result.deferred
+		? `DEFERRED (${result.deferReason}): ${answered.length}/${params.questions.length} answered. No unanswered decision was accepted or denied.`
+		: result.cancelled
+		? `Decision round stopped early: ${answered.length}/${params.questions.length} answered.`
+		: `Decision round complete: ${answered.length}/${params.questions.length} answered${
 				overruled > 0 ? `, ${overruled} overruled your recommendation` : ""
 			}${freeText > 0 ? `, ${freeText} answered in free text (no option fitted)` : ""}.`;
 	const report = [header];
 	for (const a of result.answers) {
-		const q = questions.find((x) => x.id === a.id);
+		const q = params.questions.find((x) => x.id === a.id);
 		const tag = q?.title ? ` (${q.title})` : "";
 		if (a.skipped) {
 			report.push(`${a.id}${tag}: skipped — still open`);
@@ -663,8 +722,11 @@ async function runAsk(
 		report.push(line);
 		if (a.note) report.push(`    note: ${a.note.replace(/\s*\n\s*/g, " / ")}`);
 	}
-	if (result.cancelled && answered.length < questions.length) {
-		report.push(`Not asked: ${questions.slice(result.answers.length).map((q) => q.id).join(", ")}`);
+	if (result.unresolvedIds.length > 0) {
+		report.push(`Unresolved IDs: ${result.unresolvedIds.join(", ")}`);
+		if (result.draft) report.push(`Unsubmitted draft (not a decision): ${JSON.stringify(result.draft)}`);
+		if (result.deferReason === "rpc-unsupported") report.push("RPC ask deferred without opening the editor: this Pi editor API has no timeout or AbortSignal option and cannot preserve an unsubmitted RPC draft. Resume in the TUI.");
+		report.push(DEFER_INSTRUCTION);
 	}
 	return { content: [{ type: "text" as const, text: report.join("\n") }], details: result };
 }
@@ -1648,8 +1710,43 @@ async function runNarrow(
 /* ────────────────────────────── registration ────────────────────────────── */
 
 export default function questions(pi: ExtensionAPI) {
+	type PendingRound = { params: { topic: string; questions: AskQuestion[] }; result: Awaited<ReturnType<typeof runAsk>> };
+	const pending = new Map<string, PendingRound>();
+	let resuming = false;
+	function roundKey(params: PendingRound["params"]) {
+		return params.topic;
+	}
+	function remember(params: PendingRound["params"], result: PendingRound["result"], ctx: ExtensionContext) {
+		const key = roundKey(params);
+		if (result.details.unresolvedIds?.length) pending.set(key, { params, result });
+		else pending.delete(key);
+		const count = [...pending.values()].reduce((n, round) => n + (round.result.details.unresolvedIds?.length ?? 0), 0);
+		ctx.ui.setStatus("questions-pending", count ? `${count} decisions pending · /decisions · in memory (reset/reload loses queue)` : undefined);
+	}
+	pi.registerCommand("decisions", {
+		description: "Resume pending ask rounds (in memory; reset/reload loses queue, transcript remains)",
+		handler: async (_args, ctx) => {
+			if (resuming) return;
+			if (pending.size === 0) {
+				ctx.ui.notify("No pending decisions in this extension instance. Reset/reload loses the queue; the original transcript remains.", "info");
+				return;
+			}
+			resuming = true;
+			try {
+				for (const round of [...pending.values()]) {
+					const result = await runAsk(round.params, ctx, ctx.signal, round.result.details);
+					remember(round.params, result, ctx);
+					pi.sendMessage({ customType: "decisions", content: result.content, details: result.details, display: true }, { triggerTurn: false });
+					if (result.details.deferred || result.details.cancelled) break;
+				}
+			} finally {
+				resuming = false;
+			}
+		},
+	});
 	pi.registerTool({
 		name: "ask",
+		executionMode: "sequential",
 		label: "Ask",
 		description:
 			"Ask the user a batched round of decision questions. Each question gets 2-4 mutually exclusive options (up to 9), a one-line consequence per option (what happens if it is chosen, including the cost), an optional preview block shown for the highlighted option (folder layout, config, data model), and your recommendation — marked ★ and focused, so Enter accepts it. The user picks one option and can attach a free-text note to that decision; if none of the options fits they can answer in their own words instead, which comes back as `freeText` (not as a skip — a rejected option set is a decision, and it means ask differently if you ask again); `s` skips a question and leaves it open. Returns every decision with its note and whether it overruled your recommendation. Use for the forks only the user can settle; never for what you can measure yourself, and never for a question whose answer changes nothing.",
@@ -1657,11 +1754,43 @@ export default function questions(pi: ExtensionAPI) {
 		promptGuidelines: [
 			"Use ask when a fork belongs to the user and not to you: 2-4 mutually exclusive options, a one-line consequence each, your recommendation marked and given first, and a preview when the choice has shape. The user can attach a note to each decision — those notes are their reasoning, so carry them into whatever you write next.",
 			"Use ask never for what you can measure yourself, and never for a question whose answer changes nothing: decide those, say you decided, and move on.",
+			"Ask defers unresolved decisions after 60 seconds idle, never accepts a default on timeout. Continue independent work and do not re-ask or assume unresolved decisions until the user returns; /decisions resumes pending rounds without automatic execution.",
 		],
 		parameters: AskParams,
 
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			return runAsk(params as { topic: string; questions: AskQuestion[] }, ctx);
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+			const round = params as { topic: string; questions: AskQuestion[] };
+			const ids = new Set<string>();
+			for (const q of round.questions) {
+				if (ids.has(q.id)) throw new Error(`ask: duplicate question id "${q.id}"`);
+				ids.add(q.id);
+			}
+			const existing = pending.get(roundKey(round));
+			let active = round;
+			let previous = existing?.result.details;
+			const revised: string[] = [];
+			if (existing) {
+				const merged = new Map(existing.params.questions.map((q) => [q.id, q]));
+				let unchanged = true;
+				for (const q of round.questions) {
+					const old = merged.get(q.id);
+					if (JSON.stringify(old) !== JSON.stringify(q)) {
+						unchanged = false;
+						if (old) revised.push(q.id);
+					}
+					merged.set(q.id, q);
+				}
+				if (existing.result.details.deferred && unchanged) return existing.result;
+				active = { topic: round.topic, questions: [...merged.values()] };
+				previous = { ...existing.result.details,
+					answers: existing.result.details.answers.filter((a) => !revised.includes(a.id)),
+					draft: revised.includes(existing.result.details.draft?.id ?? "") ? undefined : existing.result.details.draft,
+				};
+			}
+			const result = await runAsk(active, ctx, signal, previous, existing?.result.details.deferred);
+			if (revised.length) result.content.push({ type: "text", text: `Revised question definitions: ${revised.join(", ")}. Earlier answers or drafts for those IDs no longer apply; a new user decision is required.` });
+			if (result.details.unresolvedIds) remember(active, result, ctx);
+			return result;
 		},
 
 		renderCall(args, theme, _context) {
@@ -1680,9 +1809,13 @@ export default function questions(pi: ExtensionAPI) {
 			}
 			const answered = details.answers.filter((a) => !a.skipped).length;
 			const overruled = details.answers.filter((a) => a.followedRecommendation === false).length;
-			let text = theme.fg("success", `◆ ${answered}/${details.answers.length} decided`);
+			const total = details.unresolvedIds ? answered + details.unresolvedIds.length : details.answers.length;
+			let text = theme.fg("success", `◆ ${answered}/${total} decided`);
 			if (overruled > 0) text += theme.fg("warning", ` · ${overruled} overruled your recommendation`);
-			if (details.cancelled) text += theme.fg("warning", " (stopped early)");
+			if (details.deferred) text += theme.fg("warning", ` (DEFERRED: ${details.deferReason})`);
+			else if (details.cancelled) text += theme.fg("warning", " (stopped early)");
+			if (details.unresolvedIds?.length) text += theme.fg("warning", `\n  Unresolved: ${details.unresolvedIds.join(", ")} · /decisions`);
+			if (details.draft) text += theme.fg("dim", `\n  Unsubmitted draft: ${JSON.stringify(details.draft)}`);
 			for (const a of details.answers) {
 				const label = a.skipped
 					? theme.fg("warning", "skipped — still open")

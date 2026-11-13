@@ -59,7 +59,13 @@ that decision; `s` skips a question and leaves it open. The result reports every
 decision with its note and says whether it overruled your recommendation — so a
 caller can tell an informed answer from an accepted default, and can carry the
 user's own reasoning into the document it writes. Question rounds in
-`crystallize` are this tool.
+`crystallize` are this tool. After 60 seconds of inactivity, the TUI defers unresolved
+questions without accepting the focused recommendation. Completed answers and unfinished
+notes remain available through `/decisions`; the status line shows the pending count.
+The agent may continue independent work only. The queue is in memory and is lost on reload,
+restart or session change; the original round remains in the transcript. Opted-in RPC asks
+defer immediately: Pi's editor handoff cannot time out or abort, so the extension does not
+open an uninterruptible editor. Resumption currently requires the TUI.
 - **`quiz`** — graded multiple-choice, one question at a time, graded on
 selection with the correct answer and explanation revealed, and "I don't know"
 always offered. Before answering, the learner can type their thinking (`t`) and set a

@@ -180,6 +180,46 @@ impl Shell {
         self.json(Method::GET, &path, None, 20).await
     }
 
+    /// Read one bounded page of operator-only content proposals.
+    pub async fn media_content_proposals(
+        &self,
+        state: &str,
+        after: i64,
+    ) -> ShellResult<crate::media::ContentPage> {
+        let path = super::with_query(
+            "/media/api/content/proposals",
+            &[("state", state), ("after", &after.to_string())],
+        );
+        self.json(Method::GET, &path, None, 15).await
+    }
+
+    /// Read private preview evidence for the selected content proposal only.
+    pub async fn media_content_detail(&self, id: i64) -> ShellResult<crate::media::ContentDetail> {
+        self.json(
+            Method::GET,
+            &format!("/media/api/content/proposals/{id}"),
+            None,
+            20,
+        )
+        .await
+    }
+
+    /// Save an explicit metadata decision for an exact immutable evidence fingerprint.
+    pub async fn media_content_decide(
+        &self,
+        id: i64,
+        decision: &crate::media::ContentDecision,
+    ) -> ShellResult<crate::media::ContentProposal> {
+        let body = serde_json::to_value(decision).map_err(|_| ShellError::Unreadable)?;
+        self.json(
+            Method::POST,
+            &format!("/media/api/content/proposals/{id}/decision"),
+            Some(body),
+            20,
+        )
+        .await
+    }
+
     /// Read combined media status and recent runs for the primary media view.
     pub async fn media_view(&self) -> ShellResult<crate::media::MediaView> {
         let (status, ingests) = futures::try_join!(self.media_status(), self.media_ingests())?;

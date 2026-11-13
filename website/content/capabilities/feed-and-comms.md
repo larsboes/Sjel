@@ -4,6 +4,26 @@ Comms ingests observed information and serves the shared reader contract. The
 [capability README](../../../crates/comms/README.md) explains its scope; the schema and policy
 implementation below define what a reader or inference caller may assume.
 
+## Clip reads
+
+Sjel Clipper documents are separate from the feed and capture inbox. Authenticated reads use
+the shared agent gate, including capability mode, trust tier, data-class cap and response
+pseudonymization. The list envelope, each metadata row and each document declare `data_class: "c2"`.
+These routes are included in `/routes` for MCP discovery. Saves, deletion, settings and local
+interpretation remain on the owner-only Unix socket.
+
+| Route | Contract |
+| --- | --- |
+| `GET /clips` | Metadata only, newest save first. Optional `q` searches literal substrings in saved versions' title, URL and Markdown, ignoring ASCII case. Optional `limit` defaults to 20 and clamps to 1–100; `offset` defaults to 0. Returns `{documents, next_offset}`. Each row has `document_key`, `title`, `url`, `versions`, `updated_at`, and `data_class`. |
+| `GET /clips/document?key=…` | Complete current Markdown after folding all save behaviors. `key` is the exact URL-encoded `document_key` from discovery; it can contain slashes. Returns metadata plus `markdown`. Missing documents return 404. |
+
+Search matches saved versions, so a document can match text that a later overwrite replaced.
+The reader returns the complete document so the privacy gate can identify names across the full
+text. Agent callers must reduce large responses after the gate, before returning text to a model.
+
+This interface does not create cloud derivatives, reclassify content, or expose saved HTML and
+raw capture payloads. The existing cloud-processing boundary remains separate from agent reads.
+
 ## Mail evidence for Projects and Inventory
 
 Mail evidence scanning is disabled pending privacy and retry validation. The replay route returns

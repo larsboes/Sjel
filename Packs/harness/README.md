@@ -74,18 +74,31 @@ copies whose unit set is unchanged still need `sync` to receive source updates. 
 These checks cover Sjel-managed Packs, not every discovery root a harness reads. Application-owned
 skill links and native or account-synced plugins need independent inspection. Intake reviews and
 store pins prove which bytes were screened; they do not establish Sjel ownership or authorize a
-runtime deployment. The existing upstream installer commands must not be used for wholesale
-installation. Retained store snapshots are reference material. The tooling enforcement gap and
+runtime deployment. Upstream installers are permitted only for explicitly approved native
+components in their approved host; they do not turn stored reference snapshots into owned or
+approved runtime components. Retained store snapshots are reference material. The tooling enforcement gap and
 remaining migration work are tracked in [`docs/plans/packs.md`](../../docs/plans/packs.md).
 
 ### Upstream adoption
 
-The [owned-component rule](../../CONTRIBUTING.md#owned-agent-components) applies to skills and
-plugins alike. Identify a real weakness, inspect upstream behavior and its license, then adapt
-the smallest useful change into the existing owner. Retain notices for copied material and
-record the source in `upstreams.toml`. Verify the behavior and its context, latency and maintenance
-cost before deploying it. A reviewed local adaptation may reuse upstream code; it must have an
-explicit local contract, tests and maintenance responsibility rather than a cosmetic rename.
+The [ownership rule](../../CONTRIBUTING.md#owned-agent-components) separates locally maintained
+behavior from reviewed native dependencies. Check the supported native route before rebuilding
+an upstream capability. Community plugins can qualify; native packaging alone grants no approval.
+
+For a native dependency, review its purpose, licence for the intended workload/host, permissions,
+execution, data access, egress and cost. Record the component identity, reviewed revision and
+approved host/data boundary in `upstreams.toml`, keeping native-use and source-porting verdicts
+distinct. Use its supported installer and upstream lifecycle; do not copy it into a Pack merely
+to claim ownership. Routine updates are delegated within that boundary. Material trust changes
+require re-review, not a review of every prompt edit. Approval, activation and running a job are
+separate decisions. These rules are not an implemented native-plugin enforcement mechanism;
+the inventory and activation gap remains in the existing tooling plan.
+
+For an owned adaptation, identify a real weakness and adapt the smallest useful change into its
+existing owner. Preserve notices and licence obligations, record the source in `upstreams.toml`,
+and verify behavior and context/latency/maintenance cost before deployment. It needs a local
+contract, checks and maintenance responsibility, not a cosmetic rename. Neither route restores
+previously disabled plugins or approves an installation merely because it already exists.
 
 [Matt Pocock's skills](https://github.com/mattpocock/skills) (MIT) are retained as screened reference
 snapshots, not a second workflow layer. Tracker scaffolding and label provisioning are not part
@@ -98,6 +111,18 @@ of the adoption. Possible destinations for individually justified improvements a
 | `codebase-design` and architecture surveys | `prior-art`, Rust safety and UI-specific constraints |
 | `research` for primary-source repo reports | `web-research` for public web and AI Studio routing |
 | `writing-for-agents` for agent-facing documentation | `skill-creator` for skill packaging and evaluation; `human-writing` for reader-facing prose |
+
+### Security review of owned changes
+
+Owned-change security review reuses [`review`](agents/review.md) with a target scope and a
+security brief. This does not replace secrets/CVE scanning or third-party agent intake.
+The [four-case baseline](evals/review-security-baseline.json) classified three seeded defects and
+one benign control correctly, satisfying 12 manual semantic assertions; no additional security
+instruction block is justified by that result. The reviewer is checkout-first: it ran its
+mandatory Git inspection despite the fixture-only no-tools request, so that operational
+assertion failed. Use it for checkout reviews, not no-tools fixture probes. The result is neither
+isolated nor evidence of full-scanner coverage or improved reasoning. Controlled actor/context
+selection remains with the existing [tooling gap](../../docs/plans/tooling.md).
 
 ### Unattended local work
 
@@ -224,8 +249,8 @@ cd "$SJEL_ROOT/Packs/harness/pi-packages/pi-subagents" && bun install
 
 ## Attribution
 
-Sjel maintains intentional adaptations, not wholesale upstream agent installations. Pi-subagents
-and pi-web-access are maintained here so Sjel can improve their behavior. Human-writing and
+Sjel maintains the adaptations in this Pack; approved native dependencies remain upstream-managed.
+Pi-subagents and pi-web-access are maintained here so Sjel can improve their behavior. Human-writing and
 unslop are also maintained in their Packs. A dormant reference such as Accordion is not an
 approved runtime component. These are ownership decisions, not permission to copy every project.
 

@@ -1,8 +1,8 @@
 //! The Sjel Clipper as the app sees it: the templates and Interpreter model comms owns, and the
 //! clip documents saved through the extension.
 //!
-//! Everything goes over comms' owner-only clip socket (`libs/clip-socket`), not through
-//! sjel-status: clip content is `c2` and stays on this Mac. Templates keep upstream's shape
+//! The app uses comms' owner-only clip socket (`crates/clip-socket`). Authenticated API reads
+//! use the agent privacy gate; clip content remains `c2`. Templates keep upstream's shape
 //! (`crates/comms/clipper/src/types/types.ts`); the app edits the fields people change and
 //! carries every other field through unchanged.
 

@@ -51,13 +51,14 @@ The example is an ideal lever, not a dynamics simulation. One model sets its for
 From this skill directory:
 
 ```bash
-node scripts/build-example.mjs
-node scripts/build-example.mjs --check
-bun test scripts/example.test.ts
-node scripts/check-example.mjs <screenshot-directory>
+bun --no-env-file scripts/build-example.mjs
+bun --no-env-file scripts/build-example.mjs --check
+bun --no-env-file test scripts/example.test.ts
+bun --no-env-file scripts/check-example.mjs <screenshot-directory>
 ```
 
-The browser check needs installed Chrome or Chromium, or `CHROME_BIN`. It downloads nothing.
+These commands use the declared Bun runtime. The browser check also needs installed Chrome or
+Chromium, or `CHROME_BIN`. It downloads nothing.
 It uses temporary browser profiles and synthetic input events. It does not verify native
 keyboard actions or an Obsidian embed. Open `assets/lever.html` for the standalone figure.
 

@@ -9,7 +9,8 @@ baseline-first RED discipline adapted idea-only from obra/superpowers' skill-tes
 ```bash
 tools/skill-eval list                   # every suite, its cases, whether a baseline is recorded
 tools/skill-eval check --all            # validate the suites (file-based; this half runs in CI)
-tools/skill-eval run <skill> --case 2   # the A/B; ~$1.50 a case, so iterate one case at a time
+tools/skill-eval run <skill> --case 2    # four model calls when graded
+tools/skill-eval run <skill> --case 2 --repeat 3  # opt-in: twelve model calls
 ```
 
 `check` is in `repo-gates`; `run` is opt-in and manual, because a gate that needs a model and
@@ -34,6 +35,8 @@ skipping steps. Then write only enough instruction to close that observed failur
 to confirm. A skill written against imagined failures documents needs that never existed; a
 discipline skill written against harvested rationalizations can rebut them specifically.
 Fresh context matters: leftover authoring context masks gaps in the written instructions.
+If the baseline already meets the assertions, record that result instead of inventing a failure.
+A runnable tool can add capability without establishing a reasoning-quality gain.
 
 ## The evals.json format
 
@@ -90,9 +93,16 @@ skill directory, one `iteration-N/` per pass:
 └── benchmark.json
 ```
 
-Per run, record `timing.json` (`total_tokens`, `duration_ms` — in Claude Code, from the
-subagent completion notification; save immediately). Spawn each run as a subagent with: the
-skill path (or none), the prompt, input files, and the output directory.
+The runner launches native Claude processes. Each arm gets a fresh directory, but installed
+global context remains shared. It does not provide an isolated owned-revision comparison.
+For `--repeat N` with N greater than one, insert `sample-<N>/` below each case directory.
+The default one-sample paths remain unchanged.
+
+Each arm records task `timing.json`, `grading-timing.json`, raw `grading-result.txt`, validated
+`grading.json` and `sample.json` with explicit case, sample and arm identity. Task and grading
+usage and costs stay separate; combined totals include both. Unknown billing metadata is an
+error, not a free call. `--no-grade` records an intentional skip with no pass-rate observation.
+A graded case costs four model calls per repeat, not a fixed currency amount.
 
 ## Assertions — and the near-miss rule for triggers
 
@@ -113,18 +123,31 @@ is not the substance. Use a script for mechanical checks (valid JSON, file exist
 counts); an LLM for observational ones; **blind comparison** (two outputs, judge not told
 which version produced which) for holistic quality between versions.
 
-Aggregate into `benchmark.json`: pass rate / time / tokens per arm, plus the delta. The delta
-is the verdict: what the skill costs vs what it buys. +50 points pass rate for +13s is a
-skill; +2 points for double the tokens is a liability.
+The grader must cover every requested assertion exactly once, with PASS or FAIL and nonempty
+evidence. Malformed, missing, duplicate or unknown assertions make the entire response UNGRADED.
+Incomplete grading retains its output and billed cost, but the graded run exits unsuccessfully.
+Inspect evidence: structural validation does not prove a model's verdict is correct. The native
+grader sees returned text, not an independent verification of generated files.
+
+`benchmark.json` records the actual UTC date, sample identities, task/grading cost totals and
+per-case/per-arm descriptive statistics: n, mean, sample standard deviation, min and max.
+Missing or ungraded pass rates are not successes. Empty data is null; one observation has
+unknown standard deviation, not zero uncertainty. Do not pool distinct cases into an implied
+repeated experiment. Raw aggregate assertion counts are supplementary, not statistical proof.
+
+Use deltas as evidence to inspect, not an automatic verdict. Repetition does not establish
+significance, causality or independence. Trigger selection, holistic blind comparison and
+controlled before/candidate snapshots require their own procedures and evidence.
 
 ## Analyzing patterns
 
-- Assertions that pass in **both** arms: delete — the model didn't need the skill for that.
+- Assertions that pass in **both** arms: do not claim an instruction gain. Retain useful contract
+  regressions without treating them as evidence that more guidance was needed.
 - Assertions that fail in **both** arms: broken assertion, too-hard case, or wrong check — fix
   before the next iteration.
 - Pass-with / fail-without: the skill's actual value; understand which instruction did it.
-- Inconsistent across runs (high stddev): flaky eval or ambiguous instruction — add an example
-  or tighten wording.
+- Inconsistent across runs: inspect transcripts. The model, task or grader may explain the
+  variation; a larger standard deviation alone does not identify the cause.
 - Token/time outliers: read that run's transcript for the bottleneck.
 - Feed failed assertions + human feedback + transcripts to an LLM with the current SKILL.md
   and ask for changes that **generalize** (no per-test patches), keep the skill lean (remove

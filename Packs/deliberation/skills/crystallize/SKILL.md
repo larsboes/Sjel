@@ -33,8 +33,8 @@ modes are specific and repeat.
 
 1. **Read the target, then read the ground truth.** The document is a claim about a system. Go
    look at the system. Count things.
-2. **Ask 3–4 questions in one round.** Batched, concrete, with a recommendation. Never one at a
-   time — that turns a conversation into an interrogation.
+2. **Ask the ready, independent decisions together.** Give concrete options and a recommendation.
+   Ask one if only one is ready.
 3. **Write the answers in immediately, dated, with the reasoning.** A decision you did not record
    is a decision you will re-litigate.
 4. **Report what the measurement contradicted.** This is where most of the value is.
@@ -65,7 +65,7 @@ gap is the deliverable. In practice it is where every genuinely surprising findi
 
 The full craft is in `references/question-craft.md`. The short version:
 
-- **3–4 per round.** Fewer wastes a turn; more exceeds what anyone will read carefully.
+- **Up to four ready, independent questions per round.** Settle prerequisites first; one can be enough.
 - **2–4 options each, mutually exclusive**, with a one-line consequence per option — not a
   description of the option, but what happens if it is chosen.
 - **Put your recommendation first and mark it.** You have read the code and they have not.

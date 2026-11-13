@@ -32,5 +32,21 @@ if [ -z "$identity" ]; then
   echo "codesign-binary: no code-signing identity; $bin stays ad-hoc signed" >&2
   exit 0
 fi
+# Re-signing rewrites the file. A build that relinked nothing must leave it untouched, or
+# `service-runner.sh refresh` reads the new mtime as a new binary and restarts the service.
+already_signed() {
+  local details leaf dir
+  details="$(codesign -dv "$bin" 2>&1)" || return 1
+  printf '%s\n' "$details" | grep -qx "Identifier=$id" || return 1
+  printf '%s\n' "$details" | grep -q 'flags=.*(runtime)' || return 1
+  codesign --verify --strict "$bin" 2>/dev/null || return 1
+  dir="$(mktemp -d)"
+  (abs="$(cd "$(dirname "$bin")" && pwd)/$(basename "$bin")" && cd "$dir" \
+    && codesign -d --extract-certificates "$abs" 2>/dev/null)
+  leaf="$(shasum -a 1 "$dir/codesign0" 2>/dev/null | cut -c1-40 | tr 'a-f' 'A-F')"
+  rm -rf "$dir"
+  [ -n "$leaf" ] && [ "$leaf" = "$(printf '%s' "$identity" | tr 'a-f' 'A-F')" ]
+}
+already_signed && exit 0
 codesign --force --sign "$identity" --identifier "$id" --options runtime "$bin"
 codesign --verify --strict "$bin"

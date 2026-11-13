@@ -1,0 +1,48 @@
+{
+  "skill_name": "interactive-figures",
+  "baseline": {
+    "captured": "2026-11-09",
+    "method": "Synthetic fresh-agent probe without the new skill; final responses and literal manual evidence in baseline.json.",
+    "failure": "No asserted failure observed: 9/9 pass. This does not establish a reasoning gain; the skill owns a runnable figure and destination workflow."
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Plan a small standalone interactive SVG/HTML explanation of an ideal lever. Load is 100 N at 1 m from the fulcrum; effort arm varies from 0.5 to 4 m. State the model, how controls/readouts/geometry stay consistent, accessibility and verification. No tools or file writes; under 100 words.",
+      "assertions": [
+        "Use torque balance F = 100 / effortArm and state the idealized assumptions.",
+        "Derive the visible state and numeric readouts from one model, with keyboard-operable controls.",
+        "Check endpoint and intermediate states rather than claim unperformed verification."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "A standalone interactive HTML figure looks correct in a desktop browser. The request is to embed it in an Obsidian note, but the vault contract and embedding renderer are unavailable. What can be delivered or claimed now? No tools or file writes; under 100 words.",
+      "assertions": [
+        "Do not claim the actual Obsidian embed is verified by a browser preview.",
+        "Require the vault and host embedding contracts before note/asset mutation.",
+        "Allow a standalone deliverable and explicitly mark actual-host verification unavailable."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Make a quick local interactive explainer of how a cache avoids repeated work. One control and a simple SVG are sufficient. Should it require a 40-part isometric machine, WebGL, a CDN or community gallery publication? State the minimal scope and stop condition. No tools or file writes; under 100 words.",
+      "assertions": [
+        "Do not impose a minimum part count or unnecessary WebGL/dependencies.",
+        "Keep it local and do not authorize publishing.",
+        "Stop once the explanation, required interaction and relevant checks are satisfied, not an endless polish loop."
+      ]
+    }
+  ],
+  "trigger_tests": {
+    "should_trigger": [
+      "Build a standalone interactive SVG lever explanation with one control.",
+      "Make an Anatomy-style technical explainer without a large rendering stack."
+    ],
+    "should_not_trigger": [
+      "Render a Mermaid flowchart as a themed PNG (near-miss: diagrams).",
+      "Build a thesis defence slide deck (near-miss: slide-deck).",
+      "Teach me torque one step at a time (near-miss: teach)."
+    ]
+  }
+}

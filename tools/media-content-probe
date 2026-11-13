@@ -1,0 +1,218 @@
+#!/usr/bin/env swift
+// Local image and sampled-video label evidence for Media; never applies sorting.
+import AVFoundation
+import CryptoKit
+import Darwin
+import Foundation
+import ImageIO
+import Vision
+
+struct Label: Codable {
+    let identifier: String
+    let score: Float
+}
+struct Frame: Codable {
+    let requestedSeconds: Double?
+    let seconds: Double?
+    let labels: [Label]
+    let previewPng: String
+}
+struct Evidence: Codable {
+    let path: String
+    let sha256: String?
+    let kind: String?
+    let frames: [Frame]
+    let error: String?
+}
+struct Report: Encodable {
+    let formatVersion: Int = 1
+    let engine: String
+    let os: String
+    let revision: Int
+    let advisory: String
+    let items: [Evidence]
+}
+struct ProbeError: Error, CustomStringConvertible {
+    let description: String
+    init(_ message: String) { description = message }
+}
+
+func metadata(_ path: String) throws -> stat {
+    var value = stat()
+    guard path.withCString({ lstat($0, &value) }) == 0 else {
+        throw ProbeError("Cannot stat input: \(String(cString: strerror(errno)))")
+    }
+    return value
+}
+
+func checkSource(_ path: String) throws -> stat {
+    guard path.hasPrefix("/") else { throw ProbeError("Input must be an absolute local path") }
+    guard !path.split(separator: "/").contains("..") else {
+        throw ProbeError("Parent traversal is not accepted")
+    }
+    var ancestor = URL(fileURLWithPath: path)
+    while ancestor.path != "/" {
+        let value = try metadata(ancestor.path)
+        guard value.st_mode & S_IFMT != S_IFLNK else {
+            throw ProbeError("Symlink paths are not accepted")
+        }
+        ancestor.deleteLastPathComponent()
+    }
+    let value = try metadata(path)
+    guard value.st_mode & S_IFMT == S_IFREG else { throw ProbeError("Input must be a regular file") }
+    guard value.st_flags & UInt32(SF_DATALESS) == 0 else {
+        throw ProbeError("Cloud-only input requires an explicit download before analysis")
+    }
+    guard value.st_size > 0 && value.st_size <= 1_073_741_824 else {
+        throw ProbeError("Pilot accepts nonempty files up to 1 GiB")
+    }
+    return value
+}
+
+func digest(_ url: URL) throws -> String {
+    let input = try FileHandle(forReadingFrom: url)
+    defer { try? input.close() }
+    var hash = SHA256()
+    while let chunk = try input.read(upToCount: 1_048_576), !chunk.isEmpty { hash.update(data: chunk) }
+    return hash.finalize().map { String(format: "%02x", $0) }.joined()
+}
+
+func labels(_ request: VNClassifyImageRequest) -> [Label] {
+    (request.results ?? []).prefix(5).map { Label(identifier: $0.identifier, score: $0.confidence) }
+}
+
+func previewPng(_ image: CGImage) throws -> String {
+    let data = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else {
+        throw ProbeError("Cannot create PNG preview encoder")
+    }
+    CGImageDestinationAddImage(destination, image, nil)
+    guard CGImageDestinationFinalize(destination) else { throw ProbeError("Cannot encode PNG preview") }
+    guard data.length <= 512 * 1024 else { throw ProbeError("PNG preview exceeds 512 KiB") }
+    return (data as Data).base64EncodedString()
+}
+
+func videoFrames(_ source: URL) async throws -> [Frame] {
+    // AVFoundation needs a container suffix for extensionless attachment blobs.
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("sjel-media-probe-" + UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
+                                           attributes: [.posixPermissions: 0o700])
+    do {
+        let staged = directory.appendingPathComponent("source.mov")
+        try FileManager.default.copyItem(at: source, to: staged)
+        let asset = AVURLAsset(url: staged)
+        let tracks = try await asset.loadTracks(withMediaType: .video)
+        guard !tracks.isEmpty else { throw ProbeError("No decodable image or video track") }
+        let duration = try await asset.load(.duration).seconds
+        guard duration.isFinite && duration > 0 else { throw ProbeError("No finite video duration") }
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 256, height: 256)
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        var sampled: [Frame] = []
+        for fraction in [0.1, 0.5, 0.9] {
+            let time = CMTime(seconds: duration * fraction, preferredTimescale: 600)
+            let frame = try await generator.image(at: time)
+            let actual = frame.actualTime.seconds
+            guard actual.isFinite && actual >= 0 && actual <= duration &&
+                  abs(actual - time.seconds) <= 0.25 else {
+                throw ProbeError("Decoded frame is not within 250 ms of the requested sample")
+            }
+            let request = VNClassifyImageRequest()
+            try VNImageRequestHandler(cgImage: frame.image, options: [:]).perform([request])
+            sampled.append(Frame(requestedSeconds: time.seconds, seconds: actual, labels: labels(request),
+                                 previewPng: try previewPng(frame.image)))
+        }
+        try FileManager.default.removeItem(at: directory)
+        return sampled
+    } catch {
+        let failure = error
+        if FileManager.default.fileExists(atPath: directory.path) {
+            do { try FileManager.default.removeItem(at: directory) }
+            catch { throw ProbeError("Analysis failed: \(failure); private staging cleanup failed at \(directory.path): \(error)") }
+        }
+        throw failure
+    }
+}
+
+func analyze(_ path: String) async -> Evidence {
+    do {
+        let before = try checkSource(path)
+        let url = URL(fileURLWithPath: path)
+        let hash = try digest(url)
+        let kind: String
+        let frames: [Frame]
+        if let source = CGImageSourceCreateWithURL(url as CFURL, nil), CGImageSourceGetCount(source) > 0 {
+            kind = "image"
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 256,
+            ]
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+                throw ProbeError("Cannot decode image thumbnail")
+            }
+            let request = VNClassifyImageRequest()
+            try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+            frames = [Frame(requestedSeconds: nil, seconds: nil, labels: labels(request),
+                            previewPng: try previewPng(image))]
+        } else {
+            kind = "video"
+            frames = try await videoFrames(url)
+        }
+        guard frames.allSatisfy({ !$0.labels.isEmpty }) else { throw ProbeError("Classifier returned no labels") }
+        let after = try metadata(path)
+        guard before.st_ino == after.st_ino && before.st_dev == after.st_dev &&
+              before.st_size == after.st_size && before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec &&
+              before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec &&
+              before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec &&
+              before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec else {
+            throw ProbeError("Source changed during analysis; discard this evidence")
+        }
+        return Evidence(path: path, sha256: hash, kind: kind, frames: frames, error: nil)
+    } catch {
+        return Evidence(path: path, sha256: nil, kind: nil, frames: [], error: String(describing: error))
+    }
+}
+
+let paths = Array(CommandLine.arguments.dropFirst())
+if paths == ["--help"] || paths == ["-h"] {
+    print("""
+    usage: tools/media-content-probe /absolute/image-or-video [...]
+    Local Apple Vision evidence only; 1–20 explicit files, up to 1 GiB each.
+    Emits JSON to stdout; any failed item makes the exit status nonzero.
+    Images: five candidate labels. Videos: five labels at each of three sampled frames.
+    Each frame includes the classified image as a base64 PNG preview, at most 256 px and 512 KiB.
+    Video samples use zero time tolerance; an offset over 250 ms fails the item.
+    Video analysis uses a private temporary copy; process termination can prevent cleanup.
+    Scores are not calibrated probabilities. No tags, source moves/deletion or network client.
+    Keep reports private: umask 077; tools/media-content-probe ... > /private/report.json
+    """)
+    exit(0)
+}
+guard !paths.isEmpty && paths.count <= 20 && !paths.contains(where: { $0.hasPrefix("-") }) else {
+    fputs("media-content-probe: supply 1–20 absolute file paths; use --help for limits\n", stderr)
+    exit(2)
+}
+var items: [Evidence] = []
+for path in paths { items.append(await analyze(path)) }
+let report = Report(
+    engine: "apple-vision/VNClassifyImageRequest",
+    os: ProcessInfo.processInfo.operatingSystemVersionString,
+    revision: VNClassifyImageRequest().revision,
+    advisory: "Review-only evidence, not accepted tags or collections. Scores are not calibrated probabilities. Three video frames do not describe every scene. No identity, event or location inference; no source cleanup authorization.",
+    items: items
+)
+do {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let output = try encoder.encode(report)
+    FileHandle.standardOutput.write(output)
+    FileHandle.standardOutput.write(Data([10]))
+    exit(items.contains(where: { $0.error != nil }) ? 1 : 0)
+} catch {
+    fputs("media-content-probe: cannot encode report: \(error)\n", stderr)
+    exit(1)
+}

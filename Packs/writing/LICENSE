@@ -1,6 +1,7 @@
 This pack vendors text and code from two MIT-licensed upstreams. Both notices are reproduced
-below, as the MIT terms require. A third upstream is credited but nothing of its text was
-copied, so it carries no notice obligation here; see the note at the bottom.
+below, as the MIT terms require. Idea-only sources are credited without claiming their
+licences cover original Sjel code. The official skill-creator's Apache-2.0 reference grant is
+preserved in LICENSES/anthropic-skill-creator-Apache-2.0.txt; see the Pack README for its scope.
 ===============================================================================
 1. stephenoffer/human-voice, pinned 9bcba2f (2026-06-23)
    Covers: skills/human-writing/scripts/ (the human_voice_linter package,

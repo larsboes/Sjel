@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { checkSuite, executeCases, parseGrades, parseRunFlags, sampleDirectory, sampleStats, summarizeBenchmark, type ArmRecord, type ClaudeRun, type SampleRecord, type Skill, type Suite } from "./skill-eval.ts";
+import { checkSuite, executeCases, parseGrades, parseRunFlags, recordedCost, sampleDirectory, sampleStats, summarizeBenchmark, type ArmRecord, type ClaudeRun, type SampleRecord, type Skill, type Suite } from "./skill-eval.ts";
 
 let root: string;
 let skill: Skill;
@@ -48,6 +48,16 @@ beforeEach(() => {
   plantSkill();
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+describe("recordedCost", () => {
+  test("accepts explicit charges and rejects unknown or invalid billing", () => {
+    expect(recordedCost(0)).toBe(0);
+    expect(recordedCost(0.25)).toBe(0.25);
+    for (const value of [undefined, null, "0.25", -1, NaN, Infinity]) {
+      expect(() => recordedCost(value)).toThrow("cost is unknown");
+    }
+  });
+});
 
 describe("sampleStats", () => {
   test("no data and one observation do not invent uncertainty", () => {

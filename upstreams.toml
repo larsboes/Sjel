@@ -1149,7 +1149,22 @@ url = "https://github.com/mattpocock/skills"
 verdict = "inspiration"
 license = "MIT"
 summary = "Reference techniques for improving Sjel-owned engineering skills"
-why = "Screened snapshots remain reference material rather than a standalone workflow installation. Evaluate individual techniques against an observed weakness in an existing Sjel skill, preserve required notices for copied material, and verify the adapted behavior. Tracker scaffolding, ticket proliferation and automatic upstream replacement are not adopted."
+why = "The 25 retained skills were semantically mapped; four baseline cases passed 12 manual assertions before changes, so only crystallize's contradictory fixed question-count minimum was removed, with no claimed reasoning benefit. Tracker scaffolding, automatic commits and new orchestration are not adopted; Packs/deliberation/README.md identifies the reviewed reference and preserves its complete MIT grant in Packs/deliberation/LICENSES/mattpocock-skills-MIT.txt."
+
+[anthropic-claude-security]
+url = "https://github.com/anthropics/claude-plugins-official/tree/0412be76f50ab4f4f8abff3753efa9269fbbca5b/plugins/claude-security"
+verdict = "reject"
+license = "Proprietary"
+summary = "Source-porting rejected; native Claude Code use needs a separate approval"
+why = "The primary LICENSE at the reviewed revision and the installed 0.12.0 licence restrict use to Anthropic products, prohibit redistribution and prohibit use to develop non-Anthropic products. This rejects source adaptation into Sjel, not native eligibility under the reviewed-dependency policy; component/host approval and activation remain separate and are not granted by this record."
+
+[claude-code-security-review]
+url = "https://github.com/anthropics/claude-code-security-review/tree/0c6a49f1fa56a1d472575da86a94dbc1edb78eda"
+verdict = "reject"
+license = "MIT"
+summary = "Permitted diff-review reference, distinct from the proprietary Claude Security plugin"
+why = "Reviewed the command, hard filter, API client, action and dependency manifest at 0c6a49f1fa56a1d472575da86a94dbc1edb78eda; the complete MIT grant permits adaptation but does not establish parity with the proprietary plugin. Whole-workflow adoption is declined because blanket Rust/non-C++ memory-safety and AI-prompt exclusions, plus maximum confidence on failed or disabled model checks, are unsuitable for Sjel."
+revisit = "No workflow adoption is planned: the existing reviewer classified four public fixtures correctly, without tool isolation, so no additional security instruction block is justified by that probe. Reconsider an individual permitted technique only for a concrete unmet need; preserve the applicable full licence and notices before any adaptation."
 
 [ponytail]
 url = "https://github.com/DietrichGebert/ponytail"
@@ -1184,7 +1199,14 @@ url = "https://github.com/wheresryan22/anatomy"
 verdict = "inspiration"
 license = "MIT"
 summary = "Interactive technical figures as an explanation technique"
-why = "The presentations Pack owns interactive-figures and its original ideal-lever example. Only the design idea is adopted; no upstream instructions, code, images or assets are included. Upstream snapshots remain reference-only. The knowledge Pack owns the Obsidian embedding contract."
+why = "The presentations Pack owns interactive-figures and its original ideal-lever example. Reviewed SKILL.md SHA-256 3423ada45a05033bb6e320dfc3b3ac832569969a5afb059bbfc9096c5cf0c71b. Model-driven explanation, accessibility and destination checks are adopted idea-only; no instructions, code, images or assets are copied. The complete MIT grant is preserved in Packs/presentations/LICENSES/anatomy-MIT.txt. Mandatory part counts, compulsory WebGL and gallery publication are rejected. Upstream snapshots remain reference-only; the knowledge Pack owns embedding."
+
+[anthropic-skill-creator-evaluation]
+url = "https://github.com/anthropics/claude-plugins-official/tree/0412be76f50ab4f4f8abff3753efa9269fbbca5b/plugins/skill-creator"
+verdict = "inspiration"
+license = "Apache-2.0"
+summary = "Repeated-run descriptive statistics in the existing owned skill evaluator"
+why = "Reviewed aggregate_benchmark.py SHA-256 123ef128ea5ccc01a4b1ac212ef5567f21e9c13d3d240609780beeb3200c49aa. Repeated samples and per-case configuration statistics are implemented independently in tools/skill-eval.ts, with exact grading coverage and task/grader cost accounting. No upstream code, prompts, optimizer, viewer or runtime plugin is copied. The full reference grant is preserved in Packs/writing/LICENSES/anthropic-skill-creator-Apache-2.0.txt; no separate NOTICE is present in the reviewed snapshot. This does not establish isolated owned-revision or runtime-trigger comparisons."
 
 [portable-pty]
 url = "https://github.com/wezterm/wezterm"

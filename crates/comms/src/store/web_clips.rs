@@ -44,6 +44,17 @@ pub struct WebClipDocument {
     pub updated_at: String,
 }
 
+/// Clip metadata for discovery without returning document bodies.
+#[derive(Debug, Serialize)]
+pub struct WebClipSummary {
+    pub document_key: String,
+    pub title: Option<String>,
+    pub url: String,
+    pub versions: i64,
+    pub updated_at: String,
+    pub data_class: &'static str,
+}
+
 /// Failure to validate or persist a clip.
 #[derive(Debug, thiserror::Error)]
 pub enum ClipError {
@@ -313,6 +324,49 @@ impl Store {
         keys.iter()
             .filter_map(|key| self.web_clip_document(key).transpose())
             .collect()
+    }
+
+    /// Search saved versions by literal substring, returning current metadata newest first.
+    ///
+    /// # Errors
+    /// Returns an error when storage is unavailable or pagination exceeds SQLite's range.
+    pub fn search_web_clip_documents(
+        &self,
+        query: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<WebClipSummary>, ClipError> {
+        let limit = i64::try_from(limit).map_err(|_| ClipError::Invalid)?;
+        let offset = i64::try_from(offset).map_err(|_| ClipError::Invalid)?;
+        let conn = self.conn().map_err(|_| ClipError::Storage)?;
+        let mut statement = conn.prepare(&format!(
+            "SELECT latest.document_key, json_extract(latest.payload, '$.title'),
+                    latest.url, grouped.versions, latest.created_at
+             FROM (SELECT document_key, MAX(rowid) AS latest_id, COUNT(*) AS versions
+                   FROM {0}_web_clips GROUP BY document_key) grouped
+             JOIN {0}_web_clips latest ON latest.rowid = grouped.latest_id
+             WHERE ?1 = '' OR EXISTS (
+                 SELECT 1 FROM {0}_web_clips saved
+                 WHERE saved.document_key = grouped.document_key AND (
+                     instr(lower(saved.url), lower(?1)) > 0 OR
+                     instr(lower(COALESCE(json_extract(saved.payload, '$.title'), '')), lower(?1)) > 0 OR
+                     instr(lower(COALESCE(json_extract(saved.payload, '$.markdown'), '')), lower(?1)) > 0))
+             ORDER BY grouped.latest_id DESC LIMIT ?2 OFFSET ?3", self.prefix
+        )).map_err(|_| ClipError::Storage)?;
+        let rows = statement
+            .query_map(params![query, limit, offset], |row| {
+                Ok(WebClipSummary {
+                    document_key: row.get(0)?,
+                    title: row.get(1)?,
+                    url: row.get(2)?,
+                    versions: row.get(3)?,
+                    updated_at: row.get(4)?,
+                    data_class: "c2",
+                })
+            })
+            .map_err(|_| ClipError::Storage)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|_| ClipError::Storage)
     }
 
     /// Delete every stored version belonging to one clip document.

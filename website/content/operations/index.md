@@ -368,7 +368,10 @@ tools/service-runner.sh status sjel-status
 sjel capability url sjel-status
 ```
 
-The runner builds the service binary when required. `sjel-status` serves the status API.
+The runner builds the service binary when required. A running service keeps the binary it
+started with. After a pull or an edit, `tools/service-runner.sh refresh` builds every running
+process and restarts only those whose binary changed. `tools/doctor` names a process that is
+older than its binary. `sjel-status` serves the status API.
 The printed URL reflects the current registry instead of assuming a port.
 Client applications connect through the native desktop and mobile interfaces (`apps/gpui`).
 

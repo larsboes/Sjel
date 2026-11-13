@@ -12,9 +12,10 @@ deterministic scripts, evals that prove the skill earns its context cost. Ground
 verify every path and command against disk before writing it down.
 
 ## Before you scaffold
-For Sjel, apply `CONTRIBUTING.md#owned-agent-components`: adapt a justified upstream technique
-into its existing owner, rather than installing a second skill or plugin. Preserve required
-notices and verify the adaptation; a copied package is not owned merely because it was renamed.
+For Sjel, apply `CONTRIBUTING.md#owned-agent-components`. Check the reviewed native-dependency
+route before writing a replacement; component/host approval and activation remain separate.
+For a local adaptation, use the existing owner, preserve notices and verify the behavior.
+Copying or renaming a package does not establish ownership.
 
 Write a skill when the same instructions get pasted into chat repeatedly, or a CLAUDE.md
 section has grown into a procedure rather than a fact — a skill's body loads only when

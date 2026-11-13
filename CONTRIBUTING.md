@@ -299,7 +299,7 @@ Obsidian holds learning notes only: what `teach` and `practice` write, and subje
 (`PLAN.md`, Decisions, 2026-11-08). It is not a Sjel database. Operational records live in each
 capability's store; notes that belong to a record live in `projects`. The markdown adapters in
 `comms` and `scouting` read any configured directory and no longer point into the vault
-([`storage.md`](docs/plans/storage.md#vault-holds-learning-only)). Integrations never mutate
+([`storage.md`](docs/plans/storage.md#one-vault-for-prose)). Integrations never mutate
 another capability's notes by implication.
 
 Lineage: Sjel's public-core and private-overlay separation draws inspiration from upstream AI-operator
@@ -645,11 +645,25 @@ judgment, and no per-agent report is required for routine successful delegation.
 
 ### Owned agent components
 
-Skills, agents, prompt workflows, hooks and harness plugins must be maintained as Sjel-owned
-components. Upstream packages are reference material, not ready-made runtime installations.
-Adapt only a justified behavior into its existing owner, or deliberately maintain a reviewed
-adaptation with a local contract and checks. Renaming or copying a package does not establish
-ownership. Upstream changes are reviewed inputs, never automatic replacements for local work.
+Skills, agents, prompt workflows, hooks and harness plugins have two ownership forms:
+
+- **Sjel-owned behavior:** components authored, forked, vendored or redistributed by Sjel are
+  maintained locally, with a contract and checks. Adapt a justified behavior into its existing
+  owner. Renaming, copying, screening or storing a package does not establish ownership.
+- **Reviewed native dependencies:** unmodified upstream-managed components may be approved for
+  their supported host or vendor integration, including community-maintained components. Their
+  native installer and upstream maintain the package; Sjel owns only its local configuration or
+  integration. Copying their behavior into Sjel or another harness requires an owned adaptation.
+
+Native approval is component- and host-specific, after proportionate review of intended use,
+licence, permissions, execution, data access, egress and cost. Record the decision and constraints
+in `upstreams.toml`. Marketplace membership, installation or a familiar publisher is not approval;
+activation requires a separate decision. Source-porting and native-use verdicts are distinct.
+
+Delegate routine native updates to upstream within the approved trust boundary. Material changes
+to publisher, permissions, execution, egress or licensing require re-review before accepting the
+expanded boundary; not every prompt edit requires a revision gate. Upstream updates never
+replace locally maintained Sjel sources automatically.
 
 Preserve attribution and every applicable license obligation, including notices and source
 requirements. Attribution alone is insufficient. Stop an adoption when permission or license
@@ -683,9 +697,11 @@ it is not a Pack distribution channel.
 
 ### Pack documentation and attribution
 
-Every Pack has a README and SPDX license field. Adapted material names its canonical upstream,
-license and adopted influence. Preserve required notices and nearby lineage comments
-where Sjel's changes would otherwise obscure origin.
+Every Pack has a README and SPDX license field. For adaptations and idea-only references, the
+README names the canonical upstream, reviewed revision or content digest, license, adopted
+influence and material not adopted. Keep complete applicable license and NOTICE texts with the
+owning Pack and link them from its README. Preserve lineage comments where changes would
+otherwise obscure origin.
 
 ## Documentation
 

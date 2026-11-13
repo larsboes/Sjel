@@ -49,6 +49,7 @@ use comms::travel;
 
 mod background;
 mod captures;
+mod clips;
 mod cloud;
 mod content;
 mod contracts;
@@ -146,6 +147,8 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/feed", "Feed entries. Optional status filter."),
     r("POST", "/ingest", "Ingest one URL into the feed."),
     r("GET", "/captures", "Capture inbox, newest first. Optional status filter."),
+    r("GET", "/clips", "Sjel Clipper documents, newest first, without bodies. Optional q: case-insensitive literal substring in saved versions' title, URL or Markdown; limit (default 20, max 100), offset (default 0). Results are c2 under the agent privacy gate."),
+    r("GET", "/clips/document", "Read a Sjel Clipper document's complete current Markdown. Required key: exact document_key from /clips, including note paths. Returns c2 under the agent privacy gate. Reduce large responses before returning text to a model."),
     r("POST", "/captures", "Store a link or a note; #buy, #look, #go, #learn set the tag."),
     r("PATCH", "/captures/{id}", "Edit a capture's text, tag, status or route."),
     r("GET", "/feed/{id}", "One feed entry."),
@@ -520,6 +523,7 @@ fn build_router(dashboard_origin: &str) -> Router {
     Router::new()
         .merge(read_routes)
         .merge(write_routes)
+        .merge(clips::router(Config::load().database_path))
         .layer(cors)
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024)) // 2 MiB
 }
@@ -1154,7 +1158,8 @@ mod route_manifest_tests {
     /// here rather than shipping a surface that lies about itself.
     #[test]
     fn the_manifest_covers_every_served_route() {
-        let missing = route_manifest::undeclared_routes(include_str!("main.rs"), super::ROUTES);
+        let mut missing = route_manifest::undeclared_routes(include_str!("main.rs"), super::ROUTES);
+        missing.extend(route_manifest::undeclared_routes(include_str!("clips.rs"), super::ROUTES));
         assert!(missing.is_empty(), "served but undocumented: {missing:?}");
         assert!(super::AGENT_ROUTES.closes("POST", "/triage/mail-evidence/replay"));
     }

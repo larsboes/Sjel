@@ -5,9 +5,67 @@
 
 pub use media_api::*;
 
+/// Decode only the selected proposal's bounded PNG previews.
+///
+/// # Errors
+/// A preview is invalid base64 or exceeds the evidence contract's size limit.
+pub fn content_previews(detail: &ContentDetail) -> Result<Vec<Vec<u8>>, String> {
+    use base64::Engine;
+    detail
+        .frames
+        .iter()
+        .map(|frame| {
+            if frame.preview_png.len() > 700_000 {
+                return Err("Preview exceeds size limit".into());
+            }
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(&frame.preview_png)
+                .map_err(|_| "Invalid preview encoding".to_string())?;
+            if bytes.len() > 512 * 1024 {
+                return Err("Preview exceeds size limit".into());
+            }
+            Ok(bytes)
+        })
+        .collect()
+}
+
+/// Split explicit review text into stable, unique metadata names without choosing candidates.
+pub fn content_names(text: &str) -> Vec<String> {
+    text.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn content_names_require_explicit_input_and_deduplicate_chosen_names() {
+        assert!(content_names("").is_empty());
+        assert_eq!(
+            content_names(" Travel, , Family,Travel "),
+            ["Family", "Travel"]
+        );
+    }
+
+    #[test]
+    fn selected_previews_decode_without_reading_original_paths() {
+        let detail: ContentDetail = serde_json::from_value(serde_json::json!({
+            "proposal": {"id":1,"sha256":"a".repeat(64),"fingerprint":"b".repeat(64),
+                "kind":"image","engine":"fixture","revision":1,"state":"pending","tags":[],"collections":[],"created_at":"fixture"},
+            "os":"fixture","filenames":["original.png"],
+            "frames":[{"requestedSeconds":null,"seconds":null,"labels":[],"previewPng":"AQID"}]
+        })).unwrap();
+        assert_eq!(content_previews(&detail).unwrap(), [vec![1, 2, 3]]);
+        let mut invalid = detail;
+        invalid.frames[0].preview_png = "not base64".into();
+        assert!(content_previews(&invalid).is_err());
+    }
 
     #[test]
     fn test_format_bytes() {

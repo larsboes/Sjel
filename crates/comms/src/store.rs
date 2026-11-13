@@ -859,7 +859,7 @@ pub use clipper_settings::{ClipperSettings, SettingsError};
 pub use event_scans::MailEventScan;
 pub use prompt_drafts::{DraftError, PromptDraft};
 use rows::{epoch_now, row_to_feed_full, row_to_feed_list, row_to_triage};
-pub use web_clips::{ClipError, WebClip, WebClipDocument, WebClipInput, WebClipWrite};
+pub use web_clips::{ClipError, WebClip, WebClipDocument, WebClipInput, WebClipSummary, WebClipWrite};
 
 #[cfg(test)]
 mod unit_tests {

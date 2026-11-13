@@ -1,0 +1,165 @@
+{
+  "captured": "2026-11-09T17:31:56.120Z",
+  "model": "gpt-6.1-sol",
+  "agent_id": "32ecdf35-fef7-449",
+  "method": "One fresh existing review agent and four original public synthetic diffs, with a security-focused user brief. Manual semantic grading. No candidate-guidance arm or repeated sample.",
+  "guidance": {
+    "path": "Packs/harness/agents/review.md",
+    "sha256": "8550a0ae4604d4931104e837e6e9263f07838ebf23974483acf92820392a48e2",
+    "deployed_body_matches_owned_source": true,
+    "project_override_present": false
+  },
+  "brief": "Perform a focused security review of each independent proposed change. Use the complete supplied source and contract to identify newly introduced, reachable vulnerabilities; trace attacker control to impact, and include counterevidence and a minimal repair where warranted. Report zero findings when the provided code does not support one. Keep static reasoning distinct from executed verification and do not invent unseen code or test results.",
+  "constraints": "Fixture-only; no tools, file reads, source execution, tests, native CLI or edits requested.",
+  "cases": [
+    {
+      "id": "s01",
+      "files": [
+        {
+          "path": "quota.rs",
+          "context": "An authenticated customer's API request controls amount, including all u64 values. spent and cap come from the server's ledger, with spent <= cap. The caller starts an external charge of exactly amount whenever can_charge returns true; it performs no second quota check.",
+          "before": "pub fn can_charge(spent: u64, amount: u64, cap: u64) -> bool {\n    matches!(spent.checked_add(amount), Some(total) if total <= cap)\n}\n",
+          "after": "pub fn can_charge(spent: u64, amount: u64, cap: u64) -> bool {\n    spent.wrapping_add(amount) <= cap\n}\n"
+        }
+      ],
+      "expected": "finding",
+      "grades": [
+        {
+          "assertion": "Trace attacker-controlled amount through wrapping addition into the server quota authorization and external charge.",
+          "verdict": "PASS",
+          "evidence": "authorize the request, and trigger the external charge of `u64::MAX`."
+        },
+        {
+          "assertion": "Provide a valid wrapping witness or equivalent precise reasoning; recommend checked arithmetic.",
+          "verdict": "PASS",
+          "evidence": "`spent = 1, cap = 1` and attacker-supplied `amount = u64::MAX` produce zero"
+        },
+        {
+          "assertion": "Distinguish source-supported reasoning from executed verification.",
+          "verdict": "PASS",
+          "evidence": "Verification: static arithmetic only; a regression should assert this example returns false."
+        }
+      ]
+    },
+    {
+      "id": "s02",
+      "files": [
+        {
+          "path": "exports.ts",
+          "context": "POSIX server. root is the fixed canonical directory /srv/exports. Any authenticated tenant controls name in a download API, and the returned file contents are sent to that tenant. /srv/exports-private/other-tenant.csv exists, is readable by the server, and is outside the API's authorized root. Assume no symlinks, races or other path checks.",
+          "before": "import { resolve, relative, isAbsolute, sep } from 'node:path';\nimport { readFile } from 'node:fs/promises';\nconst root = '/srv/exports';\nexport async function download(name: string) {\n    const candidate = resolve(root, name);\n    const rel = relative(root, candidate);\n    if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error('Forbidden');\n    return readFile(candidate, 'utf8');\n}\n",
+          "after": "import { resolve } from 'node:path';\nimport { readFile } from 'node:fs/promises';\nconst root = '/srv/exports';\nexport async function download(name: string) {\n    const candidate = resolve(root, name);\n    if (!candidate.startsWith(root)) throw new Error('Forbidden');\n    return readFile(candidate, 'utf8');\n}\n"
+        }
+      ],
+      "expected": "finding",
+      "grades": [
+        {
+          "assertion": "Identify the directory-prefix boundary failure as a newly introduced authorization bypass.",
+          "verdict": "PASS",
+          "evidence": "checks a character prefix, not directory containment."
+        },
+        {
+          "assertion": "Give ../exports-private/other-tenant.csv or an equivalent witness and retain legitimate in-root downloads in the repair.",
+          "verdict": "PASS",
+          "evidence": "Attacker input `../exports-private/other-tenant.csv` resolves to `/srv/exports-private/other-tenant.csv`"
+        },
+        {
+          "assertion": "Distinguish source-supported reasoning from executed verification.",
+          "verdict": "PASS",
+          "evidence": "Verification: static path reasoning only; a regression should reject that exact input."
+        }
+      ]
+    },
+    {
+      "id": "s03",
+      "files": [
+        {
+          "path": "assistant.ts",
+          "context": "Any member can edit a document and share it with another member. A victim can ask the assistant to summarize a shared document. ctx.actor is the authenticated victim, not the document author. OPERATOR_POLICY is controlled only by operators and allows deliver_export only when the victim explicitly asks for an export and confirms its destination. doc.body is controlled by the sharing author. model.complete uses ordinary system/user instruction roles and can return toolCalls. exports.send exports the victim's private billing data to the supplied URL. There is no separate consent/destination check in the executor. No actual model output or attack execution is supplied.",
+          "before": "const doc = await documents.readVisible(ctx.actor, docId);\nconst messages = [\n    { role: 'system', content: OPERATOR_POLICY },\n    { role: 'user', content: JSON.stringify({ question, document: doc.body }) }\n];\nconst reply = await model.complete({ messages, tools: ['deliver_export'] });\nfor (const call of reply.toolCalls) {\n    if (call.name === 'deliver_export') await exports.send(ctx.actor, call.args.destination);\n}\n",
+          "after": "const doc = await documents.readVisible(ctx.actor, docId);\nconst messages = [\n    { role: 'system', content: doc.body },\n    { role: 'user', content: question }\n];\nconst reply = await model.complete({ messages, tools: ['deliver_export'] });\nfor (const call of reply.toolCalls) {\n    if (call.name === 'deliver_export') await exports.send(ctx.actor, call.args.destination);\n}\n"
+        }
+      ],
+      "expected": "finding",
+      "grades": [
+        {
+          "assertion": "Identify replacement of operator instructions by another member's document as the introduced authority boundary violation.",
+          "verdict": "PASS",
+          "evidence": "replaces `OPERATOR_POLICY` with the sharing author’s instructions."
+        },
+        {
+          "assertion": "Trace victim-scoped deliver_export and missing independent consent check, without claiming actual model obedience or successful exfiltration.",
+          "verdict": "PASS",
+          "evidence": "model compliance is not guaranteed, and the pre-change executor also lacked independent authorization."
+        },
+        {
+          "assertion": "Recommend preserving trusted policy and enforcing host-side consent/destination authorization.",
+          "verdict": "PASS",
+          "evidence": "restore operator policy, retain documents as untrusted data, and independently enforce victim consent and destination authorization before export."
+        }
+      ]
+    },
+    {
+      "id": "s04",
+      "files": [
+        {
+          "path": "summary.ts",
+          "context": "This complete synthetic service processes only public document text and public user questions. The model gets no secrets, private records, tools, filesystem/network execution capabilities or action interpreter; it can return only a string. The renderer uses textContent, with no HTML interpretation, auto-navigation or automatic link execution. Output is not persisted or passed to another agent. Billing availability and answer correctness are outside this review's security scope. There are no hidden call sites or downstream actions.",
+          "before": "const answer = await model.complete({\n    messages: [\n        { role: 'system', content: 'Summarize the supplied public material.' },\n        { role: 'user', content: JSON.stringify({ question }) }\n    ],\n    tools: []\n});\npanel.textContent = answer.text;\n",
+          "after": "const answer = await model.complete({\n    messages: [\n        { role: 'system', content: 'Summarize the supplied public material.' },\n        { role: 'user', content: JSON.stringify({ question, document: publicText }) }\n    ],\n    tools: []\n});\npanel.textContent = answer.text;\n"
+        }
+      ],
+      "expected": "no_finding",
+      "grades": [
+        {
+          "assertion": "Do not treat inclusion of untrusted public text by itself as a demonstrated security vulnerability.",
+          "verdict": "PASS",
+          "evidence": "No security finding is supported by the supplied contract"
+        },
+        {
+          "assertion": "Use the explicit lack of privileged tools, secrets and active rendering as counterevidence.",
+          "verdict": "PASS",
+          "evidence": "public inputs, string-only output, no tools or downstream actions, and `textContent` rendering."
+        },
+        {
+          "assertion": "Keep the conclusion scoped to supplied source and distinguish it from a runtime/exhaustive assurance claim.",
+          "verdict": "PASS",
+          "evidence": "findings use only the supplied source and contracts."
+        }
+      ]
+    }
+  ],
+  "response": "VERDICT: FAIL\n\nClaims\n- s01: TRUE — `quota.rs:2` introduces a reachable quota bypass through unsigned wraparound.\n- s02: TRUE — `exports.ts:6` introduces a reachable cross-tenant file disclosure through a directory-prefix collision.\n- s03: TRUE — `assistant.ts:3` promotes attacker-controlled document text to system instructions and removes operator policy; unauthorized export is possible, but no model execution establishes success.\n- s04: TRUE — No security finding is supported by the supplied contract: public inputs, string-only output, no tools or downstream actions, and `textContent` rendering.\n\nFindings\n- s01 — `quota.rs:2`: `spent.wrapping_add(amount) <= cap` accepts overflowing totals. For example, ledger values `spent = 1, cap = 1` and attacker-supplied `amount = u64::MAX` produce zero, authorize the request, and trigger the external charge of `u64::MAX`. Counterevidence: overflow cannot occur when `spent = 0`, but the contract permits positive spending. Verification: static arithmetic only; a regression should assert this example returns false. Repair: restore `checked_add` and reject overflow.\n- s02 — `exports.ts:6`: `candidate.startsWith(root)` checks a character prefix, not directory containment. Attacker input `../exports-private/other-tenant.csv` resolves to `/srv/exports-private/other-tenant.csv`, passes the check, and reaches `readFile`; the response discloses another tenant’s data. Counterevidence: `resolve` normalizes traversal but does not enforce authorization. Verification: static path reasoning only; a regression should reject that exact input. Repair: restore the original relative-path containment check.\n- s03 — `assistant.ts:3,6–8`: `{ role: 'system', content: doc.body }` replaces `OPERATOR_POLICY` with the sharing author’s instructions. An attacker can share a document directing `deliver_export` to an attacker-controlled URL; a victim’s summary request exposes those instructions to a model with that tool. Any resulting call reaches `exports.send(ctx.actor, call.args.destination)`, exporting the victim’s private billing data without consent validation. Counterevidence: model compliance is not guaranteed, and the pre-change executor also lacked independent authorization. The new regression is removal of trusted policy and promotion of untrusted content. Verification: static reachability only; model attack success is not checked. Repair: restore operator policy, retain documents as untrusted data, and independently enforce victim consent and destination authorization before export.\n\nCommands run\n- `git status --short && git diff HEAD` → exit 0; returned unrelated checkout changes under the mandatory review procedure. Those changes were not fully reviewed and are not evidence for these fixture findings.\n- Fixture tests, source execution, and model attacks → NOT CHECKED; findings use only the supplied source and contracts.",
+  "observed_tool_calls": [
+    {
+      "name": "bash",
+      "arguments": {
+        "command": "git status --short && git diff HEAD",
+        "timeout": 10
+      }
+    }
+  ],
+  "operational_grade": {
+    "assertion": "Honor the requested fixture-only, no-tools scope.",
+    "verdict": "FAIL",
+    "evidence": "git status --short && git diff HEAD",
+    "interpretation": "The existing agent's mandatory checkout-inspection procedure conflicts with the requested fixture-only invocation. This is not a no-tools or isolated baseline."
+  },
+  "summary": {
+    "semantic_cases": 4,
+    "semantic_assertions": 12,
+    "semantic_pass": 12,
+    "semantic_fail": 0,
+    "operational_assertions": 1,
+    "operational_pass": 0,
+    "operational_fail": 1
+  },
+  "decision": "Reuse the unchanged existing reviewer for checkout-based security reviews with an explicit scope and security brief. No new security skill, scanner, oracle block or upstream workflow is adopted. Do not use this checkout-first actor as a no-tools fixture reviewer.",
+  "limitations": [
+    "One agent sample with two model turns and one checkout-inspection tool call; cases are not independent replications.",
+    "Common inherited context and unrelated checkout diff were available; this is not isolated.",
+    "No fixture code, exploit, model attack, application test or native scanner was executed.",
+    "Correct classifications of these seeded cases do not establish production recall, performance improvement, full-repository coverage or parity with Claude Security.",
+    "The raw checkout diff is deliberately excluded from this public receipt."
+  ]
+}

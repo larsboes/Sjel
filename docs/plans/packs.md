@@ -117,11 +117,15 @@ reference material; runtime selection follows the owned-component decision in se
 
 ## 5. Work packages
 
-Decided 2026-11-08: skills and harness plugins must be owned, maintained adaptations, not wholesale
-upstream installations. This supersedes the store-deployment choice for unchanged skills.
-`CONTRIBUTING.md#owned-agent-components` owns the rule. Matt and Anatomy store snapshots remain
-reference material and are held off every harness. Matt's native Claude and Codex plugins are
-disabled; tracker setup and label provisioning are cancelled. `web-research` remains Sjel-owned.
+Decided 2026-11-09: distinguish Sjel-owned agent behavior from reviewed upstream-managed native
+dependencies. Community integrations can qualify with explicit component/host approval. Routine
+updates are delegated to upstream within the approved trust boundary; material permission,
+execution, egress or licence changes require re-review. Source-porting permission, native-use
+approval, activation and running a job are separate. `CONTRIBUTING.md#owned-agent-components`
+owns the rule; this replaces the blanket owned-only restriction without approving or restoring
+any plugin. Matt and Anatomy store snapshots remain reference-only and held off every harness.
+Matt's native Claude/Codex bundles remain disabled; tracker setup and labels remain cancelled.
+`web-research` remains Sjel-owned.
 
 Decided 2026-11-09: retire Ponytail from runtime and close its temporary migration exception.
 The native Claude plugin is disabled at user scope. Automatic instruction repetition and the
@@ -139,8 +143,8 @@ limitations live in each skill's `evals/`.
 Common inherited context remains a confound, and runtime triggering was not tested. Pi resolves
 both owned sources without diagnostics. Materialized copies remain unchanged to avoid deploying
 unrelated concurrent edits. Metadata and suite checks, self-model freshness, publication hygiene
-and diff checks passed. Doctor still reports an invalid Packs backup source root. Full-workspace
-checks did not run.
+and diff checks passed. The latest doctor run passes with warnings; the earlier Packs backup
+source-root failure is resolved. Full-workspace checks did not run.
 
 Decided 2026-11-09: disable the native Claude `claude-security`, `code-simplifier`,
 `frontend-design`, `plugin-dev` and `skill-creator` plugins, plus Matt's separately enabled Codex
@@ -151,10 +155,124 @@ pre-change fingerprints. Packages and caches remain installed. Tool connectors, 
 servers, Interceptor and account-managed components were not changed. Existing sessions may
 retain loaded behavior until restarted.
 
-Open: audit other native and account-synced plugins and application-bundled skills; classify each
-as owned adaptation, a dependency behind an owned adapter, or unadopted agent behavior requiring
-migration or disabling. Existing unadopted components are unresolved violations, not implicit
-exceptions. The wider migration is not complete. Full-workspace checks did not run.
+Decided 2026-11-09: adopt an owned `interactive-figures` workflow in presentations and improve
+`tools/skill-eval` under the existing writing owner. The original ideal-lever example uses one
+model for forces and geometry; the retained Anatomy source remains reference-only. Evaluation
+adds opt-in repeats, per-case descriptive statistics, exact grading coverage and task/grader
+cost accounting, not a second framework or upstream runtime plugin. Owning READMEs identify
+reviewed sources, licences and rejected material; complete MIT and Apache-2.0 grants are retained.
+The synthetic figure baseline passed 9/9 assertions without the new skill, so no reasoning gain
+is claimed. Actual Obsidian embedding, native keyboard actions and runtime triggering remain
+unverified. Scoped checks passed: 42 offline tests, 33 metadata checks (three deliberate fixtures
+skipped), both relevant suite checks, stored pins, self-model freshness, publication hygiene and
+diff checks. Five browser states at actual 500/900 px widths, including endpoints and dark mode,
+passed and their captures were read. Preserved licence grants match the reviewed sources byte
+for byte. Independent review passed after replacing the undeclared Node commands with Bun;
+the documented Bun commands and all focused checks passed again. The three presentations
+skills are registered for Pi; other harnesses were not redeployed. Full-workspace and paid
+native eval runs did not run.
+
+**Matt reference assessment — 2026-11-09.** All 25 retained skills and their technique-bearing
+references were compared with authoritative owned guidance, not deployed copies. Source:
+[mattpocock/skills](https://github.com/mattpocock/skills), MIT, copyright 2026 Matt Pocock; the
+[full grant](https://github.com/mattpocock/skills/blob/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/LICENSE)
+was checked from the primary source. Retained Pack manifest SHA-256:
+`e499311775a8d94802c9953478a571db5099d079169035eef42e825f246f7087`;
+`tools/skills verify` confirmed its pins. Nineteen retained skill bodies match native 1.3.1
+(`49dd158d1076134a641b33efb035946536778336`); six differ, so that commit is not asserted as
+the source identity of every retained file. Substantial reuse requires the applicable snapshot
+and notices to be resolved before copying.
+
+Disposition: 10 covered, eight candidate rows representing six techniques, five rejected and
+two deferred. Coverage is a semantic assessment, not a runtime or performance result. No
+instruction-performance deficit was measured. No upstream workflow was executed or activated,
+and no source text or code was copied into owned guidance during this assessment.
+
+| Retained skill | Disposition | Existing owner | Reason or smallest conditional technique |
+|---|---|---|---|
+| ask-matt | Reject | sjel | Competing lifecycle/persona router; retain the owned workflow. |
+| code-review | Covered | unslop, prior-art, effective-rust | Requirements, conventions and scoped review already have owners. |
+| codebase-design | Candidate M3 | prior-art | Caller obligations and the module-deletion thought experiment. |
+| diagnosing-bugs | Candidate M4 | technical-precision, root-cause | Improve symptom sensitivity, turnaround and intermittent reproduction rate. |
+| domain-modeling | Covered | crystallize, technical-precision, effective-rust | Grounded terminology, explicit decisions and domain types. |
+| grill-me | Covered | crystallize, ask | Alias for the interview technique, not a separate capability. |
+| grill-with-docs | Covered | crystallize, technical-precision | Interview plus contemporaneous terminology/decision capture. |
+| grilling | Candidate M1 | crystallize | Only ask decisions whose prerequisites are settled. |
+| handoff | Defer | sjel, crystallize, runtime compaction | Cross-harness redacted continuation needs a concrete losing-context case. |
+| implement | Reject | prior-art, sjel | Thin orchestration macro; automatic full-suite runs and commits are not defaults. |
+| improve-codebase-architecture | Candidate M3 | prior-art, sjel | Same interface-depth diagnostic, not another adaptation. |
+| pr | Covered | sjel | Existing change descriptions; work-package PRs remain disabled while PLAN is active. |
+| prototype | Covered | interactive-figures, ui-craftsmanship, unslop | Explicit model, meaningful interaction and host-appropriate variants. |
+| research | Covered | technical-precision, prior-art, web-research | Primary sources, bounded investigation and owned output placement. |
+| retro | Candidate M6 | root-cause, suggest-skills, trim | Session-environment review; distinguish absent checks from unwired checks. |
+| setup-matt-pocock-skills | Reject | sjel | Tracker, labels and bootstrap scaffolding remain cancelled. |
+| tdd | Candidate M2 | sjel verification, effective-rust | Independent behavioral expectations and a relevant observed failing regression. |
+| to-questionnaire | Candidate M5 | crystallize | Self-contained questions for an absent knowledge holder, not the present user. |
+| to-spec | Covered | crystallize, sjel | Grounded synthesis, acceptance behavior and canonical specification placement. |
+| to-tickets | Defer | sjel, crystallize | Test vertical slices/expand-contract on a real feature before adding process. |
+| triage | Reject | root-cause, prior-art, crystallize | No demonstrated need for a label/state-machine queue or duplicate rejection store. |
+| wait-what | Covered | asd-ste100, technical-precision | Clear re-explanation with necessary context. |
+| wayfinder | Candidate M1 | crystallize | Separate blocked decisions, unformed intent and already-decided work. |
+| wizard | Reject | existing manual setup owner | No generic plaintext-secret persistence or CI-secret workflow. |
+| writing-for-agents | Covered | skill-creator, asd-ste100, sjel | Progressive disclosure, canonical owners, completion criteria and lean context. |
+
+Conditional techniques: M1 prerequisite-aware questions and incremental intent; M2 independent
+behavioral test oracles and relevant red-before-repair evidence; M3 caller-obligation/deletion
+diagnostic; M4 reproduction-signal quality; M5 absent-stakeholder questionnaires; M6 session
+environment retrospectives. Approved prerequisite-order and test-expectation probes (M1/M2)
+passed four cases and all 12 manual assertions under the existing guidance. No new guard block is added: crystallize only loses its contradictory
+fixed question-count minimum, and verification guidance remains unchanged. The receipt is
+`Packs/deliberation/skills/crystallize/evals/guard-probe.json`; owning attribution and the complete
+MIT grant are preserved. One synthetic model call is not an isolated comparison or proof of a
+reasoning gain. M3-M6 require a concrete task showing why existing guidance is insufficient.
+No new standalone skill, tracker, vocabulary system or orchestration framework is proposed.
+
+Two additional native-bundle entries were already excluded: `teach` remains with the owned
+vault-based teaching/practice system; `implement-spec` requires integration branches, worktrees
+and tracker orchestration incompatible with the current workflow. Their main instructions were
+checked to confirm those exclusions; they are not counted as two further full-reference audits.
+The next approved investigation is Claude Security's primary source and applicable licence;
+source availability does not authorize porting the restricted installed plugin.
+
+**Security source assessment — 2026-11-09.** The official
+[claude-security LICENSE](https://github.com/anthropics/claude-plugins-official/blob/0412be76f50ab4f4f8abff3753efa9269fbbca5b/plugins/claude-security/LICENSE)
+is proprietary and matches the installed 0.12.0 restrictions: Anthropic-product use only,
+no redistribution and no use to develop non-Anthropic products. Source availability is not
+permission to port it; no restricted prompts, agents or workflows are adopted.
+
+A different project,
+[claude-code-security-review](https://github.com/anthropics/claude-code-security-review/tree/0c6a49f1fa56a1d472575da86a94dbc1edb78eda),
+has an MIT grant (copyright 2025 Anthropic). Its command, filter, API client, action and
+dependency manifest were read at that revision; it is a PR/diff reviewer, not the newer plugin.
+Whole-workflow adoption is declined. The command excludes Rust memory-safety and AI-prompt
+findings (`.claude/commands/security-review.md:148,152`); the hard filter also removes matching
+non-C/C++ reports (`claudecode/findings_filter.py:140-143`). Failed or disabled model filtering
+assigns confidence 10.0 (`claudecode/findings_filter.py:299-314`), not an unknown/unverified state.
+The action installs the native CLI and publishes comments/artifacts by default; none of it was
+installed, executed or activated. This is a bounded source/permission assessment, not a complete
+dependency, history or runtime audit.
+
+Existing coverage is distinct: `crates/sjel-cli/src/audit.rs:155-157` runs gitleaks and OSV;
+`crates/sjel-cli/src/intake/review.rs:24-33` reviews third-party agent material for manipulation;
+`Packs/harness/agents/review.md` verifies own changes without an explicit vulnerability-review
+contract. No dedicated own-code vulnerability route was located in those searched surfaces;
+this does not establish that the general reviewer lacks the reasoning ability. Decided: reuse
+that reviewer for checkout-based security review with an explicit target and security brief,
+not a new skill or scanner. Four public synthetic diffs (three defects, one benign control)
+satisfied 12 manual semantic assertions. The fixture-only no-tools assertion failed: the actor
+ran its mandatory Git inspection, so the result is not isolated. The receipt is
+`Packs/harness/evals/review-security-baseline.json`; the review definition is unchanged. No
+fixture code, exploit, application test, native scan or paid native-Claude evaluation ran.
+Both upstream workflow/source adoptions are declined in `upstreams.toml`; native Claude Security
+use is a separate, not-yet-approved dependency decision under the revised boundary. No proprietary
+or MIT upstream instructions/code are adapted into the security workflow.
+
+Open: review native and account-synced plugins and application-bundled skills; classify each as
+owned adaptation, explicitly approved upstream-managed native dependency, or unapproved behavior
+requiring a disposition. A native dependency does not require an owned wrapper merely to qualify.
+Existing installations are not grandfathered into approval. Native approval/enforcement and
+activation inventory remain incomplete; this policy-only change modifies no plugin settings or
+runtime holds. Full-workspace checks did not run.
 
 | # | Work | Done when |
 |---|---|---|

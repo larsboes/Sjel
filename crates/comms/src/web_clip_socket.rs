@@ -2,8 +2,9 @@
 //!
 //! The browser starts `comms-clip-host` through native messaging; the host relays each
 //! message over a Unix socket that only `comms-server` listens on. The socket is a file
-//! with owner-only permissions in the overlay data directory, so there is no TCP route for
-//! `sjel-status` to proxy and no bearer token in browser storage. Both hops use the native
+//! with owner-only permissions in the overlay data directory. Writes have no HTTP route and
+//! need no bearer token in browser storage; authenticated clip reads also have an HTTP API.
+//! Both socket hops use the native
 //! messaging frame: a little-endian `u32` length, then that many bytes of JSON.
 
 use std::path::Path;

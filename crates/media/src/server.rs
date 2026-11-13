@@ -1,5 +1,7 @@
 //! Operator HTTP access to the ledger and local attachment intake.
 
+mod content_review;
+
 use std::sync::Arc;
 
 use axum::{
@@ -24,6 +26,13 @@ const RECENT_RUNS: i64 = 20;
 
 /// The manifest served at `GET /routes`.
 pub const ROUTES: &[route_manifest::Route] = &[
+    route_manifest::get("GET", "/api/content/proposals", "Operator-only content review queue. Filters: state and after; at most 50 items and a next_after cursor. No previews in list rows."),
+    route_manifest::get("GET", "/api/content/proposals/{id}", "Operator-only evidence, private PNG previews, raw candidates and approved metadata for one immutable proposal."),
+    route_manifest::Route {
+        method: "POST", path: "/api/content/proposals/{id}/decision",
+        summary: "Persist explicit accepted tags/collections or rejection for the exact evidence fingerprint. Idempotent identical retries; conflicting decisions refuse. Originals never change.",
+        request_schema: Some(route_manifest::schema_of::<media_api::ContentDecision>),
+    },
     route_manifest::get(
         "GET",
         "/api/attachments/{sha256}",
@@ -292,13 +301,13 @@ pub fn serve() {
             std::process::exit(1);
         }
     };
-    let app =
-        router(ledger)
-            .merge(attachment_router(library))
-            .layer(middleware::from_fn_with_state(
-                "media",
-                sjel_server::origin::refuse_foreign_origins,
-            ));
+    let app = router(ledger.clone())
+        .merge(content_review::router(ledger, library.clone()))
+        .merge(attachment_router(library))
+        .layer(middleware::from_fn_with_state(
+            "media",
+            sjel_server::origin::refuse_foreign_origins,
+        ));
     let port = sjel_config::resolve_port(None, None, DEFAULT_PORT);
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime could not start");
     runtime.block_on(sjel_server::serve(
@@ -324,7 +333,10 @@ mod tests {
 
     #[test]
     fn manifest_covers_routes() {
-        let source = include_str!("server.rs");
+        let source = concat!(
+            include_str!("server.rs"),
+            include_str!("server/content_review.rs")
+        );
         assert!(route_manifest::undeclared_routes(source, ROUTES).is_empty());
         assert!(route_manifest::bodies_without_schemas(ROUTES).is_empty());
     }

@@ -2,6 +2,7 @@
 //!
 //! Replaces the dashboard `/media` route. Backed by `crates/media` via sjel-status.
 
+mod content;
 pub mod inspector;
 pub mod runs;
 pub mod summary;
@@ -21,6 +22,7 @@ pub struct MediaPage {
     pub(crate) repo: Repo,
     pub(crate) media: Remote<MediaView>,
     pub(crate) notice: Option<String>,
+    content: content::ContentReview,
 
     pub(crate) selected_run_id: Option<i64>,
     pub(crate) selected_run_detail: Remote<MediaIngestDetail>,
@@ -33,6 +35,7 @@ impl MediaPage {
             repo,
             media: Remote::default(),
             notice: None,
+            content: content::ContentReview::default(),
 
             selected_run_id: None,
             selected_run_detail: Remote::default(),
@@ -49,6 +52,7 @@ impl MediaPage {
             &repo,
             |shell| async move { shell.media_view().await },
         );
+        self.load_content(cx);
     }
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
@@ -86,15 +90,27 @@ impl Render for MediaPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = ThemeContext::of(window, cx).palette;
 
+        let content_panel = self.render_content(palette, cx);
         let Some(view) = self.media.value.clone() else {
             let body = match &self.media.error {
                 Some(error) => note(error.to_string(), palette.red),
                 None => placeholder(320.),
             };
-            return section("Media", body, palette).into_any_element();
+            return section(
+                "Media",
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .child(content_panel)
+                    .child(body)
+                    .into_any_element(),
+                palette,
+            )
+            .into_any_element();
         };
 
-        let mut panels = Vec::new();
+        let mut panels = vec![content_panel];
 
         if let Some(notice) = &self.notice {
             panels.push(note(notice.as_str(), palette.green));

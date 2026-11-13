@@ -3238,6 +3238,14 @@
       "verdict": "inspiration"
     },
     {
+      "name": "anthropic-claude-security",
+      "verdict": "reject"
+    },
+    {
+      "name": "anthropic-skill-creator-evaluation",
+      "verdict": "inspiration"
+    },
+    {
       "name": "apfel",
       "verdict": "adopt"
     },
@@ -3316,6 +3324,10 @@
     {
       "name": "cisco-skill-scanner",
       "verdict": "watch"
+    },
+    {
+      "name": "claude-code-security-review",
+      "verdict": "reject"
     },
     {
       "name": "clm",

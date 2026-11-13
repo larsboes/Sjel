@@ -136,10 +136,11 @@ renderer use it rather than duplicating its path or signing policy. Contract:
 [`signed helper`](../../tools/fda-launcher/README.md).
 
 Verification: isolated lifecycle tests, two Rust persistence tests, CLI build, and formatting
-pass. The live helper is installed and signed; its launchd access probe has not passed, so
-existing jobs and the old executable remain unchanged. Live acceptance waits for the macOS
-permission grant, a successful migration/probe, and service-health verification. Broader Rust
-suites, packaged helper installation, and alternate-platform execution remain unchecked. The node
+pass. Live migration and protected-folder access under launchd pass; the old executable is
+removed, and the switched status capability answers its health endpoint. Synthetic regressions
+cover non-Sjel consumers and inherited user-domain jobs. Obsolete privacy-panel rows require
+manual cleanup without resetting unrelated grants. Broader Rust suites, packaged helper
+installation, and alternate-platform execution remain unchecked. The node
 archive includes the managed path resolver; its extracted-path regression passes.
 
 ## Open
@@ -161,11 +162,29 @@ archive includes the managed path resolver; its extracted-path regression passes
   while another decided the phone's renderer. Smallest change: a hold record per area plan that
   `sjel` lists and `tools/doctor` reports when it is stale.
 
+- **Overlay ignore-policy compatibility — deferred.** The shared floor excludes the machine
+  manifest and all runtime-data paths, while existing private overlays deliberately version
+  selected instance manifests and source assets there. Adopting it unchanged would conflict
+  with those tracking contracts. Define the versioned-input/runtime-state boundary before
+  migration; preserve reviewed source tracking and prove that secret and runtime exclusions
+  still win. Do not silently weaken the floor or change an overlay's tracking set.
+
+- **Orphan build roots outside the checkout — deferred.** Storage inventories the selected
+  Cargo target and secondary targets inside the public checkout; a retired sibling-overlay
+  cache has no route that selects only that orphan. A scoped manual removal checked tracked
+  files, open files, launcher references, and the surviving active binary first. Add an
+  explicit-root guarded inventory/reclaim route only if another such cleanup is needed;
+  reject active targets, source/state trees, and symlink roots in its regression tests.
+
 - **Native-plugin activation control.** Sjel's Pack holds do not cover native marketplace or
   account-managed plugins. The scoped cleanup used Claude's native disable command; Codex exposes
   removal but no persistent disable command, so its named plugin enablement was edited directly.
-  Smallest change: inventory native activation alongside Packs and add a guarded disable route;
-  prove non-target settings remain unchanged. Do not substitute uninstall for disable.
+  Smallest change: inventory native activation alongside Packs, distinguish approved native
+  dependencies from owned and unapproved components, and add guarded activation/disable routes.
+  Bind approvals to component/host and the reviewed trust boundary; source-porting rejection is
+  not a native-use verdict. Routine upstream updates are delegated, with material scope changes
+  requiring re-review. No native enforcement is implemented by the policy change. Prove non-target
+  settings remain unchanged; do not substitute uninstall for disable.
 
 - **Unit-scoped harness sync.** `tools/harnesses sync` selects a whole Pack. A coding sync would
   also deploy unrelated concurrent Rust guidance changes. Pi already reads the changed owned
@@ -178,8 +197,15 @@ archive includes the managed path resolver; its extracted-path regression passes
   not one owned revision against another. This adoption used fresh owned Pi agents with immutable
   before/candidate guidance and synthetic prompts; common inherited context remains a limitation.
   Public responses and source identities live in the skills' eval fixtures. Smallest change:
-  support explicit baseline/candidate snapshots and a controlled owned runner, record the actual
-  capture date and include grading usage in cost totals. Keep live workspace data out of inputs.
+  support explicit baseline/candidate snapshots and a controlled owned runner. The current
+  native runner now records the actual UTC date, validates exact grading coverage, includes
+  grading costs and supports opt-in descriptive repeats with separate sample identities.
+  These changes do not isolate installed context or test runtime triggering. The security
+  fixture probe also encountered a checkout-first review actor whose mandatory Git inspection
+  conflicted with the requested no-tools scope; its semantic answers are not a tool-isolated
+  result. Controlled evaluation needs explicit actor/context and tool boundaries, with an
+  incompatible fixture-only invocation rejected before checkout access. Keep live workspace
+  data out of inputs; public receipts omit the unrelated checkout diff.
 
 - **Non-mutating command help.** `tools/harnesses apply --help` was needed to inspect options,
   but applied every bound profile instead. The observed side effect deployed the already-selected
@@ -530,6 +556,11 @@ archive includes the managed path resolver; its extracted-path regression passes
 - `tools/check-doc-links.sh` fails a Markdown file whose relative link names a missing path or a
   heading the target lacks. It runs in the repo gates for every `*.md` change
   (`tools/lib/ci-inputs.ts`). `tools/doctor` does not run it yet.
+- `tools/service-runner.sh stale [<capability>]` reports whether each running process serves the
+  binary on disk, and `refresh [<capability>]` builds first and restarts only a process whose
+  binary changed. A failed build keeps the old process running. `tools/doctor` warns about a
+  stale process. `tools/codesign-binary.sh` skips a binary that the same identity already
+  signed, so a no-op build does not look like a new binary.
 - Storage's launcher accepts an explicitly selected, executable `SJEL_STORAGE_BIN` for isolated
   verification; arguments and child status are preserved, and invalid overrides refuse without
   compiling. The launcher regression passes. Pi's held-package fixture canonicalizes its root

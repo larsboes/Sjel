@@ -60,6 +60,13 @@ skills/diagrams/
   scripts/diagrams      bash + uv launcher, delegates to scripts/diagramkit
   scripts/diagramkit/   theme (palette → Mermaid config), render (mermaid-cli, pinned), cli
   references/mermaid.md the variable mapping, the layout defaults, how to write a source
+
+skills/interactive-figures/
+  SKILL.md              one claim → pure model → SVG/HTML → destination checks
+  assets/lever-model.mjs  tested ideal-lever model and display geometry
+  assets/lever.html      generated standalone example, no remote resources
+  scripts/              deterministic build, model tests and optional browser checks
+  evals/                synthetic baseline responses and assertions, not a claimed quality gain
 ```
 
 A deck is a Python module that builds one `Deck`. A module rather than a data format
@@ -186,8 +193,8 @@ missing.
 
 ## Attribution
 
-Original work, no upstream. The design system is transcribed from a reference deck the
-user supplied and re-coloured from that project's own figure palette
+`slide-deck` and `diagrams` are original work. The design system is transcribed from a reference
+deck supplied for that project and re-coloured from that project's own figure palette
 (`assets/themes/warm-scientific-teal.json`, provenance recorded in the file). The
 academic layer is grounded in the source thesis's first assessment and its validity
 taxonomy (Wohlin et al.), with the constructs sourced from the `academic-writing` Pack.
@@ -197,12 +204,25 @@ The `deckkit` code is written against `python-pptx` and `pymupdf`, both pinned i
 ## Interactive figures
 
 `interactive-figures` owns interactive technical explainers. Its ideal-lever example contains
-an original model, standalone HTML generator and model/browser checks. Run its commands from
-the skill directory; browser checks require an installed Chrome or Chromium and do not verify
+an original model, standalone HTML generator and model/browser checks. Its commands use the
+declared Bun runtime. Run them from the skill directory; browser checks also require installed
+Chrome or Chromium and do not verify
 an Obsidian embed.
 
-[Anatomy](https://github.com/wheresryan22/anatomy) (MIT) is design inspiration for using an
-interactive technical figure to explain a mechanism. No upstream instructions, code, images
-or assets are included. The owned skill and example use this Pack's MIT license. Upstream
-snapshots remain reference-only, not runtime skills. Obsidian embedding follows the knowledge
-Pack's [host contract](../knowledge/plugins/interactive/README.md).
+[Anatomy](https://github.com/wheresryan22/anatomy) is the upstream design reference (MIT,
+copyright 2026 Ryan). The reviewed `SKILL.md` has SHA-256
+`3423ada45a05033bb6e320dfc3b3ac832569969a5afb059bbfc9096c5cf0c71b`.
+The retained source is reference-only, not a runtime skill. Its complete grant is preserved in
+[`LICENSES/anatomy-MIT.txt`](LICENSES/anatomy-MIT.txt); the owned skill and example remain MIT.
+
+Adopted: model-driven technical explanation, consistent geometry and readouts, meaningful
+controls, accessibility and actual-destination checks. No upstream instructions, code, images
+or assets are copied. Not adopted: mandatory part counts, decorative machinery, compulsory
+WebGL, remote assets or gallery publication. Obsidian embedding follows the knowledge Pack's
+[host contract](../knowledge/plugins/interactive/README.md), not assumed native HTML execution.
+
+The example's commands are documented in its skill. Browser captures use isolated temporary
+profiles, test wide and narrow actual viewports and a dark scheme, and dispatch input events.
+They do not establish native keyboard behavior or Obsidian embedding. The synthetic baseline
+passed all nine assertions without the new skill; it establishes no reasoning-quality gain.
+The concrete addition is the owned delivery workflow and runnable, checked example.

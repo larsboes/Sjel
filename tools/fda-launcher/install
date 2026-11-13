@@ -80,16 +80,27 @@ verify_helper() (
   label="dev.sjel.fda-probe.$$"
   trap 'launchctl remove "$label" >/dev/null 2>&1 || true; rm -rf "$scratch"' EXIT
   launchctl submit -l "$label" -o "$scratch/out" -e "$scratch/err" -- \
-    "$BIN" /bin/sh -c '/bin/ls -A "$1" >/dev/null 2>&1 && printf "%s\n" sjel-fda-access-ok' \
+    "$BIN" /bin/sh -c 'printf "%s\n" sjel-fda-probe-started; if /bin/ls -A "$1" >/dev/null 2>&1; then printf "%s\n" sjel-fda-access-ok; else printf "%s\n" sjel-fda-access-denied; exit 3; fi' \
     fda-probe "$protected"
   result=0
   for _ in $(seq 1 50); do
-    if [ -f "$scratch/out" ] && grep -Fxq sjel-fda-access-ok "$scratch/out"; then result=1; break; fi
+    if [ -f "$scratch/out" ]; then
+      if grep -Fxq sjel-fda-access-ok "$scratch/out"; then result=1; break; fi
+      if grep -Fxq sjel-fda-access-denied "$scratch/out"; then result=2; break; fi
+    fi
     sleep 0.1
   done
-  if [ "$result" -ne 1 ]; then
-    fail "protected-folder access was not proved under launchd. Grant Full Disk Access to $BIN in System Settings, then run 'sjel fda-launcher verify'. No existing job was changed."
+  if [ "$result" -eq 2 ]; then
+    echo "fda-launcher: launchd probe ran but protected-folder access was denied. Grant Full Disk Access to $BIN in System Settings, then run 'sjel fda-launcher verify'. No existing job was changed." >&2
     return 3
+  fi
+  if [ "$result" -ne 1 ]; then
+    echo "fda-launcher: launchd probe did not complete; permission is unverified, not known to be denied. No existing job was changed." >&2
+    launchctl print "gui/$(id -u)/$label" 2>/dev/null | awk '/^[[:space:]]*(state|last exit code) =/ {print "fda-launcher: " $0}' >&2 || true
+    if [ -s "$scratch/err" ]; then
+      while IFS= read -r line; do printf 'fda-launcher probe: %s\n' "$line" >&2; done < "$scratch/err"
+    fi
+    return 1
   fi
   echo "fda-launcher: protected-folder access verified under launchd"
 )
@@ -150,7 +161,9 @@ migrate_helper() (
   loaded="$(launchctl list)" || { fail "cannot inspect loaded jobs; old helper retained"; return 1; }
   while IFS= read -r label; do
     [ -n "$label" ] || continue
-    if ! program="$(launchctl print "gui/$uid/$label" 2>/dev/null)"; then
+    if ! program="$(launchctl print "gui/$uid/$label" 2>/dev/null)" &&
+       ! program="$(launchctl print "user/$uid/$label" 2>/dev/null)" &&
+       ! program="$(launchctl print "system/$label" 2>/dev/null)"; then
       if launchctl list "$label" >/dev/null 2>&1; then
         fail "cannot inspect loaded job: $label"; return 1
       fi

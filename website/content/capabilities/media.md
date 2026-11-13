@@ -67,6 +67,7 @@ leave an orphaned digest.
 | `media_ingest_copies` | Incoming directory ownership, target volume UUID and canonical library root | `(ingest_id, relpath)`; unique incoming name |
 | `media_attachments` | A verified local original's digest, byte length and import time | `sha256` |
 | `media_attachment_sources` | Each observed source filename and its first-seen time | `(sha256, filename)` |
+| `media_content_proposals` | Immutable content evidence and previews, explicit decision and chosen metadata | `id`; unique evidence fingerprint |
 
 Local attachments are separate from `media_files` and `media_locations`: mounted-volume counts,
 audit and ingest do not treat local attachments as volume copies. Perceptual and geotag tables
@@ -124,7 +125,7 @@ external filesystem edits and storage failure.
 
 `media serve` starts a process capability on port **8102** ([`service.toml`](../../../crates/media/service.toml)).
 Mounted-volume routes are read-only. The attachment intake writes only to the private local
-attachment root and its metadata tables. Verbs that move or organize mounted-library files stay
+attachment root and its metadata tables. Content decisions write reviewed metadata, never originals. Verbs that move or organize mounted-library files stay
 operator-invoked commands with their own approval lists and are not exposed.
 
 | Method & path | Answers |
@@ -136,6 +137,9 @@ operator-invoked commands with their own approval lists and are not exposed.
 | `GET /api/ingests/{id}` | One run and the disposition of every path it considered (404 if unknown) |
 | `POST /api/attachments?filename=<name>&sha256=<digest>` | Store raw bytes, at most 128 MiB. Returns `{attachment, created}` with 201 for a new original, 200 for existing verified bytes |
 | `GET /api/attachments/{sha256}` | Verify the original and return `{attachment: {sha256, byte_len, filenames}}`; 404 if no metadata exists |
+| `GET /api/content/proposals?state=pending&after=0` | At most 50 proposal summaries and `next_after`; states: pending, accepted, rejected, all |
+| `GET /api/content/proposals/{id}` | Immutable evidence, private PNG previews, raw labels, filename provenance and decision; 404 if unknown |
+| `POST /api/content/proposals/{id}/decision` | Exact fingerprint, accept/reject, chosen tags and collections; idempotent identical retries, 409 for conflicts |
 
 The upload requires a single visible filename, not a path, and a 64-character lowercase SHA-256
 that matches the submitted bytes. Unknown query fields are refused. Unsafe names or mismatched
@@ -155,9 +159,9 @@ requests up to 8 MiB; import therefore submits raw attachments directly to the l
 listener, using the deployment credential. `SJEL_MEDIA_URL` selects an alternate loopback HTTP
 origin when needed; media's declared default port is the fallback.
 
-**The HTTP surface does not cache or materialize derived data.** It renders ledger contents at
-request time, so its response reflects the tables written by each verb. A slow query runs on
-`spawn_blocking` rather than stalling the listener.
+Ledger reads render persisted records at request time. Content evidence is an immutable snapshot
+staged by the owner CLI, not a model result generated during an HTTP read. Decision writes do not
+rerun inference. Blocking queries and original verification run on `spawn_blocking`.
 
 ### Local attachment storage and retry contract
 
@@ -188,8 +192,11 @@ not a relative source path.
 
 Intake performs no content extraction, EXIF indexing, cloud call, mounted-volume ingest, or
 source removal. Source filenames are the minimum provenance; no arbitrary source path is
-accepted. Original bytes and filename metadata stay in the local overlay. These originals are
-not a backup and are not automatically mirrored to mounted drives.
+accepted. Original bytes and filename metadata stay in the local overlay. Intake is not a backup.
+The Media manifest separately declares `data/media/attachments` for the shared backup runner,
+excluding incomplete `.upload-*` files. The shared-store backup covers metadata and provenance.
+Mounted-volume libraries are outside this attachment backup contract. Retain sources until both
+metadata and original-byte archives have passed isolated restores.
 
 Isolated coverage is exercised by `tools/cargo-hermetic test -p sjel-media -p sjel-import --locked`:
 raw-upload authentication and size limits, deduplication with multiple filenames, interrupted
@@ -198,12 +205,61 @@ exclusions before import descent and CSV header inspection, binary-plist placeho
 single-file intake and `.pvt` component routing. Real Downloads/Inbox intake and app
 acceptance require a separate operator run; synthetic tests do not establish that acceptance.
 
+### Content evidence and review
+
+`tools/media-content-probe` requires macOS, the declared Swift toolchain, Apple Vision and
+AVFoundation, not a model server or download. It accepts 1–20 explicit absolute local files,
+including extensionless originals, up to 1 GiB each. Symlink paths, parent traversal and dataless
+cloud-only files are refused. Source identity, size and modification metadata must remain stable.
+The native probe makes no network calls. Reports contain private pixels and inferred labels;
+they must not enter cloud prompts or public artifacts.
+
+Images are oriented and reduced to a 256-pixel thumbnail before classification. Video frames use
+10%, 50% and 90% of duration with zero decoder tolerance; requested and actual times are recorded,
+and an offset over 250 ms fails the item. Each classified frame includes that same frame's PNG
+preview and up to five raw-scored labels. Video decoding uses a private temporary copy with a
+container suffix. Normal-path cleanup errors are reported; process termination can leave a copy.
+The bounded frames provide sample coverage, not whole-video classification.
+
+The report protocol is `formatVersion: 1`. `media proposals stage --report PATH [--db PATH]`
+accepts at most 24 MiB and checks the engine, revision, frame coverage, label scores and bounded
+PNG headers. Successful digests must resolve through verified local attachment originals; source
+paths from a report are never read or persisted. A native failed item contributes a failure count,
+not a proposal. Validation failure rolls back the whole successful-item batch. Reports are
+operator-submitted evidence, not cryptographic attestations of the classifier or preview.
+
+Decision requests are limited to 16 KiB. Invalid metadata or fingerprints return 422, unknown
+proposals return 404, and stale fingerprints or terminal conflicts return 409. Original-verification
+and storage failures return a sanitized 500 and do not save a decision.
+
+One fingerprint binds the digest, kind, engine, revision, OS and complete frame evidence.
+Staging identical evidence is idempotent and preserves its decision. Changed evidence starts
+pending and cannot inherit approval. Raw candidates and accepted tags/collections are separate.
+A proposal's terminal decision is immutable; an identical normalized retry succeeds, while a
+conflicting action or changed fingerprint refuses. Acceptance re-verifies the original.
+
+The native Media page loads a bounded summary queue and only the selected item's previews.
+It provides pending/accepted/rejected filters, explicit chosen-name fields and accept/reject.
+Choosing a candidate only edits the tag field; no metadata is saved until the explicit save.
+The CLI equivalent is `media proposals decide --id ID --fingerprint SHA256 --action accept|reject
+[--tag NAME] [--collection NAME]`. Accept needs at least one chosen name; reject accepts none.
+Metadata, evidence and previews live in `media_content_proposals` and are backed up with the
+shared store. Original bytes remain covered by Media's separate attachment backup contract.
+These contracts cover local attachments, not mounted-volume organization or a general gallery.
+
+`tools/media-content-probe.test.sh` exercises native decoding, PNG preview limits and long-GOP
+sample timing; optional FFmpeg generates its video fixture. Rust content tests cover atomic staging,
+replay, terminal conflicts, explicit metadata, changed evidence, corruption and pagination.
+Dataless refusal and concurrent source-change rejection in the native probe remain inspection-only.
+Classification usefulness and live native app acceptance require separate local review.
+
 ## 4. Invariants
 
 - **Exact bytes, never a guess.** A row is written from a SHA-256 digest computed on this machine.
 - **Nothing is deleted.** `supersede` and `reclaim` rename into quarantine and journal the move
   before it happens; reclaiming the space is a separate declared step.
-- **Only attachment intake writes over HTTP.** It stores verified local originals without replacing
-  paths. Mounted-volume write verbs remain absent from the router; operator credentials gate both.
+- **HTTP writes are narrow.** Attachment intake stores verified local originals without replacing
+  paths; content review stores explicit metadata decisions. Mounted-volume write verbs remain absent
+  from the router. Operator credentials gate the private surfaces.
 - **A partial answer says so.** `complete: false` and a named `issues` list travel with the report
   that carries them, so a plan that had to skip a file cannot read as a clean run.

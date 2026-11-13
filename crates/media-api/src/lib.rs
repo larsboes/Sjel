@@ -2,6 +2,9 @@
 //!
 //! Shared across server capability (`sjel-media`) and client apps (`sjel-gpui-core`).
 
+mod content;
+pub use content::*;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

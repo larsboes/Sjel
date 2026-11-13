@@ -34,7 +34,7 @@
 // already in bun's cache — and fails with instructions when none of the three is there,
 // rather than reporting "typecheck passed" after checking nothing.
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
   cpSync,
@@ -558,6 +558,7 @@ describe.skipIf(!piConfigured)("pack extensions > questions widgets", () => {
     return {
       mode: "tui",
       ui: {
+        setStatus() {},
         custom: (factory: (t: unknown, th: unknown, kb: unknown, done: (r: unknown) => void) => unknown) =>
           new Promise((resolve) => {
             const widget = factory(tui, theme, {}, resolve) as {
@@ -583,6 +584,7 @@ describe.skipIf(!piConfigured)("pack extensions > questions widgets", () => {
 
   /** The questions extension's tools, loaded once against the fixture. */
   let toolDefs: Map<string, ToolDef> | undefined;
+  beforeEach(() => { toolDefs = undefined; });
   async function questionsTools(): Promise<Map<string, ToolDef>> {
     if (toolDefs) return toolDefs;
     const file = packs.find((f) => f.path.endsWith("questions.ts"));

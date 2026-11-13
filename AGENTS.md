@@ -42,8 +42,9 @@ Always:
 - Write a durable rule or decision into the repository: code, the skill that owns it, the area
   plan in `docs/plans/`, or this file. Never into agent memory. The tracked `.claude/settings.json`
   sets `autoMemoryEnabled: false`. Machine-specific settings go in `.claude/settings.local.json`.
-- Use only owned and maintained skills and harness plugins; adapt upstream material instead of
-  installing it wholesale. Rules: [owned agent components](CONTRIBUTING.md#owned-agent-components).
+- Use Sjel-owned agent behavior or explicitly approved upstream-managed native dependencies.
+  Copying does not establish ownership; native approval and activation are separate. Rules:
+  [owned agent components](CONTRIBUTING.md#owned-agent-components).
 - Reassess repeated routine approvals and wasteful delegation before continuing. Use narrow
   permissions and agents only when they pay for their overhead. Rules:
   [proportionate approvals and delegation](CONTRIBUTING.md#proportionate-approvals-and-delegation).

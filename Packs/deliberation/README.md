@@ -109,9 +109,21 @@ verdict for that upstream is `inspiration` — see the `[lifeos]` row in `upstre
 Attribution is repeated in each SKILL.md, which is the copy that travels when a Pack is deployed
 into a harness.
 
-`crystallize` is not from that upstream and not from any other: it was written here and lived
-unmanaged in `~/.claude/skills` from 2026-08-24 until it was adopted into this Pack on 2026-09-07,
-with no copy in any repository for those two weeks.
+`crystallize` was authored in Sjel. Matt Pocock's
+[`grilling`](https://github.com/mattpocock/skills/blob/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/productivity/grilling/SKILL.md)
+(MIT, copyright 2026 Matt Pocock) informed its round-sizing review. The reviewed retained
+`SKILL.md` has SHA-256 `a146842ed93ca43d833550fa9adf02e58cb63c83fea9d4b4522995b82242d4e2`.
+The complete reference grant is preserved in
+[`LICENSES/mattpocock-skills-MIT.txt`](LICENSES/mattpocock-skills-MIT.txt).
+
+The local change removes the fixed question-count minimum and retains bounded rounds of ready,
+independent decisions. It does not adopt relentless interviewing, unlimited frontier batches,
+tracker scaffolding or mandatory delegation. No upstream instructions or code are copied.
+A four-case baseline using the previous owned guidance passed all 12 manually graded assertions,
+including question dependencies and independent regression-test expectations. No extra test-oracle
+instruction was added, and no reasoning-quality gain is claimed. The
+[probe receipt](skills/crystallize/evals/guard-probe.json) identifies inputs, committed guidance
+blobs, responses and evidence; it is not an isolated runtime-trigger or repeated-sample study.
 
 What the port removed, and why:
 

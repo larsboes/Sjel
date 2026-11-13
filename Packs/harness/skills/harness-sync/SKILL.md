@@ -8,7 +8,9 @@ license: MIT
 
 Sjel is the source. Every harness holds a copy or a pointer, and the two drift.
 For upstream skills or plugins, apply `CONTRIBUTING.md#owned-agent-components` before deployment:
-screening, store membership and a new name do not establish maintained ownership.
+classify an owned adaptation or an explicitly approved native dependency. Screening, store
+membership, native packaging and a new name establish neither ownership nor approval.
+Use the native host's lifecycle for approved dependencies, not Pack sync or promotion.
 
 One tool answers all of it: `tools/harnesses` in the Sjel repository. This skill is the judgment
 around it — which direction a change should travel, and when the answer is not `sync`.
@@ -30,7 +32,7 @@ lose good work or import junk into the source of truth.
 | A deployed copy was edited in place and the edit is worth keeping | `accept` |
 | A deployed copy was edited in place and the edit is not worth keeping | `discard` — replaces the copy with the Pack's text and keeps the replaced copy beside the ledger. It lists what it replaces, adds and removes, and refuses until given `--force` |
 | A skill exists in a harness, no Pack owns it, and it should be shared | `promote` |
-| An upstream skill exists outside Sjel ownership | inspect for deliberate adaptation or disable it; retain source only as reference |
+| An upstream skill exists outside Sjel ownership | check explicit native component/host approval; otherwise assess adaptation or leave it unapproved, not silently activated |
 
 ## Procedure
 
@@ -89,9 +91,11 @@ a row still showing `D` afterwards means the copy and the source still differ.
   longer exists, which `status` reports as `missing`. `promote` and `accept` are meaningless there
   and refuse. pi additionally auto-discovers `~/.agents/skills` and every `.agents/skills` up to
   the repository root, so a skill placed there by anybody else is loaded too. `status` lists those
-  as `~` discovered; a *system-wide* one that no Pack owns is a policy violation, not a promote
-  candidate, because the same name can also be registered and pi keeps the first. `tools/skills
-  audit` names them, and `tools/skills add` installs a non-Pack skill project-scoped instead.
+  as `~` discovered. Check native component/host approval before classifying an unowned entry as
+  a violation; discovery is not approval. Approved upstream-managed entries stay with their
+  installer, never `promote`. Duplicate names remain a defect because pi keeps the first.
+  `tools/skills audit` names discovered entries; project-scoped placement through `tools/skills
+  add` does not bypass approval.
 
 ## When the hooks fire
 

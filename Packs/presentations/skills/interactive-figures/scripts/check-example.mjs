@@ -30,7 +30,7 @@ export function checkExample(outputDirectory) {
   const scratch = mkdtempSync(join(tmpdir(), "sjel-interactive-figure-"));
   const cases = [
     { name: "wide", width: 900, height: 700, arm: 2 },
-    { name: "phone", width: 390, height: 780, arm: 2 },
+    { name: "narrow", width: 500, height: 780, arm: 2 },
     { name: "minimum", width: 900, height: 700, arm: 0.5 },
     { name: "maximum", width: 900, height: 700, arm: 4 },
     { name: "dark", width: 900, height: 700, arm: 2, dark: true },
@@ -38,7 +38,7 @@ export function checkExample(outputDirectory) {
   try {
     const results = cases.map((test) => {
       const file = join(scratch, test.name + ".html");
-      const probe = `<script>const control=document.getElementById("arm");control.value=${test.arm};control.focus();control.dispatchEvent(new Event("input",{bubbles:true}));document.documentElement.dataset.overflow=String(document.documentElement.scrollWidth>innerWidth);document.documentElement.dataset.scheme=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";</script>`;
+      const probe = `<script>const control=document.getElementById("arm");control.value=${test.arm};control.focus({preventScroll:true});control.dispatchEvent(new Event("input",{bubbles:true}));document.documentElement.dataset.viewport=String(innerWidth);document.documentElement.dataset.overflow=String(document.documentElement.scrollWidth>innerWidth);document.documentElement.dataset.scheme=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";</script>`;
       writeFileSync(file, exampleHtml().replace("</body>", probe + "</body>"), { flag: "wx" });
       const screenshot = join(output, test.name + ".png");
       const args = [
@@ -55,6 +55,7 @@ export function checkExample(outputDirectory) {
       assert(run.stdout.includes(`data-effort-force="${state.effortForce}"`), "Rendered force differs from model.");
       assert(run.stdout.includes(`data-effort-arm="${test.arm}"`), "Input event did not update state.");
       assert(run.stdout.includes(`>${state.effortForce.toFixed(1)} N effort</text>`), "SVG label did not update.");
+      assert(run.stdout.includes(`data-viewport="${test.width}"`), "Browser viewport differs from requested width.");
       assert(run.stdout.includes(`data-overflow="false"`), "Page overflows horizontally.");
       assert(existsSync(screenshot), "Browser did not write a screenshot.");
       const scheme = /data-scheme="(dark|light)"/.exec(run.stdout)?.[1];
@@ -70,7 +71,7 @@ export function checkExample(outputDirectory) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (process.argv.length !== 3) {
-    console.error("Usage: node scripts/check-example.mjs <output-directory>");
+    console.error("Usage: bun --no-env-file scripts/check-example.mjs <output-directory>");
     process.exitCode = 2;
   } else {
     try { console.log(JSON.stringify(checkExample(process.argv[2]), null, 2)); }

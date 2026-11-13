@@ -1,0 +1,99 @@
+{
+  "captured": "2026-11-09T11:46:11.740Z",
+  "method": "One fresh Pi agent without the new skill or tool use. The terminal wrap-up rewrote its response; the final response is retained, not treated as an independent repeated sample. Manual assertion grading.",
+  "model": "gpt-6.1-sol",
+  "limitations": [
+    "Inherited global instructions are not isolated.",
+    "Synthetic planning responses do not test file authoring or runtime skill selection.",
+    "All nine assertions pass without the new skill. No reasoning-quality gain is established.",
+    "The runnable example is checked separately, not scored as a comparable model response."
+  ],
+  "responses": [
+    {
+      "id": 1,
+      "response": "Model a rigid, massless lever in static equilibrium: load torque is 100 N × 1 m = 100 N·m; required effort is F = 100/r N, opposite the load torque. One labelled slider sets r from 0.5–4 m. Derive SVG positions, arm labels, effort and torque readouts from that same value using a fixed distance scale. Ignore deformation, friction and lever weight. Provide keyboard operation, visible focus, text equivalents and non-colour cues. Verify endpoints (200 N, 25 N), r = 1 m (100 N), torque balance and control/geometry agreement.",
+      "grades": [
+        {
+          "assertion": "Use torque balance F = 100 / effortArm and state the idealized assumptions.",
+          "verdict": "PASS",
+          "evidence": [
+            "Model a rigid, massless lever in static equilibrium",
+            "required effort is F = 100/r N",
+            "Ignore deformation, friction and lever weight."
+          ]
+        },
+        {
+          "assertion": "Derive the visible state and numeric readouts from one model, with keyboard-operable controls.",
+          "verdict": "PASS",
+          "evidence": [
+            "Derive SVG positions, arm labels, effort and torque readouts from that same value using a fixed distance scale.",
+            "Provide keyboard operation, visible focus, text equivalents and non-colour cues."
+          ]
+        },
+        {
+          "assertion": "Check endpoint and intermediate states rather than claim unperformed verification.",
+          "verdict": "PASS",
+          "evidence": [
+            "Verify endpoints (200 N, 25 N), r = 1 m (100 N), torque balance and control/geometry agreement."
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "response": "Deliver standalone HTML source and integration instructions explicitly marked unverified. Claim only observed desktop-browser behaviour, not Obsidian compatibility. Without the vault contract, do not write into the vault or invent placement rules. Without the embedding renderer, do not claim scripts execute, sizing works, accessibility survives or offline assets resolve inside Obsidian. Offer a static SVG or image with explanatory text as a fallback, but do not claim its embedding is verified. Integration acceptance requires the contract and testing in the actual Obsidian renderer.",
+      "grades": [
+        {
+          "assertion": "Do not claim the actual Obsidian embed is verified by a browser preview.",
+          "verdict": "PASS",
+          "evidence": [
+            "Claim only observed desktop-browser behaviour, not Obsidian compatibility."
+          ]
+        },
+        {
+          "assertion": "Require the vault and host embedding contracts before note/asset mutation.",
+          "verdict": "PASS",
+          "evidence": [
+            "Without the vault contract, do not write into the vault or invent placement rules.",
+            "Integration acceptance requires the contract and testing in the actual Obsidian renderer."
+          ]
+        },
+        {
+          "assertion": "Allow a standalone deliverable and explicitly mark actual-host verification unavailable.",
+          "verdict": "PASS",
+          "evidence": [
+            "Deliver standalone HTML source and integration instructions explicitly marked unverified."
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "response": "No. Use one self-contained local HTML file with inline JavaScript and a simple SVG: request → cache → computation. One “Request same item” button demonstrates a first-request miss that computes and stores a deterministic result; later clicks return it without recomputation. Show the result, hit/miss status and computation count. Label computation as simulated; make no real performance claim. Provide keyboard access and textual state. No elaborate machine, WebGL, CDN or publication. Stop when the first click computes once, repeated clicks preserve that count, and SVG and readouts agree. Reload resets the demonstration.",
+      "grades": [
+        {
+          "assertion": "Do not impose a minimum part count or unnecessary WebGL/dependencies.",
+          "verdict": "PASS",
+          "evidence": [
+            "No elaborate machine, WebGL, CDN or publication.",
+            "One “Request same item” button"
+          ]
+        },
+        {
+          "assertion": "Keep it local and do not authorize publishing.",
+          "verdict": "PASS",
+          "evidence": [
+            "No elaborate machine, WebGL, CDN or publication."
+          ]
+        },
+        {
+          "assertion": "Stop once the explanation, required interaction and relevant checks are satisfied, not an endless polish loop.",
+          "verdict": "PASS",
+          "evidence": [
+            "Stop when the first click computes once, repeated clicks preserve that count, and SVG and readouts agree."
+          ]
+        }
+      ]
+    }
+  ]
+}

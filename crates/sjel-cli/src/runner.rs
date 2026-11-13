@@ -33,7 +33,9 @@ usage: service-runner.sh <start|stop|idle-stop|restart|resume|recreate|status> <
        service-runner.sh stop <capability> [--no-hold]   # --no-hold: do not keep it down
        service-runner.sh up [--all]     # start the autostart set (--all: everything enabled)
        service-runner.sh down           # stop everything enabled, dependents first; no hold
-       service-runner.sh status         # one line per enabled service";
+       service-runner.sh status         # one line per enabled service
+       service-runner.sh stale [<capability>]     # does a running process serve its current build
+       service-runner.sh refresh [<capability>]   # build, then restart only a stale running process";
 
 /// The hold expires: it sits in boot-cleared /tmp, so a crashed holder can never leave a
 /// password manager permanently un-restartable.
@@ -99,6 +101,7 @@ fn main(args: &[String]) -> R<u8> {
             return Ok(fan_out(&paths, "stop", false, Some("--no-hold")));
         }
         "status" if cap.is_empty() => return Ok(fan_out(&paths, "status", false, None)),
+        "stale" | "refresh" if cap.is_empty() => return Ok(fan_out(&paths, cmd, false, None)),
         // "Which capabilities will not come back after a reboot" is a question about the
         // machine, not about one capability (#9).
         "persistence" => {
@@ -427,6 +430,29 @@ impl<'a> Svc<'a> {
                 Ok(0)
             }
             "status" => self.status_service(),
+            "stale" if process => {
+                let (state, detail) = match self.freshness() {
+                    Freshness::Current => ("current", "the running process serves its current build".to_owned()),
+                    Freshness::Stale(why) => ("stale", why),
+                    Freshness::Unbuilt => (
+                        "unbuilt",
+                        "a workspace source is newer than the binary; refresh lets cargo decide"
+                            .to_owned(),
+                    ),
+                    Freshness::NotApplicable(why) => ("n/a", why.to_owned()),
+                };
+                println!("{}\t{state}\t{detail}", self.cap);
+                Ok(0)
+            }
+            "stale" => {
+                println!(
+                    "{}\tn/a\tcontainer: tools/container-refresh owns image updates",
+                    self.cap
+                );
+                Ok(0)
+            }
+            "refresh" if process => self.refresh_process(),
+            "refresh" => fail(1, "service-runner.sh: 'refresh' is for process capabilities; use recreate for a container"),
             "recreate" if process => fail(1, "service-runner.sh: 'recreate' is for container capabilities; use restart for a process"),
             "recreate" => self.recreate_service(),
             "install-persistence" => persist::install(self),
@@ -729,6 +755,84 @@ impl<'a> Svc<'a> {
         PathBuf::from(format!("/tmp/sjel-{}.pid", self.cap))
     }
 
+    /// The file a build produces: `build_output`, else an absolute `command[0]`. `None` for a
+    /// bare command name, which resolves on PATH at exec time.
+    fn artifact(&self) -> Option<PathBuf> {
+        if !self.build_output.is_empty() {
+            return Some(if self.build_output.starts_with('/') {
+                PathBuf::from(&self.build_output)
+            } else {
+                self.cap_root.join(&self.build_output)
+            });
+        }
+        self.command
+            .first()
+            .filter(|c| c.starts_with('/'))
+            .map(PathBuf::from)
+    }
+
+    /// Whether the running process serves the build its sources describe. `start` builds only
+    /// a stopped capability and the watchdog only calls `start`, so without this a long-running
+    /// process keeps the binary it started with after every later change.
+    fn freshness(&self) -> Freshness {
+        if !self.schedule.is_empty() {
+            return Freshness::NotApplicable("scheduled job: each run builds first");
+        }
+        if self.build.is_empty() {
+            return Freshness::NotApplicable("no build declared");
+        }
+        let Some(pid) = self.running_pid() else {
+            return Freshness::NotApplicable("not running");
+        };
+        let Some(artifact) = self.artifact() else {
+            return Freshness::NotApplicable("no build artifact declared");
+        };
+        let Some(started) = process_started(&pid) else {
+            return Freshness::NotApplicable("process start time unreadable");
+        };
+        freshness_of(
+            &self.build,
+            &artifact,
+            &source_root(&self.build, &self.cap_root),
+            started,
+        )
+    }
+
+    /// Build first while the old process keeps serving, then restart only when the build
+    /// succeeded. A failed build leaves the running process and no hold, unlike `restart`.
+    fn refresh_process(&self) -> R<u8> {
+        // Checked before the lock: a scheduled job holds its own lock for the whole run.
+        if let Freshness::Current | Freshness::NotApplicable(_) = self.freshness() {
+            return Ok(0);
+        }
+        let mut lifecycle = Some(self.lifecycle_lock()?);
+        if self.hold_active(true) {
+            println!(
+                "service-runner.sh: '{}' is held for maintenance, not refreshing",
+                self.cap
+            );
+            return Ok(0);
+        }
+        self.maybe_build(true).map_err(|error| Fail {
+            code: error.code,
+            msg: format!(
+                "service-runner.sh: refresh build failed for '{}'; the running process keeps serving",
+                self.cap
+            ),
+        })?;
+        // A build that relinked nothing leaves the process current: no restart.
+        if !matches!(self.freshness(), Freshness::Stale(_)) {
+            return Ok(0);
+        }
+        self.take_restart_hold()?;
+        if self.stop_process(false)? != 0 {
+            return Ok(1);
+        }
+        self.clear_hold(&self.restart_hold())?;
+        println!("refreshed {}", self.cap);
+        self.start_process(&mut lifecycle, true)
+    }
+
     /// Build when the artifact is missing, or always when `force` (restart).
     fn maybe_build(&self, force: bool) -> R<()> {
         if self.build.is_empty() {
@@ -738,20 +842,11 @@ impl<'a> Svc<'a> {
             // The tree the build's sources live in, which is not always the tree the capability
             // runs from. See `source_root`.
             let sources = source_root(&self.build, &self.cap_root);
-            if !self.build_output.is_empty() {
-                let out = if self.build_output.starts_with('/') {
-                    PathBuf::from(&self.build_output)
-                } else {
-                    self.cap_root.join(&self.build_output)
-                };
-                if artifact_is_current(&self.build, &out, &sources) {
-                    return Ok(());
-                }
-            } else if !self.command[0].starts_with('/') {
-                // A bare name on PATH with nothing declared to look for.
-                return Ok(());
-            } else if artifact_is_current(&self.build, Path::new(&self.command[0]), &sources) {
-                return Ok(());
+            // A bare name on PATH with nothing declared to look for has no artifact.
+            match self.artifact() {
+                None => return Ok(()),
+                Some(out) if artifact_is_current(&self.build, &out, &sources) => return Ok(()),
+                Some(_) => {}
             }
         }
         println!("building {}: {}", self.cap, self.build.join(" "));
@@ -1444,6 +1539,65 @@ pub fn status_of(c: &mut Command) -> u8 {
     }
 }
 
+pub enum Freshness {
+    Current,
+    /// The binary on disk is newer than the running process: a restart changes what it serves.
+    Stale(String),
+    /// Some workspace source is newer than the binary. Coarse: cargo decides whether a build
+    /// changes the binary at all.
+    Unbuilt,
+    NotApplicable(&'static str),
+}
+
+/// Two seconds of slack: `ps` reports elapsed time in whole seconds, and `restart` starts the
+/// process right after the build writes the binary.
+const START_SLACK: Duration = Duration::from_secs(2);
+
+fn freshness_of(
+    build: &[String],
+    artifact: &Path,
+    sources: &Path,
+    started: SystemTime,
+) -> Freshness {
+    let Ok(built) = std::fs::metadata(artifact).and_then(|m| m.modified()) else {
+        return Freshness::Stale("binary missing on disk".to_owned());
+    };
+    if built > started + START_SLACK {
+        return Freshness::Stale("binary on disk is newer than the running process".to_owned());
+    }
+    if !artifact_is_current(build, artifact, sources) {
+        return Freshness::Unbuilt;
+    }
+    Freshness::Current
+}
+
+/// When `pid` started, from `ps -o etime=` (`[[dd-]hh:]mm:ss`), which macOS and Linux share.
+fn process_started(pid: &str) -> Option<SystemTime> {
+    let out = Command::new("ps")
+        .args(["-o", "etime=", "-p", pid])
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    let elapsed = parse_etime(String::from_utf8_lossy(&out.stdout).trim())?;
+    SystemTime::now().checked_sub(Duration::from_secs(elapsed))
+}
+
+fn parse_etime(etime: &str) -> Option<u64> {
+    let (days, clock) = match etime.split_once('-') {
+        Some((d, rest)) => (d.parse::<u64>().ok()?, rest),
+        None => (0, etime),
+    };
+    let mut secs = 0;
+    let parts: Vec<&str> = clock.split(':').collect();
+    if parts.is_empty() || parts.len() > 3 {
+        return None;
+    }
+    for part in parts {
+        secs = secs * 60 + part.parse::<u64>().ok()?;
+    }
+    Some(days * 86_400 + secs)
+}
+
 fn alive(pid: &str) -> bool {
     Command::new("kill")
         .args(["-0", pid])
@@ -1997,6 +2151,40 @@ mod tests {
         write_at(&artifact, new);
         assert!(artifact_is_current(&cargo_build(), &artifact, &dir));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_running_process_is_stale_when_its_binary_or_sources_moved_on() {
+        let dir = scratch("freshness");
+        let artifact = dir.join("target/release/tool");
+        let source = dir.join("libs/x/src/lib.rs");
+        let t = |s: u64| SystemTime::UNIX_EPOCH + Duration::from_secs(s);
+        write_at(&source, t(1_000));
+        write_at(&artifact, t(2_000));
+        let fresh = |started| freshness_of(&cargo_build(), &artifact, &dir, started);
+        assert!(matches!(fresh(t(2_001)), Freshness::Current));
+        // Rebuilt after the process started: the process serves the old binary.
+        assert!(matches!(fresh(t(1_500)), Freshness::Stale(_)));
+        // Edited after the build: cargo decides whether the binary is behind.
+        write_at(&source, t(3_000));
+        assert!(matches!(fresh(t(2_001)), Freshness::Unbuilt));
+        std::fs::remove_file(&artifact).expect("remove artifact");
+        assert!(matches!(fresh(t(2_001)), Freshness::Stale(_)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ps_elapsed_time_parses_in_every_width() {
+        assert_eq!(parse_etime("00:07"), Some(7));
+        assert_eq!(parse_etime("04:30"), Some(270));
+        assert_eq!(parse_etime("01:00:01"), Some(3_601));
+        assert_eq!(
+            parse_etime("03-20:34:29"),
+            Some(3 * 86_400 + 20 * 3_600 + 34 * 60 + 29)
+        );
+        assert_eq!(parse_etime(""), None);
+        assert_eq!(parse_etime("1:2:3:4"), None);
+        assert_eq!(parse_etime("x-01:00"), None);
     }
 
     #[test]

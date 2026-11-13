@@ -18,8 +18,8 @@ actions, as upstream has them.
    page provides them. Each clip carries a new retry key.
 3. Chrome passes it through native messaging to `comms-clip-host`, which relays it to
    `comms-server` over a Unix socket at `<overlay>/data/comms/clip.sock`
-   ([`web_clip_socket.rs`](../src/web_clip_socket.rs)). The socket has owner-only permissions. There is no
-   HTTP route and no token in browser storage, so `sjel-status` has nothing to proxy.
+   ([`web_clip_socket.rs`](../src/web_clip_socket.rs)). The socket has owner-only permissions.
+   Saves have no HTTP route and require no token in browser storage.
 4. The store keeps the clip as `c2` and starts no enrichment or cloud call.
 
 When Sjel does not answer, the clip stays in the extension's local storage and the popup says so.
@@ -52,6 +52,12 @@ paragraph is kept only once in the saved clip.
 Large documents in **Feed › Clips** are parsed once and shown in pages of at most 80 Markdown
 blocks. Citation auditing applies to the visible page, keeping scrolling and navigation bounded
 without truncating the stored clip.
+
+Authenticated API and MCP callers can discover and read saved clips through `GET /clips` and
+`GET /clips/document?key=<document_key>`. The same agent gate as mail applies: capability mode,
+trust tier, data-class cap and pseudonymization. Clip responses declare `c2`; this interface
+does not reclassify clips or start enrichment. The [API contract](../../../website/content/capabilities/feed-and-comms.md#clip-reads)
+defines search and pagination. Writes, deletion, settings and the Interpreter stay on the socket.
 
 ## YouTube clips
 

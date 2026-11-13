@@ -95,7 +95,7 @@ function readBalanced(s: string, i: number, open: string, close: string): [strin
   return [s.slice(i), s.length];
 }
 
-export function lex(src: string): Token[] {
+export function lex(src: string, home?: string): Token[] {
   const tokens: Token[] = [];
   const pendingHeredocs: { delimiter: string; strip: boolean; op: Op }[] = [];
   let i = 0;
@@ -157,6 +157,9 @@ export function lex(src: string): Token[] {
         if (src[i] === "\\" && i + 1 < src.length) {
           w.text += src[i + 1];
           i += 2;
+        } else if (home && w.text === "" && (src.startsWith("$HOME/", i) || src.startsWith("${HOME}/", i))) {
+          w.text += home;
+          i += src.startsWith("${HOME}", i) ? 7 : 5;
         } else if (src[i] === "$" && src[i + 1] === "(") {
           const [inner, next] = readBalanced(src, i + 2, "(", ")");
           w.substitutions.push(inner);

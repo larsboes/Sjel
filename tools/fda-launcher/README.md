@@ -15,7 +15,7 @@ that path; persistence generation queries it rather than maintaining a second pa
 |---|---|
 | `sjel fda-launcher` or `status` | Read-only signature, source freshness, and receipt check; nonzero if missing, stale, modified, or unmanaged |
 | `sjel fda-launcher install` | Build and sign a missing or stale helper; a current installation is untouched |
-| `sjel fda-launcher verify` | Run a disposable launchd job that attempts to enumerate the protected Mail directory; return only success/failure, never directory contents |
+| `sjel fda-launcher verify` | Run a disposable launchd job that attempts to enumerate the protected Mail directory; report probe status, never directory contents |
 | `sjel fda-launcher migrate` | Install, prove access, switch installed Sjel jobs, check loaded jobs, and remove the former overlay executable |
 | `sjel fda-launcher path` | Print the managed executable path |
 
@@ -31,13 +31,19 @@ Doctor reports helper freshness when an enabled capability declares Full Disk Ac
 macOS permission is verified, not inferred from a valid signature or a terminal invocation.
 `verify` runs the actual installed helper under launchd, outside a terminal's responsibility
 chain. It does not create or modify Mail data. An absent protected directory leaves access
-unverified rather than manufacturing a passing probe.
+unverified rather than manufacturing a passing probe. An access denial is distinguished from
+an incomplete probe; a failed probe reports execution diagnostics without listing protected data.
 
 If macOS requires a new grant, add the managed executable under System Settings → Privacy &
 Security → Full Disk Access, then rerun `sjel fda-launcher migrate`. No existing job is changed
 before the probe passes. The former executable remains until installed and loaded jobs no
 longer use it. A failed job switch restores the changed job files and reloads them; if rollback
-fails, the command preserves its private temporary backup and reports the location.
+fails, the command preserves its private temporary backup and reports the location. Loaded-job
+checks include GUI, user, and system launchd domains, regardless of the job label.
+
+Deleting a former executable does not remove its row from Full Disk Access. Remove obsolete
+rows in System Settings after migration; retain or re-add the managed executable and run
+`verify` again. Do not reset unrelated applications' privacy grants.
 
 The receipt proves installation integrity and source freshness, not a continuing permission
 grant. `verify` is the live permission check. Migration does not move personal configuration or

@@ -41,7 +41,7 @@ input:focus-visible { outline: 3px solid var(--accent); outline-offset: 6px; }
 <h1>A longer arm needs less force</h1>
 <p>Move the effort point while the load stays at 100 N, one metre from the fulcrum.</p>
 <figure style="margin: 0">
-<svg id="lever" viewBox="0 0 560 330" role="img" aria-labelledby="lever-title lever-description">
+<svg id="lever" viewBox="0 90 560 240" role="img" aria-labelledby="lever-title lever-description">
 <title id="lever-title">An ideal lever in static balance</title>
 <desc id="lever-description">The effort arm is 2 metres. A 50 newton effort balances a 100 newton load at one metre.</desc>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/></marker></defs>
@@ -55,7 +55,7 @@ input:focus-visible { outline: 3px solid var(--accent); outline-offset: 6px; }
 <line x1="300" x2="350" y1="285" y2="285" stroke="var(--load)"/>
 <text id="arm-label" x="250" y="308" text-anchor="middle">2.0 m</text>
 <text x="332" y="308" text-anchor="middle">1 m</text>
-<text x="300" y="245" text-anchor="middle" font-size="11">pivot</text>
+<text x="300" y="258" text-anchor="middle" style="font-size:12px">pivot</text>
 </svg>
 <figcaption>Both sides produce the same turning moment: <output id="moment">${initial.moment}</output> N·m.</figcaption>
 </figure>
@@ -102,11 +102,11 @@ paint();
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.length > 1 || (args.length === 1 && args[0] !== "--check")) {
-    console.error("Usage: node scripts/build-example.mjs [--check]");
+    console.error("Usage: bun --no-env-file scripts/build-example.mjs [--check]");
     process.exitCode = 2;
   } else if (args[0] === "--check") {
     if (readFileSync(destination, "utf8") !== exampleHtml()) {
-      console.error("Example is stale. Run node scripts/build-example.mjs.");
+      console.error("Example is stale. Run bun --no-env-file scripts/build-example.mjs.");
       process.exitCode = 1;
     } else console.log("Lever example is current.");
   } else {

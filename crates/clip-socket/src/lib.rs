@@ -3,7 +3,7 @@
 //! `comms-server` listens on a Unix socket with owner-only permissions in the overlay data
 //! directory; the Sjel Clipper's native messaging host and the GPUI app talk to it here. Every
 //! message is a native messaging frame: a little-endian `u32` length, then that many bytes of
-//! JSON. There is no TCP route, so nothing that proxies HTTP can reach it.
+//! JSON. Writes stay on this socket; authenticated HTTP clip reads use comms' agent privacy gate.
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};

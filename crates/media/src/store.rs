@@ -137,6 +137,7 @@ impl Ledger {
                 );",
                 now = sjel_store::NOW
             ))?;
+            crate::content::migrate(conn)?;
             Ok(())
         })?;
         Ok(Self { pool })

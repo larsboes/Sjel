@@ -8,7 +8,7 @@ mod server;
 
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
-        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--paths] [--db PATH]\n  media status [--db PATH]\n  media serve\n  media attach --file PATH [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n  media mirror --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--settled-for SECONDS] [--apply | --check]
+        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--paths] [--db PATH]\n  media status [--db PATH]\n  media serve\n  media attach --file PATH [--db PATH]\n  media proposals stage --report PATH [--db PATH]\n  media proposals list [--state pending|accepted|rejected|all] [--after ID] [--db PATH]\n  media proposals decide --id ID --fingerprint SHA256 --action accept|reject [--tag NAME] [--collection NAME] [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n  media mirror --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--settled-for SECONDS] [--apply | --check]
   media sync --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--settled-for SECONDS]\n  media reclaim --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--survivor PATH] [--survivor-uuid UUID] [--path REL] [--exclude REL] [--list PATH] [--quarantine PATH] [--journal PATH] [--apply]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
@@ -89,6 +89,70 @@ fn mounted(root: &Path, expected: &str) -> Result<String> {
     }
     Ok(actual)
 }
+fn run_proposals(args: &[String]) -> Result<i32> {
+    let (verb, opts) = args
+        .split_first()
+        .ok_or("proposals needs stage, list or decide")?;
+    let keys: &[&str] = match verb.as_str() {
+        "stage" => &["--report", "--db"],
+        "list" => &["--state", "--after", "--db"],
+        "decide" => &[
+            "--id",
+            "--fingerprint",
+            "--action",
+            "--tag",
+            "--collection",
+            "--db",
+        ],
+        _ => return Err("unknown proposals action".into()),
+    };
+    allowed(opts, keys, &[])?;
+    let db = option(opts, "--db")?
+        .map(PathBuf::from)
+        .unwrap_or_else(sjel_config::database_path);
+    let ledger = std::sync::Arc::new(Ledger::open(&db)?);
+    if verb == "list" {
+        let state = option(opts, "--state")?.unwrap_or_else(|| "pending".into());
+        let after = option(opts, "--after")?
+            .map(|v| v.parse::<i64>())
+            .transpose()?
+            .unwrap_or(0);
+        println!(
+            "{}",
+            serde_json::to_string(&media::content::list(&ledger, &state, after)?)?
+        );
+        return Ok(0);
+    }
+    let root = sjel_config::overlay_root().ok_or("media proposals require a private overlay")?;
+    let library =
+        media::attachments::Library::open(ledger.clone(), root.join("data/media/attachments"))?;
+    if verb == "stage" {
+        let report = rooted(opts, "--report")?;
+        let result = media::content::stage(&ledger, &library, &report)?;
+        println!("{}", serde_json::to_string(&result)?);
+        return Ok(i32::from(result.failed_items > 0));
+    }
+    let action = match required(opts, "--action")?.as_str() {
+        "accept" => media::ContentAction::Accept,
+        "reject" => media::ContentAction::Reject,
+        _ => return Err("action must be accept or reject".into()),
+    };
+    let decision = media::ContentDecision {
+        fingerprint: required(opts, "--fingerprint")?,
+        action,
+        tags: repeated(opts, "--tag")?,
+        collections: repeated(opts, "--collection")?,
+    };
+    let result = media::content::decide(
+        &ledger,
+        &library,
+        required(opts, "--id")?.parse()?,
+        &decision,
+    )?;
+    println!("{}", serde_json::to_string(&result)?);
+    Ok(0)
+}
+
 fn run(args: &[String]) -> Result<i32> {
     let Some((verb, opts)) = args.split_first() else {
         usage();
@@ -122,6 +186,9 @@ fn run(args: &[String]) -> Result<i32> {
                 Ok(1)
             }
         };
+    }
+    if verb == "proposals" {
+        return run_proposals(opts);
     }
     if verb == "attach" {
         allowed(opts, &["--file", "--db"], &[])?;

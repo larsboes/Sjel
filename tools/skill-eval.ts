@@ -279,6 +279,14 @@ export function sampleStats(samples: number[]) {
   };
 }
 
+/** Require reported billing metadata rather than treating an unknown charge as zero. */
+export function recordedCost(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error("claude returned missing or invalid total_cost_usd; cost is unknown");
+  }
+  return value;
+}
+
 export type ClaudeRun = {
   result: string;
   durationMs: number;
@@ -322,7 +330,7 @@ function claude(prompt: string, cwd: string, model: string | null): ClaudeRun {
     tokensIn: usage.input_tokens ?? 0,
     tokensOut: usage.output_tokens ?? 0,
     cacheRead: usage.cache_read_input_tokens ?? 0,
-    costUsd: result.total_cost_usd ?? 0,
+    costUsd: recordedCost(result.total_cost_usd),
     model: init?.model ?? "unknown",
   };
 }
@@ -610,7 +618,7 @@ Flags for run:
   --no-grade           run the tasks only, skip grading — cheapest way to read raw outputs
 
 A graded case makes 4 model calls per repeat. Repetition is not statistical proof.
-Installed global context is not isolated. A graded case costs roughly $1.50 per repeat.
+Installed global context is not isolated. Billing depends on the selected models and usage.
 See the header of tools/skill-eval.ts for
 what the delta does and does not measure.`;
 

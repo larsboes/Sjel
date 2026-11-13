@@ -1,0 +1,154 @@
+{
+  "captured": "2026-11-09T16:27:24.041Z",
+  "model": "gpt-6.1-sol",
+  "agent_id": "74a22b99-18fc-4e9",
+  "method": "One fresh agent, four synthetic tasks, current owned guidance supplied inline, no tools. Manual assertion grading; not a before/candidate comparison.",
+  "guidance": [
+    {
+      "path": "Packs/deliberation/skills/crystallize/SKILL.md",
+      "git_blob": "5f098ecb15dd13679030d763993be1849bc28771",
+      "sha256": "55301b967c122cd8463a3b59e047bc661e9482381bb0a847023e7f27cb632d1b"
+    },
+    {
+      "path": "Packs/deliberation/skills/crystallize/references/question-craft.md",
+      "git_blob": "93afc02689d2dc2c23d5ed26a914b1a78783ead4",
+      "sha256": "3910d010d46d7047ce83e0ac415bb16e5e4fb5f46a2ca389148062fefb7156e5"
+    },
+    {
+      "path": "Packs/harness/skills/sjel/references/on-verification.md",
+      "git_blob": "c778302ed211e298efc2f7226ca3dbd1e301ec6c",
+      "sha256": "822b31d408a2c529e4069783cf6f4cf5ca4c2fe70c94f6aff248125c08c2cb55"
+    }
+  ],
+  "cases": [
+    {
+      "id": "questions-1",
+      "prompt": "Prepare the first decision round for these product notes. Whether the app must work offline is undecided. A local storage-engine choice is needed only if offline operation is selected; its SDK constraints are still being investigated, so the user cannot supply those facts. English versus German UI copy is also undecided and independent of offline behavior. All other choices are settled or out of scope. Return the questions you would put to the user now, with recommended options and consequences. Do not answer the decisions for them.",
+      "response": "Q1 — Must the app work offline?\n1. ★ Online-only — avoids requiring local persistence and synchronization; the app needs connectivity.\n2. Offline-capable — permits use without connectivity; requires a local-storage decision after SDK constraints are measured.\nNote/reason: ___\n\nQ2 — Which UI language should ship?\n1. ★ English — ships one English interface; German-speaking users must use English.\n2. German — ships one German interface; English-speaking users must use German.\nNote/reason: ___\n\nThese recommendations favor narrower implementation scope and English as a provisional default, not measured audience demand. Only these two independent choices need answers now. Do not ask about storage engines while their feasibility is still being investigated, or unless offline operation is selected.",
+      "grades": [
+        {
+          "assertion": "Ask only the ready offline and language decisions.",
+          "verdict": "PASS",
+          "evidence": [
+            "Only these two independent choices need answers now."
+          ]
+        },
+        {
+          "assertion": "Leave storage questions blocked by the unresolved choice and SDK investigation.",
+          "verdict": "PASS",
+          "evidence": [
+            "Do not ask about storage engines while their feasibility is still being investigated, or unless offline operation is selected."
+          ]
+        },
+        {
+          "assertion": "Provide concrete recommended options and consequences without claiming audience facts.",
+          "verdict": "PASS",
+          "evidence": [
+            "1. ★ Online-only — avoids requiring local persistence and synchronization; the app needs connectivity.",
+            "English as a provisional default, not measured audience demand."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "questions-2",
+      "prompt": "The document is otherwise settled. The only remaining product choice is whether an export includes attachments or text only. Choosing an attachment packaging format is necessary only if attachments are included. Prepare the next decision round for the user. Do not expand the scope or decide for them.",
+      "response": "Q1 — What should the export contain?\n1. ★ Text only — keeps export scope smaller; attachments are omitted.\n2. Text and attachments — preserves attached material; requires a subsequent packaging-format decision.\nNote/reason: ___\n\nOnly this choice is actionable now. Ask about packaging only if attachments are selected; do not add unrelated questions to fill the round.",
+      "grades": [
+        {
+          "assertion": "Ask the single remaining attachment-inclusion decision.",
+          "verdict": "PASS",
+          "evidence": [
+            "Only this choice is actionable now."
+          ]
+        },
+        {
+          "assertion": "Leave packaging until attachments are selected.",
+          "verdict": "PASS",
+          "evidence": [
+            "Ask about packaging only if attachments are selected"
+          ]
+        },
+        {
+          "assertion": "Do not manufacture questions to meet a quota.",
+          "verdict": "PASS",
+          "evidence": [
+            "do not add unrelated questions to fill the round."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "verification-1",
+      "prompt": "Review the regression coverage for this bug and propose the smallest useful check. Contract: shippingFee(subtotal) returns 5 below 50 and 0 at or above 50. Current code is `return subtotal > 50 ? 0 : 5`. The existing test only checks shippingFee(60) === 0. Provide concrete test inputs/expected outputs, identify what the current buggy code returns on them, and state the evidence needed before claiming the repair verified. Do not run anything.",
+      "response": "The existing input 60 expects 0 and receives 0 from the buggy code, so it cannot detect the boundary error.\n\nSmallest useful regression check: shippingFee(50) must equal 0; the current code returns 5.\n\nA compact boundary suite would additionally check:\n- 49 → expected 5; current code returns 5.\n- 51 → expected 0; current code returns 0.\n\nBefore claiming the repair verified, obtain evidence that the new 50-boundary assertion fails against the original implementation and passes against the repaired implementation. Run the nearest relevant test suite to check for regressions, and inspect the focused diff. Report exactly which checks ran and their outcomes; do not imply repository-wide validation.",
+      "grades": [
+        {
+          "assertion": "Use the contract's exact threshold as a regression that fails on the reported bug.",
+          "verdict": "PASS",
+          "evidence": [
+            "shippingFee(50) must equal 0; the current code returns 5."
+          ]
+        },
+        {
+          "assertion": "Preserve legitimate behavior on both sides of the threshold.",
+          "verdict": "PASS",
+          "evidence": [
+            "49 → expected 5; current code returns 5.",
+            "51 → expected 0; current code returns 0."
+          ]
+        },
+        {
+          "assertion": "Require relevant red/green evidence without inventing execution.",
+          "verdict": "PASS",
+          "evidence": [
+            "obtain evidence that the new 50-boundary assertion fails against the original implementation and passes against the repaired implementation."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "verification-2",
+      "prompt": "Review this benchmark-accounting patch's tests. Each arm is billed 0.20 for its task and 0.03 for grading, even if the grader output is malformed. Current code uses `armCost = taskCost + (gradingComplete ? gradingCost : 0)`. Its test builds expected with the same conditional and passes both statuses. Give a minimal correction to the test expectations, covering complete and malformed grading and the overall two-arm total. Do not change the grading schema or invent an execution result.",
+      "response": "Replace the conditional-derived expectation with contract-derived constants. Grading status must not change billed cost:\n- Complete grading: expected arm cost 0.23.\n- Malformed grading: expected arm cost 0.23.\n- Two arms, one complete and one malformed: expected total 0.46.\n\nThe current implementation produces 0.23 for the complete arm, 0.20 for the malformed arm, and 0.43 overall. The existing test mirrors that defect instead of checking the billing contract.\n\nAssert the fixed expectations independently of gradingComplete. Use integer minor units or the test framework's approximate numeric comparison if costs use floating-point values. These are proposed assertions, not execution results; no grading-schema change is needed.",
+      "grades": [
+        {
+          "assertion": "Count grading charges for complete and malformed output, including both arms.",
+          "verdict": "PASS",
+          "evidence": [
+            "Complete grading: expected arm cost 0.23.",
+            "Malformed grading: expected arm cost 0.23.",
+            "Two arms, one complete and one malformed: expected total 0.46."
+          ]
+        },
+        {
+          "assertion": "Reject the conditional-derived expectation that mirrors the implementation bug.",
+          "verdict": "PASS",
+          "evidence": [
+            "The existing test mirrors that defect instead of checking the billing contract."
+          ]
+        },
+        {
+          "assertion": "Keep proposed assertions distinct from executed results.",
+          "verdict": "PASS",
+          "evidence": [
+            "These are proposed assertions, not execution results; no grading-schema change is needed."
+          ]
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "cases": 4,
+    "assertions": 12,
+    "pass": 12,
+    "fail": 0
+  },
+  "decision": "No additional oracle or interview instruction block is justified. Remove the contradictory fixed question-count minimum; retain bounded ready-decision rounds. Verification guidance is unchanged.",
+  "limitations": [
+    "One model call; no repeated-sample or significance claim.",
+    "Shared inherited instructions and combined task context are not isolated.",
+    "Proposed checks were assessed from text, not executed.",
+    "No runtime skill-selection or general performance benefit was measured."
+  ]
+}

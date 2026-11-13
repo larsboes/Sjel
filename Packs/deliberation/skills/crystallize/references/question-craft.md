@@ -9,8 +9,8 @@ every question must be one only they can answer, and it must arrive already narr
 
 ## Anatomy of a good round
 
-**3–4 questions.** Fewer wastes a turn. More exceeds what anyone reads carefully — the last one
-gets a coin-flip answer, which is worse than not asking.
+**Batch up to four ready, independent questions.** A dependent decision waits for its prerequisite.
+One question can be a complete round; do not add questions merely to fill it.
 
 **2–4 options each**, mutually exclusive, each with a one-line consequence. The description says
 *what happens if you pick this*, not what the option is. "Keep both vocabularies" describes;
@@ -43,8 +43,8 @@ When `ask` is available, the round is one tool call and each beat above is a fie
 | Your recommendation | `recommendedIndex`, with that option at index 0 |
 | The user's reason | comes back as `note` on that decision |
 
-Send the round's questions together in one call — 3–4 of them. The tool shows one at a time, but a
-round is still one conversation turn, not a session.
+Send the ready questions together in one call. The tool shows one at a time, but a round is still
+one conversation turn, not a session.
 
 ## What makes a question worth asking
 

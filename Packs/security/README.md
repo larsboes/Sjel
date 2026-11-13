@@ -15,6 +15,32 @@ differ from Pi's tool-call interception and `vault_exec`; it is not a Pi extensi
 | `extensions/inference-keys/` | **pi** | Supplies provider API keys from the macOS login keychain, falling back to the Bitwarden/Vaultwarden vault, instead of from environment variables or `auth.json`. The key is handed to pi by a command and never enters the conversation. The pi entry stays in TypeScript; its credential gateway, unlock flow, and keychain migration are implemented in the shared Rust CLI. See its [README](extensions/inference-keys/README.md). |
 | `skills/secrets-guard/` | **Claude Code** | Skill teaching the safe credential workflow (env-sourcing, never read/echo secrets, hand off secret creation to `tools/setup-secret.sh`) — the counterpart to Sjel's deny policy in the user-level Claude Code settings (`tools/templates/claude-code/settings.base.json`, applied by `sjel claude`). Deploy with `tools/packs.sh link security`. |
 
+## Pi session permissions
+
+`/permissions auto <directory>` grants routine file writes under one existing task directory.
+The grant covers `write` and `edit`, simple `cp -n` (optionally `-p`) to an explicit file,
+`mkdir` (optionally `-p`), and `touch` without flags. Quoted `$HOME/` and `${HOME}/` paths
+are resolved for these simple commands. Compound commands, wrappers, other variables,
+recursive copies and directory copy destinations still use the normal approval rules.
+Sensitive credential/configuration names and agent extension/hook targets do not gain
+approval from a file scope. Separate secrets-guard checks remain active. A file scope does
+not authorize publishing, package changes, network writes, process control or destruction.
+
+`/permissions off` clears session grants. `/permissions` lists active scopes and the deferred
+count. Scopes are pinned to canonical paths; symlinks inside them cannot extend the grant.
+The whole home directory and filesystem root cannot be granted as task directories.
+
+Approval cards defer after 60 seconds without a decision. Explicit **Defer**, dismissal and
+timeout execute nothing and are distinct from **Deny**. `/permissions pending` revisits the
+queue and can approve one retry of an exact call in its original working directory; it never
+executes the stored action itself.
+An unchanged pending call does not open another card. The agent receives instructions to
+continue independent work, not bypass the gate, and stop when the remaining work depends on
+an unresolved decision.
+
+Grants and pending cards are held in memory and cleared on reload, restart or session change.
+The original tool calls remain in the session transcript. This policy is not a sandbox.
+
 ## The problem
 
 Coding agents read files and run commands the same way you do. When you tell an agent

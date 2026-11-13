@@ -229,8 +229,9 @@ No Ponytail code or text is copied into this skill.
 
 Promoted 2026-09-11 out of the personal `meta` staging pack, which held it as an upgraded
 public pack awaiting promotion. It carries `writing-skills` forward and reconciles several
-sources into one local convention, all distilled into `references/` in our own words. No
-verbatim third-party text retained, no code vendored, MIT throughout.
+sources into one local convention, all distilled into `references/` in original words.
+Skill instructions and evaluator code remain independently authored under MIT. Upstream
+reference grants retain their own terms and are preserved separately.
 
 What it adds over the distilled base it inherited, each grounded in the 2026-08-08 source
 review: **current-model authoring rules** (`references/fable-5-authoring.md` —
@@ -247,6 +248,30 @@ fixture included.
 - Anthropic's [Extend Claude with skills](https://code.claude.com/docs/en/skills) doc, covering the Claude-Code-specific frontmatter and runtime (`context: fork`, dynamic context injection, skill stacking, `skillOverrides`, the description-listing budget), in `references/claude-code-extensions.md`.
 - Anthropic's [new rules of context engineering for Claude 5](https://claude.com/blog/the-new-rules-of-context-engineering-for-claude-5-generation-models) (2026): over 80% of Claude Code's own system prompt removed without measurable loss; prescriptive rules replaced by principles, detail moved behind progressive disclosure. Read 2026-07-28; it is why `validate_metadata.py` now enforces the Level-2 body budget this pack had documented but never checked.
 - A third-party PDF skill-authoring guide and a "bootstrap a whole skill library" mega-prompt (both unknown author and license, encountered without provenance), mined for *ideas only*: the three-tier eval framework, the five workflow-shape patterns, the discover→parallel-author→adversarial-review pattern. Rewritten from scratch, no text retained. `references/evaluation.md`, `references/patterns.md`, `references/bootstrap-library.md`.
+
+#### Evaluation tooling reference
+
+Anthropic's official [skill-creator](https://github.com/anthropics/claude-plugins-official/tree/0412be76f50ab4f4f8abff3753efa9269fbbca5b/plugins/skill-creator)
+provided method-level inspiration for repeated-run aggregation in the existing
+[`tools/skill-eval`](../../tools/skill-eval.ts), not a second skill or runtime plugin.
+Reviewed snapshot: `0412be76f50ab4f4f8abff3753efa9269fbbca5b`, specifically
+`skills/skill-creator/scripts/aggregate_benchmark.py`, SHA-256
+`123ef128ea5ccc01a4b1ac212ef5567f21e9c13d3d240609780beeb3200c49aa`.
+
+Adopted independently: opt-in repeated samples, explicit sample identities and descriptive
+per-case/per-arm mean, sample standard deviation and range. The owned runner also requires
+exact assertion coverage, marks incomplete grading unsuccessful, records the actual UTC date,
+and accounts for task and grading charges separately. Missing billing metadata is an error,
+not a zero-cost claim. No source, prompts, scripts, automatic optimizer or report viewer is copied.
+The native upstream plugin remains disabled. The complete Apache-2.0 reference grant is in
+[`LICENSES/anthropic-skill-creator-Apache-2.0.txt`](LICENSES/anthropic-skill-creator-Apache-2.0.txt).
+The reviewed snapshot contains no separate NOTICE file.
+
+`--repeat N` multiplies four model calls per graded case; it is opt-in, not a default cost.
+Statistics are descriptive, with singleton uncertainty unknown. Native Claude processes still
+inherit installed global context. Controlled owned-revision comparisons and actual runtime
+trigger tests remain separate work, not claims made by this adoption. Details and commands:
+[`references/evaluation.md`](skills/skill-creator/references/evaluation.md).
 
 ## Considered and declined
 

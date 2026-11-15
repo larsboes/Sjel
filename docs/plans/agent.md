@@ -20,6 +20,7 @@ Order:
 3. Live validation on Mac and iPhone (§7).
 4. Plugins and the Pi port, all web providers (§4).
 5. The measured comparison with Pi (§8).
+6. Queued data tasks (§11).
 
 ## 1. What exists
 
@@ -418,3 +419,35 @@ All decided 2026-10-25.
 | A3 | Can a tier change inside a session? | No. A new session per tier. |
 | A4 | Can the phone start a `project` or `account` session? | Yes. Every Ask and Block decision still needs a card. |
 | A5 | Where do PTY sessions live? | `crates/agent`, because it already has the session, stream and device plumbing. Split into a `terminal` capability only if the two grow apart. |
+
+## 11. Queued data tasks
+
+A queue of tasks on Sjel's own data that run without the operator present: sort and extract mail,
+summarize finance, find what a trip still lacks. The tasks are not coding tasks. They run
+after the tier picker (§5) and live validation (§7).
+
+**Runner.** The Sjel agent in the `sjel` tier (§2) is the default runner. That tier has no shell and
+no file writes, and every cloud call passes the data-class check. Claude Code (`claude -p`) and
+Codex (`codex exec`) may run a task only through `sjel-mcp`, with their own file and shell tools
+switched off. `sjel-mcp` pseudonymizes each answer and follows the owner's mode for each
+capability (`crates/sjel-mcp/src/server.rs`). A harness that keeps its file tools can read the
+overlay directly and bypass the gate. The exact flags that switch those tools off are unverified.
+
+**Output.** A task never writes a final record. It writes proposals into the queue that the
+capability already has, and the operator decides them. Examples: triage classification in
+`comms`, import candidates in `finance`, mail proposals in `inventory`, people proposals in
+`places`. A headless run cannot answer an Ask card. An `ask`-mode write therefore fails the task
+step and records it as blocked. It does not wait.
+
+**Queue.** A queued task is one kind of proposal in the one proposal queue
+([product page](../../website/content/product.md#architecture)), not a second task system. A
+task names its prompt, the capabilities it may read, the proposal routes it may write and its
+limits. The operator approves a task before its first run.
+
+**Limits.** No task runs until a supervisor enforces a wall-clock limit and a call budget for each
+run. §3 records that no such supervisor exists. Runs on a Claude or ChatGPT subscription stay at
+ordinary individual volume. A large batch uses an API key.
+
+Done when one approved task runs in the `sjel` tier and writes only proposals. Its egress lines
+must pass `comms egress-log --audit` with zero violations. The supervisor must stop a run at its
+limit, and the operator must decide the proposals on the Mac.

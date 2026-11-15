@@ -9,9 +9,9 @@ it leaves to other tools, and the architecture that follows. The order of work i
 Sjel is a private model of one person's or one household's life and work. It holds typed facts
 with a source and a data class on hardware the owner controls. Its main job is the
 combination: it connects facts that live in separate tools, shows what the connection reveals,
-and lets the owner manage the result in one place. It is useful on its own data, and other tools
-are its sources. Every domain is a module that the owner adds or removes, and the class of each
-value decides which model may read it.
+and lets the owner manage the result in one place. It is useful on its own data. Other tools are
+its sources, and they can read back everything it holds. Every domain is a module that the
+owner adds or removes, and the class of each value decides which model may read it.
 
 ## Where the need comes from
 
@@ -74,6 +74,10 @@ capabilities against this rule is open work.
 4. **One way in.** The CLI, MCP tools and views read the same contract.
 5. **Built for one owner first.** The design keeps a second household possible: a core that runs
    with no capability enabled, and nothing that only the author can set up.
+6. **Open in both directions.** Every capability exports its records in a format that other
+   tools read: Markdown, CSV, JSON, iCalendar or vCard. The owner can use a focused tool beside
+   Sjel, or leave Sjel, and keep the data. An export keeps the class of each value. An export to
+   a service off the owner's hardware passes the policy gate like any other egress.
 
 ## Architecture
 

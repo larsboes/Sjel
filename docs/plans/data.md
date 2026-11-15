@@ -386,6 +386,12 @@ automated access; a capture of a page the operator is viewing stays the default.
   of 237 source archives remains unverified. All 25 synthetic decoder tests pass; no private
   archive, live OCR, or end-to-end Notes import was checked.
 - Align formats across capabilities, so one fact has one shape.
+- Export for each capability, per
+  [product principle 6](../../website/content/product.md#principles). Not verified: which
+  capabilities serve an export today. `sjel mirror build` is to ask each owner for an export
+  ([`storage.md`](storage.md#4-full-migration) step 3), so both use one route. Done when every
+  capability exports its records in an open format, each value carries its class, and a
+  re-import into an empty store gives the same records.
 
 ## 3. Settings surface for inference and keys
 
@@ -518,6 +524,24 @@ Open items that belong to one capability and to no priority yet.
   decision on reading every body in the sweep. Known limits: a fixed list of multi-label
   suffixes instead of the Public Suffix List, look-alike checks on the first domain label only,
   and a known-sender set that also holds earlier phishing domains.
+- **Mail that needs a reply.** Triage knows `proposed`, `approved`, `dismissed`, `archived`,
+  `trashed` and `executed` (`crates/comms/src/server/triage.rs`, `triage_status_handler` and
+  `reconciled_status`). No state marks a thread that waits for the operator's answer, so Inbox
+  Zero has to choose between archiving it and losing it, or leaving it in the inbox. Add an
+  `awaiting_reply` state that survives Gmail reconciliation. A local-model proposal may set it,
+  and only the operator clears it. Done when a thread in `awaiting_reply` stays visible after
+  it is archived in Gmail, appears in one list on the Mac and in `sjel`, and leaves that list
+  when the operator replies or dismisses it.
+- **Own data on places.** A place in the register holds kind, address and coordinates only
+  (`Place` in `crates/places-api/src/lib.rs`). The operator needs their own facts on it: who
+  gives access (`access`: office, friend, public, paid), what it offers (`shower`,
+  `workspace`, `sleep`), and their own `rating` (1 to 5) with a `note`. The `place` entity kind
+  and the field types for these already exist (`KINDS` and `FIELD_TYPES` in
+  `crates/entities-api/src/lib.rs`), so the fields are declarations, not a new store. The
+  person who lives at a place comes from that person's `home_base` fact. That this fact
+  resolves to the same place as the register is unverified. Field names stay generic, and the
+  list of places is instance data in the overlay. Done when the operator declares the fields,
+  `sjel` answers "places with a shower near a given city", and the map can filter by `access`.
 - **Finance investments.** `instruments` holds 13 records and `allocations` is empty. Ten carry
   a Yahoo `ticker`, set 2026-11-05 after a range check against the broker price. A quote in USD,
   GBP or NOK values a EUR holding through the newest ECB rate, which the position names

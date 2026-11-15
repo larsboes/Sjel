@@ -174,6 +174,19 @@ These need an answer before the work package that depends on them starts.
 
 ### Later
 
+- Route preferences from past travel. Reuse the traveller profile's stated journey weights
+  (`crates/traveler-api/src/lib.rs`) and the realised-ride evidence in T6. Transit should offer
+  preferred route alternatives without treating frequent use as proof of reliability. Keep
+  personal routes and ride history private. Done when a user can review a history-derived route
+  preference, override it for one search, and compare a slower preferred route with a faster
+  alternative using measured reliability and explicit missing-evidence labels.
+- Planned stopovers. Reuse Trips' destinations, stages and stay items
+  (`crates/trips-api/src/lib.rs` and `crates/trips/README.md`) rather than add a second itinerary
+  model. Transit supplies connections for each travel stage; Trips owns the intermediate stay
+  and continuation dates. Done when a user can plan A → B, stay at B, then continue to C, edit
+  the stay without losing selected legs, and distinguish a planned stay from a transfer buffer.
+  Booking-site integration follows the existing
+  [build, ingest or link-out rule](../../website/content/product.md#what-sjel-builds-ingests-and-links-to).
 - Road traffic for road legs: named segments on the routes, polled only inside watch windows.
 - OpenStreetMap right-of-way priors and the hierarchical leg model for regions with no history.
 - Correlated sampling in the evaluator (layer 5), replacing the independent product.

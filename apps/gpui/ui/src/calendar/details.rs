@@ -96,57 +96,31 @@ impl CalendarPage {
             );
         }
 
-        let (events, _) = self.events(&entries);
-        let (select, open) = (cx.entity().downgrade(), cx.entity().downgrade());
-        panel = panel.child(
-            crate::ely::calendar::AgendaView::new(
-                "calendar-agenda",
-                adapter::date(self.day),
-                1,
-                events,
-            )
-            .zone(self.zone.clone())
-            .selected(self.selected_entry.clone().map(Into::into))
-            .on_select(move |id, _, cx| {
-                let _ = select.update(cx, |page, cx| page.activate_event(id, cx));
-            })
-            .on_event(move |id, window, cx| {
-                let _ = open.update(cx, |page, cx| {
-                    page.activate_event(id, cx);
-                    page.edit_selected(window, cx);
-                });
-            }),
-        );
+        if !(self.entries.loading && self.entries.value.is_none()) {
+            let (events, _) = self.events(&entries);
+            let (select, open) = (cx.entity().downgrade(), cx.entity().downgrade());
+            panel = panel.child(
+                crate::ely::calendar::AgendaView::new(
+                    "calendar-agenda",
+                    adapter::date(self.day),
+                    1,
+                    events,
+                )
+                .zone(self.zone.clone())
+                .selected(self.selected_entry.clone().map(Into::into))
+                .on_select(move |id, _, cx| {
+                    let _ = select.update(cx, |page, cx| page.activate_event(id, cx));
+                })
+                .on_event(move |id, window, cx| {
+                    let _ = open.update(cx, |page, cx| {
+                        page.activate_event(id, cx);
+                        page.edit_selected(window, cx);
+                    });
+                }),
+            );
+        }
         if self.entries.loading && self.entries.value.is_none() {
             panel = panel.child(muted("Loading…", palette));
-        } else if entries.is_empty() {
-            panel = panel.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .justify_center()
-                    .py_6()
-                    .px_3()
-                    .gap_2()
-                    .rounded(px(6.))
-                    .border_1()
-                    .border_color(rgba(palette.border))
-                    .bg(rgba(palette.raised))
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(rgb(palette.muted))
-                            .child("No events scheduled"),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child("Press 'n' or click + Add above"),
-                    ),
-            );
         } else {
             for (i, entry) in entries.into_iter().enumerate() {
                 let color = kind_color(&entry.kind);

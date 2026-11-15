@@ -854,16 +854,14 @@ Optional list conversions stay last.
 
 Shared Ely tabs for Inventory, Backup and Systems shipped in `f2324efe`.
 
-The shared counted-filter adapter now uses the pinned Ely `ToggleButton` for Projects,
-Documents, Feed and Inbox. Domain callbacks still own exclusive selection and grouping.
-All 205 UI tests pass, including document pointer/keyboard filtering and Projects grouping.
-Installation and live acceptance of this adapter remain open.
+Counted Ely filter toggles for Projects, Documents, Feed and Inbox shipped in `65cee7b2`.
 
-Verification: all 203 UI tests pass, including production Inventory pointer and arrow-key
-selection inside Kit Root. UI Clippy passes with three warnings in untouched Projects, Travel
-and People code. The documentation link check passes for 419 documents. Live light/dark and
-narrow-window acceptance, app installation and phone feature checks remain open. The fork and
-dependency pin are unchanged.
+Verification: all 207 UI tests and three registry-contract tests pass, including document
+pointer/keyboard filtering, Projects grouping and registry layout/focus regressions.
+UI Clippy passes with three warnings in untouched Projects, Travel and People code.
+The signed `65cee7b2` desktop build is installed; live light/dark and narrow-window acceptance
+continues. Shell replacement was denied by macOS; Finder completed the signed bundle update.
+Phone feature checks remain open. The fork and dependency pin are unchanged.
 
 #### Remaining component parity
 
@@ -980,6 +978,11 @@ Open, in order:
    warnings. Live Projects discovery publishes both projections; installed-app and end-to-end
    relation acceptance through the updated proxy have not run
    ([`data.md`](data.md#registry-derived-project-views)).
+   A live installed-app pass now loads the project list, opens properties and follows Records.
+   It exposed overlapping headings, column order shared across object types and lost focus
+   after opening a row. The adapter now gives each object its own table state and explicit
+   column widths, and retains focus on the property page. Headless regressions pass;
+   installation and live retest of these corrections remain open.
 2. The same views on the phone as NSH screens, fed from the local copy. The existing replica
    readers omit classification metadata; extend their read contract before supplying registry
    projections, preserving object identity and class rather than inventing defaults.

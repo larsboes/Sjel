@@ -3,7 +3,7 @@
 use std::rc::Rc;
 
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::{div, prelude::*, px, rgb, Context, SharedString, Window};
+use gpui_kit::{div, prelude::*, px, rems, rgb, Context, FocusHandle, SharedString, Window};
 use serde_json::Value;
 use sjel_gpui_core::record::registry::{self, View};
 
@@ -18,6 +18,7 @@ use crate::theme::ThemeContext;
 
 pub struct RegistryPage {
     repo: Repo,
+    focus: FocusHandle,
     capability: String,
     data: Remote<View>,
     selected: Option<Value>,
@@ -28,6 +29,7 @@ impl RegistryPage {
     pub fn new(repo: Repo, capability: String, cx: &mut Context<Self>) -> Self {
         let mut page = Self {
             repo,
+            focus: cx.focus_handle(),
             capability,
             data: Remote::default(),
             selected: None,
@@ -115,6 +117,7 @@ impl Render for RegistryPage {
         let palette = ThemeContext::of(window, cx).palette;
         let mut body = div()
             .id("registry-browser")
+            .track_focus(&self.focus)
             .size_full()
             .overflow_y_scrollbar()
             .p(px(16.))
@@ -235,7 +238,9 @@ impl Render for RegistryPage {
             let columns = keys
                 .iter()
                 .map(|key| {
-                    let column = Column::new((*key).clone(), (*key).clone());
+                    let minimum = if *key == &object.title { 18. } else { 8. };
+                    let width = (key.chars().count() as f32 + 4.).max(minimum);
+                    let column = Column::new((*key).clone(), (*key).clone()).width(rems(width));
                     if matches!(
                         properties[*key]["type"].as_str(),
                         Some("number" | "integer")
@@ -278,21 +283,24 @@ impl Render for RegistryPage {
                         .child(object.label.clone()),
                 )
                 .child(
-                    DataTable::new("registry-objects", columns)
-                        .rows(Rc::new(rows))
-                        .on_open(move |key, _, cx| {
-                            if loading {
-                                return;
-                            }
-                            if let Some((_, row)) = values.iter().find(|(id, _)| id == key.as_ref())
-                            {
-                                entity.update(cx, |page, cx| {
-                                    page.selected = Some(row.clone());
-                                    cx.notify();
-                                });
-                            }
-                        })
-                        .empty("No objects"),
+                    DataTable::new(
+                        SharedString::from(format!("registry-objects-{}", object.id)),
+                        columns,
+                    )
+                    .rows(Rc::new(rows))
+                    .on_open(move |key, window, cx| {
+                        if loading {
+                            return;
+                        }
+                        if let Some((_, row)) = values.iter().find(|(id, _)| id == key.as_ref()) {
+                            entity.update(cx, |page, cx| {
+                                page.selected = Some(row.clone());
+                                window.focus(&page.focus, cx);
+                                cx.notify();
+                            });
+                        }
+                    })
+                    .empty("No objects"),
                 );
         }
         body.into_any_element()

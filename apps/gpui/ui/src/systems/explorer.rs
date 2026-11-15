@@ -10,6 +10,7 @@ use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement};
 
 use crate::data::Remote;
+use crate::ely::charts::Treemap;
 use crate::primitives::{list, mono_num, note, row};
 use crate::theme::Palette;
 use sjel_gpui_core::shell::{self, ShellError, ShellResult};
@@ -296,6 +297,23 @@ impl SystemsPage {
             }
             if let Some(error) = &snapshot.error {
                 body = body.child(note(error.clone(), palette.amber));
+            }
+            if snapshot.bytes > 0 {
+                let chart = snapshot
+                    .directories
+                    .iter()
+                    .filter(|entry| entry.bytes > 0)
+                    .fold(
+                        Treemap::new("systems-directory-allocation"),
+                        |chart, entry| chart.tile(entry.path.clone(), entry.bytes as f64),
+                    );
+                body = body.child(
+                    chart
+                        .tile("Unlisted", snapshot.unlisted_bytes as f64)
+                        .format(|bytes| storage_bytes(bytes.round() as u64))
+                        .w_full()
+                        .h(px(220.)),
+                );
             }
             let rows = snapshot
                 .directories

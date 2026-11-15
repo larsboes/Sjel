@@ -15,6 +15,7 @@ use sjel_gpui_core::finance::{
 };
 use sjel_gpui_core::shell::{self, FinanceTransaction, ShellError};
 
+use crate::ely::charts::{BarChart, Series};
 use crate::ely::data_display::Tone;
 use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
 use crate::primitives::{mono_num, tabular_cell};
@@ -499,15 +500,67 @@ impl FinancePage {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let rows = self.tx_rows();
+        let mut spending =
+            std::collections::BTreeMap::<String, std::collections::BTreeMap<String, f64>>::new();
+        for tx in self
+            .dashboard
+            .value
+            .iter()
+            .flat_map(|projection| &projection.transactions)
+            .filter(|tx| tx.kind == "expense")
+        {
+            *spending
+                .entry(tx.currency.clone())
+                .or_default()
+                .entry(tx.category.clone())
+                .or_default() += tx.amount_cents as f64;
+        }
+        let charts = spending
+            .into_iter()
+            .map(|(currency, categories)| {
+                let labels: Vec<_> = categories.keys().cloned().collect();
+                let selected = labels.clone();
+                let entity = cx.weak_entity();
+                BarChart::new(format!("finance-category-spending-{currency}"), labels)
+                    .series(Series::new(
+                        format!("Loaded expenses · {currency}"),
+                        categories.values().copied(),
+                    ))
+                    .horizontal()
+                    .format(move |cents| format_money(cents.round() as i64, &currency))
+                    .on_select(move |ix, _, cx| {
+                        if let Some(category) = selected.get(ix) {
+                            let _ = entity.update(cx, |page, cx| {
+                                page.selected_category =
+                                    if page.selected_category.as_ref() == Some(category) {
+                                        None
+                                    } else {
+                                        Some(category.clone())
+                                    };
+                                page.filter_rev = page.filter_rev.wrapping_add(1);
+                                cx.notify();
+                            });
+                        }
+                    })
+                    .h(px((categories.len() as f32 * 24. + 40.).clamp(100., 240.)))
+                    .w_full()
+            })
+            .collect::<Vec<_>>();
 
         let search_box = div()
             .w(px(280.))
             .child(Input::new(&self.search_field(window, cx)).small());
 
-        // Category filter buttons
-        let categories = ["Food", "Transport", "Shopping", "Tech", "Travel", "Health"];
+        let categories = self
+            .dashboard
+            .value
+            .iter()
+            .flat_map(|projection| &projection.transactions)
+            .map(|tx| tx.category.clone())
+            .collect::<std::collections::BTreeSet<_>>();
         let filter_bar = div()
             .flex()
+            .flex_wrap()
             .items_center()
             .justify_between()
             .gap_4()
@@ -515,6 +568,7 @@ impl FinancePage {
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
                     .gap_1()
                     .child(
@@ -529,16 +583,16 @@ impl FinancePage {
                                 cx.notify();
                             })),
                     )
-                    .children(categories.map(|cat| {
-                        let active = self.selected_category.as_deref() == Some(cat);
+                    .children(categories.into_iter().map(|cat| {
+                        let active = self.selected_category.as_ref() == Some(&cat);
                         Button::new(SharedString::from(format!("cat-{cat}")))
                             .xsmall()
-                            .label(cat)
+                            .label(cat.clone())
                             .when(active, |b| b.primary())
                             .when(!active, |b| b.ghost())
                             .on_click(cx.listener(move |page, _, _, cx| {
                                 page.selected_category =
-                                    if active { None } else { Some(cat.to_string()) };
+                                    if active { None } else { Some(cat.clone()) };
                                 page.filter_rev = page.filter_rev.wrapping_add(1);
                                 cx.notify();
                             }))
@@ -551,6 +605,12 @@ impl FinancePage {
             .gap_2()
             .size_full()
             .child(filter_bar)
+            .when(!charts.is_empty(), |body| {
+                body.child(div().text_xs().child(
+                    "Personal spending by category · loaded transactions · click a bar to filter",
+                ))
+            })
+            .children(charts)
             .child(
                 div().flex_1().min_h_0().pb_6().child(
                     DataTable::new("finance-transactions", tx_columns())
@@ -604,26 +664,50 @@ mod tests {
         }
     }
 
-    struct Ledger(Rc<Vec<Row>>);
-
-    impl gpui_kit::Render for Ledger {
-        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            DataTable::new("finance-transactions", tx_columns())
-                .rows(self.0.clone())
-                .virtualized()
-                .empty("No transactions match the current filter.")
-                .size_full()
-        }
-    }
-
     #[gpui_kit::test]
-    fn the_ledger_draws_on_elys_table(cx: &mut TestAppContext) {
+    fn category_chart_filters_the_production_ledger_and_toggles_off(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
         cx.update(crate::ely::init_for_tests);
-        let rows = Rc::new(vec![
-            tx_row(&tx("a", "expense", -500)),
-            tx_row(&tx("b", "income", 900)),
-        ]);
-        let (_, cx): (_, &mut VisualTestContext) = cx.add_window_view(|_, _| Ledger(rows));
+        let slot = Rc::new(std::cell::RefCell::new(None));
+        let found = slot.clone();
+        let (_, cx): (_, &mut VisualTestContext) = cx.add_window_view(move |window, cx| {
+            let page = cx.new(|cx| {
+                let mut page =
+                    FinancePage::new(crate::data::Repo::new(Err(ShellError::NotSetUp)), cx);
+                page.view = super::super::View::Transactions;
+                let mut transport = tx("b", "expense", 900);
+                transport.category = "Transport".into();
+                page.dashboard.value = Some(
+                    serde_json::from_value(serde_json::json!({
+                        "transactions": [tx("a", "expense", 500), transport],
+                    }))
+                    .expect("dashboard fixture reads"),
+                );
+                page
+            });
+            found.replace(Some(page.clone()));
+            gpui_kit::component::Root::new(page, window, cx)
+        });
+        let page = slot.take().unwrap();
+        for _ in 0..3 {
+            cx.run_until_parked();
+            cx.update(|window, _| window.refresh());
+        }
+        let bounds = cx
+            .debug_bounds("chart-root")
+            .expect("the category chart draws");
+        let at = bounds.origin + gpui_kit::point(bounds.size.width * 0.75, px(25.));
+        cx.simulate_click(at, gpui_kit::Modifiers::none());
         cx.run_until_parked();
+        page.update(cx, |page, _| {
+            assert_eq!(page.selected_category.as_deref(), Some("Food"));
+            assert_eq!(page.tx_rows().len(), 1);
+        });
+        cx.simulate_click(at, gpui_kit::Modifiers::none());
+        cx.run_until_parked();
+        page.update(cx, |page, _| {
+            assert_eq!(page.selected_category, None);
+            assert_eq!(page.tx_rows().len(), 2);
+        });
     }
 }

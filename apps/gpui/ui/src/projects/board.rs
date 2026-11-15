@@ -7,6 +7,7 @@ use gpui_kit::{
     Window,
 };
 
+use crate::ely::charts::{GanttChart, ProgressChart, Task};
 use crate::primitives::{due_badge, priority_pill, status_pill};
 use crate::theme::{tint, Palette};
 use sjel_gpui_core::shell::ProjectRecord;
@@ -360,13 +361,65 @@ impl Projects {
                 )
         });
 
+        let completed = tasks
+            .iter()
+            .filter(|task| parse_frontmatter_status(&task.content, task.done) == "done")
+            .count();
+        let dated = tasks
+            .iter()
+            .filter_map(|task| {
+                let date = task.due.as_ref()?.parse().ok()?;
+                Some(Task::new(task.title.clone(), date, date).done(
+                    if parse_frontmatter_status(&task.content, task.done) == "done" {
+                        1.
+                    } else {
+                        0.
+                    },
+                ))
+            })
+            .collect::<Vec<_>>();
+        let timeline = (!dated.is_empty()).then(|| {
+            let height = (dated.len() as f32 * 24. + 48.).clamp(100., 240.);
+            dated
+                .into_iter()
+                .fold(GanttChart::new("projects-due-dates"), |chart, task| {
+                    chart.task(task)
+                })
+                .h(px(height))
+                .w_full()
+        });
         div()
             .flex()
-            .gap_3()
+            .flex_col()
             .size_full()
-            .min_h(px(400.))
-            .overflow_hidden()
-            .children(columns)
+            .when(!tasks.is_empty(), |body| {
+                body.child(
+                    ProgressChart::new("projects-task-progress")
+                        .goal("Completed tasks", completed as f64, tasks.len() as f64)
+                        .format(|value| format!("{value:.0} tasks"))
+                        .h(px(100.))
+                        .w_full(),
+                )
+            })
+            .when_some(timeline, |body, timeline| {
+                body.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child("Task due dates"),
+                )
+                .child(timeline)
+            })
+            .child(
+                div()
+                    .flex()
+                    .gap_3()
+                    .w_full()
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_hidden()
+                    .children(columns),
+            )
             .into_any_element()
     }
 }

@@ -5,7 +5,7 @@ use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data;
-use crate::ely::charts::{LineChart, Series};
+use crate::ely::charts::{Bullet, BulletChart, LineChart, Series};
 use crate::ely::data_display::Tone;
 use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
 use crate::primitives::{list, note, section};
@@ -15,7 +15,6 @@ use sjel_gpui_core::systems::{
     StorageHistory, StorageTrend, UpdateStatus, UpdateSurface, TREND_WINDOW_HOURS,
 };
 
-use super::overview::bar;
 use super::types::{APPLY_BEAT, APPLY_BEATS};
 use super::{heading, SystemsPage};
 
@@ -140,7 +139,13 @@ impl SystemsPage {
                                 .flex()
                                 .items_center()
                                 .gap_2()
-                                .child(bar(view.used_pct, tone, palette))
+                                .child(
+                                    BulletChart::new("systems-disk-capacity")
+                                        .bullet(Bullet::new("Used (%)", view.used_pct as f64 * 100., 100.))
+                                        .format(|value| format!("{value:.1} %"))
+                                        .h(px(72.))
+                                        .flex_1(),
+                                )
                                 .child(
                                     div()
                                         .w(px(72.))
@@ -179,6 +184,7 @@ impl SystemsPage {
                 rows.push(trend_row(
                     self.derived.storage_trend.as_ref(),
                     self.history.value.as_ref(),
+                    self.storage.value.as_ref().map(|report| report.disk.total),
                     palette,
                 ));
 
@@ -591,6 +597,7 @@ impl SystemsPage {
 fn trend_row(
     trend: Option<&StorageTrend>,
     history: Option<&StorageHistory>,
+    capacity: Option<u64>,
     palette: Palette,
 ) -> AnyElement {
     let Some(trend) = trend else {
@@ -619,6 +626,11 @@ fn trend_row(
         samples.iter().map(|sample| sample.used as f64),
     ))
     .format(|bytes| storage_bytes(bytes.max(0.0).round() as u64))
+    .zoom()
+    .when_some(
+        capacity.filter(|capacity| *capacity > 0),
+        |chart, capacity| chart.rule(capacity as f64, "Capacity"),
+    )
     .h(px(180.))
     .w_full();
     div()
@@ -651,6 +663,7 @@ mod chart_tests {
             div().w(px(700.)).child(trend_row(
                 self.0.trend().as_ref(),
                 Some(&self.0),
+                Some(2 * 1073741824),
                 Palette::light(),
             ))
         }

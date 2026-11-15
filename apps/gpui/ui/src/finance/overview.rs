@@ -764,6 +764,9 @@ fn render_trend(trend: &[FinanceTrendPoint], currency: &str, palette: Palette) -
         return div().into_any_element();
     }
     let observed: Vec<_> = window.iter().filter_map(|(_, point)| *point).collect();
+    if observed.is_empty() {
+        return div().into_any_element();
+    }
     let currency_owned = currency.to_owned();
     let chart = BarChart::new(
         "finance-monthly-trend",
@@ -782,6 +785,14 @@ fn render_trend(trend: &[FinanceTrendPoint], currency: &str, palette: Palette) -
             .map(|point| point.personal_spending_cents as f64),
     ))
     .format(move |cents| format_money(cents.round() as i64, &currency_owned))
+    .rule(
+        observed
+            .iter()
+            .map(|point| point.personal_spending_cents as f64)
+            .sum::<f64>()
+            / observed.len() as f64,
+        "Average spending",
+    )
     .h(px(220.))
     .w_full();
     let columns = window.into_iter().map(|(month, point)| {
@@ -818,7 +829,7 @@ fn render_trend(trend: &[FinanceTrendPoint], currency: &str, palette: Palette) -
             div()
                 .text_xs()
                 .text_color(rgb(palette.muted))
-                .child("Monthly net · months without imported rows are omitted from the chart"),
+                .child("Monthly net · chart and spending average use months with imported rows"),
         )
         .child(div().flex().items_end().gap_2().children(columns))
         .into_any_element()
@@ -877,6 +888,18 @@ fn percent_bp(bp: i64) -> String {
 fn render_holdings(portfolio: &FinancePortfolio, palette: Palette) -> AnyElement {
     let mut positions: Vec<&FinancePosition> = portfolio.positions.iter().collect();
     positions.sort_by_key(|position| std::cmp::Reverse(position.share_bp));
+    let allocation = BarChart::new(
+        "finance-holdings-allocation",
+        positions.iter().map(|position| position.label.clone()),
+    )
+    .series(Series::new(
+        "Portfolio share",
+        positions.iter().map(|position| position.share_bp as f64),
+    ))
+    .horizontal()
+    .format(|bp| format!("{:.1} %", bp / 100.))
+    .h(px((positions.len() as f32 * 28. + 48.).clamp(120., 480.)))
+    .w_full();
     let rows = positions.into_iter().map(|position| {
         let (provenance, stale) = price_provenance(position);
         let change = position.change_since_review_bp.filter(|bp| *bp != 0);
@@ -942,6 +965,9 @@ fn render_holdings(portfolio: &FinancePortfolio, palette: Palette) -> AnyElement
                         .child(format!("As of {}", portfolio.as_of)),
                 ),
         )
+        .when(!portfolio.positions.is_empty(), |panel| {
+            panel.child(allocation)
+        })
         .child(div().flex().flex_col().children(rows))
         .children(portfolio.caveats.iter().map(|caveat| {
             div()

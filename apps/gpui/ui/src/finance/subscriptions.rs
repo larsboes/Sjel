@@ -7,6 +7,7 @@ use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, FontWeight};
 use sjel_gpui_core::context::format_money;
 use sjel_gpui_core::finance::{calculate_monthly_burn, SubscriptionSummary};
 
+use crate::ely::charts::{BarChart, Series};
 use crate::primitives::tone_chip;
 use crate::theme::Palette;
 
@@ -48,6 +49,39 @@ impl FinancePage {
         self.sync_subs_derived();
         let monthly_burn = self.subs_derived.monthly_burn;
         let summaries = &self.subs_derived.summaries;
+        let mut categories = std::collections::BTreeMap::<(String, String), i64>::new();
+        for sub in summaries
+            .iter()
+            .filter(|sub| sub.status == "active" || sub.status == "trial")
+        {
+            *categories
+                .entry((sub.category.clone(), sub.currency.clone()))
+                .or_default() += sub.monthly_equivalent_cents;
+        }
+        let charts = categories
+            .keys()
+            .map(|(_, currency)| currency.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(|currency| {
+                let entries = categories
+                    .iter()
+                    .filter(|((_, unit), _)| *unit == currency)
+                    .collect::<Vec<_>>();
+                let unit = currency.clone();
+                BarChart::new(
+                    format!("subscription-categories-{currency}"),
+                    entries.iter().map(|((category, _), _)| category.clone()),
+                )
+                .series(Series::new(
+                    format!("Monthly recurring · {currency}"),
+                    entries.iter().map(|(_, cents)| **cents as f64),
+                ))
+                .horizontal()
+                .format(move |cents| format_money(cents.round() as i64, &unit))
+                .h(px((entries.len() as f32 * 28. + 48.).clamp(120., 400.)))
+                .w_full()
+            });
 
         let header_stat = div()
             .flex()
@@ -187,6 +221,7 @@ impl FinancePage {
                     .track_scroll(&self.subscriptions_scroll)
                     .vertical_scrollbar(&self.subscriptions_scroll)
                     .pb_6()
+                    .children(charts)
                     .child(cards_grid),
             )
             .into_any_element()

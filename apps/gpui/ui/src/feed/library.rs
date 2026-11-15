@@ -7,6 +7,7 @@ use gpui_kit::{
 };
 use sjel_gpui_core::shell::FeedEntry;
 
+use crate::ely::charts::CalendarHeatmap;
 use crate::primitives::{filter_pill, virtual_list};
 use crate::theme::Palette;
 
@@ -86,6 +87,34 @@ impl Feed {
             .child(self.title_row(cx))
             .child(toolbar)
             .child(kind_row);
+        let today = chrono::Local::now().date_naive();
+        let start = today - chrono::Duration::days(90);
+        let mut counts = [0.; 91];
+        for entry in self.library.value.iter().flatten() {
+            if let Ok(day) = chrono::NaiveDate::parse_from_str(&entry.day, "%Y-%m-%d") {
+                let index = (day - start).num_days();
+                if (0..91).contains(&index) {
+                    counts[index as usize] += 1.;
+                }
+            }
+        }
+        if self
+            .library
+            .value
+            .as_ref()
+            .is_some_and(|entries| !entries.is_empty())
+        {
+            if let Ok(first) = start.to_string().parse() {
+                column = column
+                    .child(muted("Feed entries by source date · last 91 days", palette))
+                    .child(
+                        CalendarHeatmap::new("feed-entry-cadence", first, counts)
+                            .format(|count| format!("{count:.0} entries"))
+                            .w_full()
+                            .h(px(100.)),
+                    );
+            }
+        }
         if let Some(error) = &self.library.error {
             column = column.child(
                 div()

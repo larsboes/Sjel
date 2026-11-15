@@ -1,7 +1,4 @@
-//! The apps, leftovers and tools on this Mac from the `software` capability: what each costs on
-//! disk, when it was last opened, and what the operator decided about it. Click a row to decide;
-//! the note field carries why, and a decision button saves both. A row marked `remove` offers its
-//! uninstall, which the capability runs through whoever installed it.
+//! Sortable software inventory with a decision editor for the opened app.
 
 pub mod row;
 pub mod types;
@@ -9,19 +6,20 @@ pub mod types;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, rgb, AnyElement, Context, Entity, IntoElement, SharedString, Window,
-};
+use gpui_kit::{div, prelude::*, rgb, Context, Entity, IntoElement, SharedString, Window};
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::primitives::{list, note, placeholder, section};
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
+use crate::ely::theme::Density;
+use crate::primitives::{note, placeholder, section};
 use crate::theme::ThemeContext;
 use sjel_gpui_core::shell::{SoftwareApp, SoftwareApps};
 
 use types::size;
 pub use types::{shows, Filter, FILTERS, SCAN};
 
-use self::row::render_app_row;
+use self::row::render_app_detail;
 
 pub struct Software {
     pub(crate) repo: Repo,
@@ -184,10 +182,44 @@ impl Render for Software {
             .label("Scan now")
             .loading(self.busy.contains(SCAN))
             .on_click(cx.listener(|view, _, window, cx| view.scan(window, cx)));
-        let rows: Vec<AnyElement> = shown
-            .into_iter()
-            .map(|app| render_app_row(self, app, palette, cx))
-            .collect();
+        let rows: Vec<Row> = shown.iter().map(|app| software_row(app)).collect();
+        let page = cx.entity();
+        let table = DataTable::new(
+            "software-apps",
+            [
+                Column::new("name", "SOFTWARE"),
+                Column::new("size", "DISK SIZE").end(),
+                Column::new("source", "SOURCE"),
+                Column::new("last_used", "LAST USED"),
+                Column::new("decision", "DECISION"),
+            ],
+        )
+        .rows(rows)
+        .paged(25)
+        .sorts([SortKey {
+            column: "size".into(),
+            rising: false,
+        }])
+        .density(Density::Comfortable)
+        .current(self.open.clone())
+        .on_open(move |key, window, cx| {
+            page.update(cx, |page, cx| {
+                let app = page
+                    .apps
+                    .value
+                    .as_ref()
+                    .and_then(|apps| apps.apps.iter().find(|app| app.bundle_id == key.as_ref()))
+                    .cloned();
+                if let Some(app) = app {
+                    page.toggle(&app, window, cx);
+                }
+            })
+        })
+        .empty("No software matches this filter.");
+        let detail = shown
+            .iter()
+            .find(|app| self.open.as_deref() == Some(app.bundle_id.as_str()))
+            .map(|app| render_app_detail(self, app, palette, cx));
         div()
             .flex()
             .flex_col()
@@ -212,15 +244,106 @@ impl Render for Software {
                             .child(scan),
                     ),
             )
-            .child(list(rows, palette))
+            .child(table)
+            .children(detail)
             .into_any_element()
     }
+}
+
+fn software_row(app: &SoftwareApp) -> Row {
+    let bytes = app.app_bytes + app.data_bytes;
+    let tone = match app.decision.as_deref() {
+        Some("use") => Tone::Success,
+        Some("remove") => Tone::Danger,
+        Some("replace" | "rebuild") => Tone::Warning,
+        _ => Tone::Neutral,
+    };
+    let meta = app
+        .review
+        .iter()
+        .chain(app.note.iter())
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" · ");
+    Row::new(
+        app.bundle_id.clone(),
+        [
+            Cell::Lines(app.name.clone().into(), meta.into()),
+            Cell::Figure(size(bytes).into(), bytes as f64, Tone::Neutral),
+            Cell::Text(app.source.clone().into()),
+            app.last_used
+                .as_deref()
+                .map(|stamp| Cell::Text(types::last_used(Some(stamp)).into()))
+                .unwrap_or(Cell::Empty),
+            Cell::Tag(
+                app.decision
+                    .clone()
+                    .unwrap_or_else(|| "undecided".into())
+                    .into(),
+                tone,
+            ),
+        ],
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::types::{last_used, uninstall_label};
     use super::*;
+
+    #[gpui::test]
+    fn table_sorts_sizes_and_opens_the_matching_decision_editor(cx: &mut gpui::TestAppContext) {
+        cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
+        let (page, cx) = cx.add_window_view(|_, _| {
+            let mut page =
+                Software::new(Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)));
+            page.apps.value = Some(SoftwareApps {
+                apps: vec![
+                    SoftwareApp {
+                        bundle_id: "small".into(),
+                        name: "Small".into(),
+                        app_bytes: 900 * 1_048_576,
+                        note: Some("Small note".into()),
+                        ..row("app", true, None)
+                    },
+                    SoftwareApp {
+                        bundle_id: "large".into(),
+                        name: "Large".into(),
+                        app_bytes: 4 * 1_073_741_824,
+                        note: Some("Large note".into()),
+                        ..row("app", true, None)
+                    },
+                ],
+            });
+            page
+        });
+        cx.run_until_parked();
+        let large = cx.debug_bounds("table-row large").unwrap();
+        let small = cx.debug_bounds("table-row small").unwrap();
+        assert!(
+            large.origin.y < small.origin.y,
+            "sizes sort numerically across units"
+        );
+        cx.simulate_click(large.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, cx| {
+            assert_eq!(page.open.as_deref(), Some("large"));
+            assert_eq!(
+                page.note.as_ref().unwrap().read(cx).value().as_str(),
+                "Large note"
+            );
+        });
+        cx.simulate_keystrokes("down enter");
+        cx.run_until_parked();
+        page.read_with(cx, |page, cx| {
+            assert_eq!(page.open.as_deref(), Some("small"));
+            assert_eq!(
+                page.note.as_ref().unwrap().read(cx).value().as_str(),
+                "Small note"
+            );
+        });
+    }
 
     fn row(kind: &str, present: bool, review: Option<&str>) -> SoftwareApp {
         SoftwareApp {

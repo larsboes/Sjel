@@ -1,6 +1,5 @@
 //! Filtering, labels, formatters, and decision constants for software inventory.
 
-use crate::theme::Palette;
 use sjel_gpui_core::shell::SoftwareApp;
 
 pub const SCAN: &str = "software:scan";
@@ -45,16 +44,6 @@ pub fn uninstall_label(app: &SoftwareApp) -> String {
         ("tool", manager) => format!("Uninstall ({manager})"),
         (_, source) if source.starts_with("cask:") => "Uninstall (brew cask)".to_owned(),
         _ => "Move to Trash".to_owned(),
-    }
-}
-
-pub fn decision_look(decision: Option<&str>, palette: Palette) -> (u32, &'static str) {
-    match decision {
-        Some("use") => (palette.green, "use"),
-        Some("remove") => (palette.red, "remove"),
-        Some("replace") => (palette.amber, "replace"),
-        Some("rebuild") => (palette.amber, "rebuild"),
-        _ => (palette.muted, ""),
     }
 }
 

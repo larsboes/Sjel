@@ -7,7 +7,9 @@ use gpui_kit::{
 };
 
 use crate::data;
-use crate::primitives::{list, note, row, section};
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
+use crate::primitives::{list, note, section};
 use crate::theme::{tint, Palette};
 use sjel_gpui_core::systems::{
     apply_summary, audit_needs_attention, dated_absences, storage_bytes, version_label, Severity,
@@ -191,69 +193,65 @@ impl SystemsPage {
                     );
                 } else {
                     let deltas = &self.derived.class_deltas;
-                    let largest = view.scale_bytes;
                     rows.push(heading("Policy-managed storage", palette));
-                    let class_rows: Vec<AnyElement> = view
+                    let class_rows = view
                         .classes
                         .iter()
                         .map(|class| {
-                            let share = class.bytes as f32 / largest as f32;
-                            let color = if class.flagged {
-                                palette.amber
-                            } else {
-                                palette.accent
-                            };
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_3()
-                                .px_3()
-                                .py_1()
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .flex()
-                                        .flex_col()
-                                        .child(div().truncate().text_sm().child(class.name.clone()))
-                                        .child(
-                                            div()
-                                                .flex()
-                                                .gap_2()
-                                                .text_xs()
-                                                .text_color(rgb(palette.muted))
-                                                .children(
-                                                    (!class.applicable)
-                                                        .then(|| "report-only".to_owned()),
-                                                )
-                                                .children(
-                                                    class.flagged.then(|| "over flag".to_owned()),
-                                                )
-                                                .children(
-                                                    (class.measured == Some(false))
-                                                        .then(|| "partial".to_owned()),
-                                                ),
-                                        ),
-                                )
-                                .child(div().w(px(160.)).child(bar(share, color, palette)))
-                                .child(
-                                    div()
-                                        .w(px(150.))
-                                        .text_xs()
-                                        .text_color(rgb(palette.text))
-                                        .child(format!(
-                                            "{}{}",
-                                            storage_bytes(class.bytes),
-                                            deltas
-                                                .get(&class.name)
-                                                .map(|delta| format!(" ({delta})"))
-                                                .unwrap_or_default()
-                                        )),
-                                )
-                                .into_any_element()
+                            let flags = [
+                                (!class.applicable).then_some("report-only"),
+                                class.flagged.then_some("over flag"),
+                                (class.measured == Some(false)).then_some("partial"),
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .collect::<Vec<_>>()
+                            .join(" · ");
+                            Row::new(
+                                class.name.clone(),
+                                [
+                                    Cell::Text(class.name.clone().into()),
+                                    Cell::Figure(
+                                        storage_bytes(class.bytes).into(),
+                                        class.bytes as f64,
+                                        if class.flagged {
+                                            Tone::Warning
+                                        } else {
+                                            Tone::Neutral
+                                        },
+                                    ),
+                                    Cell::Text(
+                                        deltas.get(&class.name).cloned().unwrap_or_default().into(),
+                                    ),
+                                    Cell::Tag(
+                                        flags.into(),
+                                        if class.flagged {
+                                            Tone::Warning
+                                        } else {
+                                            Tone::Neutral
+                                        },
+                                    ),
+                                ],
+                            )
                         })
-                        .collect();
-                    rows.push(list(class_rows, palette));
+                        .collect::<Vec<_>>();
+                    rows.push(
+                        DataTable::new(
+                            "storage-classes",
+                            [
+                                Column::new("name", "CLASS"),
+                                Column::new("size", "SIZE").end(),
+                                Column::new("change", "CHANGE").end().unsorted(),
+                                Column::new("state", "STATE"),
+                            ],
+                        )
+                        .rows(class_rows)
+                        .sorts([SortKey {
+                            column: "size".into(),
+                            rising: false,
+                        }])
+                        .into_any_element(),
+                    );
                     rows.push(
                         div()
                             .text_xs()
@@ -531,45 +529,40 @@ impl SystemsPage {
                             .into_any_element(),
                     );
 
-                    let update_rows: Vec<AnyElement> = group
+                    let update_rows = group
                         .rows
                         .iter()
                         .map(|entry| {
-                            let (tone, mark) = match entry.status() {
-                                UpdateStatus::Stale => (palette.amber, "!"),
-                                UpdateStatus::Current => (palette.green, "✓"),
-                                UpdateStatus::Unknown => (palette.muted, "?"),
-                                UpdateStatus::NotApplicable => (palette.muted, "·"),
+                            let (tone, status) = match entry.status() {
+                                UpdateStatus::Stale => (Tone::Warning, "Stale"),
+                                UpdateStatus::Current => (Tone::Success, "Current"),
+                                UpdateStatus::Unknown => (Tone::Neutral, "Unknown"),
+                                UpdateStatus::NotApplicable => (Tone::Neutral, "Not applicable"),
                             };
-                            row()
-                                .text_xs()
-                                .child(div().w(px(14.)).text_color(rgb(tone)).child(mark))
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .truncate()
-                                        .text_sm()
-                                        .child(entry.name.clone()),
-                                )
-                                .child(
-                                    div()
-                                        .w(px(150.))
-                                        .truncate()
-                                        .text_color(rgb(palette.muted))
-                                        .child(version_label(entry)),
-                                )
-                                .child(
-                                    div()
-                                        .w(px(240.))
-                                        .truncate()
-                                        .text_color(rgb(palette.muted))
-                                        .child(entry.note.clone().unwrap_or_default()),
-                                )
-                                .into_any_element()
+                            Row::new(
+                                entry.name.clone(),
+                                [
+                                    Cell::Text(entry.name.clone().into()),
+                                    Cell::Tag(status.into(), tone),
+                                    Cell::Text(version_label(entry).into()),
+                                    Cell::Text(entry.note.clone().unwrap_or_default().into()),
+                                ],
+                            )
                         })
-                        .collect();
-                    rows.push(list(update_rows, palette));
+                        .collect::<Vec<_>>();
+                    rows.push(
+                        DataTable::new(
+                            format!("system-updates-{}", group.surface.id),
+                            [
+                                Column::new("name", "PACKAGE"),
+                                Column::new("status", "STATUS"),
+                                Column::new("version", "VERSION").muted(),
+                                Column::new("note", "NOTE").muted(),
+                            ],
+                        )
+                        .rows(update_rows)
+                        .into_any_element(),
+                    );
                 }
 
                 if view.unknown > 0 {

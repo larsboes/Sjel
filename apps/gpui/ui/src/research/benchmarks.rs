@@ -1,4 +1,6 @@
 //! Benchmark suites and model evaluation metrics tab.
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row};
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement};
 use sjel_gpui_core::research::BenchmarkSuite;
 
@@ -20,104 +22,63 @@ impl ResearchPage {
         let mut panels = Vec::new();
 
         for suite in suites {
-            // Runs table
-            let run_rows = suite.runs.iter().map(|run| {
-                let acc = run.result.accuracy;
-                let acc_pct = format!("{:.0}%", acc * 100.0);
-                let acc_color = if acc >= 0.90 {
-                    palette.green
-                } else if acc >= 0.75 {
-                    palette.amber
-                } else {
-                    palette.red
-                };
-
-                div()
-                    .flex()
-                    .items_center()
-                    .py(px(6.0))
-                    .px(px(8.0))
-                    .border_b_1()
-                    .border_color(rgba(palette.border))
-                    .child(
-                        div()
-                            .w(px(180.0))
-                            .text_size(px(12.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(rgb(palette.text))
-                            .child(run.result.model.clone()),
+            let run_rows = suite
+                .runs
+                .iter()
+                .map(|run| {
+                    let result = &run.result;
+                    let tone = if result.accuracy >= 0.90 {
+                        Tone::Success
+                    } else if result.accuracy >= 0.75 {
+                        Tone::Warning
+                    } else {
+                        Tone::Danger
+                    };
+                    Row::new(
+                        run.file.clone(),
+                        [
+                            Cell::Text(result.model.clone().into()),
+                            Cell::Text(result.backend.clone().into()),
+                            Cell::Figure(
+                                format!("{}/{}", result.correct, result.n).into(),
+                                result.correct as f64,
+                                Tone::Neutral,
+                            ),
+                            Cell::Figure(
+                                format!("{:.0}%", result.accuracy * 100.0).into(),
+                                result.accuracy,
+                                tone,
+                            ),
+                            Cell::Figure(
+                                format!("{:.0} ms", result.latency_ms.p50).into(),
+                                result.latency_ms.p50,
+                                Tone::Neutral,
+                            ),
+                            Cell::Figure(
+                                format!("{:.0} ms", result.latency_ms.p95).into(),
+                                result.latency_ms.p95,
+                                Tone::Neutral,
+                            ),
+                            Cell::Text(result.host.clone().into()),
+                            Cell::Text(result.date.clone().into()),
+                        ],
                     )
-                    .child(
-                        div()
-                            .w(px(90.0))
-                            .text_size(px(11.0))
-                            .text_color(rgb(palette.muted))
-                            .child(run.result.backend.clone()),
-                    )
-                    .child(
-                        div()
-                            .w(px(80.0))
-                            .text_size(px(12.0))
-                            .text_color(rgb(palette.text))
-                            .child(format!("{}/{}", run.result.correct, run.result.n)),
-                    )
-                    .child(
-                        div()
-                            .w(px(80.0))
-                            .text_size(px(12.0))
-                            .font_weight(gpui::FontWeight::BOLD)
-                            .text_color(rgb(acc_color))
-                            .child(acc_pct),
-                    )
-                    .child(
-                        div()
-                            .w(px(80.0))
-                            .text_size(px(11.0))
-                            .text_color(rgb(palette.muted))
-                            .child(format!("{:.0} ms", run.result.latency_ms.p50)),
-                    )
-                    .child(
-                        div()
-                            .w(px(80.0))
-                            .text_size(px(11.0))
-                            .text_color(rgb(palette.muted))
-                            .child(format!("{:.0} ms", run.result.latency_ms.p95)),
-                    )
-                    .child(
-                        div()
-                            .w(px(110.0))
-                            .text_size(px(11.0))
-                            .text_color(rgb(palette.muted))
-                            .child(run.result.host.clone()),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_size(px(11.0))
-                            .text_color(rgb(palette.muted))
-                            .child(run.result.date.clone()),
-                    )
-                    .into_any_element()
-            });
-
-            let runs_table_header = div()
-                .flex()
-                .items_center()
-                .py(px(4.0))
-                .px(px(8.0))
-                .border_b_1()
-                .border_color(rgba(palette.border))
-                .text_size(px(10.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(rgb(palette.muted))
-                .child(div().w(px(180.0)).child("MODEL"))
-                .child(div().w(px(90.0)).child("BACKEND"))
-                .child(div().w(px(80.0)).child("CORRECT"))
-                .child(div().w(px(80.0)).child("ACCURACY"))
-                .child(div().w(px(80.0)).child("P50"))
-                .child(div().w(px(80.0)).child("P95"))
-                .child(div().w(px(110.0)).child("HOST"))
-                .child(div().flex_1().child("DATE"));
+                })
+                .collect::<Vec<_>>();
+            let runs_table = DataTable::new(
+                format!("benchmark-runs-{}", suite.name),
+                [
+                    Column::new("model", "MODEL"),
+                    Column::new("backend", "BACKEND"),
+                    Column::new("correct", "CORRECT").end(),
+                    Column::new("accuracy", "ACCURACY").end(),
+                    Column::new("p50", "P50").end(),
+                    Column::new("p95", "P95").end(),
+                    Column::new("host", "HOST"),
+                    Column::new("date", "DATE"),
+                ],
+            )
+            .rows(run_rows);
 
             // Per-case matrix table
             let case_rows = suite.case_ids.iter().map(|case_id| {
@@ -220,17 +181,7 @@ impl ResearchPage {
                                 .child(format!("{} runs evaluated", suite.runs.len())),
                         ),
                 )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .bg(rgba(palette.surface))
-                        .rounded(px(6.0))
-                        .border_1()
-                        .border_color(rgba(palette.border))
-                        .child(runs_table_header)
-                        .children(run_rows),
-                )
+                .child(runs_table)
                 .child(
                     div()
                         .flex()

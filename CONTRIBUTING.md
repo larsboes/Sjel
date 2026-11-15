@@ -126,7 +126,9 @@ default cache for ordinary verification rather than creating a target directory 
 
 ### Other checks
 
-- `tools/maintenance --json` inventories tracked maintenance inputs offline. Add `--unused`,
+- `tools/maintenance --json` inventories tracked maintenance inputs offline. Add `--overlay`
+  to include the configured private repository in a separate local report. Bun runs freshness
+  checks for tracked Bun and npm lockfile trees, including workspace packages. Add `--unused`,
   `--freshness` or `--licenses` for optional read-only analyzers. Missing requested coverage
   exits 2; license inventory covers the current Rust host target and is not legal approval.
 - `sjel gates` and `sjel test` replay CI's repo gates and Bun job from the workflow file.

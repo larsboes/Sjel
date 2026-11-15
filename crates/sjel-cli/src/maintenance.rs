@@ -11,8 +11,9 @@ use semver::{Version, VersionReq};
 use serde::Serialize;
 use serde_json::{json, Value};
 
-const HELP: &str = "sjel maintenance [--json] [--unused] [--freshness] [--licenses]\n\
-    Inventory tracked workspaces, Bun projects, API contracts and stale-path candidates.\n\
+const HELP: &str = "sjel maintenance [--json] [--overlay] [--unused] [--freshness] [--licenses]\n\
+    Inventory tracked workspaces, JavaScript projects, API contracts and stale-path candidates.\n\
+    --overlay    include the configured private overlay as a separate local report\n\
     --unused     run cargo-machete without fixes or Cargo metadata\n\
     --freshness  query crates.io and run Bun outdated; change no manifests or lockfiles\n\
     --licenses   run cargo-deny license inventory offline for the current Rust host\n\
@@ -27,6 +28,8 @@ struct Report {
     path_candidates: Vec<Value>,
     dependencies: Vec<Dependency>,
     analyses: Vec<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    overlay: Option<Box<Report>>,
 }
 
 #[derive(Serialize)]
@@ -200,21 +203,35 @@ fn inventory(root: &Path, files: &[String]) -> Result<Report, String> {
         plans: Vec::new(),
         path_candidates: Vec::new(),
         analyses: Vec::new(),
+        overlay: None,
     };
     let path_pattern = Regex::new(r"`((?:crates|tools|apps|libs|capabilities|services|Packs|schemas|website|docs|research)/[A-Za-z0-9_./-]+)`")
         .map_err(|e| e.to_string())?;
     for file in files {
-        if file.ends_with("/package.json")
-            && files.contains(&file.replace("package.json", "bun.lock"))
+        if Path::new(file)
+            .file_name()
+            .is_some_and(|name| name == "package.json")
+            && Path::new(file).parent().unwrap().ancestors().any(|dir| {
+                ["bun.lock", "bun.lockb", "package-lock.json"]
+                    .iter()
+                    .any(|lock| files.contains(&dir.join(lock).to_string_lossy().into_owned()))
+            })
         {
-            report
-                .bun_projects
-                .push(file.trim_end_matches("/package.json").into());
+            report.bun_projects.push(
+                Path::new(file)
+                    .parent()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            );
         }
         if file.starts_with("crates/") && file.ends_with("-api/Cargo.toml") {
             report.api_contracts.push(file.clone());
         }
-        if file == "PLAN.md" || (file.starts_with("docs/plans/") && file.ends_with(".md")) {
+        if file == "PLAN.md"
+            || ((file.starts_with("docs/plans/") || file.starts_with("plans/"))
+                && file.ends_with(".md"))
+        {
             let text = fs::read_to_string(root.join(file)).map_err(|e| e.to_string())?;
             report.plans.push((file.clone(), text.lines().count()));
             for (line, content) in text.lines().enumerate() {
@@ -338,10 +355,16 @@ pub fn run(root: &Path, args: &[String]) -> ExitCode {
         println!("{HELP}");
         return ExitCode::SUCCESS;
     }
-    if args
-        .iter()
-        .any(|a| !["--json", "--unused", "--freshness", "--licenses"].contains(&a.as_str()))
-    {
+    if args.iter().any(|a| {
+        ![
+            "--json",
+            "--overlay",
+            "--unused",
+            "--freshness",
+            "--licenses",
+        ]
+        .contains(&a.as_str())
+    }) {
         eprintln!("{HELP}");
         return ExitCode::from(2);
     }
@@ -353,6 +376,56 @@ pub fn run(root: &Path, args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    analyze(root, args, &mut report);
+    if args.iter().any(|a| a == "--overlay") {
+        let overlay = crate::paths::Paths::from_env()
+            .and_then(|paths| {
+                paths
+                    .overlay_root
+                    .ok_or_else(|| "no overlay configured".to_owned())
+            })
+            .and_then(|path| {
+                if path.canonicalize().map_err(|e| e.to_string())?
+                    == root.canonicalize().map_err(|e| e.to_string())?
+                {
+                    return Err("overlay resolves to the public checkout".to_owned());
+                }
+                let files = tracked(&path)?;
+                let mut overlay = inventory(&path, &files)?;
+                analyze(&path, args, &mut overlay);
+                Ok(overlay)
+            });
+        match overlay {
+            Ok(overlay) => report.overlay = Some(Box::new(overlay)),
+            Err(error) => report.analyses.push(json!({
+                "analyzer": "overlay", "status": "failed", "error": error
+            })),
+        }
+    }
+    let incomplete = incomplete(&report);
+    if args.iter().any(|a| a == "--json") {
+        match serde_json::to_string_pretty(&report) {
+            Ok(text) => println!("{text}"),
+            Err(e) => {
+                eprintln!("maintenance: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    } else {
+        print_report(&report);
+        if let Some(overlay) = &report.overlay {
+            println!("Private overlay (local report):");
+            print_report(overlay);
+        }
+    }
+    if incomplete {
+        ExitCode::from(2)
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+fn analyze(root: &Path, args: &[String], report: &mut Report) {
     if args.iter().any(|a| a == "--unused") {
         for workspace in &report.workspaces {
             let dir = Path::new(workspace).parent().unwrap();
@@ -370,7 +443,7 @@ pub fn run(root: &Path, args: &[String]) -> ExitCode {
         }
     }
     if args.iter().any(|a| a == "--freshness") {
-        if let Err(error) = freshness(&mut report, root) {
+        if let Err(error) = freshness(report, root) {
             report
                 .analyses
                 .push(json!({"analyzer": "freshness", "status": "failed", "error": error}));
@@ -398,41 +471,33 @@ pub fn run(root: &Path, args: &[String]) -> ExitCode {
             None => report.analyses.push(json!({"analyzer": "licenses", "status": "unavailable", "error": "Rust host target could not be determined"})),
         }
     }
-    let incomplete = report.analyses.iter().any(|a| a["status"] != "reported");
-    if args.iter().any(|a| a == "--json") {
-        match serde_json::to_string_pretty(&report) {
-            Ok(text) => println!("{text}"),
-            Err(e) => {
-                eprintln!("maintenance: {e}");
-                return ExitCode::from(2);
-            }
-        }
-    } else {
-        println!(
-            "{} workspaces, {} Bun projects, {} API contracts",
-            report.workspaces.len(),
-            report.bun_projects.len(),
-            report.api_contracts.len()
-        );
-        println!(
-            "{} plan lines; {} unresolved path candidates (review context before editing)",
-            report.plans.iter().map(|p| p.1).sum::<usize>(),
-            report.path_candidates.len()
-        );
-        for row in &report.path_candidates {
-            println!("{}:{} {}", row["document"], row["line"], row["path"]);
-        }
-        for result in &report.analyses {
-            println!("{result}");
-        }
-        if report.analyses.is_empty() {
-            println!("Offline inventory; unused dependencies and freshness were not checked.");
-        }
+}
+
+fn incomplete(report: &Report) -> bool {
+    report.analyses.iter().any(|a| a["status"] != "reported")
+        || report.overlay.as_deref().is_some_and(incomplete)
+}
+
+fn print_report(report: &Report) {
+    println!(
+        "{} workspaces, {} JavaScript projects, {} API contracts",
+        report.workspaces.len(),
+        report.bun_projects.len(),
+        report.api_contracts.len()
+    );
+    println!(
+        "{} plan lines; {} unresolved path candidates (review context before editing)",
+        report.plans.iter().map(|p| p.1).sum::<usize>(),
+        report.path_candidates.len()
+    );
+    for row in &report.path_candidates {
+        println!("{}:{} {}", row["document"], row["line"], row["path"]);
     }
-    if incomplete {
-        ExitCode::from(2)
-    } else {
-        ExitCode::SUCCESS
+    for result in &report.analyses {
+        println!("{result}");
+    }
+    if report.analyses.is_empty() {
+        println!("Offline inventory; unused dependencies and freshness were not checked.");
     }
 }
 
@@ -468,6 +533,11 @@ mod tests {
             ),
             ("Packs/demo/package.json", "{}"),
             ("Packs/demo/bun.lock", "{}"),
+            ("apps/web/package.json", "{}"),
+            ("apps/web/package-lock.json", "{}"),
+            ("apps/web/apps/child/package.json", "{}"),
+            ("unlocked/package.json", "{}"),
+            ("plans/private.md", "An open `apps/missing` migration.\n"),
             (
                 "PLAN.md",
                 "Current `crates/missing/src/lib.rs`.\nHistorical `libs/retired`.\n",
@@ -486,9 +556,19 @@ mod tests {
         let report = inventory(&root, &files).unwrap();
         assert_eq!(report.workspaces.len(), 2);
         assert_eq!(report.api_contracts.len(), 1);
-        assert_eq!(report.bun_projects, ["Packs/demo"]);
-        assert_eq!(report.path_candidates.len(), 2);
-        assert_eq!(report.path_candidates[1]["historical_context"], true);
+        assert_eq!(
+            report.bun_projects,
+            ["Packs/demo", "apps/web", "apps/web/apps/child"]
+        );
+        assert_eq!(report.path_candidates.len(), 3);
+        assert_eq!(
+            report
+                .path_candidates
+                .iter()
+                .find(|row| row["path"] == "libs/retired")
+                .unwrap()["historical_context"],
+            true
+        );
         let root_dep = report
             .dependencies
             .iter()
@@ -502,6 +582,17 @@ mod tests {
         assert_eq!(root_dep.locked, ["1.0.0"]);
         assert_eq!(app_dep.locked, ["0.9.0"]);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn overlay_analyzer_failures_make_the_combined_report_incomplete() {
+        let mut report = inventory(Path::new("."), &[]).unwrap();
+        let mut overlay = inventory(Path::new("."), &[]).unwrap();
+        overlay.analyses.push(json!({"status": "unavailable"}));
+        report.overlay = Some(Box::new(overlay));
+        assert!(incomplete(&report));
+        report.overlay.as_mut().unwrap().analyses.clear();
+        assert!(!incomplete(&report));
     }
 
     #[test]

@@ -23,7 +23,7 @@
     "esbuild": "^0.28.1",
     "jsdom": "^29.1.1",
     "mini-css-extract-plugin": "^2.9.1",
-    "sass": "^1.108.1",
+    "sass": "^1.108.2",
     "sass-loader": "^16.0.1",
     "ts-loader": "^9.5.1",
     "ts-node": "^10.9.2",

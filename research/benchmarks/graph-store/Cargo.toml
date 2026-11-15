@@ -9,6 +9,6 @@ publish = false
 
 [dependencies]
 libsql = { version = "=0.10.0", default-features = false, features = ["core"] }
-grafeo = { version = "=0.6.0", default-features = false, features = ["cypher", "grafeo-file"] }
+grafeo = { version = "=0.6.2", default-features = false, features = ["cypher", "grafeo-file"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "macros"] }

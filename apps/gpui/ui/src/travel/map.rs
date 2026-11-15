@@ -1823,7 +1823,7 @@ mod tests {
     /// input wiring, not the network. `map_enabled` false is the same state as before the
     /// operator presses Load map, and it still draws the map element and its handlers.
     fn map_view(cx: &mut TestAppContext) -> (Entity<Travel>, &mut VisualTestContext) {
-        cx.update(gpui_kit::init);
+        crate::test_support::init(cx);
         let slot: Rc<RefCell<Option<Entity<Travel>>>> = Rc::new(RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {

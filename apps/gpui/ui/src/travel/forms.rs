@@ -5,13 +5,9 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, SharedString, Subscription, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, Focusable, SharedString,
+    Subscription, Window,
 };
-use gpui_kit::component::button::ButtonVariants;
-use gpui_kit::component::calendar::Date;
-use gpui_kit::component::date_picker::{DatePicker, DatePickerState};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::{
     shell::{self, Shell, ShellError},
     travel::{
@@ -24,6 +20,14 @@ use sjel_gpui_core::{
 };
 
 use super::Travel;
+use crate::ely::{
+    buttons::{Button, ButtonVariant, SegmentedControl},
+    forms::{
+        DatePicker, Form as ElyForm, FormError, FormField as ElyFormField, Input, InputEvent,
+        TextInput,
+    },
+    theme::ControlSize,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum FormKind {
@@ -37,20 +41,15 @@ pub(super) enum FormKind {
 }
 
 pub(super) enum FormField {
-    Text(Entity<InputState>),
-    Date(Entity<DatePickerState>),
+    Text(Entity<TextInput>),
+    Date(String),
 }
 
 impl FormField {
     fn value(&self, cx: &gpui::App) -> String {
         match self {
-            Self::Text(input) => input.read(cx).value().to_string(),
-            Self::Date(picker) => picker
-                .read(cx)
-                .date_time()
-                .start()
-                .map(|dt| dt.date().format("%Y-%m-%d").to_string())
-                .unwrap_or_default(),
+            Self::Text(input) => input.read(cx).text().to_string(),
+            Self::Date(date) => date.clone(),
         }
     }
 }
@@ -88,17 +87,13 @@ impl Travel {
     ) {
         self.open_route(TravelRoute::Trips, cx);
         self.open_form(FormKind::Trip(None), window, cx);
-        if let Some(form) = &self.form {
+        if let Some(form) = &mut self.form {
             for index in [3, 4] {
-                match &form.fields[index].1 {
-                    FormField::Date(picker) => {
-                        picker.update(cx, |picker, cx| {
-                            picker.set_date(Date::Single(Some(day)), window, cx);
-                        });
-                    }
+                match &mut form.fields[index].1 {
+                    FormField::Date(date) => *date = day.format("%Y-%m-%d").to_string(),
                     FormField::Text(input) => {
                         let formatted = day.format("%Y-%m-%d").to_string();
-                        input.update(cx, |input, cx| input.set_value(formatted, window, cx));
+                        input.update(cx, |input, cx| input.set_text(formatted, cx));
                     }
                 }
             }
@@ -280,33 +275,31 @@ impl Travel {
         let is_date_field = |label: &str| {
             matches!(
                 label,
-                "Start date" | "End date" | "Day" | "Check-in" | "Check-out" | "Date"
+                "Start"
+                    | "End"
+                    | "Day"
+                    | "Check-in"
+                    | "Check-out"
+                    | "Date"
+                    | "Free cancellation until"
             )
         };
         let mut fields = Vec::new();
         let mut subscriptions = Vec::new();
         for ((label, placeholder), value) in labels.into_iter().zip(values) {
             if is_date_field(label) {
-                let parsed_date = chrono::NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok();
-                let picker = cx.new(|cx| {
-                    let mut picker = DatePickerState::new(window, cx).date_format("%Y-%m-%d");
-                    if let Some(d) = parsed_date {
-                        picker.set_date(Date::Single(Some(d)), window, cx);
-                    }
-                    picker
-                });
-                fields.push((label, FormField::Date(picker)));
+                fields.push((label, FormField::Date(value)));
             } else {
                 let input = cx.new(|cx| {
-                    let mut state = InputState::new(window, cx).placeholder(placeholder);
-                    state.set_value(value, window, cx);
+                    let mut state = TextInput::new(window, cx).placeholder(placeholder);
+                    state.set_text(value, cx);
                     state
                 });
                 subscriptions.push(cx.subscribe_in(
                     &input,
                     window,
                     |view, _, event, window, cx| {
-                        if let InputEvent::PressEnter { .. } = event {
+                        if let InputEvent::Submit = event {
                             view.save_form(window, cx);
                         }
                     },
@@ -315,7 +308,7 @@ impl Travel {
             }
         }
         if let Some((_, FormField::Text(first))) = fields.first() {
-            first.update(cx, |input, cx| input.focus(window, cx));
+            first.update(cx, |input, cx| window.focus(&input.focus_handle(cx), cx));
         }
         self.form = Some(Form {
             kind,
@@ -643,19 +636,30 @@ impl Travel {
                     .font_weight(gpui::FontWeight::MEDIUM)
                     .child(title),
             );
-        for (label, field) in &form.fields {
+        for (index, (label, field)) in form.fields.iter().enumerate() {
             let control = match field {
-                FormField::Text(input) => Input::new(input).small().into_any_element(),
-                FormField::Date(picker) => DatePicker::new(picker).small().into_any_element(),
+                FormField::Text(input) => {
+                    Input::new(input).size(ControlSize::Sm).into_any_element()
+                }
+                FormField::Date(date) => {
+                    let view = cx.weak_entity();
+                    DatePicker::new(("travel-form-date", index), date.parse().ok())
+                        .size(ControlSize::Sm)
+                        .on_change(move |date, _, cx| {
+                            let _ = view.update(cx, |view, cx| {
+                                if let Some(form) = &mut view.form {
+                                    if let FormField::Date(value) = &mut form.fields[index].1 {
+                                        *value = date.to_string();
+                                    }
+                                }
+                                cx.notify();
+                            });
+                        })
+                        .into_any_element()
+                }
             };
-            card = card.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(div().text_xs().text_color(rgb(palette.muted)).child(*label))
-                    .child(control),
-            );
+            card =
+                card.child(ElyFormField::new(("travel-form-field", index), *label).child(control));
         }
         if matches!(form.kind, FormKind::Stage(_)) {
             card = card
@@ -683,30 +687,34 @@ impl Travel {
             );
         }
         Some(
-            card.when_some(form.error.clone(), |card, why| {
-                card.child(div().text_xs().text_color(rgb(palette.red)).child(why))
-            })
-            .child(
-                div()
-                    .flex()
-                    .gap_2()
+            ElyForm::new("travel-form")
+                .child(
+                    card.when_some(form.error.clone(), |card, why| {
+                        card.child(FormError::new("travel-form-error", why))
+                    })
                     .child(
-                        self.button("travel-form-save")
-                            .primary()
-                            .label(if form.saving { "Saving…" } else { "Save" })
-                            .disabled(form.saving)
-                            .on_click(
-                                cx.listener(|view, _, window, cx| view.save_form(window, cx)),
+                        div()
+                            .flex()
+                            .gap_2()
+                            .child(
+                                Button::new(
+                                    "travel-form-save",
+                                    if form.saving { "Saving…" } else { "Save" },
+                                )
+                                .primary()
+                                .disabled(form.saving)
+                                .on_click(
+                                    cx.listener(|view, _, window, cx| view.save_form(window, cx)),
+                                ),
+                            )
+                            .child(
+                                Button::new("travel-form-cancel", "Cancel")
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(cx.listener(|view, _, _, cx| view.close_form(cx))),
                             ),
-                    )
-                    .child(
-                        self.button("travel-form-cancel")
-                            .ghost()
-                            .label("Cancel")
-                            .on_click(cx.listener(|view, _, _, cx| view.close_form(cx))),
                     ),
-            )
-            .into_any_element(),
+                )
+                .into_any_element(),
         )
     }
 
@@ -718,23 +726,20 @@ impl Travel {
         set: fn(&mut Form, &'static str),
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let mut row = div().flex().flex_wrap().gap_1();
+        let mut control = SegmentedControl::new(id, on).size(ControlSize::Sm);
         for (key, label) in options {
-            let key: &'static str = key;
-            row = row.child(
-                self.button(SharedString::from(format!("{id}-{key}")))
-                    .label(*label)
-                    .when(key == on, |button| button.primary())
-                    .when(key != on, |button| button.ghost())
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        if let Some(form) = view.form.as_mut() {
-                            set(form, key);
-                        }
-                        cx.notify();
-                    })),
-            );
+            control = control.segment(*key, *label, None);
         }
-        row.into_any_element()
+        control
+            .on_change(cx.listener(move |view, value: &SharedString, _, cx| {
+                if let Some((key, _)) = options.iter().find(|(key, _)| *key == value.as_ref()) {
+                    if let Some(form) = view.form.as_mut() {
+                        set(form, key);
+                    }
+                    cx.notify();
+                }
+            }))
+            .into_any_element()
     }
 
     /// A button that opens `kind`'s form, absent when this page cannot write.
@@ -750,7 +755,7 @@ impl Travel {
             form.kind == kind
                 || (matches!(&kind, FormKind::Trip(_)) && matches!(&form.kind, FormKind::Trip(_)))
         });
-        let button = self.button(id).label(label).disabled(open);
+        let button = Button::new(id, label).disabled(open);
         let button = if matches!(&kind, FormKind::Trip(None)) {
             button.primary()
         } else {
@@ -789,13 +794,15 @@ impl Travel {
             _ => ("Remove", "Press again to remove"),
         };
         Some(
-            self.button(SharedString::from(format!("remove-{key}")))
-                .ghost()
-                .label(if armed { armed_label } else { label })
-                .on_click(
-                    cx.listener(move |view, _, window, cx| view.remove(target.clone(), window, cx)),
-                )
-                .into_any_element(),
+            Button::new(
+                SharedString::from(format!("remove-{key}")),
+                if armed { armed_label } else { label },
+            )
+            .variant(ButtonVariant::Ghost)
+            .on_click(
+                cx.listener(move |view, _, window, cx| view.remove(target.clone(), window, cx)),
+            )
+            .into_any_element(),
         )
     }
 }
@@ -826,4 +833,46 @@ enum Work {
     ItemFields(String, String, serde_json::Value),
     RemoveItem(String, String),
     Stages(String, StageEdit),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{size, TestAppContext};
+
+    #[gpui::test]
+    fn trip_fields_keep_calendar_dates_and_submit_validation(cx: &mut TestAppContext) {
+        let (view, cx) =
+            crate::test_support::mount_root(cx, Some(size(px(1100.), px(900.))), |window, cx| {
+                let shell = Arc::new(Shell::new("http://127.0.0.1:1").unwrap());
+                let mut view = Travel::new(Some(Source::Shell(shell)), crate::Density::Desktop, cx);
+                view.loaded = true;
+                view.map_enabled = false;
+                view.trip_drafts_loading = true;
+                view.plan_calendar_day(
+                    chrono::NaiveDate::from_ymd_opt(2026, 12, 10).unwrap(),
+                    window,
+                    cx,
+                );
+                view
+            });
+        view.read_with(cx, |view, cx| {
+            let form = view.form.as_ref().unwrap();
+            assert!(matches!(form.fields[3].1, FormField::Date(_)));
+            assert!(matches!(form.fields[4].1, FormField::Date(_)));
+            assert_eq!(form.value(3, cx), "2026-12-10");
+            assert_eq!(form.value(4, cx), "2026-12-10");
+        });
+        cx.simulate_keystrokes("enter");
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| {
+            let form = view.form.as_ref().unwrap();
+            assert!(form.error.is_some());
+            assert!(!form.saving);
+        });
+        cx.simulate_input("Winter trip");
+        view.read_with(cx, |view, cx| {
+            assert_eq!(view.form.as_ref().unwrap().value(0, cx), "Winter trip");
+        });
+    }
 }

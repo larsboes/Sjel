@@ -3,14 +3,9 @@
 use std::time::Duration;
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, SharedString, Subscription, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, Focusable, SharedString,
+    Subscription, Window,
 };
-use gpui_kit::component::button::ButtonVariants;
-use gpui_kit::component::calendar::Date;
-use gpui_kit::component::date_picker::{DatePicker, DatePickerEvent, DatePickerState};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::time_field::{TimeField, TimeFieldEvent, TimeFieldState};
-use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::shell;
 use sjel_gpui_core::travel::connections::{
     self, Journey, Query, Rank, Sort, SplitResult, Station, PRIORITIES,
@@ -18,6 +13,13 @@ use sjel_gpui_core::travel::connections::{
 use sjel_gpui_core::travel::TravelRoute;
 
 use super::Travel;
+use crate::ely::{
+    buttons::{Button, ButtonVariant, SegmentedControl},
+    feedback::InlineMessage,
+    forms::{DatePicker, FormField, Input, InputEvent, TextInput, TimePicker},
+    primitives::Severity,
+    theme::ControlSize,
+};
 
 /// How long typing pauses before a station name is looked up.
 const SUGGEST_DEBOUNCE: Duration = Duration::from_millis(250);
@@ -30,7 +32,7 @@ enum Tab {
 
 /// A station field: the text typed, the station picked for it, and what transit suggests.
 struct StationField {
-    input: Entity<InputState>,
+    input: Entity<TextInput>,
     picked: Option<Station>,
     suggestions: Vec<Station>,
 }
@@ -44,9 +46,9 @@ enum End {
 pub(super) struct Connections {
     from: StationField,
     to: StationField,
-    date: Entity<DatePickerState>,
-    time: Entity<TimeFieldState>,
-    phrase: Entity<InputState>,
+    date: String,
+    time: String,
+    phrase: Entity<TextInput>,
     _subscriptions: Vec<Subscription>,
     priority: Option<&'static str>,
     sort: Sort,
@@ -72,27 +74,15 @@ impl Travel {
                      window: &mut Window,
                      cx: &mut Context<Self>| {
             cx.new(|cx| {
-                let mut state = InputState::new(window, cx).placeholder(placeholder);
-                state.set_value(value, window, cx);
+                let mut state = TextInput::new(window, cx).placeholder(placeholder);
+                state.set_text(value, cx);
                 state
             })
         };
         let from = input("From station", String::new(), window, cx);
         let to = input("To station", String::new(), window, cx);
-        let initial_date = chrono::NaiveDate::parse_from_str(&connections::tomorrow(), "%Y-%m-%d")
-            .unwrap_or_else(|_| chrono::Local::now().date_naive());
-        let date = cx.new(|cx| {
-            let mut picker = DatePickerState::new(window, cx).date_format("%Y-%m-%d");
-            picker.set_date(Date::Single(Some(initial_date)), window, cx);
-            picker
-        });
-        let time = cx.new(|cx| {
-            let mut field = TimeFieldState::new(window, cx);
-            if let Ok(t) = chrono::NaiveTime::parse_from_str("10:00", "%H:%M") {
-                field.set_time(t, window, cx);
-            }
-            field
-        });
+        let date = connections::tomorrow();
+        let time = "10:00".to_owned();
         let phrase = input(
             "or say it: cheapest, direct, schnell und zuverlässig",
             String::new(),
@@ -101,42 +91,33 @@ impl Travel {
         );
         let station_events = |end: End| {
             move |view: &mut Travel,
-                  input: &Entity<InputState>,
+                  input: &Entity<TextInput>,
                   event: &InputEvent,
                   window: &mut Window,
                   cx: &mut Context<Travel>| match event {
-                InputEvent::Change => {
-                    let text = input.read(cx).value().trim().to_owned();
+                InputEvent::Changed => {
+                    let text = input.read(cx).text().trim().to_owned();
                     view.station_typed(end, text, cx);
                 }
-                InputEvent::PressEnter { .. } => view.station_enter(end, window, cx),
+                InputEvent::Submit => view.station_enter(end, window, cx),
                 _ => {}
             }
         };
         let search_on_enter = |view: &mut Travel,
-                               _: &Entity<InputState>,
+                               _: &Entity<TextInput>,
                                event: &InputEvent,
                                window: &mut Window,
                                cx: &mut Context<Travel>| {
-            if let InputEvent::PressEnter { .. } = event {
+            if let InputEvent::Submit = event {
                 view.search_connections(window, cx);
             }
         };
-        let date_sub =
-            cx.subscribe_in(&date, window, |view, _, _: &DatePickerEvent, window, cx| {
-                view.search_connections(window, cx);
-            });
-        let time_sub = cx.subscribe_in(&time, window, |view, _, _: &TimeFieldEvent, window, cx| {
-            view.search_connections(window, cx);
-        });
         let subscriptions = vec![
             cx.subscribe_in(&from, window, station_events(End::From)),
             cx.subscribe_in(&to, window, station_events(End::To)),
-            date_sub,
-            time_sub,
             cx.subscribe_in(&phrase, window, search_on_enter),
         ];
-        from.update(cx, |input, cx| input.focus(window, cx));
+        from.update(cx, |input, cx| window.focus(&input.focus_handle(cx), cx));
         let field = |input| StationField {
             input,
             picked: None,
@@ -196,7 +177,7 @@ impl Travel {
             let current = this
                 .update(cx, |view, cx| {
                     view.field(end)
-                        .is_some_and(|f| f.input.read(cx).value().trim() == text)
+                        .is_some_and(|f| f.input.read(cx).text().trim() == text)
                 })
                 .unwrap_or(false);
             if !current {
@@ -206,7 +187,7 @@ impl Travel {
             let found = shell::run(async move { source.stations(&asked).await }).await;
             let _ = this.update(cx, |view, cx| {
                 let Some(field) = view.field(end) else { return };
-                if field.input.read(cx).value().trim() != text {
+                if field.input.read(cx).text().trim() != text {
                     return;
                 }
                 match found {
@@ -230,14 +211,14 @@ impl Travel {
         &mut self,
         end: End,
         station: Station,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let Some(field) = self.field(end) else { return };
         let input = field.input.clone();
         field.suggestions.clear();
         field.picked = Some(station.clone());
-        input.update(cx, |input, cx| input.set_value(station.name, window, cx));
+        input.update(cx, |input, cx| input.set_text(station.name, cx));
         cx.notify();
     }
 
@@ -263,12 +244,12 @@ impl Travel {
             _ => None,
         };
         match next {
-            Some(input) => input.update(cx, |input, cx| input.focus(window, cx)),
+            Some(input) => input.update(cx, |input, cx| window.focus(&input.focus_handle(cx), cx)),
             None => self.search_connections(window, cx),
         }
     }
 
-    fn swap_stations(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn swap_stations(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let Some(page) = self.connections.as_mut() else {
             return;
         };
@@ -277,11 +258,11 @@ impl Travel {
         page.to.suggestions.clear();
         let (from, to) = (page.from.input.clone(), page.to.input.clone());
         let (a, b) = (
-            from.read(cx).value().to_string(),
-            to.read(cx).value().to_string(),
+            from.read(cx).text().to_string(),
+            to.read(cx).text().to_string(),
         );
-        from.update(cx, |input, cx| input.set_value(b, window, cx));
-        to.update(cx, |input, cx| input.set_value(a, window, cx));
+        from.update(cx, |input, cx| input.set_text(b, cx));
+        to.update(cx, |input, cx| input.set_text(a, cx));
         cx.notify();
     }
 
@@ -296,7 +277,7 @@ impl Travel {
         };
         page.priority = priority;
         let phrase = page.phrase.clone();
-        phrase.update(cx, |input, cx| input.set_value("", window, cx));
+        phrase.update(cx, |input, cx| input.set_text("", cx));
         self.search_connections(window, cx);
     }
 
@@ -317,22 +298,14 @@ impl Travel {
             cx.notify();
             return;
         };
-        let date_str = page
-            .date
-            .read(cx)
-            .date_time()
-            .start()
-            .map(|dt| dt.date().format("%Y-%m-%d").to_string())
-            .unwrap_or_else(connections::tomorrow);
-        let time_str = page.time.read(cx).time().format("%H:%M").to_string();
         let query = Query {
             from,
             to,
-            date: date_str,
-            time: time_str,
+            date: page.date.clone(),
+            time: page.time.clone(),
             rank: Rank {
                 priority: page.priority,
-                phrase: page.phrase.read(cx).value().to_string(),
+                phrase: page.phrase.read(cx).text().to_string(),
             },
         };
         if let Err(error) = query.when() {
@@ -386,13 +359,15 @@ impl Travel {
                 .children(field.suggestions.iter().enumerate().map(|(i, station)| {
                     let station = station.clone();
                     let name = station.name.clone();
-                    self.button(SharedString::from(format!("station-{}-{i}", end as u8)))
-                        .ghost()
-                        .small()
-                        .label(name)
-                        .on_click(cx.listener(move |view, _, window, cx| {
-                            view.pick_station(end, station.clone(), window, cx)
-                        }))
+                    Button::new(
+                        SharedString::from(format!("station-{}-{i}", end as u8)),
+                        name,
+                    )
+                    .variant(ButtonVariant::Ghost)
+                    .size(ControlSize::Sm)
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        view.pick_station(end, station.clone(), window, cx)
+                    }))
                 }))
         };
         let station = |end: End, field: &StationField, cx: &mut Context<Self>| {
@@ -402,9 +377,21 @@ impl Travel {
                 .flex()
                 .flex_col()
                 .gap_1()
-                .child(Input::new(&field.input).small())
+                .child(
+                    FormField::new(
+                        if end == End::From {
+                            "connection-from"
+                        } else {
+                            "connection-to"
+                        },
+                        if end == End::From { "From" } else { "To" },
+                    )
+                    .child(Input::new(&field.input).size(ControlSize::Sm)),
+                )
                 .child(suggestions(end, field, cx))
         };
+        let date_view = cx.weak_entity();
+        let time_view = cx.weak_entity();
         let form = div()
             .flex()
             .flex_wrap()
@@ -412,28 +399,58 @@ impl Travel {
             .gap_2()
             .child(station(End::From, &page.from, cx))
             .child(
-                self.button("swap-stations")
-                    .ghost()
-                    .small()
-                    .label("⇄")
+                Button::new("swap-stations", "⇄")
+                    .variant(ButtonVariant::Ghost)
+                    .size(ControlSize::Sm)
                     .on_click(cx.listener(|view, _, window, cx| view.swap_stations(window, cx))),
             )
             .child(station(End::To, &page.to, cx))
-            .child(div().w(px(130.)).child(DatePicker::new(&page.date).small()))
-            .child(div().w(px(80.)).child(TimeField::new(&page.time).small()))
             .child(
-                self.button("search-connections")
-                    .small()
-                    .primary()
-                    .label(if page.searching {
+                div().w(px(130.)).child(
+                    FormField::new("connection-date-field", "Date").child(
+                        DatePicker::new("connection-date", page.date.parse().ok())
+                            .size(ControlSize::Sm)
+                            .on_change(move |date, window, cx| {
+                                let _ = date_view.update(cx, |view, cx| {
+                                    if let Some(page) = &mut view.connections {
+                                        page.date = date.to_string();
+                                    }
+                                    view.search_connections(window, cx);
+                                });
+                            }),
+                    ),
+                ),
+            )
+            .child(
+                div().w(px(80.)).child(
+                    FormField::new("connection-time-field", "Time").child(
+                        TimePicker::new("connection-time", page.time.parse().ok())
+                            .size(ControlSize::Sm)
+                            .on_change(move |time, window, cx| {
+                                let _ = time_view.update(cx, |view, cx| {
+                                    if let Some(page) = &mut view.connections {
+                                        page.time =
+                                            format!("{:02}:{:02}", time.hour(), time.minute());
+                                    }
+                                    view.search_connections(window, cx);
+                                });
+                            }),
+                    ),
+                ),
+            )
+            .child(
+                Button::new(
+                    "search-connections",
+                    if page.searching {
                         "Searching…"
                     } else {
                         "Search"
-                    })
-                    .disabled(page.searching)
-                    .on_click(
-                        cx.listener(|view, _, window, cx| view.search_connections(window, cx)),
-                    ),
+                    },
+                )
+                .size(ControlSize::Sm)
+                .primary()
+                .disabled(page.searching)
+                .on_click(cx.listener(|view, _, window, cx| view.search_connections(window, cx))),
             );
         let mut body = div()
             .flex()
@@ -448,31 +465,33 @@ impl Travel {
             )
             .child(form)
             .when_some(page.error.clone(), |el, error| {
-                el.child(div().text_sm().text_color(rgb(palette.red)).child(error))
+                el.child(InlineMessage::new(Severity::Danger, error))
             });
         let Some(journeys) = &page.journeys else {
             return body.into_any_element();
         };
-        let tab = |label: String, tab: Tab, cx: &mut Context<Self>| {
-            let active = page.tab == tab;
-            self.button(SharedString::from(format!("connections-tab-{}", tab as u8)))
-                .small()
-                .label(label)
-                .when(active, |b| b.primary())
-                .when(!active, |b| b.ghost())
-                .on_click(cx.listener(move |view, _, _, cx| {
-                    if let Some(page) = view.connections.as_mut() {
-                        page.tab = tab;
-                        cx.notify();
-                    }
-                }))
-        };
         body = body.child(
-            div()
-                .flex()
-                .gap_2()
-                .child(tab(format!("Direct ({})", journeys.len()), Tab::Direct, cx))
-                .child(tab("Split-ticket".into(), Tab::Split, cx)),
+            SegmentedControl::new(
+                "connection-results",
+                if page.tab == Tab::Direct {
+                    "direct"
+                } else {
+                    "split"
+                },
+            )
+            .size(ControlSize::Sm)
+            .segment("direct", format!("Direct ({})", journeys.len()), None)
+            .segment("split", "Split-ticket", None)
+            .on_change(cx.listener(|view, value: &SharedString, _, cx| {
+                if let Some(page) = &mut view.connections {
+                    page.tab = if value == "split" {
+                        Tab::Split
+                    } else {
+                        Tab::Direct
+                    };
+                    cx.notify();
+                }
+            })),
         );
         let content = match page.tab {
             Tab::Direct => self.direct(page, journeys, cx),
@@ -487,69 +506,54 @@ impl Travel {
         journeys: &[Journey],
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let palette = self.palette;
-        let sorts = div()
-            .flex()
-            .flex_wrap()
-            .gap_1()
-            .children(Sort::ALL.map(|sort| {
-                let active = page.sort == sort;
-                self.button(SharedString::from(format!("journey-sort-{}", sort.label())))
-                    .xsmall()
-                    .label(sort.label())
-                    .when(active, |b| b.primary())
-                    .when(!active, |b| b.ghost())
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        if let Some(page) = view.connections.as_mut() {
-                            page.sort = sort;
-                            cx.notify();
-                        }
-                    }))
+        let mut sorts =
+            SegmentedControl::new("journey-sort", page.sort.label()).size(ControlSize::Sm);
+        for sort in Sort::ALL {
+            sorts = sorts.segment(sort.label(), sort.label(), None);
+        }
+        let sorts = sorts.on_change(cx.listener(|view, value: &SharedString, _, cx| {
+            if let Some(sort) = Sort::ALL
+                .into_iter()
+                .find(|sort| sort.label() == value.as_ref())
+            {
+                if let Some(page) = &mut view.connections {
+                    page.sort = sort;
+                }
+                cx.notify();
+            }
+        }));
+        let mut priorities =
+            SegmentedControl::new("connection-priority", page.priority.unwrap_or("usual"))
+                .size(ControlSize::Sm)
+                .segment("usual", "My usual", None);
+        for (id, label, _) in PRIORITIES {
+            priorities = priorities.segment(id, label, None);
+        }
+        let priorities =
+            priorities.on_change(cx.listener(|view, value: &SharedString, window, cx| {
+                let priority = PRIORITIES
+                    .into_iter()
+                    .find(|(id, _, _)| *id == value.as_ref())
+                    .map(|(id, _, _)| id);
+                view.set_priority(priority, window, cx);
             }));
-        let usual = page.priority.is_none();
-        let mut presets = div()
+        let presets = div()
             .flex()
             .flex_wrap()
             .items_center()
             .gap_1()
+            .child(FormField::new("connection-priority-field", "Rank by").child(priorities))
             .child(
                 div()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child("Rank by"),
-            )
-            .child(
-                self.button("rank-usual")
-                    .xsmall()
-                    .label("My usual")
-                    .when(usual, |b| b.primary())
-                    .when(!usual, |b| b.ghost())
-                    .on_click(
-                        cx.listener(|view, _, window, cx| view.set_priority(None, window, cx)),
-                    ),
+                    .w(px(320.))
+                    .child(Input::new(&page.phrase).size(ControlSize::Sm)),
             );
-        for (id, label, _) in PRIORITIES {
-            let active = page.priority == Some(id);
-            presets = presets.child(
-                self.button(SharedString::from(format!("rank-{id}")))
-                    .xsmall()
-                    .label(label)
-                    .when(active, |b| b.primary())
-                    .when(!active, |b| b.ghost())
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.set_priority(Some(id), window, cx)
-                    })),
-            );
-        }
-        presets = presets.child(div().w(px(320.)).child(Input::new(&page.phrase).small()));
         let mut list = div().flex().flex_col().gap_1();
         if journeys.is_empty() {
-            list = list.child(
-                div()
-                    .text_sm()
-                    .text_color(rgb(palette.muted))
-                    .child("No connections at this time."),
-            );
+            list = list.child(InlineMessage::new(
+                Severity::Info,
+                "No connections at this time.",
+            ));
         }
         for (i, journey) in connections::ordered(journeys, page.sort)
             .into_iter()
@@ -738,12 +742,14 @@ impl Travel {
                 let journey_clone = journey.clone();
                 row = row.child(
                     div().flex().items_center().justify_end().pt_1().child(
-                        self.button(gpui::SharedString::from(format!("add-to-trip-{i}")))
-                            .ghost()
-                            .label(format!("Add to {}", plan.title))
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.add_journey_to_trip(&journey_clone, cx);
-                            })),
+                        Button::new(
+                            gpui::SharedString::from(format!("add-to-trip-{i}")),
+                            format!("Add to {}", plan.title),
+                        )
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.add_journey_to_trip(&journey_clone, cx);
+                        })),
                     ),
                 );
             }
@@ -869,9 +875,8 @@ impl Travel {
         } else {
             panel.child(
                 div().child(
-                    self.button("book-split")
-                        .small()
-                        .label("Book on bahn.de ↗")
+                    Button::new("book-split", "Book on bahn.de ↗")
+                        .size(ControlSize::Sm)
                         .on_click(|_, _, cx| cx.open_url("https://www.bahn.de")),
                 ),
             )
@@ -890,23 +895,63 @@ impl Travel {
         self.open_route(TravelRoute::Connections, cx);
         self.ensure_connections(window, cx);
         if let Some(page) = self.connections.as_mut() {
-            page.from.input.update(cx, |input, cx| {
-                input.set_value(from_name.clone(), window, cx)
-            });
+            page.from
+                .input
+                .update(cx, |input, cx| input.set_text(from_name.clone(), cx));
             page.to
                 .input
-                .update(cx, |input, cx| input.set_value(to_name.clone(), window, cx));
+                .update(cx, |input, cx| input.set_text(to_name.clone(), cx));
             if let Some(d) = date_str
                 .as_deref()
                 .and_then(|s| chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok())
             {
-                page.date.update(cx, |picker, cx| {
-                    picker.set_date(Date::Single(Some(d)), window, cx);
-                });
+                page.date = d.format("%Y-%m-%d").to_string();
             }
         }
         self.station_typed(End::From, from_name, cx);
         self.station_typed(End::To, to_name, cx);
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{size, TestAppContext};
+
+    #[gpui::test]
+    fn connection_input_and_result_segments_dispatch(cx: &mut TestAppContext) {
+        let (view, cx) =
+            crate::test_support::mount_root(cx, Some(size(px(1100.), px(800.))), |window, cx| {
+                let mut view = Travel::new(None, crate::Density::Desktop, cx);
+                view.loaded = true;
+                view.route = TravelRoute::Connections;
+                view.ensure_connections(window, cx);
+                view.connections.as_mut().unwrap().journeys = Some(vec![]);
+                view
+            });
+        cx.simulate_input("Bonn");
+        cx.simulate_keystrokes("enter");
+        cx.run_until_parked();
+        view.read_with(cx, |view, cx| {
+            let page = view.connections.as_ref().unwrap();
+            assert_eq!(page.from.input.read(cx).text(), "Bonn");
+            assert!(page.error.as_ref().unwrap().contains("Pick an origin"));
+            assert!(!page.searching);
+        });
+        let split = cx
+            .debug_bounds("segment split")
+            .expect("split-ticket segment");
+        cx.simulate_click(split.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.connections.as_ref().unwrap().tab, Tab::Split);
+        });
+        let direct = cx.debug_bounds("segment direct").expect("direct segment");
+        cx.simulate_click(direct.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.connections.as_ref().unwrap().tab, Tab::Direct);
+        });
     }
 }

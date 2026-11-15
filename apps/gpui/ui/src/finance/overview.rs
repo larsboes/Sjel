@@ -14,6 +14,7 @@ use sjel_gpui_core::shell::{
     ManualBalance, ManualBalanceUpdate, ShellError,
 };
 
+use crate::ely::charts::{BarChart, Series};
 use crate::primitives::{mono_num, stat_card, stat_strip, tone_chip};
 use crate::theme::Palette;
 
@@ -702,7 +703,6 @@ impl FinancePage {
 }
 
 const TREND_MONTHS: usize = 6;
-const TREND_BAR_HEIGHT: f32 = 96.;
 
 /// The six calendar months ending at the newest month in `trend`, oldest first.
 /// A month with no imported rows is `None`, not zero.
@@ -763,54 +763,44 @@ fn render_trend(trend: &[FinanceTrendPoint], currency: &str, palette: Palette) -
     if window.is_empty() {
         return div().into_any_element();
     }
-    let peak = window
-        .iter()
-        .filter_map(|(_, point)| *point)
-        .map(|point| point.income_cents.max(point.personal_spending_cents))
-        .max()
-        .unwrap_or(0)
-        .max(1);
-    let bar = |cents: i64, tone: u32| {
-        let height = (cents.max(0) as f32 / peak as f32 * TREND_BAR_HEIGHT).max(2.);
-        div()
-            .w(px(14.))
-            .h(px(height))
-            .rounded_t(px(3.))
-            .bg(rgb(tone))
-    };
+    let observed: Vec<_> = window.iter().filter_map(|(_, point)| *point).collect();
+    let currency_owned = currency.to_owned();
+    let chart = BarChart::new(
+        "finance-monthly-trend",
+        observed
+            .iter()
+            .map(|point| month_name(&point.month, "%b %Y")),
+    )
+    .series(Series::new(
+        "Income",
+        observed.iter().map(|point| point.income_cents as f64),
+    ))
+    .series(Series::new(
+        "Spending",
+        observed
+            .iter()
+            .map(|point| point.personal_spending_cents as f64),
+    ))
+    .format(move |cents| format_money(cents.round() as i64, &currency_owned))
+    .h(px(220.))
+    .w_full();
     let columns = window.into_iter().map(|(month, point)| {
         let short = month_name(&month, "%b");
-        let (bars, net) = match point {
+        let net = match point {
             Some(point) => {
                 let net = point.income_cents - point.personal_spending_cents;
-                (
-                    div()
-                        .flex()
-                        .items_end()
-                        .gap_1()
-                        .h(px(TREND_BAR_HEIGHT))
-                        .child(bar(point.income_cents, palette.green))
-                        .child(bar(point.personal_spending_cents, palette.red))
-                        .into_any_element(),
-                    mono_num(
-                        format_money(net, currency),
-                        if net >= 0 { palette.green } else { palette.red },
-                    )
-                    .text_xs()
-                    .into_any_element(),
+                mono_num(
+                    format_money(net, currency),
+                    if net >= 0 { palette.green } else { palette.red },
                 )
+                .text_xs()
+                .into_any_element()
             }
-            None => (
-                div()
-                    .h(px(TREND_BAR_HEIGHT))
-                    .flex()
-                    .items_end()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child("no rows")
-                    .into_any_element(),
-                div().text_xs().child(" ").into_any_element(),
-            ),
+            None => div()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child("no rows")
+                .into_any_element(),
         };
         div()
             .flex_1()
@@ -818,34 +808,17 @@ fn render_trend(trend: &[FinanceTrendPoint], currency: &str, palette: Palette) -
             .flex_col()
             .items_center()
             .gap_1()
-            .child(bars)
             .child(div().text_xs().text_color(rgb(palette.muted)).child(short))
             .child(net)
     });
-    let legend = |text: &'static str, tone: u32| {
-        div()
-            .flex()
-            .items_center()
-            .gap_1()
-            .child(div().size(px(8.)).rounded(px(2.)).bg(rgb(tone)))
-            .child(text)
-    };
     panel(palette)
+        .child(panel_title("LAST 6 MONTHS", palette))
+        .child(chart)
         .child(
             div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(panel_title("LAST 6 MONTHS", palette))
-                .child(
-                    div()
-                        .flex()
-                        .gap_3()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(legend("Income", palette.green))
-                        .child(legend("Spending", palette.red)),
-                ),
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child("Monthly net · months without imported rows are omitted from the chart"),
         )
         .child(div().flex().items_end().gap_2().children(columns))
         .into_any_element()
@@ -982,6 +955,48 @@ fn render_holdings(portfolio: &FinancePortfolio, palette: Palette) -> AnyElement
 #[cfg(test)]
 mod overview_tests {
     use super::*;
+    use gpui_kit::{Render, TestAppContext};
+
+    struct TrendPreview(Vec<FinanceTrendPoint>);
+
+    impl Render for TrendPreview {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(700.))
+                .child(render_trend(&self.0, "EUR", Palette::light()))
+        }
+    }
+
+    #[gpui_kit::test]
+    fn the_finance_trend_draws_with_gaps_zero_values_and_negative_net(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
+        let (view, cx) = cx.add_window_view(|_, _| {
+            TrendPreview(vec![
+                point("2026-01"),
+                FinanceTrendPoint {
+                    month: "2026-03".into(),
+                    income_cents: 0,
+                    personal_spending_cents: 12345,
+                },
+            ])
+        });
+        cx.run_until_parked();
+        let bounds = cx
+            .debug_bounds("chart-root")
+            .expect("Ely draws the finance chart");
+        assert!(bounds.size.width > px(0.));
+        assert_eq!(bounds.size.height, px(220.));
+        view.update(cx, |view, cx| {
+            view.0.clear();
+            cx.notify();
+        });
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("chart-root").is_none(),
+            "no trend draws no chart"
+        );
+    }
 
     fn point(month: &str) -> FinanceTrendPoint {
         FinanceTrendPoint {

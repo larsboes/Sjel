@@ -2,18 +2,17 @@
 use chrono::Local;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, SharedString, Window,
-};
+use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data;
+use crate::ely::charts::{LineChart, Series};
 use crate::ely::data_display::Tone;
 use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
 use crate::primitives::{list, note, section};
-use crate::theme::{tint, Palette};
+use crate::theme::Palette;
 use sjel_gpui_core::systems::{
     apply_summary, audit_needs_attention, dated_absences, storage_bytes, version_label, Severity,
-    StorageTrend, UpdateStatus, UpdateSurface,
+    StorageHistory, StorageTrend, UpdateStatus, UpdateSurface, TREND_WINDOW_HOURS,
 };
 
 use super::overview::bar;
@@ -179,7 +178,7 @@ impl SystemsPage {
 
                 rows.push(trend_row(
                     self.derived.storage_trend.as_ref(),
-                    self.history.value.as_ref().map_or(0, |h| h.retention_days),
+                    self.history.value.as_ref(),
                     palette,
                 ));
 
@@ -589,11 +588,16 @@ impl SystemsPage {
     }
 }
 
-pub(super) fn trend_row(trend: Option<&StorageTrend>, days: u32, palette: Palette) -> AnyElement {
+fn trend_row(
+    trend: Option<&StorageTrend>,
+    history: Option<&StorageHistory>,
+    palette: Palette,
+) -> AnyElement {
     let Some(trend) = trend else {
         return div().into_any_element();
     };
     if !trend.enough {
+        let days = history.map_or(0, |history| history.retention_days);
         return div()
             .text_xs()
             .text_color(rgb(palette.muted))
@@ -602,31 +606,26 @@ pub(super) fn trend_row(trend: Option<&StorageTrend>, days: u32, palette: Palett
             ))
             .into_any_element();
     }
-    let bars: Vec<AnyElement> = trend
-        .bars
-        .iter()
-        .map(|share| {
-            let height = (share * 24.0).max(2.0);
-            div()
-                .w(px(2.))
-                .h(px(height))
-                .rounded(px(1.))
-                .bg(rgba(tint(palette.accent, 0xaa)))
-                .into_any_element()
-        })
-        .collect();
+    let Some(history) = history else {
+        return div().into_any_element();
+    };
+    let samples = &history.samples[history.samples.len().saturating_sub(TREND_WINDOW_HOURS)..];
+    let chart = LineChart::new(
+        "systems-storage-history",
+        samples.iter().map(|sample| sample.hour.clone()),
+    )
+    .series(Series::new(
+        "Used",
+        samples.iter().map(|sample| sample.used as f64),
+    ))
+    .format(|bytes| storage_bytes(bytes.max(0.0).round() as u64))
+    .h(px(180.))
+    .w_full();
     div()
         .flex()
         .flex_col()
         .gap_1()
-        .child(
-            div()
-                .flex()
-                .items_end()
-                .gap(px(1.))
-                .h(px(24.))
-                .children(bars),
-        )
+        .child(chart)
         .child(
             div()
                 .text_xs()
@@ -637,4 +636,61 @@ pub(super) fn trend_row(trend: Option<&StorageTrend>, days: u32, palette: Palett
                 )),
         )
         .into_any_element()
+}
+
+#[cfg(test)]
+mod chart_tests {
+    use super::*;
+    use gpui_kit::{Render, TestAppContext};
+    use sjel_gpui_core::systems::StorageSample;
+
+    struct StoragePreview(StorageHistory);
+
+    impl Render for StoragePreview {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(px(700.)).child(trend_row(
+                self.0.trend().as_ref(),
+                Some(&self.0),
+                Palette::light(),
+            ))
+        }
+    }
+
+    #[gpui_kit::test]
+    fn storage_history_draws_after_two_samples(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
+        let (view, cx) = cx.add_window_view(|_, _| {
+            StoragePreview(StorageHistory {
+                samples: vec![
+                    StorageSample {
+                        hour: "2026-11-15T09:00:00Z".into(),
+                        used: 0,
+                        ..Default::default()
+                    },
+                    StorageSample {
+                        hour: "2026-11-15T10:00:00Z".into(),
+                        used: 1073741824,
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            })
+        });
+        cx.run_until_parked();
+        let bounds = cx
+            .debug_bounds("chart-root")
+            .expect("Ely draws storage history");
+        assert!(bounds.size.width > px(0.));
+        assert_eq!(bounds.size.height, px(180.));
+        view.update(cx, |view, cx| {
+            view.0.samples.truncate(1);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("chart-root").is_none(),
+            "one sample shows the history notice"
+        );
+    }
 }

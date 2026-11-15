@@ -1,6 +1,6 @@
 //! Capability backup contracts cards and views.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::backup::{format_age_seconds, format_bytes};
 use sjel_gpui_core::shell::BackupStatus;
@@ -194,18 +194,16 @@ impl BackupPage {
                                         .items_center()
                                         .gap_1()
                                         .child(
-                                            Button::new(format!("confirm-{}", cap_name))
-                                                .small()
-                                                .label("Stop & back up")
+                                            Button::new(format!("confirm-{}", cap_name), "Stop & back up")
+                                                .size(ControlSize::Sm)
                                                 .on_click(cx.listener(move |page, _, _, cx| {
                                                     page.trigger_backup(cap_name.clone(), None, cx);
                                                 })),
                                         )
                                         .child(
-                                            Button::new(format!("cancel-{}", b.capability))
-                                                .small()
-                                                .ghost()
-                                                .label("Cancel")
+                                            Button::new(format!("cancel-{}", b.capability), "Cancel")
+                                                .size(ControlSize::Sm)
+                                                .variant(ButtonVariant::Ghost)
                                                 .on_click(cx.listener(|page, _, _, cx| {
                                                     page.confirming_cold_copy = None;
                                                     cx.notify();
@@ -216,9 +214,8 @@ impl BackupPage {
                             } else {
                                 let cap_to_backup = cap_name.clone();
                                 Some(
-                                    Button::new(format!("backup-btn-{}", cap_name))
-                                        .small()
-                                        .label("Back up now")
+                                    Button::new(format!("backup-btn-{}", cap_name), "Back up now")
+                                        .size(ControlSize::Sm)
                                         .on_click(cx.listener(move |page, _, _, cx| {
                                             if holds_service {
                                                 page.confirming_cold_copy = Some(cap_to_backup.clone());

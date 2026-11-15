@@ -3,9 +3,9 @@
 pub mod row;
 pub mod types;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::InputState;
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::TextInput;
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, rgb, Context, Entity, IntoElement, SharedString, Window};
 
 use crate::data::{self, Busy, Remote, Repo};
@@ -27,7 +27,7 @@ pub struct Software {
     pub(crate) busy: Busy,
     /// The bundle id whose decision row is open.
     pub(crate) open: Option<String>,
-    pub(crate) note: Option<Entity<InputState>>,
+    pub(crate) note: Option<Entity<TextInput>>,
     pub(crate) filter: Filter,
 }
 
@@ -79,10 +79,10 @@ impl Software {
             self.open = Some(app.bundle_id.clone());
             let text = app.note.clone().unwrap_or_default();
             let input = cx.new(|cx| {
-                InputState::new(window, cx)
+                TextInput::new(window, cx)
                     .placeholder("Why: what you use it for, or what replaces it")
             });
-            input.update(cx, |input, cx| input.set_value(text, window, cx));
+            input.update(cx, |input, cx| input.set_text(text, cx));
             self.note = Some(input);
         }
         cx.notify();
@@ -100,7 +100,7 @@ impl Software {
         let note = self
             .note
             .as_ref()
-            .map(|input| input.read(cx).value().trim().to_owned())
+            .map(|input| input.read(cx).text().trim().to_owned())
             .unwrap_or_default();
         let repo = self.repo.clone();
         let key = format!("decide:{bundle_id}");
@@ -165,21 +165,22 @@ impl Render for Software {
             .map(|(choice, title)| {
                 let choice = *choice;
                 let count = apps.apps.iter().filter(|a| shows(choice, a)).count();
-                Button::new(SharedString::from(format!("software-filter-{title}")))
-                    .small()
-                    .when(choice != filter, |b| b.ghost())
-                    .label(format!("{title} {count}"))
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.filter = choice;
-                        view.open = None;
-                        cx.notify();
-                    }))
+                Button::new(
+                    SharedString::from(format!("software-filter-{title}")),
+                    format!("{title} {count}"),
+                )
+                .size(ControlSize::Sm)
+                .when(choice != filter, |b| b.variant(ButtonVariant::Ghost))
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.filter = choice;
+                    view.open = None;
+                    cx.notify();
+                }))
             })
             .collect();
-        let scan = Button::new("software-scan")
-            .small()
-            .ghost()
-            .label("Scan now")
+        let scan = Button::new("software-scan", "Scan now")
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
             .loading(self.busy.contains(SCAN))
             .on_click(cx.listener(|view, _, window, cx| view.scan(window, cx)));
         let rows: Vec<Row> = shown.iter().map(|app| software_row(app)).collect();
@@ -328,19 +329,13 @@ mod tests {
         cx.run_until_parked();
         page.read_with(cx, |page, cx| {
             assert_eq!(page.open.as_deref(), Some("large"));
-            assert_eq!(
-                page.note.as_ref().unwrap().read(cx).value().as_str(),
-                "Large note"
-            );
+            assert_eq!(page.note.as_ref().unwrap().read(cx).text(), "Large note");
         });
         cx.simulate_keystrokes("down enter");
         cx.run_until_parked();
         page.read_with(cx, |page, cx| {
             assert_eq!(page.open.as_deref(), Some("small"));
-            assert_eq!(
-                page.note.as_ref().unwrap().read(cx).value().as_str(),
-                "Small note"
-            );
+            assert_eq!(page.note.as_ref().unwrap().read(cx).text(), "Small note");
         });
     }
 

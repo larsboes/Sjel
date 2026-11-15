@@ -4,13 +4,14 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use chrono::{DateTime, Local};
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement};
 
 use crate::data::Remote;
 use crate::ely::charts::Treemap;
+use crate::ely::primitives::Tooltip;
 use crate::primitives::{list, mono_num, note, row};
 use crate::theme::Palette;
 use sjel_gpui_core::shell::{self, ShellError, ShellResult};
@@ -214,37 +215,56 @@ impl SystemsPage {
         let view = state.remote.value.as_ref();
         let snapshot = view.and_then(|view| view.snapshot.as_ref());
         let parent = parent_root(&state.root);
-        let mut body = div().flex().flex_col().gap_2()
+        let back = parent.map(|parent| {
+            div()
+                .id("disk-explorer-back-help")
+                .tooltip(Tooltip::text(format!("Back to {parent}")))
+                .child(
+                    Button::new("disk-explorer-back", "Back")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(cx.listener(move |page, _, _, cx| {
+                            page.navigate_explorer(parent.clone(), cx);
+                        })),
+                )
+        });
+        let scan = div()
+            .id("disk-explorer-scan-help")
+            .tooltip(Tooltip::text(if state.following {
+                "Waiting for this scan; previous measurements remain visible."
+            } else {
+                "Scans run only on request. Allocated bytes are not recoverable-space estimates."
+            }))
+            .child(
+                Button::new("disk-explorer-scan", state.action())
+                    .size(ControlSize::Sm)
+                    .disabled(state.following)
+                    .on_click(cx.listener(|page, _, _, cx| {
+                        let scan = !page.explorer.scanning() && !page.explorer.timed_out;
+                        page.read_explorer(scan, cx);
+                    })),
+            );
+        let mut body = div()
+            .flex()
+            .flex_col()
+            .gap_2()
             .child(heading("Disk explorer", palette))
             .child(
-                div().flex().items_center().gap_2()
-                    .children(parent.map(|parent| {
-                        Button::new("disk-explorer-back").small().ghost().label("Back")
-                            .tooltip(format!("Back to {parent}"))
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                page.navigate_explorer(parent.clone(), cx);
-                            }))
-                    }))
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .children(back)
                     .when(state.root != "/", |bar| bar.child(
-                        Button::new("disk-explorer-root").small().ghost().label("Disk root")
+                        Button::new("disk-explorer-root", "Disk root")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.navigate_explorer("/".into(), cx);
-                            }))
+                            })),
                     ))
                     .child(div().flex_1().min_w_0().truncate().text_sm().child(state.root.clone()))
-                    .child(
-                        Button::new("disk-explorer-scan").small().label(state.action())
-                            .disabled(state.following)
-                            .tooltip(if state.following {
-                                "Waiting for this scan; previous measurements remain visible."
-                            } else {
-                                "Scans run only on request. Allocated bytes are not recoverable-space estimates."
-                            })
-                            .on_click(cx.listener(|page, _, _, cx| {
-                                let scan = !page.explorer.scanning() && !page.explorer.timed_out;
-                                page.read_explorer(scan, cx);
-                            })),
-                    ),
+                    .child(scan),
             )
             .child(note("Allocated bytes, not recoverable space. / represents the whole writable volume. No files are changed.", palette.muted));
 
@@ -337,14 +357,17 @@ impl SystemsPage {
                                 .text_xs(),
                         )
                         .child(
-                            Button::new(("disk-explorer-directory", index))
-                                .small()
-                                .ghost()
-                                .label("Open")
-                                .tooltip(format!("Open {path}"))
-                                .on_click(cx.listener(move |page, _, _, cx| {
-                                    page.navigate_explorer(path.clone(), cx);
-                                })),
+                            div()
+                                .id(("disk-explorer-directory-help", index))
+                                .tooltip(Tooltip::text(format!("Open {path}")))
+                                .child(
+                                    Button::new(("disk-explorer-directory", index), "Open")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
+                                        .on_click(cx.listener(move |page, _, _, cx| {
+                                            page.navigate_explorer(path.clone(), cx);
+                                        })),
+                                ),
                         )
                         .into_any_element()
                 })

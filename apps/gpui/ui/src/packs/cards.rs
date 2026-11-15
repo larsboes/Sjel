@@ -1,7 +1,7 @@
 //! Orphaned harness warnings, harness summary cards, and unowned stray listings.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::prelude::*;
 use gpui_kit::{div, px, rgb, rgba, AnyElement, Context, IntoElement, SharedString};
 use sjel_gpui_core::packs::{deployed_units, held_packs, orphaned_harnesses, PacksView};
@@ -145,52 +145,54 @@ pub(crate) fn render_harness_cards(
         if installed && harness.write_supported {
             let h_id_for_sync = h_id.clone();
             let held_for_sync = held.clone();
-            let sync_button = Button::new(SharedString::from(format!("sync-{}", h_id)))
-                .small()
-                .label(format!("Sync {} Packs", held.len()))
-                .disabled(is_busy || held.is_empty())
-                .on_click(cx.listener(move |page, _, window, cx| {
-                    page.write(
-                        "sync",
-                        h_id_for_sync.clone(),
-                        held_for_sync.clone(),
-                        window,
-                        cx,
-                    );
-                }));
+            let sync_button = Button::new(
+                SharedString::from(format!("sync-{}", h_id)),
+                format!("Sync {} Packs", held.len()),
+            )
+            .size(ControlSize::Sm)
+            .disabled(is_busy || held.is_empty())
+            .on_click(cx.listener(move |page, _, window, cx| {
+                page.write(
+                    "sync",
+                    h_id_for_sync.clone(),
+                    held_for_sync.clone(),
+                    window,
+                    cx,
+                );
+            }));
 
             let h_id_for_deploy = h_id.clone();
             let pack_for_deploy = selected_pack.clone();
-            let deploy_button = Button::new(SharedString::from(format!("deploy-{}", h_id)))
-                .small()
-                .label("Deploy")
-                .disabled(is_busy || pack_for_deploy.is_empty())
-                .on_click(cx.listener(move |page, _, window, cx| {
-                    page.write(
-                        "deploy",
-                        h_id_for_deploy.clone(),
-                        vec![pack_for_deploy.clone()],
-                        window,
-                        cx,
-                    );
-                }));
+            let deploy_button =
+                Button::new(SharedString::from(format!("deploy-{}", h_id)), "Deploy")
+                    .size(ControlSize::Sm)
+                    .disabled(is_busy || pack_for_deploy.is_empty())
+                    .on_click(cx.listener(move |page, _, window, cx| {
+                        page.write(
+                            "deploy",
+                            h_id_for_deploy.clone(),
+                            vec![pack_for_deploy.clone()],
+                            window,
+                            cx,
+                        );
+                    }));
 
             let h_id_for_remove = h_id.clone();
             let pack_for_remove = selected_pack.clone();
-            let remove_button = Button::new(SharedString::from(format!("remove-{}", h_id)))
-                .small()
-                .danger()
-                .label("Remove")
-                .disabled(is_busy || pack_for_remove.is_empty())
-                .on_click(cx.listener(move |page, _, window, cx| {
-                    page.write(
-                        "remove",
-                        h_id_for_remove.clone(),
-                        vec![pack_for_remove.clone()],
-                        window,
-                        cx,
-                    );
-                }));
+            let remove_button =
+                Button::new(SharedString::from(format!("remove-{}", h_id)), "Remove")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Danger)
+                    .disabled(is_busy || pack_for_remove.is_empty())
+                    .on_click(cx.listener(move |page, _, window, cx| {
+                        page.write(
+                            "remove",
+                            h_id_for_remove.clone(),
+                            vec![pack_for_remove.clone()],
+                            window,
+                            cx,
+                        );
+                    }));
 
             let h_id_cycle = h_id.clone();
             let all_packs_list = all.to_vec();
@@ -222,7 +224,9 @@ pub(crate) fn render_harness_cards(
                     cx.notify();
                 }));
 
+            let actions_id = h_id.clone();
             let actions = div()
+                .debug_selector(move || format!("pack-harness-actions-{actions_id}"))
                 .flex()
                 .flex_wrap()
                 .items_center()

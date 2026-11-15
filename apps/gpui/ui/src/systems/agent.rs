@@ -1,7 +1,7 @@
 //! Agent permission gates, live approvals, and capability call history.
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use chrono::{Local, TimeZone};
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data::{self, Busy};
@@ -183,13 +183,12 @@ fn gate_row(
             let picked = mode.clone();
             let in_flight = busy.contains(&format!("agent:{}", gate.capability));
             let gate_clone = gate.clone();
-            Button::new(SharedString::from(format!(
-                "agent-{}-{mode}",
-                gate.capability
-            )))
-            .small()
-            .when(!chosen, |button| button.ghost())
-            .label(mode.clone())
+            Button::new(
+                SharedString::from(format!("agent-{}-{mode}", gate.capability)),
+                mode.clone(),
+            )
+            .size(ControlSize::Sm)
+            .when(!chosen, |button| button.variant(ButtonVariant::Ghost))
             .loading(in_flight && chosen)
             .on_click(cx.listener(move |page, _, window, cx| {
                 if !chosen {
@@ -281,23 +280,24 @@ fn approval_row(
                 .flex_none()
                 .gap_1()
                 .child(
-                    Button::new(SharedString::from(format!("deny-{}", approval.id)))
-                        .small()
-                        .ghost()
-                        .label("Deny")
+                    Button::new(SharedString::from(format!("deny-{}", approval.id)), "Deny")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .loading(in_flight)
                         .on_click(cx.listener(move |page, _, window, cx| {
                             page.decide_agent(deny_id.clone(), false, window, cx);
                         })),
                 )
                 .child(
-                    Button::new(SharedString::from(format!("allow-{}", approval.id)))
-                        .small()
-                        .label("Allow")
-                        .loading(in_flight)
-                        .on_click(cx.listener(move |page, _, window, cx| {
-                            page.decide_agent(allow_id.clone(), true, window, cx);
-                        })),
+                    Button::new(
+                        SharedString::from(format!("allow-{}", approval.id)),
+                        "Allow",
+                    )
+                    .size(ControlSize::Sm)
+                    .loading(in_flight)
+                    .on_click(cx.listener(move |page, _, window, cx| {
+                        page.decide_agent(allow_id.clone(), true, window, cx);
+                    })),
                 ),
         )
         .into_any_element()

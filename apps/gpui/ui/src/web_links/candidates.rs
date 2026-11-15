@@ -1,7 +1,7 @@
 //! Browser history candidate review rows.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::prelude::*;
 use gpui_kit::{div, px, rgb, AnyElement, Context, IntoElement, SharedString};
 use sjel_gpui_core::web_links::WebLinkCandidate;
@@ -48,21 +48,22 @@ pub(crate) fn render_candidate_row(
                 ),
         )
         .child(
-            Button::new(SharedString::from(format!("keep-{}", candidate.id)))
-                .small()
-                .label("Keep")
+            Button::new(SharedString::from(format!("keep-{}", candidate.id)), "Keep")
+                .size(ControlSize::Sm)
                 .on_click(cx.listener(move |view, _, window, cx| {
                     view.history_decision(keep.clone(), "keep", window, cx)
                 })),
         )
         .child(
-            Button::new(SharedString::from(format!("dismiss-{}", candidate.id)))
-                .small()
-                .ghost()
-                .label("Dismiss")
-                .on_click(cx.listener(move |view, _, window, cx| {
-                    view.history_decision(dismiss.clone(), "dismiss", window, cx)
-                })),
+            Button::new(
+                SharedString::from(format!("dismiss-{}", candidate.id)),
+                "Dismiss",
+            )
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
+            .on_click(cx.listener(move |view, _, window, cx| {
+                view.history_decision(dismiss.clone(), "dismiss", window, cx)
+            })),
         )
         .into_any_element()
 }

@@ -7,9 +7,9 @@ mod row;
 
 use std::collections::BTreeMap;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{
     div, prelude::*, px, rgb, AnyElement, Context, Entity, IntoElement, Render, SharedString,
     Subscription, Window,
@@ -31,13 +31,13 @@ pub struct LinksPage {
     pub(crate) candidates: Remote<Vec<WebLinkCandidate>>,
     pub(crate) busy: Busy,
     pub(crate) query: String,
-    pub(crate) query_input: Option<(Entity<InputState>, Subscription)>,
-    pub(crate) url_input: Option<(Entity<InputState>, Subscription)>,
-    pub(crate) title_input: Option<(Entity<InputState>, Subscription)>,
-    pub(crate) group_input: Option<(Entity<InputState>, Subscription)>,
+    pub(crate) query_input: Option<(Entity<TextInput>, Subscription)>,
+    pub(crate) url_input: Option<(Entity<TextInput>, Subscription)>,
+    pub(crate) title_input: Option<(Entity<TextInput>, Subscription)>,
+    pub(crate) group_input: Option<(Entity<TextInput>, Subscription)>,
     pub(crate) edit_id: Option<String>,
-    pub(crate) edit_title: Option<Entity<InputState>>,
-    pub(crate) edit_group: Option<Entity<InputState>>,
+    pub(crate) edit_title: Option<Entity<TextInput>>,
+    pub(crate) edit_group: Option<Entity<TextInput>>,
     pub(crate) confirm_remove: Option<String>,
     pub(crate) history_days: u16,
     pub(crate) show_add: bool,
@@ -86,15 +86,15 @@ impl LinksPage {
         );
     }
 
-    fn ensure_query(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    fn ensure_query(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
         if let Some((input, _)) = &self.query_input {
             return input.clone();
         }
         let input = cx
-            .new(|cx| InputState::new(window, cx).placeholder("Search links, sites, communities…"));
+            .new(|cx| TextInput::new(window, cx).placeholder("Search links, sites, communities…"));
         let subscription =
             cx.subscribe_in(&input, window, |view, input, _event: &InputEvent, _, cx| {
-                view.query = input.read(cx).value().to_string();
+                view.query = input.read(cx).text().to_string();
                 cx.notify();
             });
         self.query_input = Some((input.clone(), subscription));
@@ -106,7 +106,7 @@ impl LinksPage {
             return;
         }
         let make = |window: &mut Window, cx: &mut Context<Self>, hint: &'static str| {
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder(hint));
+            let input = cx.new(|cx| TextInput::new(window, cx).placeholder(hint));
             let subscription = cx.subscribe_in(
                 &input,
                 window,
@@ -123,7 +123,7 @@ impl LinksPage {
         let Some(url) = self
             .url_input
             .as_ref()
-            .map(|(input, _)| input.read(cx).value().trim().to_owned())
+            .map(|(input, _)| input.read(cx).text().trim().to_owned())
             .filter(|url| !url.is_empty())
         else {
             return;
@@ -131,12 +131,12 @@ impl LinksPage {
         let title = self
             .title_input
             .as_ref()
-            .map(|(input, _)| input.read(cx).value().trim().to_owned())
+            .map(|(input, _)| input.read(cx).text().trim().to_owned())
             .unwrap_or_default();
         let group = self
             .group_input
             .as_ref()
-            .map(|(input, _)| input.read(cx).value().trim().to_owned())
+            .map(|(input, _)| input.read(cx).text().trim().to_owned())
             .filter(|group| !group.is_empty());
         let body = serde_json::json!({"url":url, "title":title, "group":group, "pinned":false});
         let repo = self.repo.clone();
@@ -171,15 +171,12 @@ impl LinksPage {
             self.edit_id = None;
             return;
         }
-        let title = cx.new(|cx| InputState::new(window, cx).placeholder("Name"));
-        title.update(cx, |input, cx| {
-            input.set_value(link.title.clone(), window, cx)
-        });
-        let group = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Group override (blank = automatic)")
-        });
+        let title = cx.new(|cx| TextInput::new(window, cx).placeholder("Name"));
+        title.update(cx, |input, cx| input.set_text(link.title.clone(), cx));
+        let group = cx
+            .new(|cx| TextInput::new(window, cx).placeholder("Group override (blank = automatic)"));
         group.update(cx, |input, cx| {
-            input.set_value(link.group_override.clone().unwrap_or_default(), window, cx)
+            input.set_text(link.group_override.clone().unwrap_or_default(), cx)
         });
         self.edit_id = Some(link.id.clone());
         self.edit_title = Some(title);
@@ -191,12 +188,12 @@ impl LinksPage {
         let title = self
             .edit_title
             .as_ref()
-            .map(|input| input.read(cx).value().trim().to_owned())
+            .map(|input| input.read(cx).text().trim().to_owned())
             .unwrap_or_default();
         let group = self
             .edit_group
             .as_ref()
-            .map(|input| input.read(cx).value().trim().to_owned())
+            .map(|input| input.read(cx).text().trim().to_owned())
             .unwrap_or_default();
         let body = serde_json::json!({"title":title, "group":group});
         let repo = self.repo.clone();
@@ -442,10 +439,9 @@ impl Render for LinksPage {
                     candidates.len()
                 )))
                 .child(
-                    Button::new("web-links-history-scan")
-                        .small()
-                        .ghost()
-                        .label("Rescan")
+                    Button::new("web-links-history-scan", "Rescan")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|view, _, window, cx| view.scan_history(window, cx))),
                 );
             Some(card(
@@ -481,43 +477,49 @@ impl Render for LinksPage {
                             .flex()
                             .gap(px(2.))
                             .children([30_u16, 90, 180].into_iter().map(|days| {
-                                Button::new(SharedString::from(format!("history-range-{days}")))
-                                    .small()
-                                    .when(self.history_days != days, |button| button.ghost())
-                                    .label(format!("{days}d"))
-                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                Button::new(
+                                    SharedString::from(format!("history-range-{days}")),
+                                    format!("{days}d"),
+                                )
+                                .size(ControlSize::Sm)
+                                .when(self.history_days != days, |button| {
+                                    button.variant(ButtonVariant::Ghost)
+                                })
+                                .on_click(cx.listener(
+                                    move |view, _, _, cx| {
                                         view.history_days = days;
                                         cx.notify();
-                                    }))
+                                    },
+                                ))
                             })),
                     )
                     .child(
-                        Button::new("web-links-history-import")
-                            .small()
-                            .ghost()
-                            .label("Import history")
+                        Button::new("web-links-history-import", "Import history")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .loading(self.busy.contains(SCAN))
                             .on_click(
                                 cx.listener(|view, _, window, cx| view.scan_history(window, cx)),
                             ),
                     )
                     .child(
-                        Button::new("web-links-add-toggle")
-                            .small()
-                            .label(if self.show_add { "Close" } else { "+ Add" })
-                            .on_click(cx.listener(|view, _, window, cx| {
-                                view.show_add = !view.show_add;
-                                if view.show_add {
-                                    view.ensure_add_inputs(window, cx);
-                                }
-                                cx.notify();
-                            })),
+                        Button::new(
+                            "web-links-add-toggle",
+                            if self.show_add { "Close" } else { "+ Add" },
+                        )
+                        .size(ControlSize::Sm)
+                        .on_click(cx.listener(|view, _, window, cx| {
+                            view.show_add = !view.show_add;
+                            if view.show_add {
+                                view.ensure_add_inputs(window, cx);
+                            }
+                            cx.notify();
+                        })),
                     )
                     .child(
-                        Button::new("web-links-refresh")
-                            .small()
-                            .ghost()
-                            .label("Refresh")
+                        Button::new("web-links-refresh", "Refresh")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.load(cx);
                                 view.load_candidates(cx);
@@ -529,5 +531,63 @@ impl Render for LinksPage {
             .children(history)
             .child(content)
             .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui_kit::Focusable;
+
+    #[gpui::test]
+    fn typing_updates_search_and_add_drafts_survive_rerender(cx: &mut gpui::TestAppContext) {
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, _| {
+            let mut page =
+                LinksPage::new(Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)));
+            page.links.value = Some(WebLinks::default());
+            page
+        });
+        cx.update(|window, cx| {
+            page.read(cx)
+                .query_input
+                .as_ref()
+                .unwrap()
+                .0
+                .read(cx)
+                .focus_handle(cx)
+                .focus(window, cx);
+        });
+        cx.simulate_input("rust");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert_eq!(page.query, "rust"));
+        cx.update(|window, cx| {
+            page.update(cx, |page, cx| {
+                page.show_add = true;
+                page.ensure_add_inputs(window, cx);
+                cx.notify();
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            page.read(cx)
+                .url_input
+                .as_ref()
+                .unwrap()
+                .0
+                .read(cx)
+                .focus_handle(cx)
+                .focus(window, cx);
+        });
+        cx.simulate_input("https://example.org");
+        page.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+        page.read_with(cx, |page, cx| {
+            assert!(page.show_add);
+            assert_eq!(
+                page.url_input.as_ref().unwrap().0.read(cx).text(),
+                "https://example.org"
+            );
+            assert_eq!(page.query, "rust");
+        });
     }
 }

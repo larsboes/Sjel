@@ -1,8 +1,8 @@
 //! The skill matrix: one row per (pack, skill), one column per installed harness.
 
-use gpui_kit::component::button::Button;
+use crate::ely::buttons::Button;
+use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::prelude::*;
 use gpui_kit::{div, px, rgb, rgba, AnyElement, Context, IntoElement, ScrollHandle, SharedString};
 use sjel_gpui_core::packs::{
@@ -104,12 +104,11 @@ pub(crate) fn render_matrix_table(
                     let action = if is_missing { "deploy" } else { "sync" };
                     let h_id = h.id.clone();
                     let p_name = r.pack.clone();
-                    Button::new(SharedString::from(format!(
-                        "cell-{}-{}-{}",
-                        h.id, r.pack, r.skill
-                    )))
-                    .small()
-                    .label(verb)
+                    Button::new(
+                        SharedString::from(format!("cell-{}-{}-{}", h.id, r.pack, r.skill)),
+                        verb,
+                    )
+                    .size(ControlSize::Sm)
                     .disabled(is_busy)
                     .on_click(cx.listener(move |page, _, window, cx| {
                         page.write(action, h_id.clone(), vec![p_name.clone()], window, cx);

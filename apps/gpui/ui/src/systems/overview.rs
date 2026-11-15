@@ -1,6 +1,6 @@
 //! Runtime profile, Mac hardware metrics, and Host watch findings panels.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, SharedString, Window,
 };
@@ -153,10 +153,9 @@ impl SystemsPage {
                             let chosen = selection == *id;
                             let choice = *id;
                             let selected_choice = selection.clone();
-                            Button::new(SharedString::from(format!("runtime-{id}")))
-                                .small()
-                                .when(!chosen, |button| button.ghost())
-                                .label(*label)
+                            Button::new(SharedString::from(format!("runtime-{id}")), *label)
+                                .size(ControlSize::Sm)
+                                .when(!chosen, |button| button.variant(ButtonVariant::Ghost))
                                 .loading(busy && chosen)
                                 .on_click(cx.listener(move |page, _, window, cx| {
                                     if selected_choice != choice {
@@ -303,9 +302,8 @@ impl SystemsPage {
                         div()
                             .w(px(120.))
                             .child(
-                                Button::new("start-macmon")
-                                    .small()
-                                    .label("Start macmon")
+                                Button::new("start-macmon", "Start macmon")
+                                    .size(ControlSize::Sm)
                                     .loading(self.busy.contains(MACMON_START))
                                     .on_click(cx.listener(|page, _, window, cx| {
                                         page.start_macmon(window, cx);

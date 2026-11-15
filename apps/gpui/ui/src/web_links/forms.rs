@@ -1,7 +1,7 @@
 //! Add destination form for WebLinks.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::Input;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::Input;
 use gpui_kit::prelude::*;
 use gpui_kit::{div, px, AnyElement, Context, IntoElement, Window};
 
@@ -36,15 +36,13 @@ pub(crate) fn render_add_form(
                 .flex()
                 .gap(px(8.))
                 .child(
-                    Button::new("web-links-add-save")
-                        .label("Save link")
+                    Button::new("web-links-add-save", "Save link")
                         .loading(page.busy.contains(ADD))
                         .on_click(cx.listener(|view, _, window, cx| view.add(window, cx))),
                 )
                 .child(
-                    Button::new("web-links-add-cancel")
-                        .ghost()
-                        .label("Cancel")
+                    Button::new("web-links-add-cancel", "Cancel")
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|view, _, _, cx| {
                             view.show_add = false;
                             cx.notify();

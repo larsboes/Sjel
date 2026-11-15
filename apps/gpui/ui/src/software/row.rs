@@ -1,8 +1,8 @@
 //! Decision editor and uninstall action for the opened software record.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::Input;
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::Input;
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, rgb, AnyElement, Context, SharedString};
 use sjel_gpui_core::shell::SoftwareApp;
 
@@ -19,10 +19,11 @@ pub(super) fn render_app_detail(
     let busy = software.busy.contains(&format!("decide:{}", app.bundle_id));
     let buttons = DECISIONS.iter().map(|(decision, title)| {
         let decision: &'static str = decision;
-        Button::new(SharedString::from(format!("decide-{decision}")))
-            .small()
-            .when(app.decision.as_deref() != Some(decision), |b| b.ghost())
-            .label(*title)
+        Button::new(SharedString::from(format!("decide-{decision}")), *title)
+            .size(ControlSize::Sm)
+            .when(app.decision.as_deref() != Some(decision), |b| {
+                b.variant(ButtonVariant::Ghost)
+            })
             .loading(busy)
             .on_click(cx.listener(move |view, _, window, cx| view.decide(decision, window, cx)))
     });
@@ -31,10 +32,9 @@ pub(super) fn render_app_detail(
         .contains(&format!("uninstall:{}", app.bundle_id));
     let target = app.bundle_id.clone();
     let uninstall = (app.decision.as_deref() == Some("remove")).then(|| {
-        Button::new("software-uninstall")
-            .small()
-            .danger()
-            .label(uninstall_label(app))
+        Button::new("software-uninstall", uninstall_label(app))
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Danger)
             .loading(uninstalling)
             .on_click(
                 cx.listener(move |view, _, window, cx| view.uninstall(target.clone(), window, cx)),

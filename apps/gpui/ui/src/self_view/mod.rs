@@ -7,8 +7,8 @@ pub mod cards;
 pub mod constants;
 pub mod inspector;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data::{self, Busy, Remote, Repo};
@@ -134,15 +134,17 @@ impl gpui::Render for SelfPage {
             .map(|kind| {
                 let is_active = self.filter_kind == *kind;
                 let k = *kind;
-                Button::new(SharedString::from(format!("filter-kind-{}", kind)))
-                    .small()
-                    .when(!is_active, |b| b.ghost())
-                    .label(if *kind == "all" { "All units" } else { *kind })
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        page.filter_kind = k;
-                        cx.notify();
-                    }))
-                    .into_any_element()
+                Button::new(
+                    SharedString::from(format!("filter-kind-{}", kind)),
+                    if *kind == "all" { "All units" } else { *kind },
+                )
+                .size(ControlSize::Sm)
+                .when(!is_active, |b| b.variant(ButtonVariant::Ghost))
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    page.filter_kind = k;
+                    cx.notify();
+                }))
+                .into_any_element()
             })
             .collect();
 

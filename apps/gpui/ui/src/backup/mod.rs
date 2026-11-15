@@ -12,9 +12,9 @@ pub use types::*;
 
 use std::collections::HashMap;
 
-use gpui_kit::component::button::Button;
+use crate::ely::buttons::Button;
+use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, rgb, rgba, AnyElement, Context, FocusHandle, Render, ScrollHandle, Window,
 };
@@ -316,9 +316,8 @@ impl BackupPage {
                         None
                     })
                     .child(
-                        Button::new("backup-all-header")
-                            .small()
-                            .label("Back up all now")
+                        Button::new("backup-all-header", "Back up all now")
+                            .size(ControlSize::Sm)
                             .loading(is_backing_up_all)
                             .on_click(cx.listener(|page, _, _, cx| page.trigger_backup_all(cx))),
                     ),

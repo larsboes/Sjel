@@ -8,9 +8,7 @@ pub mod types;
 
 pub use types::*;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::InputState;
-use gpui_kit::component::Sizable;
+use crate::ely::forms::TextInput;
 use gpui_kit::{
     div, prelude::*, px, AnyElement, Context, Entity, IntoElement, Subscription, Window,
 };
@@ -46,9 +44,9 @@ pub struct SetupPage {
     /// The device whose revoke is waiting for a second press.
     pub(super) confirming_revoke: Option<String>,
 
-    pub(super) url_input: Option<(Entity<InputState>, Subscription)>,
-    pub(super) credential_input: Option<(Entity<InputState>, Subscription)>,
-    pub(super) interval_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) url_input: Option<(Entity<TextInput>, Subscription)>,
+    pub(super) credential_input: Option<(Entity<TextInput>, Subscription)>,
+    pub(super) interval_input: Option<(Entity<TextInput>, Subscription)>,
 }
 
 impl SetupPage {
@@ -100,24 +98,20 @@ impl SetupPage {
     }
 
     pub(super) fn render_tabs(&self, _palette: Palette, cx: &mut Context<Self>) -> AnyElement {
-        let tab_btn = |tab: SetupTab, label: &'static str, cx: &mut Context<Self>| {
-            let active = self.active_tab == tab;
-            Button::new(label)
-                .small()
-                .when(!active, |b| b.ghost())
-                .label(label)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.switch_tab(tab, cx);
-                }))
-        };
-
-        div()
-            .flex()
-            .items_center()
-            .gap(px(8.0))
-            .child(tab_btn(SetupTab::Machine, "Machine Setup", cx))
-            .child(tab_btn(SetupTab::Devices, "Paired Devices", cx))
-            .into_any_element()
+        let page = cx.entity();
+        crate::primitives::sub_tabs(
+            "setup",
+            vec![
+                ("Machine Setup", None, self.active_tab == SetupTab::Machine),
+                ("Paired Devices", None, self.active_tab == SetupTab::Devices),
+            ],
+            move |index, _, cx| {
+                let tabs = [SetupTab::Machine, SetupTab::Devices];
+                if let Some(tab) = tabs.get(index) {
+                    page.update(cx, |page, cx| page.switch_tab(*tab, cx));
+                }
+            },
+        )
     }
 }
 
@@ -163,6 +157,57 @@ impl Render for SetupPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn tabs_preserve_setup_drafts_and_mask_credentials(cx: &mut gpui::TestAppContext) {
+        use gpui_kit::Focusable;
+        use sjel_gpui_core::setup::SetupPlan;
+
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, _| {
+            let mut page =
+                SetupPage::new(Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)));
+            page.setup.value = Some(SetupView {
+                plans: vec![SetupPlan {
+                    component: "turso".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            });
+            page.confirming_component = Some("turso".into());
+            page
+        });
+        let tabs = cx.update(|window, cx| {
+            window.blur(cx);
+            window.focus_next(cx);
+            let tabs = window.focused(cx).unwrap();
+            page.update(cx, |page, cx| {
+                let input = page.url_input.as_ref().unwrap().0.clone();
+                input.read(cx).focus_handle(cx).focus(window, cx);
+                assert!(page
+                    .credential_input
+                    .as_ref()
+                    .unwrap()
+                    .0
+                    .read(cx)
+                    .is_masked());
+            });
+            tabs
+        });
+        cx.simulate_input("libsql://example.invalid");
+        cx.update(|window, cx| tabs.focus(window, cx));
+        cx.simulate_keystrokes("right");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert_eq!(page.active_tab, SetupTab::Devices));
+        cx.simulate_keystrokes("left");
+        cx.run_until_parked();
+        page.read_with(cx, |page, cx| {
+            assert_eq!(page.active_tab, SetupTab::Machine);
+            assert_eq!(
+                page.url_input.as_ref().unwrap().0.read(cx).text(),
+                "libsql://example.invalid"
+            );
+        });
+    }
 
     #[test]
     fn test_setup_page_initial_state() {

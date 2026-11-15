@@ -1,7 +1,7 @@
 //! Unit inspector panel, runtime dependency list, coupling details, and service lifecycle controls.
 
-use gpui_kit::component::button::Button;
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::Button;
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::self_model::{
     incoming_couplings, outgoing_couplings, unit_liveness, SelfModelResponse,
@@ -56,18 +56,16 @@ pub fn unit_inspector(
         let toggle_label = if is_up { "Stop" } else { "Start" };
 
         let u_name_restart = unit.name.clone();
-        let toggle_button = Button::new("toggle-unit-service")
-            .small()
+        let toggle_button = Button::new("toggle-unit-service", toggle_label)
+            .size(ControlSize::Sm)
             .disabled(is_busy)
-            .label(toggle_label)
             .on_click(cx.listener(move |page, _, window, cx| {
                 page.run_lifecycle(u_name_toggle.clone(), action_toggle, window, cx);
             }));
 
-        let restart_button = Button::new("restart-unit-service")
-            .small()
+        let restart_button = Button::new("restart-unit-service", "↻ Restart")
+            .size(ControlSize::Sm)
             .disabled(is_busy)
-            .label("↻ Restart")
             .on_click(cx.listener(move |page, _, window, cx| {
                 page.run_lifecycle(u_name_restart.clone(), "restart", window, cx);
             }));

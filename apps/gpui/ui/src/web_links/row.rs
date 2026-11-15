@@ -1,8 +1,8 @@
 //! Rendering saved destination link rows with inline editing and remove verification.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::Input;
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::Input;
+use crate::ely::theme::ControlSize;
 use gpui_kit::prelude::*;
 use gpui_kit::{div, px, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 use sjel_gpui_core::web_links::WebLink;
@@ -53,27 +53,25 @@ pub(crate) fn render_link_row(
                 ),
         )
         .child(
-            Button::new(SharedString::from(format!("open-{}", link.id)))
-                .small()
-                .label("Open")
+            Button::new(SharedString::from(format!("open-{}", link.id)), "Open")
+                .size(ControlSize::Sm)
                 .on_click(
                     cx.listener(move |view, _, window, cx| view.open(&saved_for_open, window, cx)),
                 ),
         )
         .child(
-            Button::new(SharedString::from(format!("pin-{}", link.id)))
-                .small()
-                .ghost()
-                .label(if link.pinned { "Unpin" } else { "Pin" })
-                .on_click(
-                    cx.listener(move |view, _, window, cx| view.toggle_pin(&saved, window, cx)),
-                ),
+            Button::new(
+                SharedString::from(format!("pin-{}", link.id)),
+                if link.pinned { "Unpin" } else { "Pin" },
+            )
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
+            .on_click(cx.listener(move |view, _, window, cx| view.toggle_pin(&saved, window, cx))),
         )
         .child(
-            Button::new(SharedString::from(format!("edit-{}", link.id)))
-                .small()
-                .ghost()
-                .label("Edit")
+            Button::new(SharedString::from(format!("edit-{}", link.id)), "Edit")
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
                 .on_click(cx.listener(move |view, _, window, cx| {
                     view.begin_edit(&saved_for_edit, window, cx)
                 })),
@@ -96,18 +94,16 @@ pub(crate) fn render_link_row(
                 .children(title.map(|input| Input::new(&input)))
                 .children(group.map(|input| Input::new(&input)))
                 .child(
-                    Button::new("web-link-save-edit")
-                        .small()
-                        .label("Save")
+                    Button::new("web-link-save-edit", "Save")
+                        .size(ControlSize::Sm)
                         .on_click(cx.listener(move |view, _, window, cx| {
                             view.save_edit(id.clone(), window, cx)
                         })),
                 )
                 .child(
-                    Button::new("web-link-cancel-edit")
-                        .small()
-                        .ghost()
-                        .label("Cancel")
+                    Button::new("web-link-cancel-edit", "Cancel")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|view, _, _, cx| {
                             view.edit_id = None;
                             view.confirm_remove = None;
@@ -117,19 +113,17 @@ pub(crate) fn render_link_row(
                 .child(
                     if page.confirm_remove.as_deref() == Some(link.id.as_str()) {
                         let remove_id = link.id.clone();
-                        Button::new("web-link-remove-confirm")
-                            .small()
-                            .danger()
-                            .label("Confirm remove")
+                        Button::new("web-link-remove-confirm", "Confirm remove")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Danger)
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 view.remove(remove_id.clone(), window, cx)
                             }))
                     } else {
                         let remove_id = link.id.clone();
-                        Button::new("web-link-remove")
-                            .small()
-                            .ghost()
-                            .label("Remove…")
+                        Button::new("web-link-remove", "Remove…")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 view.request_remove(remove_id.clone(), cx)
                             }))

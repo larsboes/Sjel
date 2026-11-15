@@ -4,8 +4,9 @@
 //! Both halves live under Sjel: runtime capability and agent inspection is what Sjel is, not what
 //! today is.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{ActiveTheme, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
+use gpui_kit::component::ActiveTheme;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString, Window};
 use sjel_gpui_core::data::{Busy, Remote};
 use sjel_gpui_core::shell::{AgentView, CapabilityHealth, Liveness, NodeHealth};
@@ -143,20 +144,33 @@ fn capability_row<V: 'static>(
     let start = !cap_state.up;
     let target = name.to_owned();
     let open_target = name.to_owned();
-    let button = Button::new(SharedString::from(format!("toggle-{name}")))
-        .small()
+    let button = div()
+        .id(SharedString::from(format!("toggle-help-{name}")))
+        .debug_selector(move || format!("capability-toggle-{name}"))
         .w(px(64.))
-        .when(!start, |button| button.ghost())
-        .label(if start { "Start" } else { "Stop" })
-        .tooltip(if start {
+        .on_click(move |_, _, cx| {
+            if busy {
+                cx.stop_propagation();
+            }
+        })
+        .tooltip(crate::ely::primitives::Tooltip::text(if start {
             "Start (↩)"
         } else {
             "Stop (⌘⌫)"
-        })
-        .loading(busy)
-        .on_click(cx.listener(move |view, _, window, cx| {
-            on_toggle(view, target.clone(), start, window, cx);
-        }));
+        }))
+        .child(
+            Button::new(
+                SharedString::from(format!("toggle-{name}")),
+                if start { "Start" } else { "Stop" },
+            )
+            .size(ControlSize::Sm)
+            .full_width()
+            .when(!start, |button| button.variant(ButtonVariant::Ghost))
+            .loading(busy)
+            .on_click(cx.listener(move |view, _, window, cx| {
+                on_toggle(view, target.clone(), start, window, cx);
+            })),
+        );
     state
         .selection
         .mark(row(), selected, palette)
@@ -291,4 +305,74 @@ fn agent_writes<V: 'static>(
         }
     };
     section("Agent writes", body, palette).into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::ThemeContext;
+
+    #[derive(Default)]
+    struct CapabilityActions {
+        busy: Busy,
+        selection: Selection,
+        toggles: Vec<(String, bool)>,
+        opened: usize,
+    }
+
+    impl gpui::Render for CapabilityActions {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let palette = ThemeContext::of(window, cx).palette;
+            capability_row(
+                &State {
+                    health: &Remote::default(),
+                    agent: &Remote::default(),
+                    busy: &self.busy,
+                    selected: None,
+                    selection: &self.selection,
+                },
+                CapabilityRow {
+                    selected: false,
+                    name: "projects",
+                    health: CapabilityHealth {
+                        up: false,
+                        autostart: false,
+                    },
+                    palette,
+                },
+                cx,
+                |page, name, start, _, _| page.toggles.push((name, start)),
+                |page, _, _, _| page.opened += 1,
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn lifecycle_clicks_keep_identity_and_busy_clicks_do_not_open_the_row(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (page, cx) =
+            crate::test_support::mount_root(cx, None, |_, _| CapabilityActions::default());
+        let target = cx
+            .debug_bounds("capability-toggle-projects")
+            .unwrap()
+            .center();
+        cx.simulate_click(target, gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.toggles, [("projects".into(), true)])
+        });
+        let opened = page.read_with(cx, |page, _| page.opened);
+        page.update(cx, |page, cx| {
+            page.busy.start("projects");
+            cx.notify();
+        });
+        cx.run_until_parked();
+        cx.simulate_click(target, gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.toggles.len(), 1);
+            assert_eq!(page.opened, opened);
+        });
+    }
 }

@@ -10,9 +10,7 @@ pub mod types;
 
 pub use types::*;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::InputState;
-use gpui_kit::component::Sizable;
+use crate::ely::forms::TextInput;
 use gpui_kit::{
     div, prelude::*, px, AnyElement, Context, Entity, IntoElement, Subscription, Window,
 };
@@ -34,10 +32,10 @@ pub struct ResearchPage {
     pub(super) filter_query: String,
     pub(super) show_add_drawer: bool,
 
-    pub(super) filter_input: Option<(Entity<InputState>, Subscription)>,
-    pub(super) add_url_input: Option<(Entity<InputState>, Subscription)>,
-    pub(super) add_summary_input: Option<(Entity<InputState>, Subscription)>,
-    pub(super) add_name_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) filter_input: Option<(Entity<TextInput>, Subscription)>,
+    pub(super) add_url_input: Option<(Entity<TextInput>, Subscription)>,
+    pub(super) add_summary_input: Option<(Entity<TextInput>, Subscription)>,
+    pub(super) add_name_input: Option<(Entity<TextInput>, Subscription)>,
 }
 
 impl ResearchPage {
@@ -82,25 +80,29 @@ impl ResearchPage {
     }
 
     pub(super) fn render_tabs(&self, _palette: Palette, cx: &mut Context<Self>) -> AnyElement {
-        let tab_btn = |tab: ResearchTab, label: &'static str, cx: &mut Context<Self>| {
-            let active = self.active_tab == tab;
-            Button::new(label)
-                .small()
-                .when(!active, |b| b.ghost())
-                .label(label)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.switch_tab(tab, cx);
-                }))
-        };
-
-        div()
-            .flex()
-            .items_center()
-            .gap(px(8.0))
-            .child(tab_btn(ResearchTab::Articles, "Articles", cx))
-            .child(tab_btn(ResearchTab::Projects, "Projects", cx))
-            .child(tab_btn(ResearchTab::Benchmarks, "Benchmarks", cx))
-            .into_any_element()
+        let page = cx.entity();
+        crate::primitives::sub_tabs(
+            "research",
+            vec![
+                ("Articles", None, self.active_tab == ResearchTab::Articles),
+                ("Projects", None, self.active_tab == ResearchTab::Projects),
+                (
+                    "Benchmarks",
+                    None,
+                    self.active_tab == ResearchTab::Benchmarks,
+                ),
+            ],
+            move |index, _, cx| {
+                let tabs = [
+                    ResearchTab::Articles,
+                    ResearchTab::Projects,
+                    ResearchTab::Benchmarks,
+                ];
+                if let Some(tab) = tabs.get(index) {
+                    page.update(cx, |page, cx| page.switch_tab(*tab, cx));
+                }
+            },
+        )
     }
 }
 
@@ -149,6 +151,53 @@ impl Render for ResearchPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn project_filter_updates_from_typing_and_survives_tab_changes(cx: &mut gpui::TestAppContext) {
+        use gpui_kit::Focusable;
+
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, _| {
+            let mut page =
+                ResearchPage::new(Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)));
+            page.research.value = Some(ResearchView::default());
+            page
+        });
+        let tabs = cx.update(|window, cx| {
+            window.blur(cx);
+            window.focus_next(cx);
+            window.focused(cx).unwrap()
+        });
+        cx.simulate_keystrokes("right");
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            page.read(cx)
+                .filter_input
+                .as_ref()
+                .unwrap()
+                .0
+                .read(cx)
+                .focus_handle(cx)
+                .focus(window, cx);
+        });
+        cx.simulate_input("sqlite");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert_eq!(page.filter_query, "sqlite"));
+        cx.update(|window, cx| tabs.focus(window, cx));
+        cx.simulate_keystrokes("right");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.active_tab, ResearchTab::Benchmarks)
+        });
+        cx.simulate_keystrokes("left");
+        cx.run_until_parked();
+        page.read_with(cx, |page, cx| {
+            assert_eq!(page.active_tab, ResearchTab::Projects);
+            assert_eq!(
+                page.filter_input.as_ref().unwrap().0.read(cx).text(),
+                "sqlite"
+            );
+        });
+    }
 
     #[test]
     fn test_research_page_initial_state() {

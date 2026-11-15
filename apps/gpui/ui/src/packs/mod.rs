@@ -11,9 +11,9 @@ mod types;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::Sizable;
 use gpui_kit::prelude::*;
 use gpui_kit::{div, px, rgb, AnyElement, Context, IntoElement, ScrollHandle, Window};
 
@@ -248,18 +248,20 @@ impl gpui::Render for PacksPage {
         ));
 
         // Filter bar + Matrix
-        let filter_button = Button::new("toggle-attention-filter")
-            .small()
-            .when(!self.only_attention, |b| b.ghost())
-            .label(if self.only_attention {
+        let filter_button = Button::new(
+            "toggle-attention-filter",
+            if self.only_attention {
                 "Showing: Attention needed"
             } else {
                 "Filter: All rows"
-            })
-            .on_click(cx.listener(|page, _, _, cx| {
-                page.only_attention = !page.only_attention;
-                cx.notify();
-            }));
+            },
+        )
+        .size(ControlSize::Sm)
+        .when(!self.only_attention, |b| b.variant(ButtonVariant::Ghost))
+        .on_click(cx.listener(|page, _, _, cx| {
+            page.only_attention = !page.only_attention;
+            cx.notify();
+        }));
 
         let matrix_header = div()
             .flex()
@@ -310,9 +312,8 @@ mod tests {
 
     #[gpui::test]
     fn unsupported_harnesses_have_no_write_controls(cx: &mut gpui::TestAppContext) {
-        use gpui_kit::test::TestWindowExt;
         use sjel_gpui_core::packs::{HarnessView, PackUnitView};
-        cx.update(gpui_kit::init);
+        crate::test_support::init(cx);
         let (page, cx) = cx.add_window_view(|_, _| {
             let mut page =
                 PacksPage::new(Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)));
@@ -336,20 +337,9 @@ mod tests {
             page
         });
         cx.run_until_parked();
+        assert!(cx.debug_bounds("pack-harness-actions-claude").is_some());
+        assert!(cx.debug_bounds("pack-harness-actions-sjel-agent").is_none());
         cx.update(|window, cx| {
-            window.render_frame(cx);
-            assert!(window.try_find("sync-claude").is_some());
-            for id in [
-                "sync-sjel-agent",
-                "deploy-sjel-agent",
-                "remove-sjel-agent",
-                "cell-sjel-agent-coding-gpui",
-            ] {
-                assert!(
-                    window.try_find(id).is_none(),
-                    "unsupported action {id} is visible"
-                );
-            }
             page.update(cx, |page, cx| {
                 page.write(
                     "sync",

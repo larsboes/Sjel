@@ -1,7 +1,7 @@
 //! Active research projects, upstreams and external dependency watches.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, Window};
 use sjel_gpui_core::research::{group_upstreams, SystemRow, UpstreamRow};
 
@@ -17,15 +17,15 @@ impl ResearchPage {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.filter_input {
             return input.clone();
         }
         let input = cx
-            .new(|cx| InputState::new(window, cx).placeholder("Filter by name, summary, license…"));
+            .new(|cx| TextInput::new(window, cx).placeholder("Filter by name, summary, license…"));
         let subscription =
             cx.subscribe_in(&input, window, |this, input, _event: &InputEvent, _, cx| {
-                this.filter_query = input.read(cx).value().to_string();
+                this.filter_query = input.read(cx).text().to_string();
                 cx.notify();
             });
         self.filter_input = Some((input.clone(), subscription));
@@ -36,12 +36,12 @@ impl ResearchPage {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.add_url_input {
             return input.clone();
         }
         let input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("https://github.com/owner/repo"));
+            cx.new(|cx| TextInput::new(window, cx).placeholder("https://github.com/owner/repo"));
         let subscription = cx.subscribe_in(
             &input,
             window,
@@ -57,12 +57,12 @@ impl ResearchPage {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.add_summary_input {
             return input.clone();
         }
         let input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("What it is, and why it is worth a look")
+            TextInput::new(window, cx).placeholder("What it is, and why it is worth a look")
         });
         let subscription = cx.subscribe_in(
             &input,
@@ -79,12 +79,12 @@ impl ResearchPage {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.add_name_input {
             return input.clone();
         }
         let input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Optional name (derived from URL if empty)")
+            TextInput::new(window, cx).placeholder("Optional name (derived from URL if empty)")
         });
         let subscription = cx.subscribe_in(
             &input,
@@ -102,9 +102,9 @@ impl ResearchPage {
         let summary_field = self.ensure_add_summary_input(window, cx);
         let name_field = self.ensure_add_name_input(window, cx);
 
-        let url = url_field.read(cx).value().trim().to_string();
-        let summary = summary_field.read(cx).value().trim().to_string();
-        let name_raw = name_field.read(cx).value().trim().to_string();
+        let url = url_field.read(cx).text().trim().to_string();
+        let summary = summary_field.read(cx).text().trim().to_string();
+        let name_raw = name_field.read(cx).text().trim().to_string();
         let name = if name_raw.is_empty() {
             None
         } else {
@@ -189,18 +189,20 @@ impl ResearchPage {
 
         // 1. Add drawer
         let show_drawer = self.show_add_drawer;
-        let drawer_toggle = Button::new("toggle-add-project")
-            .small()
-            .ghost()
-            .label(if show_drawer {
+        let drawer_toggle = Button::new(
+            "toggle-add-project",
+            if show_drawer {
                 "Hide Watch Form"
             } else {
                 "+ Add a project to watch"
-            })
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.show_add_drawer = !this.show_add_drawer;
-                cx.notify();
-            }));
+            },
+        )
+        .size(ControlSize::Sm)
+        .variant(ButtonVariant::Ghost)
+        .on_click(cx.listener(|this, _, _, cx| {
+            this.show_add_drawer = !this.show_add_drawer;
+            cx.notify();
+        }));
 
         let add_header = div()
             .flex()
@@ -220,7 +222,7 @@ impl ResearchPage {
             let sum_field = self.ensure_add_summary_input(window, cx);
             let name_field = self.ensure_add_name_input(window, cx);
 
-            let sum_len = sum_field.read(cx).value().trim().len();
+            let sum_len = sum_field.read(cx).text().trim().len();
             let sum_color = if sum_len > SUMMARY_MAX {
                 palette.red
             } else {
@@ -284,9 +286,8 @@ impl ResearchPage {
                 )
                 .child(
                     div().flex().justify_end().pt(px(4.0)).child(
-                        Button::new("submit-watch-project")
-                            .small()
-                            .label("Add to Watch")
+                        Button::new("submit-watch-project", "Add to Watch")
+                            .size(ControlSize::Sm)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.add_project(window, cx);
                             })),

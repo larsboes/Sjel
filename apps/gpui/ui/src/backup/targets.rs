@@ -1,6 +1,6 @@
 //! Backup targets, storage endpoints, cadence selectors, and rehearsal verification.
-use gpui_kit::component::button::Button;
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::Button;
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::backup::{BackupTargetRecord, VerifyTargetResult};
 
@@ -136,17 +136,19 @@ impl BackupPage {
                             ),
                     )
                     .child(
-                        Button::new(format!("verify-{}", t.id))
-                            .small()
-                            .label(if is_verifying {
+                        Button::new(
+                            format!("verify-{}", t.id),
+                            if is_verifying {
                                 "Verifying…"
                             } else {
                                 "Verify target"
-                            })
-                            .loading(is_verifying)
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                page.verify_target(tid.clone(), cx);
-                            })),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .loading(is_verifying)
+                        .on_click(cx.listener(move |page, _, _, cx| {
+                            page.verify_target(tid.clone(), cx);
+                        })),
                     ),
             )
             .children(verdict.map(|v| {

@@ -1,7 +1,7 @@
 //! Storage inspection, historical retention trend, and system package updates panels.
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use chrono::Local;
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data;
@@ -414,16 +414,18 @@ impl SystemsPage {
                 .gap_3()
                 .child(explorer)
                 .child(
-                    Button::new("storage-policy-measure")
-                        .small()
-                        .ghost()
-                        .label(if self.storage.loading {
+                    Button::new(
+                        "storage-policy-measure",
+                        if self.storage.loading {
                             "Measuring policy paths…"
                         } else {
                             "Measure policy paths"
-                        })
-                        .disabled(self.storage.loading)
-                        .on_click(cx.listener(|page, _, _, cx| page.read_storage(cx))),
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
+                    .disabled(self.storage.loading)
+                    .on_click(cx.listener(|page, _, _, cx| page.read_storage(cx))),
                 )
                 .children(
                     self.storage
@@ -520,15 +522,16 @@ impl SystemsPage {
                             )
                             .when(actionable > 0 && !busy, |header| {
                                 header.child(
-                                    Button::new(SharedString::from(format!(
-                                        "apply-{}",
-                                        surface.id
-                                    )))
-                                    .small()
-                                    .label(format!("Apply {actionable}"))
-                                    .on_click(cx.listener(move |page, _, window, cx| {
-                                        page.apply_updates(surface.id.clone(), window, cx);
-                                    })),
+                                    Button::new(
+                                        SharedString::from(format!("apply-{}", surface.id)),
+                                        format!("Apply {actionable}"),
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .on_click(cx.listener(
+                                        move |page, _, window, cx| {
+                                            page.apply_updates(surface.id.clone(), window, cx);
+                                        },
+                                    )),
                                 )
                             })
                             .into_any_element(),

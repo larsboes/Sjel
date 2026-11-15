@@ -1,8 +1,7 @@
 //! Device pairing, QR challenge minting, join authorization and device management.
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use chrono::Local;
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Disableable;
-use gpui_kit::component::Sizable;
 use gpui_kit::{div, point, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, Window};
 use sjel_gpui_core::setup::{
     minutes_left, pairing_payload, partition_devices, qr_matrix, short_pin, stamp, waiting_joins,
@@ -175,10 +174,9 @@ impl SetupPage {
                 };
                 let active = picked.as_deref() == Some(host.as_str());
                 row = row.child(
-                    Button::new(("pairing-host", index))
-                        .small()
-                        .when(!active, |b| b.ghost())
-                        .label(label)
+                    Button::new(("pairing-host", index), label)
+                        .size(ControlSize::Sm)
+                        .when(!active, |b| b.variant(ButtonVariant::Ghost))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.pairing_host = Some(host.clone());
                             this.draw_code();
@@ -259,18 +257,16 @@ impl SetupPage {
                     .items_center()
                     .gap(px(8.0))
                     .child(
-                        Button::new(format!("allow-{button_key}"))
-                            .small()
-                            .label("Allow")
+                        Button::new(format!("allow-{button_key}"), "Allow")
+                            .size(ControlSize::Sm)
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.approve_join(id_allow.clone(), window, cx);
                             })),
                     )
                     .child(
-                        Button::new(format!("deny-{button_key}"))
-                            .small()
-                            .ghost()
-                            .label("Deny")
+                        Button::new(format!("deny-{button_key}"), "Deny")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.deny_join(id_deny.clone(), window, cx);
                             })),
@@ -297,19 +293,17 @@ impl SetupPage {
                 .items_center()
                 .gap(px(6.0))
                 .child(
-                    Button::new(format!("keep-{keep}"))
-                        .small()
-                        .ghost()
-                        .label("Keep")
+                    Button::new(format!("keep-{keep}"), "Keep")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.confirming_revoke = None;
                             cx.notify();
                         })),
                 )
                 .child(
-                    Button::new(format!("revoke-now-{target}"))
-                        .small()
-                        .label("Revoke now")
+                    Button::new(format!("revoke-now-{target}"), "Revoke now")
+                        .size(ControlSize::Sm)
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.revoke_device(target.clone(), window, cx);
                         })),
@@ -317,10 +311,9 @@ impl SetupPage {
                 .into_any_element()
         } else {
             let arm = id.clone();
-            Button::new(format!("revoke-{arm}"))
-                .small()
-                .ghost()
-                .label("Revoke")
+            Button::new(format!("revoke-{arm}"), "Revoke")
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.confirming_revoke = Some(arm.clone());
                     cx.notify();
@@ -448,26 +441,29 @@ impl SetupPage {
                         .items_center()
                         .gap(px(8.0))
                         .child(
-                            Button::new("setup-refresh-devices")
-                                .small()
-                                .ghost()
-                                .label("Refresh")
+                            Button::new("setup-refresh-devices", "Refresh")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|this, _, _, cx| this.load(cx))),
                         )
                         .child(
-                            Button::new("add-iphone")
-                                .small()
-                                .label(if self.challenge.is_some() {
+                            Button::new(
+                                "add-iphone",
+                                if self.challenge.is_some() {
                                     "New code"
                                 } else {
                                     "Add iPhone"
-                                })
-                                // Nothing to scan without a listener: a code no phone can
-                                // reach is a code that fails after the work of typing it.
-                                .disabled(!reachable)
-                                .on_click(cx.listener(|this, _, window, cx| {
+                                },
+                            )
+                            .size(ControlSize::Sm)
+                            // Nothing to scan without a listener: a code no phone can
+                            // reach is a code that fails after the work of typing it.
+                            .disabled(!reachable)
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
                                     this.create_challenge(window, cx);
-                                })),
+                                },
+                            )),
                         ),
                 ),
         );
@@ -559,19 +555,17 @@ impl SetupPage {
                         .gap(px(8.0))
                         .pt(px(2.0))
                         .child(
-                            Button::new("copy-code")
-                                .small()
-                                .ghost()
-                                .label("Copy code")
+                            Button::new("copy-code", "Copy code")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.copy(code.clone(), "Code", cx);
                                 })),
                         )
                         .child(
-                            Button::new("copy-payload")
-                                .small()
-                                .ghost()
-                                .label("Copy payload")
+                            Button::new("copy-payload", "Copy payload")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .disabled(payload.is_none())
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if let Some(payload) = payload.clone() {
@@ -591,10 +585,9 @@ impl SetupPage {
             );
 
             body = body.child(
-                Button::new("challenge-dismiss")
-                    .small()
-                    .ghost()
-                    .label("Done")
+                Button::new("challenge-dismiss", "Done")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.challenge = None;
                         this.challenge_payload = None;

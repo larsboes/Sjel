@@ -1,7 +1,7 @@
 //! Machine requirements and Turso replica configuration tab for Setup.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, Window};
 use sjel_gpui_core::setup::{
     has_apply_input, merge_verification_probes, ProbeMark, SetupApplyRequest, SetupPlan,
@@ -18,12 +18,12 @@ impl SetupPage {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.url_input {
             return input.clone();
         }
         let input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("libsql://your-database.turso.io"));
+            cx.new(|cx| TextInput::new(window, cx).placeholder("libsql://your-database.turso.io"));
         let subscription = cx.subscribe_in(
             &input,
             window,
@@ -39,13 +39,14 @@ impl SetupPage {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.credential_input {
             return input.clone();
         }
         let input = cx.new(|cx| {
-            InputState::new(window, cx)
+            TextInput::new(window, cx)
                 .placeholder("Primary auth token (piped to stdin, value hidden)")
+                .masked()
         });
         let subscription = cx.subscribe_in(
             &input,
@@ -62,11 +63,11 @@ impl SetupPage {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.interval_input {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("60"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("60"));
         let subscription = cx.subscribe_in(
             &input,
             window,
@@ -124,9 +125,9 @@ impl SetupPage {
         let cred_field = self.ensure_credential_input(window, cx);
         let int_field = self.ensure_interval_input(window, cx);
 
-        let url = url_field.read(cx).value().trim().to_string();
-        let token = cred_field.read(cx).value().trim().to_string();
-        let interval_str = int_field.read(cx).value().trim().to_string();
+        let url = url_field.read(cx).text().trim().to_string();
+        let token = cred_field.read(cx).text().trim().to_string();
+        let interval_str = int_field.read(cx).text().trim().to_string();
 
         if !has_apply_input(&url, &token, &interval_str) {
             self.write_error = Some("Supply a URL, credential, or interval to apply.".to_string());
@@ -224,26 +225,27 @@ impl SetupPage {
                     .items_center()
                     .gap(px(8.0))
                     .child(
-                        Button::new("setup-re-read")
-                            .small()
-                            .ghost()
-                            .label("Re-read")
+                        Button::new("setup-re-read", "Re-read")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.load(cx);
                             })),
                     )
                     .child(
-                        Button::new("setup-verify")
-                            .small()
-                            .ghost()
-                            .label(if self.verifying {
+                        Button::new(
+                            "setup-verify",
+                            if self.verifying {
                                 "Checking…"
                             } else {
                                 "Check the connection"
-                            })
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.verify_connection(window, cx);
-                            })),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.verify_connection(window, cx);
+                        })),
                     ),
             );
 
@@ -472,19 +474,17 @@ impl SetupPage {
                             .gap(px(8.0))
                             .pt(px(4.0))
                             .child(
-                                Button::new("cancel-apply")
-                                    .small()
-                                    .ghost()
-                                    .label("Cancel")
+                                Button::new("cancel-apply", "Cancel")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.confirming_component = None;
                                         cx.notify();
                                     })),
                             )
                             .child(
-                                Button::new("submit-apply")
-                                    .small()
-                                    .label("Apply Settings")
+                                Button::new("submit-apply", "Apply Settings")
+                                    .size(ControlSize::Sm)
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.apply_setup(comp_for_apply.clone(), window, cx);
                                     })),
@@ -498,13 +498,15 @@ impl SetupPage {
                     .justify_start()
                     .pt(px(4.0))
                     .child(
-                        Button::new(format!("btn-open-setup-{}", comp))
-                            .small()
-                            .label(format!("Configure {}", comp))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.confirming_component = Some(comp_to_open.clone());
-                                cx.notify();
-                            })),
+                        Button::new(
+                            format!("btn-open-setup-{}", comp),
+                            format!("Configure {}", comp),
+                        )
+                        .size(ControlSize::Sm)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.confirming_component = Some(comp_to_open.clone());
+                            cx.notify();
+                        })),
                     )
                     .into_any_element()
             };

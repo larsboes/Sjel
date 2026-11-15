@@ -38,7 +38,8 @@ fn run_host(overlay: &std::path::Path, requests: &[serde_json::Value]) -> Vec<se
 
 #[test]
 fn chrome_framed_saves_reach_the_store_and_a_missing_server_reads_as_unavailable() {
-    let overlay = std::env::temp_dir().join(format!("clip-host-{}", std::process::id()));
+    // Not temp_dir(): a long TMPDIR pushes the path past the sun_path limit (104 bytes on macOS).
+    let overlay = std::path::Path::new("/tmp").join(format!("clip-host-{}", std::process::id()));
     let socket = overlay.join("data").join("comms").join("clip.sock");
     std::fs::create_dir_all(&overlay).unwrap();
     let clip = json!({"type": "save", "clip": {
@@ -52,9 +53,10 @@ fn chrome_framed_saves_reach_the_store_and_a_missing_server_reads_as_unavailable
     );
 
     let (s, db) = (socket.clone(), overlay.join("comms.db"));
-    std::thread::spawn(move || serve(&s, &db, &NoModel));
+    let server = std::thread::spawn(move || serve(&s, &db, &NoModel));
     let started = std::time::Instant::now();
     while !socket.exists() && started.elapsed().as_secs() < 5 {
+        assert!(!server.is_finished(), "serve exited: {:?}", server.join());
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
 

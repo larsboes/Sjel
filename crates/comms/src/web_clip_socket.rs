@@ -296,14 +296,16 @@ mod tests {
     #[test]
     fn the_socket_is_owner_only_and_relays_to_the_store() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("clip-sock-{}", std::process::id()));
+        // Not temp_dir(): a long TMPDIR pushes the path past the sun_path limit (104 bytes on macOS).
+        let dir = Path::new("/tmp").join(format!("clip-sock-{}", std::process::id()));
         let socket = dir.join("s").join("clip.sock");
         let db = dir.join("comms.db");
         std::fs::create_dir_all(&dir).unwrap();
         let (s, d) = (socket.clone(), db.clone());
-        std::thread::spawn(move || serve(&s, &d, &Stub));
+        let server = std::thread::spawn(move || serve(&s, &d, &Stub));
         let started = std::time::Instant::now();
         while !socket.exists() && started.elapsed().as_secs() < 5 {
+            assert!(!server.is_finished(), "serve exited: {:?}", server.join());
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
         let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;

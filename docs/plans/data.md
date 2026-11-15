@@ -33,15 +33,22 @@ Shared typed staging, retained delivery provenance and owner-aligned deduplicati
 The body-free reviewed-label evaluator shipped in `2d88fe76`
 ([evaluation contract](../capabilities/mail-evidence.md#reviewed-local-evaluation)).
 AFM-only mail dispatch and evaluation shipped in `7f21c12b`.
+Strict purchase-section parsing, rules-only scanning/evaluation and bounded Inventory candidate
+resolution shipped in `29f6c2c9` ([contracts](../capabilities/mail-evidence.md)).
 
 Remaining work, in order:
 
-1. **Complete the first live measurement.** The private pilot has seven independently
+1. **Broaden measured extraction coverage.** The private pilot has seven independently
    agent-reviewed cases, five expected purchase claims and three negative cases. It covers an
    order, shipment, cancellation, delivery, shipment preparation and a feedback request. Labels
    were frozen before model output; they are not human ground truth. The source representation
    is pseudonymized `c1` thread bodies, supplied on stdin and never stored. Corpus and report
-   files stay in the private overlay with mode `0600`. Generation is AFM-only; other local and
+   files stay in the private overlay with mode `0600`. The `rules` baseline measured on
+   2026-11-15 found two of five expected claims, with zero false claims, three missed claims and
+   five case abstentions. It used no generation, embeddings or learned state. This is narrow
+   order/shipment coverage, not a broad accuracy result. Add independently reviewed formats
+   before extending adapters; unsupported layouts must keep abstaining as a whole.
+   Generation is AFM-only; other local and
    hosted generators are excluded. AFM passes the profile and context checks on all seven cases
    but fails shared model admission (`model_admission`). No accuracy result exists. Diagnose
    that gate through the owning capability without bypassing it. Add human review,
@@ -50,7 +57,9 @@ Remaining work, in order:
    and repeatability across pseudonymization sessions. Done when a repeatable local run reports
    false claims, missed claims, incorrect targets and duplicates with provenance and no retained
    full bodies. A first small baseline does not set an acceptance threshold.
-2. **Resolve item mentions through Inventory.** Use source-scoped identifiers before label
+2. **Complete reviewed identity resolution.** The first resolver establishes identity only from
+   canonical references; title equality and token overlap retrieve at most ten review candidates.
+   Candidate review is not yet connected to the native UI. Use source-scoped identifiers before label
    similarity. Return explicit exact, ambiguous and unknown results with candidate item IDs and
    reasons. A model may propose candidates; the owner validates identifiers and the reviewer
    selects a current item/state snapshot. Never use an order number alone as a global key.
@@ -72,13 +81,15 @@ Remaining work, in order:
    automated reasoning remain deferred until an interoperability or inference requirement
    cannot be met by these contracts.
 
-Verification: all 521 Comms tests and all-target Clippy passed, including non-AFM refusal,
-context failure classification and nine evaluator checks. The earlier shared-contract slice passed 625
-tests across Comms, Inventory and Projects. Route-schema, store-transaction, relative-document-link,
+Verification: all 590 Comms/Inventory tests and all-target Clippy passed, including rules-only
+operation without inference roles, whole-section abstention, identical-product/accessory ambiguity,
+stable top-ten truncation and unchanged review snapshots. Route-schema, store-transaction, relative-document-link,
 publication-hygiene and self-model checks passed. The existing architecture freshness failure is
 an unrelated stale `sqld` description; doctor reports an overdue backup. The AFM pilot passed
-profile/context admission but failed the shared model gate. Production replay, service installation, UI acceptance and
-workspace-wide checks have not run. Scanning remains disabled.
+profile/context admission but failed the shared model gate. The rules-only pilot completed against
+the frozen labels. Live owner staging, resolver reads against real Inventory, service installation,
+native UI acceptance and workspace-wide checks have not run. Scheduled scanning and HTTP replay
+remain disabled.
 
 ## Mail evidence for projects and inventory
 

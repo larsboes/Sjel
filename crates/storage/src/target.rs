@@ -290,12 +290,28 @@ pub fn r6_verdict(debug: u64, release: u64) -> (Option<f64>, &'static str) {
     )
 }
 
+fn profiles(dir: &Path) -> Vec<Profile> {
+    let mut names = vec!["debug".to_owned(), "release".to_owned()];
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry.file_type().is_ok_and(|kind| kind.is_dir())
+                && (entry.path().join(".fingerprint").is_dir()
+                    || entry.path().join(".cargo-lock").is_file())
+            {
+                if let Some(name) = entry.file_name().to_str() {
+                    names.push(name.to_owned());
+                }
+            }
+        }
+    }
+    names.sort();
+    names.dedup();
+    names.iter().map(|name| profile(dir, name)).collect()
+}
+
 pub fn measure(repo_root: &Path) -> TargetReport {
     let (dir, source) = target_dir(repo_root);
-    let profiles: Vec<Profile> = ["debug", "release"]
-        .iter()
-        .map(|name| profile(&dir, name))
-        .collect();
+    let profiles = profiles(&dir);
     let get = |name: &str| {
         profiles
             .iter()
@@ -430,6 +446,26 @@ mod tests {
         let p = profile(&root, "release");
         assert!(!p.present);
         assert_eq!(p.bytes, 0);
+    }
+
+    #[test]
+    fn custom_profiles_are_counted_without_treating_nested_targets_as_profiles() {
+        let root = crate::testutil::tempdir("target-custom-profile");
+        std::fs::create_dir_all(root.join("desktop-dev")).unwrap();
+        std::fs::write(root.join("desktop-dev/.cargo-lock"), b"").unwrap();
+        std::fs::write(root.join("desktop-dev/sjel-gpui"), vec![0; 16 * 1024]).unwrap();
+        std::fs::create_dir_all(root.join("legacy/.fingerprint")).unwrap();
+        std::fs::create_dir_all(root.join("hermetic-fixture/debug/.fingerprint")).unwrap();
+        let measured = profiles(&root);
+        assert_eq!(
+            measured.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+            vec!["debug", "desktop-dev", "legacy", "release"]
+        );
+        let custom = measured.iter().find(|p| p.name == "desktop-dev").unwrap();
+        assert!(custom.present);
+        assert!(custom.bytes >= 16 * 1024);
+        assert!(!measured.iter().find(|p| p.name == "debug").unwrap().present);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

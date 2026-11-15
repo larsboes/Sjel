@@ -1,10 +1,14 @@
 #!/bin/bash
-# tools/local-build — ask the power profile whether heavy local work is admitted.
-#
-# Exit 0 admitted, 3 deferred (the reason is printed), 2 undecidable. Agent guards call this
-# before a build or test command; the exit codes are the contract.
+# tools/local-build — check admission or run an explicit build with battery defaults.
 set -u
 _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/local-build.sh
 . "$_here/lib/local-build.sh"
+if [ "${1:-}" = run ]; then
+  shift
+  [ "$#" -gt 0 ] || { echo "Usage: tools/local-build run <command> [args...]" >&2; exit 2; }
+  local_build_prepare || exit $?
+  exec "$@"
+fi
+[ "$#" -eq 0 ] || { echo "Usage: tools/local-build [run <command> [args...]]" >&2; exit 2; }
 local_build_check

@@ -29,14 +29,18 @@ a stale tab or CLI cannot overwrite newer preferences.
 
 ## Local builds
 
-Compilation, Clippy and test suites are admitted only under Normal. While On the go they wait,
-and the tool that was about to compile prints why. This is not a category: a standing allowance
-to drain the battery is not a preference worth saving. One command may carry an exception:
+Unbounded compilation, Clippy and test suites are admitted only under Normal. Explicit builds
+can run On the go through the [battery-aware build wrapper](../../tools/local-build.md).
+`sjel cargo` applies the same defaults automatically. Admission-only callers still defer
+unattended CLI rebuilds and unwrapped agent commands on battery.
 
 ```sh
-SJEL_ALLOW_LOCAL_BUILD=1 tools/cargo-hermetic test -p sjel-runtime --locked
+sjel cargo test -p sjel-runtime --locked
+tools/local-build run cargo build --locked -p sjel-cli
 sjel runtime admit local-build   # exit 0 admitted · 3 deferred
 ```
+
+`SJEL_ALLOW_LOCAL_BUILD=1` remains an explicit per-command bypass without concurrency defaults.
 
 The decision is read from the deployment and a fresh `pmset` probe, so a stopped status process
 neither permits heavy work nor refuses it while docked. A checkout with no overlay has no

@@ -32,6 +32,39 @@ local_build_cli() {
   return 1
 }
 
+# Prepare an explicitly requested build; leave admission-only callers unchanged.
+local_build_prepare() {
+  local code=0 value diagnostic
+  diagnostic="$(local_build_check 2>&1)" || code=$?
+  case "$code" in
+    0)
+      [ -z "$diagnostic" ] || printf '%s\n' "$diagnostic" >&2
+      return 0
+      ;;
+    3)
+      for value in "${CARGO_BUILD_JOBS:-2}" "${RUST_TEST_THREADS:-2}"; do
+        case "$value" in
+          ''|*[!0-9]*|0) echo "local-build: concurrency must be a positive integer" >&2; return 2 ;;
+        esac
+      done
+      case "${CARGO_BUILD_JOBS:-2}" in
+        1) export CARGO_BUILD_JOBS=1 ;;
+        *) export CARGO_BUILD_JOBS=2 ;;
+      esac
+      case "${RUST_TEST_THREADS:-2}" in
+        1) export RUST_TEST_THREADS=1 ;;
+        *) export RUST_TEST_THREADS=2 ;;
+      esac
+      export SJEL_ALLOW_LOCAL_BUILD=1
+      echo "local-build: On the go — Cargo jobs=$CARGO_BUILD_JOBS, Rust test threads=$RUST_TEST_THREADS" >&2
+      ;;
+    *)
+      [ -z "$diagnostic" ] || printf '%s\n' "$diagnostic" >&2
+      return "$code"
+      ;;
+  esac
+}
+
 local_build_check() {
   if [ "${SJEL_ALLOW_LOCAL_BUILD:-}" = 1 ]; then
     echo "local-build: SJEL_ALLOW_LOCAL_BUILD=1 — the power profile is bypassed for this command" >&2

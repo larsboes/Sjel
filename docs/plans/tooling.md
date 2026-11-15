@@ -156,6 +156,33 @@ archive includes the managed path resolver; its extracted-path regression passes
 
 ## Open
 
+- **Desktop rebuild efficiency acceptance.** Contracts: [local builds](../../tools/local-build.md)
+  and [desktop builds](../../apps/gpui/README.md#running-it). The UI session supplied the table-API
+  alignment in `831d1fb2`; build tooling makes no changes to those UI files.
+  Verified: full `desktop-dev` compilation, installer regressions with mocked Cargo and real
+  macOS ad-hoc signing, both battery-wrapper suites, four replacement checks, thirteen storage
+  target tests, scoped Clippy with warnings denied, ShellCheck and documentation links.
+  Architecture freshness passes. The installer rejects a profile
+  directory used as a target root.
+  Measured on 2026-11-15 with the correct shared cache root: the successful retry took
+  101.44 seconds. Concurrent input changes prevent treating that as a controlled comparison.
+  A subsequent unchanged-input build took 0.41 seconds overall (Cargo: 0.28 seconds), with no
+  compilation and unchanged HEAD/input hashes. Platform maximum RSS was 199,917,568 bytes,
+  not aggregate process-tree memory. The machine was on AC in Normal mode; these figures do not
+  establish battery savings. No app installation, signing or restart occurred during the builds.
+  An earlier benchmark incorrectly selected the profile directory as its target root; its
+  timings are rejected. The duplicate was removed after canonical-path, profile-marker and
+  open-file checks. The correct executable hash was preserved; the intended profile retains
+  4,331,428 KiB. The installed Cargo uses `.cargo-lock` without a top-level `.fingerprint`;
+  cache-root validation and custom-profile accounting cover both layouts.
+  Open: controlled cold and one-source-edit comparisons, a real installed development bundle's
+  Finder-launched rebuild, and runtime/energy comparison with release. Compiler-stamp changes
+  and embedded documentation still invalidate builds. Measurement currently uses platform
+  `time -l` and `du -sk`; an optional report on `tools/local-build run` would own repeated probes.
+  Profile-only reclamation required a bounded local removal because existing target cleanup
+  would remove the containing working cache. A profile selector in `sjel storage reclaim`,
+  using its existing path and live-use guards, is the smallest tooling extension.
+
 - **Activate a capability from a writable build cache.** Projects activation could not remove
   Cargo archive temporary directories in either live cache, including an elevated restart.
   The service remained stopped while the release was built in the existing writable verification

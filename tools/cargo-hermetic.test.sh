@@ -180,7 +180,8 @@ mkdir -p "$case_dir/bin" "$case_dir/host-tmp"
 cat > "$case_dir/bin/cargo" <<'CARGO'
 #!/bin/bash
 set -eu
-printf '%s\n%s\n' "$TMPDIR" "$CARGO_TARGET_DIR" > "$HERMETIC_TEST_REPORT"
+printf '%s\n%s\n%s/%s\n' "$TMPDIR" "$CARGO_TARGET_DIR" \
+  "${CARGO_BUILD_JOBS:-unset}" "${RUST_TEST_THREADS:-unset}" > "$HERMETIC_TEST_REPORT"
 mkdir -p "$TMPDIR/comms-test-$$"
 printf 'fixture\n' > "$TMPDIR/comms-test-$$/store.db"
 [ "${1:-}" != "fail" ] || exit 19
@@ -200,6 +201,17 @@ fixture_tmp="$(sed -n '1p' "$case_dir/report")"
 fixture_cache="$(sed -n '2p' "$case_dir/report")"
 [ ! -e "$fixture_tmp" ] || note_fail "successful tests left temporary databases behind"
 [ -d "$fixture_cache" ] || note_fail "fixture cleanup removed the reusable build cache"
+
+printf '#!/bin/sh\nexit 3\n' > "$case_dir/bin/battery-cli"
+chmod +x "$case_dir/bin/battery-cli"
+out=$(env -u SJEL_ALLOW_LOCAL_BUILD -u CARGO_BUILD_JOBS -u RUST_TEST_THREADS \
+  PATH="$case_dir/bin:$PATH" TMPDIR="$case_dir/host-tmp" \
+  CARGO_TARGET_DIR="$case_dir/cache" HERMETIC_TEST_REPORT="$case_dir/report" \
+  SJEL_CLI_BIN="$case_dir/bin/battery-cli" "$TOOL" test 2>&1)
+status=$?
+expect_ok "explicit battery verification reaches Cargo"
+[ "$(sed -n '3p' "$case_dir/report")" = "2/2" ] || note_fail "battery defaults did not reach Cargo"
+[ "$(sed -n '2p' "$case_dir/report")" = "$fixture_cache" ] || note_fail "battery verification did not reuse the existing cache"
 
 fake_run fail
 [ "$status" -eq 19 ] || note_fail "a failed test process lost its exit status"

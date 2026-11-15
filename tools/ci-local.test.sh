@@ -176,51 +176,70 @@ EOF
 expect_status "unknown wrapper conditions still refuse" 2 "$root" run repo-gates
 
 root=$(checkout pre-push)
+calls="$SCRATCH/pre-push-calls"
 git -C "$root" init -q
-mkdir "$root/bin"
-cat > "$root/bin/gitleaks" <<'EOF'
+git -C "$root" config user.email test@example.invalid
+git -C "$root" config user.name test
+mkdir "$SCRATCH/pre-push-bin"
+cat > "$SCRATCH/pre-push-bin/gitleaks" <<'EOF'
 #!/bin/sh
-printf 'gitleaks %s\n' "$*" >> calls
+printf 'gitleaks %s\n' "$*" >> "$CALLS"
 exit "${LEAK_EXIT:-0}"
 EOF
-cat > "$root/bin/bun" <<'EOF'
+cat > "$SCRATCH/pre-push-bin/bun" <<'EOF'
 #!/bin/sh
 exit 0
 EOF
 cat > "$root/tools/check-publication-hygiene.sh" <<'EOF'
 #!/bin/sh
-printf 'publication\n' >> calls
+printf 'publication\n' >> "$CALLS"
 exit "${PUBLICATION_EXIT:-0}"
 EOF
 cat > "$root/tools/ci-local" <<'EOF'
 #!/bin/sh
-printf 'ci-local %s\n' "$*" >> calls
-exit 0
+printf 'ci-local %s in %s with %s\n' "$*" "$(pwd -P)" "$(cat checked.txt)" >> "$CALLS"
+exit "${FAST_EXIT:-0}"
 EOF
-chmod +x "$root/bin/gitleaks" "$root/bin/bun" "$root/tools/check-publication-hygiene.sh" "$root/tools/ci-local"
+chmod +x "$SCRATCH/pre-push-bin/gitleaks" "$SCRATCH/pre-push-bin/bun" "$root/tools/check-publication-hygiene.sh" "$root/tools/ci-local"
+printf 'committed\n' > "$root/checked.txt"
+git -C "$root" add -A && git -C "$root" commit -qm one
+git -C "$root" update-ref refs/remotes/origin/main HEAD
+pushed=$(git -C "$root" rev-parse HEAD)
 hook() {
-  (cd "$root" && printf '%s\n' 'refs/heads/main 1111111111111111111111111111111111111111 refs/heads/main 0000000000000000000000000000000000000000' |
-    PATH="$root/bin:$PATH" LEAK_EXIT="$1" PUBLICATION_EXIT="$2" SJEL_SKIP_PUSH_CHECKS="$3" bash "$REPO/tools/githooks/pre-push") > "$root/output" 2>&1
+  : > "$calls"
+  (cd "$root" && printf 'refs/heads/main %s refs/heads/main 0000000000000000000000000000000000000000\n' "$pushed" |
+    PATH="$SCRATCH/pre-push-bin:$PATH" CALLS="$calls" LEAK_EXIT="$1" PUBLICATION_EXIT="$2" SJEL_SKIP_PUSH_CHECKS="$3" \
+      FAST_EXIT="${4:-0}" bash "$REPO/tools/githooks/pre-push") > "$SCRATCH/pre-push-output" 2>&1
   status=$?
-  out=$(< "$root/calls")
+  out=$(< "$calls")
 }
 hook 0 0 0
 [ "$status" -eq 0 ] || { echo "FAIL: pre-push success"; fails=$((fails + 1)); }
-expect_says "gitleaks stays redacted and scoped" "gitleaks git --redact --no-banner --exit-code 1 --log-opts=1111111111111111111111111111111111111111 --not --remotes"
+expect_says "gitleaks stays redacted and scoped" "gitleaks git --redact --no-banner --exit-code 1 --log-opts=$pushed --not --remotes"
 expect_says "publication safeguard runs" "publication"
-expect_says "hook uses only fast" "ci-local fast"
-: > "$root/calls"
+expect_says "hook uses only fast on the committed range" "ci-local fast --committed --base $pushed in $(cd "$root" && pwd -P) with committed"
 hook 1 0 0
 [ "$status" -eq 1 ] || { echo "FAIL: gitleaks failure must block push"; fails=$((fails + 1)); }
 if printf '%s' "$out" | grep -qF 'ci-local'; then echo "FAIL: checks ran after secret failure"; fails=$((fails + 1)); fi
-: > "$root/calls"
 hook 0 1 1
 [ "$status" -eq 1 ] || { echo "FAIL: skip must not bypass publication failure"; fails=$((fails + 1)); }
-: > "$root/calls"
 hook 0 0 1
 [ "$status" -eq 0 ] || { echo "FAIL: explicit skip"; fails=$((fails + 1)); }
 expect_says "skip retains publication" "publication"
 if printf '%s' "$out" | grep -qF 'ci-local'; then echo "FAIL: skip still ran fast"; fails=$((fails + 1)); fi
+hook 0 0 0 1
+[ "$status" -eq 1 ] || { echo "FAIL: a failed fast check must block push"; fails=$((fails + 1)); }
+
+# Another session's uncommitted edit must not be what the push is checked against.
+printf 'uncommitted\n' > "$root/checked.txt"
+hook 0 0 0
+[ "$status" -eq 0 ] || { echo "FAIL: dirty-tree push"; fails=$((fails + 1)); }
+expect_says "a dirty tree is checked from the pushed commit" "with committed"
+if printf '%s' "$out" | grep -qF "in $(cd "$root" && pwd -P) "; then
+  echo "FAIL: a dirty tree was checked in place"; fails=$((fails + 1))
+fi
+[ "$(< "$root/checked.txt")" = "uncommitted" ] || { echo "FAIL: the hook changed the working tree"; fails=$((fails + 1)); }
+git -C "$root" checkout -q -- checked.txt
 
 out=$("$TOOL" --root "$REPO" list --json 2>&1)
 status=$?

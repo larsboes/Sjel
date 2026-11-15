@@ -41,7 +41,9 @@ configuration where a machine contract is required.
 Run `sjel check` (`tools/ci-local fast`) before pushing; the pre-push hook runs it too. It checks
 formatting in affected Rust workspaces, publication hygiene and affected cheap repository gates.
 Tests, Clippy and builds run in CI rather than being repeated in the push hook.
-`SJEL_SKIP_PUSH_CHECKS=1` skips formatting and selected gates for one push, but does not skip
+The hook checks the pushed commits. When the working tree has other changes, it runs the checks
+in a temporary clone of each pushed commit, so another session's uncommitted edits cannot fail
+the push. `SJEL_SKIP_PUSH_CHECKS=1` skips formatting and selected gates for one push, but does not skip
 secret scanning or publication hygiene.
 Inspect the diff, `git diff --check` and `git status --short` before committing. Do not describe
 a skipped or unavailable check as passing.

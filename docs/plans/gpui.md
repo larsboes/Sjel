@@ -848,11 +848,12 @@ acceptance for tables, charts, calendar and the migrated forms remains open.
 
 #### Execution order
 
-Complete table acceptance first. Then consolidate test setup while replacing the ledger smoke
-test, audit calendar interaction gaps, and migrate calendar rendering after the fork covers
-them. Charts follow; forms, menus, feedback and navigation move in bounded page changes.
-Mail, block editing and remote terminal adoption follow their interaction comparisons rather
-than a bulk import of matching component names. Optional list conversions stay last.
+Tables, `test_support.rs`, Calendar (`c3d0ed19`), interactive Charts (`f0d20861`) and
+People/Inventory forms (`8171f0c5`, `475c9800`) have landed; live light/dark acceptance remains
+open. Remaining adoption work moves in order: workspace `Toaster`/feedback, menus/overlays
+(`editor/slash_menu.rs`, `src/workspace/panels.rs`), navigation/layout, then interaction-gated
+`mail/`, `documents::BlockEditor` and `ely::terminal` (after a fork remote-transport API).
+Optional list conversions stay last.
 
 #### Table acceptance
 
@@ -868,26 +869,20 @@ accessibility in the fork and decide whether the border is needed during visual 
 
 #### Chart acceptance
 
-Finance's grouped bars and storage history use Ely in `9f5fe4d1`; 195 UI tests, Cargo check and Clippy pass.
+Finance's grouped bars and storage history moved to Ely in `9f5fe4d1`; interactive charts,
+capacity reference rules and category ledger filtering shipped in `f0d20861` (Ely `a42025a`).
+Historical completion velocity and reading cadence require capability event timestamps before
+charting.
 
-Interactive charts and ledger category selection shipped in `f0d20861` (Ely `a42025a`).
+Open: inspect Finance, Systems, Projects and Feed charts in light and dark appearances and narrow
+windows, including tooltips, legend toggles, storage brush/reset, category selection/clearing,
+negative expenses, mixed currencies, partial directory scans, missing months, empty snapshots and
+invalid or absent dates.
 
-Open: verify the expanded charts in both appearances and narrow windows; test storage brush
-and reset, category selection and clearing, negative expenses, mixed currencies, partial
-directory scans, empty snapshots and invalid or absent dates. Historical completion velocity
-and reading cadence require capability event timestamps before charting.
-
-Verification: Ely `a42025a` passes 54 chart tests on each renderer; the published dependency
-passes 199 Sjel UI tests, desktop checks without default features, and the NSH feature check.
-The Finance production-view test replaces the table smoke wrapper and checks category
-selection, filtered row count and clearing. Clippy, formatting and focused whitespace checks
-pass; Clippy retains unrelated warnings.
-The documentation link check exits 1 without diagnostics. Light/dark visual acceptance has
-not run for this expansion.
-
-Open: inspect Finance and Systems storage in light and dark appearances, including tooltips,
-legend toggles, narrow layouts, missing months and empty histories. Live appearance, the app
-workspace, GPUI Fast and NSH checks did not run for this chart change.
+Verification: Ely `a42025a` passes 54 chart tests on each renderer; `sjel-gpui-ui` passes 200
+library tests (including Finance category filtering and storage history), and `--no-default-features`
+and `sjel-gpui-ui --no-default-features --features nsh` check cleanly. Live light/dark acceptance
+has not run.
 
 #### Resume checklist (Ely)
 
@@ -907,15 +902,6 @@ sjel cargo check --manifest-path apps/gpui/Cargo.toml --locked -p sjel-gpui-ui -
 cargo test --lib --features test-support
 cargo test --lib --features test-support,gpui-fast
 ```
-
-Verification on 2026-11-15: `sjel cargo test --manifest-path apps/gpui/Cargo.toml --locked
--p sjel-gpui-core --lib` passes (386 passed, 6 ignored). The workspace command above stops
-during UI compilation: concurrent edits in `ui/src/finance/overview.rs` reference an undefined
-`TREND_BAR_HEIGHT` at lines 774, 791 and 805. No workspace tests run to completion in that
-attempt. The documentation link check passes (417 documents), the self-reference check passes
-(3,103 documents), and the focused `git diff --check` passes. `tools/doctor` reports two failed
-checks outside this plan change. This review changes only the plan. Feature checks, fork tests
-and live visual acceptance have not run for this review.
 
 #### Remaining sortable lists
 

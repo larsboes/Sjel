@@ -13,6 +13,6 @@ source details and Mail/Travel navigation. NSH retains the shared core timeline 
 The conversion boundary preserves exclusive all-day ends and source metadata.
 
 Verification: the fork passes 1,748 tests on GPUI Fast, 1,749 on GPUI Pre and library Clippy.
-Application tests, feature checks and rendered light/dark acceptance remain pending while
-verification moves to a clean snapshot of the calendar change. Concurrent finance/chart
-edits prevent a reliable whole-checkout completion claim. No physical-phone check has run.
+`sjel-gpui-ui` passes 200 library tests (including Calendar timeline, month viewport and editor
+tests), `--no-default-features` and `sjel-gpui-ui --no-default-features --features nsh` check
+cleanly. Rendered Mac light/dark acceptance and physical-phone regression checks remain open.

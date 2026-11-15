@@ -852,6 +852,13 @@ moves through navigation/layout, then interaction-gated
 `mail/`, `documents::BlockEditor` and `ely::terminal` (after a fork remote-transport API).
 Optional list conversions stay last.
 
+Sjel administration buttons and inputs, plus shared Setup/Research tabs, shipped in `06739e59`.
+The nine existing areas retain their capability calls. Registry-derived views retain priority, and
+Links retirement remains governed by [`product.md`](product.md#open-reductions).
+Verification: 224 UI library tests, UI Clippy, the app no-default-features check and the
+UI NSH-only feature check pass. Clippy reports unrelated warnings. Native light/dark
+acceptance, installation and full workspace gates have not run for this migration.
+
 Shared Ely tabs for Inventory, Backup and Systems shipped in `f2324efe`.
 
 Counted Ely filter toggles for Projects, Documents, Feed and Inbox shipped in `65cee7b2`.

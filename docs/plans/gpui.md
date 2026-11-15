@@ -859,22 +859,26 @@ Counted Ely filter toggles for Projects, Documents, Feed and Inbox shipped in `6
 Verification: all 207 UI tests and three registry-contract tests pass, including document
 pointer/keyboard filtering, Projects grouping and registry layout/focus regressions.
 UI Clippy passes with three warnings in untouched Projects, Travel and People code.
-The first signed update is installed. Its embedded build stamp reflects a concurrent commit;
-the final rebuild must set `SJEL_BUILD_COMMIT` explicitly. Live Documents light/dark filtering,
-reader opening and Inventory/Backup/Systems tab switching pass. Shell replacement was denied
-by macOS; Finder completed the signed bundle update. Narrow-window acceptance remains open.
-Phone feature checks remain open.
+Signed desktop build `627805fd` is installed and reports that version in Settings; the build
+sets `SJEL_BUILD_COMMIT` explicitly. Live Documents light/dark filtering and reader opening,
+Projects status filtering/grouping, and Inventory/Backup/Systems tab switching pass. Finder
+completed the signed bundle update after macOS denied shell replacement. The original System
+appearance is restored. Phone feature checks and live Feed/Inbox toggle acceptance remain open.
 
 The fork's `48ae78d` constrains virtual table rows to the column layout. A live Inventory
 subtitle previously pushed row actions outside their column; a regression reproduces that
 failure and now passes for plain and virtual tables. All 1,753 default-engine and 1,752
-gpui-fast fork tests pass, as does fork Clippy. The app pin follows this fix; installation and
-live retest remain open. Wishlist cards also allow long notes to displace their actions;
-that separate non-table layout still needs a constrained text column.
+gpui-fast fork tests pass, as does fork Clippy. The app pin shipped in `627805fd`; installed
+Inventory retests pass in light/dark and at 1040 × 720. Remaining layout defects: Wishlist
+notes displace actions, Inventory's category toolbar squeezes search at that width, and the
+grouped task title column is too narrow. Mutation acceptance and minimum-window checks remain
+open; live checks did not modify records.
+The documentation link gate fails on an unrelated Projects heading link in `data.md`;
+focused whitespace checks pass. Full workspace gates and phone checks did not run for this pass.
 
 #### Remaining component parity
 
-Source audit against the manifest-pinned Ely `a42025a`:
+Source audit against Ely `a42025a`; `48ae78d` changes table row sizing only:
 
 | Boundary | Finding and disposition | Required acceptance before adoption |
 |---|---|---|
@@ -984,14 +988,13 @@ Open, in order:
    Projects opens through Browse objects and `sjel://objects/projects`; the proxy exposes
    discovery for API-only services. Three registry tests, two headless pointer/loading tests,
    deep-link tests and 15 proxy tests pass. The Mac build and focused Clippy pass with unrelated
-   warnings. Live Projects discovery publishes both projections; installed-app and end-to-end
-   relation acceptance through the updated proxy have not run
-   ([`data.md`](data.md#registry-derived-project-views)).
-   A live installed-app pass now loads the project list, opens properties and follows Records.
-   It exposed overlapping headings, column order shared across object types and lost focus
-   after opening a row. The adapter now gives each object its own table state and explicit
-   column widths, and retains focus on the property page. Headless regressions pass;
-   installation and live retest of these corrections remain open.
+   warnings. The installed `627805fd` app loads Projects, opens properties, follows Records
+   and opens a related record through the live proxy
+   ([`data.md`](data.md#registry-derived-project-views)). Layout and focus corrections shipped
+   in `2161a596`: tables have object-specific state and explicit column widths; property pages
+   retain focus. Live light/dark retests verify title-first relation columns and enabled Go
+   navigation after opening a row. At 1040 × 720 visible headings remain separate; reaching
+   offscreen registry columns by horizontal gesture remains unverified.
 2. The same views on the phone as NSH screens, fed from the local copy. The existing replica
    readers omit classification metadata; extend their read contract before supplying registry
    projections, preserving object identity and class rather than inventing defaults.

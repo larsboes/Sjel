@@ -8,6 +8,16 @@ then move it to Done here.
 Entry format: what was needed, what the agent did instead, and the smallest tooling change that
 covers it.
 
+## Private repository consolidation
+
+- **Import a private source workspace with history.** Consolidating a sibling application
+  workspace required a verified Git bundle, a local history fetch and a prefixed tree import.
+  Protected local files prevented an intact directory rename, so the original checkout remains
+  a recovery source. Add an explicit-destination import command to `tools/repos` that preserves
+  unrelated edits, records the source commit as a parent and reports local-state handoff paths
+  without reading credentials. Done when a dirty destination and protected local files have
+  regression coverage and the imported source tree matches the original.
+
 ## Harness delivery
 
 Claude Code Pack installation uses the profile-aware harness adapter only. The native marketplace

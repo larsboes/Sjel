@@ -223,6 +223,10 @@ archive includes the managed path resolver; its extracted-path regression passes
   `apps/gpui/Cargo.lock` until the `rev` moves ([`gpui.md`](gpui.md#resume-checklist-ely)).
   Smallest change: a `tools/` wrapper that takes the fork path, runs the checks with the patch,
   and restores the lockfile.
+- **Protected desktop bundle replacement.** macOS denied the shell installer's rename of the
+  installed signed bundle; Finder's normal Replace action succeeded. Smallest change: detect
+  this denial, retain the signed staging bundle and report its Finder replacement path. The
+  existing `SJEL_DESKTOP_APP_DEST` supports staging without changing access controls.
 
 - **Overlay ignore-policy compatibility — deferred.** The shared floor excludes the machine
   manifest and all runtime-data paths, while existing private overlays deliberately version

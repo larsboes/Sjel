@@ -859,9 +859,18 @@ Counted Ely filter toggles for Projects, Documents, Feed and Inbox shipped in `6
 Verification: all 207 UI tests and three registry-contract tests pass, including document
 pointer/keyboard filtering, Projects grouping and registry layout/focus regressions.
 UI Clippy passes with three warnings in untouched Projects, Travel and People code.
-The signed `65cee7b2` desktop build is installed; live light/dark and narrow-window acceptance
-continues. Shell replacement was denied by macOS; Finder completed the signed bundle update.
-Phone feature checks remain open. The fork and dependency pin are unchanged.
+The first signed update is installed. Its embedded build stamp reflects a concurrent commit;
+the final rebuild must set `SJEL_BUILD_COMMIT` explicitly. Live Documents light/dark filtering,
+reader opening and Inventory/Backup/Systems tab switching pass. Shell replacement was denied
+by macOS; Finder completed the signed bundle update. Narrow-window acceptance remains open.
+Phone feature checks remain open.
+
+The fork's `48ae78d` constrains virtual table rows to the column layout. A live Inventory
+subtitle previously pushed row actions outside their column; a regression reproduces that
+failure and now passes for plain and virtual tables. All 1,753 default-engine and 1,752
+gpui-fast fork tests pass, as does fork Clippy. The app pin follows this fix; installation and
+live retest remain open. Wishlist cards also allow long notes to displace their actions;
+that separate non-table layout still needs a constrained text column.
 
 #### Remaining component parity
 

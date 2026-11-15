@@ -3,6 +3,8 @@
 //! A tone says what a value means; nothing here is decorative (`Packs/design/skills/ui-craftsmanship`, rule 1).
 
 pub mod density;
+#[cfg(feature = "gpui")]
+pub mod ely;
 pub mod nsh;
 pub mod palette;
 pub mod settings;

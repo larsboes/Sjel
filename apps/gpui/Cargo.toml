@@ -78,6 +78,8 @@ raw-window-handle = "=0.6.2"
 
 [dev-dependencies]
 gpui-kit = { workspace = true, features = ["test-support"] }
+# `ely::init_for_tests`: window tests build a `Workspace`, which sets Ely's theme.
+ely-gpui-component = { workspace = true, features = ["test-support"] }
 # `cfg(test)` marks only the crate that declares the test, so `core`'s local-database gate has to
 # arrive as a feature: without it these window tests would read this machine's real sjel.db.
 sjel-gpui-core = { workspace = true, features = ["test-support"] }

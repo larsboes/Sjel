@@ -766,42 +766,40 @@ Built: the fork is pinned at `435226f` in `apps/gpui/Cargo.toml` and re-exported
 `sjel_gpui_ui::ely` under the `gpui` feature, so the phone build carries no Ely. `src/main.rs`
 serves Ely's files before GPUI Kit's and calls `ely::init`. The two share 290 Lucide icon paths;
 289 draw the same, and `icons/credit-card.svg` now draws Ely's version. Ely's tab bindings
-apply only inside Ely's focus context.
+apply only inside Ely's focus context. The app launched cleanly with Ely loaded.
 
-Open, in order:
+Theme bridge: `ui/src/theme/ely.rs` gives Ely 13 of its 36 colors from Sjel's palette and the
+owner's accent. The other 23 keep Ely's own value for the mode. `Workspace::sync_kit_accent`
+calls it at launch, on an appearance change and on a Settings change, and switches Ely's mode at
+once, with no fade.
 
-1. A theme bridge: `ui/src/theme/palette.rs` sets Ely's palette (`Theme::set_palette`), so an
-   Ely control matches the Sjel page around it in light and dark.
-2. The first replacement: `ui/src/primitives/data_table.rs` and `tables.rs` (1,066 lines) move to
-   Ely's tables. Done when every page that used them keeps its sort, selection and keyboard
-   behavior and the two files are deleted.
+Open:
+
+1. Tables. `ui/src/primitives/data_table.rs` and `tables.rs` (1,066 lines) are replaced, not
+   ported one to one. The owner's goal: rethink the tables on Ely's, so the six pages that use
+   them carry much less code and are simpler to maintain. Done when each page keeps the sort,
+   selection and keyboard behavior it needs, and the two files are deleted. Ely's `active` and
+   `*_subtle` fills are warm greys on Sjel's blue-tinted surfaces. Judge them on the first
+   moved page.
 
 #### Resume checklist (Ely)
 
-Paused after `e5202cc7` pinned the fork. Nobody launched the app with Ely loaded yet.
-Continue in this order:
+The fork is pinned, the app launches with Ely, and the theme bridge is built. Continue in this
+order:
 
 1. **Orient.** Read `AGENTS.md`, load the `sjel` and `gpui` skills, and run
    `git status --short --branch` and `tools/doctor`. Other sessions edit `apps/gpui` in the
    primary checkout. Stage only the files of this task.
-2. **Check the launch.** Ask the owner to launch the Mac app once. A panic at launch means
-   `ely::init` did not find its files. Do not launch the app yourself.
-3. **Theme bridge (item 1).** Ely's `Palette` has 36 colors
-   (`~/Developer/forks/Ely-GPUI-Components/src/theme/palette.rs`). Sjel's has 13
-   (`ui/src/theme/palette.rs`). Map each Sjel color to its Ely field. Derive the remaining
-   Ely fields from Ely's own light and dark palettes. Do not invent new values. Call
-   `Theme::set_palette` and `Theme::set_mode` where the app applies its appearance, so a
-   change in Settings also reaches Ely. Show the mapping table to the owner before you commit,
-   because it is a visual decision.
-4. **Tables (item 2).** Six pages use Sjel's tables: `documents/mod.rs`, `finance/import.rs`,
+2. **Tables (item 1).** Six pages use Sjel's tables: `documents/mod.rs`, `finance/import.rs`,
    `finance/transactions.rs`, `inventory/owned.rs`, `projects/mod.rs` and `projects/tables.rs`
-   (all in `ui/src`). Ely's tables are in the fork at `src/tables/`. Move one page first, check
+   (all in `ui/src`). Ely's tables are in the fork at `src/tables/`. List what each page needs
+   from a table, then put a design to the owner before you move a page. Move one page, check
    sort, selection and keys with a headless test, then move the other five. Delete
    `ui/src/primitives/data_table.rs` and `tables.rs` in the change that moves the last page.
-5. **Change the fork.** When an Ely component lacks a behavior that Sjel needs, add
+3. **Change the fork.** When an Ely component lacks a behavior that Sjel needs, add
    it on the fork's `sjel` branch with a test. Do not open a PR upstream yet. Push the fork,
    then move the `rev` in `apps/gpui/Cargo.toml` to the new commit.
-6. **Keep the fork current.** On a GPUI Kit upgrade (§6), change `gpui-kit` and
+4. **Keep the fork current.** On a GPUI Kit upgrade (§6), change `gpui-kit` and
    `gpui-pre-leaks` in the fork's `Cargo.toml` to the new versions. Fetch `upstream` and merge
    its `main` into `sjel`. The 0.3.8 to 0.3.12 port is a guide to the API breaks to expect:
    key bindings, `unparse`, scroll events and the animation clock. The fork commit `435226f`
@@ -819,8 +817,10 @@ cargo test --lib --features test-support
 cargo test --lib --features test-support,gpui-fast
 ```
 
-At the last check, 647 app tests passed with 6 ignored. In the fork, 1728 tests passed on
-`gpui-pre` and 1727 on GPUI Fast, where the leak test does not run. Update this checklist with
+At the last check, 649 app tests passed with 6 ignored. Window tests call
+`ely::init_for_tests`, which needs Ely's `test-support` feature as a dev-dependency. In the
+fork, 1728 tests passed on `gpui-pre` and 1727 on GPUI Fast, where the leak test does not run.
+The theme bridge did not change the fork, so the fork's tests did not run again. Update this checklist with
 what is still open, and state each check that did not run.
 
 ### Derived views

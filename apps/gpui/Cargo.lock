@@ -2167,6 +2167,7 @@ dependencies = [
  "emojis",
  "futures",
  "gpui-kit",
+ "gpui-pre",
  "image",
  "iso_currency",
  "isocountry",
@@ -8824,6 +8825,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "cpal",
+ "ely-gpui-component",
  "futures",
  "gpui-kit",
  "nsh-base",

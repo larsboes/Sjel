@@ -704,6 +704,7 @@ mod tests {
         cx.executor().allow_parking();
         cx.update(|cx| {
             gpui_kit::init(cx);
+            sjel_gpui_ui::ely::init_for_tests(cx);
             bind_keys(cx);
         });
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));

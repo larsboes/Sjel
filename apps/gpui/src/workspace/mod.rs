@@ -1412,7 +1412,7 @@ impl Workspace {
     }
 
     /// gpui-component paints primary buttons, switches and focus rings in its own blue. This
-    /// gives them the accent the palette uses.
+    /// gives them the accent the palette uses, and gives Ely's controls Sjel's palette.
     fn sync_kit_accent(&self, cx: &mut App) {
         let dark = Theme::global(cx).is_dark();
         let accent: gpui_kit::Hsla = rgb(self.appearance_settings.accent.color_rgb(dark)).into();
@@ -1428,6 +1428,7 @@ impl Workspace {
             // `Root` sets the window's rem size from this on every frame, so it is the app's zoom.
             theme.font_size = px(f32::from(self.appearance_settings.ui_font_size));
         });
+        sjel_gpui_ui::theme::ely::sync(self.appearance_settings, dark, cx);
     }
 
     fn on_check_for_updates(
@@ -2052,6 +2053,7 @@ mod tests {
         cx.executor().allow_parking();
         cx.update(|cx| {
             gpui_kit::init(cx);
+            sjel_gpui_ui::ely::init_for_tests(cx);
             bind_keys(cx);
         });
         let slot = Rc::new(RefCell::new(None));

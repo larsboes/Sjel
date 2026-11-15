@@ -792,10 +792,10 @@ Open:
    | `DataTable::track_scroll(handle)`: the frame probe scrolls the rows | transactions | built |
    | `Cell::Lines(title, meta)`: needs `Density::Comfortable` | inventory | built |
    | `Column::actions([..])` and `on_action(row, action)`; a row's `Cell::Actions(keys)` names its subset | import, inventory | built |
-   | `Cell::Check(bool)` through `on_edit` | projects | built in fork `c9f6c1a`, not pinned |
-   | `Column::choices([..])` editor; opens from a pointer press only | projects | built in fork `c9f6c1a`, not pinned |
-   | One current row (`current`, `on_current`), up/down/j/k, Enter calls `on_open` | projects, documents | built in fork `c9f6c1a`, not pinned |
-   | `on_sort` | projects, documents | built in fork `c9f6c1a`, not pinned |
+   | `Cell::Check(bool)` through `on_edit` | projects | built |
+   | `Column::choices([..])` editor; opens from a pointer press only | projects | built |
+   | One current row (`current`, `on_current`), up/down/j/k, Enter calls `on_open` | projects, documents | built |
+   | `on_sort` | projects, documents | built |
 
    Moved: `finance/transactions.rs`, checked by the owner in light and dark. Its money keeps
    `format_money`, so EUR still reads `12,34 €`. The page gives its rows newest first, and Ely's

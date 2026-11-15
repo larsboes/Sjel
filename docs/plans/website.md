@@ -10,6 +10,8 @@ contracts live in `website/README.md`; generated output is not edited directly.
 - The build launcher disables environment-file loading for every Bun generator and server.
   Verification: scratch generation, internal links and payload checks pass. Browser rendering
   was not checked in this change.
+- `docs/` is the one home for documentation; the site renders it, area plans included, and owns
+  no content: `91b7c987`. Not checked: the Plans section in a browser.
 
 ## Open
 

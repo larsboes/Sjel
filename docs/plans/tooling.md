@@ -570,9 +570,15 @@ archive includes the managed path resolver; its extracted-path regression passes
      result reuse beyond local formatting. Set resource defaults only from measurements.
   Done when local and CI share the same planner, live full verification passes, and measurements
   establish the cost and savings.
-- **Backup CLI live acceptance.** Status/history commands shipped in `4fa41461`.
-  Installation, authentication, timer and restore acceptance stays in
-  [storage](storage.md#5-backups).
+- **Backup CLI live acceptance.** Status/history commands shipped in `4fa41461`; agent
+  read access, timer evidence and restores are recorded in [storage](storage.md#5-backups).
+- **Cross-archive restore check.** Proving that documents restore with their metadata took two
+  `tools/restore.sh` runs (`documents`, `store`), `documents verify` and `restore-index` under
+  `SJEL_PERSONAL_ROOT`/`SJEL_DB_PATH` pointing at the scratch tree, and hand-written `sqlite3`
+  joins against the live index. Add `sjel backup rehearse <capability>`: restore the newest
+  archive with the archives its index lives in, run the owner's verify command on the scratch
+  tree, and report row and digest agreement with live. Done when it reproduces the 2026-11-15
+  documents result with no manual step.
 - **`tools/doctor` in a worktree reports the repository as its own undeclared connection.** The
   undeclared-connections sweep derives the repos that count as "self" from the *basename* of the
   checkout (`crates/sjel-cli/src/doctor/checks.rs`, `undeclared_connections`: `self_roots` is

@@ -1486,7 +1486,9 @@ impl Library {
                     ));
                 }
             };
-            if expected_id != document.id {
+            // Records imported before ids included the filename carry the digest as their id.
+            let legacy_id = document.parent_id.is_none() && document.id == document.sha256;
+            if expected_id != document.id && !legacy_id {
                 return Err(LibraryError::Invalid(
                     "sidecar id does not match its source lineage".into(),
                 ));
@@ -2679,6 +2681,41 @@ mod tests {
         assert_eq!(
             restored_proposals[0].proposal.review,
             Some(crate::classification::ProposalReview::Accepted)
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn restore_index_accepts_digest_ids_from_before_filename_ids_and_nothing_else() {
+        let (library, root) = scratch();
+        let Stored::New(document) = library.intake("old.txt", b"imported early").unwrap() else {
+            panic!("new document expected")
+        };
+        let records = root.join("library/records");
+        let sidecar = records.join(format!("{}.json", document.id));
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&sidecar).unwrap()).unwrap();
+        fs::remove_file(&sidecar).unwrap();
+        let conn = library.pool.get().unwrap();
+        conn.execute("DELETE FROM documents_items", []).unwrap();
+
+        let forged = "0".repeat(64);
+        value["id"] = forged.clone().into();
+        let forged_path = records.join(format!("{forged}.json"));
+        fs::write(&forged_path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert!(library.restore_index().is_err(), "an unrelated id must not restore");
+        fs::remove_file(&forged_path).unwrap();
+
+        value["id"] = document.sha256.clone().into();
+        fs::write(
+            records.join(format!("{}.json", document.sha256)),
+            serde_json::to_vec(&value).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(library.restore_index().unwrap(), (1, 0));
+        assert_eq!(
+            library.get(&document.sha256).unwrap().unwrap().filename,
+            "old.txt"
         );
         fs::remove_dir_all(root).unwrap();
     }

@@ -343,16 +343,14 @@ target once its last successful backup is older than its interval (`crates/backu
 
 Open:
 
-1. **Silent stalls.** On 2026-10-25 six targets were 1.2 days old against a 1-day interval, while
-   the `sjel-status` log showed "policy started 1 run(s)" and no receipt changed after
-   2026-10-24 11:53Z. A manual `tools/backup-all.sh` the same day completed and wrote to
-   `/Volumes/Extreme/Backup/sjel/`, an external drive. First hypothesis to check: the scheduled
-   runs started while that drive was not mounted. Either way, a started run must end in a receipt
-   or an attempt record, and a missing target volume must show as a failed attempt.
-   Found 2026-11-03: the `backup-target` timer has been off (`interval_hours` NULL) since
-   2026-10-22 15:12Z, so finance, store, knowledge-base, packs, devices and projects only get
-   manual runs. `tools/doctor` now names an off timer, and the timer is back on at 24h
-   (2026-11-03). Open: why it was turned off.
+1. **Scheduled runs.** Verified from `backup_runs` on 2026-11-15: the timer fires, a missing
+   volume ends in a failed attempt that names the absent destination, and a failure retries
+   after `FAILURE_BACKOFF_SECS`. Since the timer came back on (2026-11-03), each `backup-target`
+   capability has about 270 failed attempts and 5 or fewer successes: runs land only while the
+   external drive is attached. Run rows do not record whether the timer or a person started
+   them, so "scheduled success" rests on timing (successes 30 minutes after a failure on
+   2026-11-05 and 2026-11-09). Open: why the timer was off from 2026-10-22, and a `trigger`
+   column on runs.
 2. **Live run inspection.** Backup status/history commands and new-receipt enforcement shipped
    in `4fa41461`. The agent token now reads `GET /backups`, `/backup/targets` and
    `/backup/runs` on `sjel-status` and nothing else there: `AgentRoutes::only` closes every
@@ -361,10 +359,15 @@ Open:
    declared-target cache, so it is a write only in the sense of a derived cache.
 3. **Per-kind proof.** A target kind counts as verified only when its own restore passes. Only
    the local kind is rehearsed. iCloud and ssh are unproven.
-4. **Documents on the external SSD.** Originals are local. Done when a restore from the selected
-   SSD returns a document's bytes and metadata together.
+4. **Documents on the external SSD.** Done 2026-11-15. All eight current archives passed
+   `tools/restore.sh` in isolation, both SQLite files with `integrity_check: ok`. The documents
+   archive restored with the same-time `store` archive gave 7,156 index rows equal to live on
+   id, digest, filename, category, status and size, and `documents verify` matched every
+   original. `documents restore-index` from the restored sidecars alone rebuilt the same 7,156
+   rows once it accepted the five pre-2026-10-21 records whose id is their digest.
 5. **One contract per database file** after the split (§4 step 5), each proven by
-   `tools/restore.sh` in isolation.
+   `tools/restore.sh` in isolation. `devices` lost its copy of the `sjel.db` contract, which
+   duplicated `store`'s; it gets its own when its file splits.
 6. **The phone.** Data that exists only on the phone (queued writes, kept documents) is covered
    by the iOS device backup only. Decide whether that is enough.
 7. **A fresh primary with no data.** `backup.sh` fails on a declared database that has never

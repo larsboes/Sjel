@@ -1,7 +1,8 @@
 # Codex command access
 
 `config.base.toml` is an opt-in permissions baseline, not an installer. Replace `@HOME@`
-with the absolute home directory, merge its root keys into the user config, and add its
+with the absolute home directory and `@SJEL_DATA@` with the overlay's `data/` directory, which
+keeps personal data behind the Sjel gate, merge its root keys into the user config, and add its
 `analytics`, `permissions.sjel-auto` and `shell_environment_policy` tables. `analytics` turns
 off the usage metrics the CLI sends to OpenAI by default. Preserve unrelated operator keys. Back up the user config
 before changing it. Do not combine `default_permissions` with `sandbox_mode` or

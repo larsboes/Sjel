@@ -178,7 +178,59 @@ fn assemble_baseline(base_path: &Path) -> Result<Baseline, String> {
     } else if env::var_os("SJEL_OVERLAY_ROOT").is_none() {
         sources.push("no overlay resolved, so no deployment fragment was applied".to_string());
     }
+    if let Some(overlay) =
+        env::var_os("SJEL_OVERLAY_ROOT").or_else(|| env::var_os("SJEL_PERSONAL_ROOT"))
+    {
+        let home = env::var_os("HOME").map(PathBuf::from);
+        deny_overlay_data(&mut value, &PathBuf::from(overlay), home.as_deref());
+        sources.push("the overlay's data/ closed to direct reads and writes".to_string());
+    }
     Ok(Baseline { value, sources })
+}
+
+/// Close `<overlay>/data/` to the session's file tools and its sandboxed commands. Personal data
+/// reaches an agent only through the Sjel gate, which pseudonymizes it and withholds `c3`
+/// (`docs/plans/containment.md`, C1). The path is derived here, so no private path is published.
+fn deny_overlay_data(value: &mut Value, overlay: &Path, home: Option<&Path>) {
+    let data = overlay.join("data");
+    let (glob, rule_path) = match home.and_then(|home| data.strip_prefix(home).ok()) {
+        Some(relative) => {
+            let tilde = format!("~/{}/**", relative.display());
+            (tilde.clone(), tilde)
+        }
+        None => (
+            format!("{}/**", data.display()),
+            format!("/{}/**", data.display()),
+        ),
+    };
+    let push = |value: &mut Value, pointer: &[&str], entry: String| {
+        let mut node = &mut *value;
+        for key in pointer {
+            if !node.is_object() {
+                *node = merge::empty_object();
+            }
+            node = node
+                .as_object_mut()
+                .expect("an object was just ensured")
+                .entry(key.to_string())
+                .or_insert_with(|| Value::Array(Vec::new()));
+        }
+        if let Some(list) = node.as_array_mut() {
+            let entry = Value::String(entry);
+            if !list.contains(&entry) {
+                list.push(entry);
+            }
+        }
+    };
+    push(value, &["sandbox", "filesystem", "denyRead"], glob.clone());
+    push(value, &["sandbox", "filesystem", "denyWrite"], glob);
+    for tool in ["Read", "Edit", "Write"] {
+        push(
+            value,
+            &["permissions", "deny"],
+            format!("{tool}({rule_path})"),
+        );
+    }
 }
 
 fn main() -> ExitCode {
@@ -347,6 +399,44 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|item| (*item).to_string()).collect()
+    }
+
+    #[test]
+    fn the_overlay_data_directory_is_closed_once_whatever_the_baseline_held() {
+        let mut value = serde_json::json!({
+            "permissions": {"deny": ["Read(~/.ssh/**)"]},
+            "sandbox": {"filesystem": {"denyRead": ["~/.ssh/**"]}}
+        });
+        let home = Path::new("/Users/someone");
+        deny_overlay_data(&mut value, Path::new("/Users/someone/overlay"), Some(home));
+        deny_overlay_data(&mut value, Path::new("/Users/someone/overlay"), Some(home));
+        assert_eq!(
+            value["sandbox"]["filesystem"]["denyRead"],
+            serde_json::json!(["~/.ssh/**", "~/overlay/data/**"])
+        );
+        assert_eq!(
+            value["sandbox"]["filesystem"]["denyWrite"],
+            serde_json::json!(["~/overlay/data/**"])
+        );
+        assert_eq!(
+            value["permissions"]["deny"],
+            serde_json::json!([
+                "Read(~/.ssh/**)",
+                "Read(~/overlay/data/**)",
+                "Edit(~/overlay/data/**)",
+                "Write(~/overlay/data/**)"
+            ])
+        );
+        let mut outside = serde_json::json!({});
+        deny_overlay_data(&mut outside, Path::new("/srv/overlay"), Some(home));
+        assert_eq!(
+            outside["permissions"]["deny"][0],
+            "Read(//srv/overlay/data/**)"
+        );
+        assert_eq!(
+            outside["sandbox"]["filesystem"]["denyRead"][0],
+            "/srv/overlay/data/**"
+        );
     }
 
     #[test]

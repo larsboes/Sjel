@@ -45,6 +45,7 @@ enabled = true
 "@HOME@/**/*.key" = "deny"
 "@HOME@/**/*.p12" = "deny"
 "@HOME@/**/*.pfx" = "deny"
+"@SJEL_DATA@" = "deny"
 
 [permissions.sjel-auto.filesystem.":workspace_roots"]
 "**/.env" = "deny"

@@ -15,5 +15,8 @@
     "@json-render/svelte": "0.22.0",
     "svelte": "5.57.2",
     "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@socketsecurity/bun-security-scanner": "1.1.3"
   }
 }

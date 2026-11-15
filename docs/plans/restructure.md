@@ -1,325 +1,81 @@
 # Restructure and sweep
 
-After the dashboard goes, the repository gets smaller, and every file changes once: layout, code
-comments and documentation in the same pass. Lane A in [`PLAN.md`](../../PLAN.md), after
-[`gpui.md`](gpui.md) retirement.
+[PLAN.md](../../PLAN.md#priority-1-unify-and-reduce-maintenance) owns priority.
+Shared contracts and removal of repeated behavior precede directory moves.
+Documentation rules live in
+[on-documentation.md](../../Packs/harness/skills/sjel/references/on-documentation.md).
 
-## 1. Delete
+## Shipped
 
-Done: `dashboard/` with its desktop wrapper, the plugins in `plugins/`, the dashboard bundle on
-the Pages site, the `sjel-status` static serve and `matches_dashboard_nav`. `demo/` stays: its
-seeded stack feeds `tools/demo-shots`. Open:
+- Capability layout and service integration: `0ee6c884`; live path follow-up: `70ccbfa9`.
+- Shared travel contracts and retirement of client shadow types: `cba9a059`.
+- README sweep: `ec859210`, `cc44c287`; persisted-name cleanup: `71558dc0`.
+- Documentation has one home under `docs/`: `91b7c987`.
+- Cross-root maintenance coverage and reviewed dependency refresh: `9ec75e72`.
 
-- Done: Prose describing the retired dashboard swept across tracked READMEs and architecture docs.
-- Done: dashboard-only Svelte tooling was removed or updated after checking its remaining consumers.
-- Done: live `capabilities/` paths left by `7031b53f` (the `cv` template, the gitleaks allowlist,
-  the clipper homepage, the repo-root scans in doctor) and 537 lines of comments and prose.
-  Open: 134 `capabilities/` strings in code and test fixtures across 40 files, and names with no
-  crate or service of that name (`agentbox`, `postgres`, `cargo-trim`).
+## Maintenance verification
 
-## 2. Sweep
+`tools/maintenance --json --overlay --freshness` covers the configured overlay separately,
+including npm workspace packages and private area plans. Missing requested analyzers in either
+root produce exit 2. The command reads tracked inputs and does not update dependencies.
 
-The rule is in `Packs/harness/skills/sjel/references/on-documentation.md`. Remove every code
-comment, config comment and README paragraph that repeats a decision, a rule or a history that
-Git or the code already holds.
+The CLI suite passes with serial test execution; CLI Clippy passes. Parallel execution
+reported a file-lock test failure that passes in isolation and in the serial suite. Extraction tests pass with Xberg 1.4.0;
+the graph-store benchmark compiles with Grafeo 0.6.2. Pi package checks, local adaptation tests
+and Clipper checks cover the dependency refresh. Pack unit declarations are unchanged; Pi reads
+the maintained package sources in place. Skill deployment changes are outside this refresh.
 
-### Where each kind of text lives
+The repository advisory scan and both Git-history secret scans pass under the existing
+exceptions. Installed-tool advisories remain outside repository lockfile coverage. Unused
+analysis remains unavailable without the reviewed cargo-machete executable. Live Linux,
+native UI and restore acceptance have not run in this maintenance pass. The full architecture
+freshness gate detects concurrent Learning manifest edits; the full documentation-link launcher
+exits 1 without diagnostics. Scoped link checking covers all area plans and passes.
 
-| Text | Home | Not in |
-|---|---|---|
-| Order, priority, open work, decisions not yet built | `PLAN.md`, `docs/plans/<area>.md` | READMEs, manifests, code |
-| A built decision and the reasoning needed to change it | The owner README, `## Why this shape: <topic>` | Code comments, TOML |
-| A rejected alternative | The owner README, `## Considered and declined` | Plans |
-| Interface contracts, data flows | `docs/capabilities/<name>.md` | READMEs |
-| History, measurements, who decided | The commit message | Anywhere tracked |
-| An invariant the code cannot express | A one- or two-line code comment | READMEs |
-| What a config value means, or its unit | One comment line on the key | Rationale paragraphs |
-| A dependency verdict | One `upstreams.toml` row | READMEs, `Cargo.toml` comments |
+<a id="3-layout"></a>
 
-Decisions stay with their owner, not in one central log. A central log goes stale because nobody
-who changes the code reads it. `PLAN.md` keeps only decisions that span areas.
+## Open, in order
 
-### `upstreams.toml`
+1. Inspect remaining client adapters against the existing API crates before extracting another
+   contract. `tools/maintenance --json --overlay` inventories both roots; it does not measure
+   duplicate behavior. Preserve offline projections and platform-specific state when replacing
+   a copied wire model. Done when each changed client imports its capability contract and its
+   serialization and offline tests pass. Remaining travel geocoding acceptance belongs to
+   [GPUI work package 31](gpui.md#open).
+2. Remove stale live paths and references to retired services, after distinguishing historical
+   fixtures and compatibility readers from active configuration. Done when maintenance path
+   candidates have been reviewed and every active path resolves. Proposed paths remain open
+   work rather than broken implementations.
+3. Shorten comments and owner documentation as their modules change. Move open work out of
+   READMEs and manifests into the owning area plan. Keep dependency verdicts in `upstreams.toml`;
+   watch and evaluate entries need a revisit condition. Done when touched files follow the
+   documentation rules and their links resolve. A repeatable comment-count ratchet in doctor
+   or CI remains open; old snapshot counts are not an executable baseline.
+4. Review crate splits only where an existing module has independent consumers. Measure build
+   time, retained artifacts and process overhead before proposing workspace consolidation,
+   package renames, micro-crate merges or a shared daemon. The root and GPUI workspaces remain
+   separate. A layout change needs a measured benefit and coordination with concurrent sessions.
+   A capability library with a thin binary is useful only where an in-process consumer exists.
 
-It stays the one registry of dependency and influence verdicts (145 entries: 65 `adopt`, 31
-`inspiration`, 24 `reject`, 15 `watch`, 6 `quarry`, 2 `evaluate`, 1 `adapt`, 1 `overlay`). A verdict
-and its review date are data and stay. Shape per entry: verdict, review date, one or two sentences
-of why (median 334 characters, maximum 632), and a link to `research/` when the analysis is longer.
-Every `watch` and `evaluate` entry carries a `revisit` condition, or it becomes `reject`.
+## Compatibility acceptance
 
-### Baseline
+The rename retains readers for old configuration names, device headers and signing strings,
+health routes, supervisor labels, backup archive names, keychain references, Markdown markers
+and persisted record tags. Historical research and fixtures preserve their source data.
+Remove a reader only after its persisted input and supported upgrades have been checked;
+renaming a stored record is not equivalent to changing current configuration.
 
-Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
+Open: live Linux acceptance of systemd-unit migration and the `sjel_filter` nftables replacement.
+Generated-output tests do not establish live host acceptance.
 
-- 609 comment lines in `*.rs`, `*.toml`, `*.sh` carry a date. 337 say "measured" or "decided".
-- 3,143 of 8,862 TOML lines were comments. Worst: `profiles.toml` 268 of 313, `toolchain.toml` 168
-  of 456, `osv-scanner-installed.toml` 155 of 386, `Cargo.toml` 93 of 190, `systems.toml` 64 of 180,
-  and 922 comment lines across all `service.toml` files. Now: `profiles.toml` 11 of 87,
-  `toolchain.toml` 25 of 319, `systems.toml` 12 of 126, `Cargo.toml` 3 of 102, `upstreams.toml`
-  29 comment lines, `osv-scanner-installed.toml` 6 of 246, and 51 of 455 across all `service.toml`
-  files.
-- "Axon" appeared 804 times in 299 files at the rename baseline; 566 in 154 files after the
-  rename's five commits, of which 447 are the compatibility reads listed in §2 Order.
-- 78 sites in `libs/`, `capabilities/` and `tools/` cited IDs of the retired `ISA.md` (for example
-  "ISA F10", "ISA.md C4"); 0 remain in those directories, `apps/`, `schemas/`, `website/` and the root config.
-- Over 800 lines: `crates/comms/README.md`, `crates/calendar/README.md`.
+<a id="4-the-public-page"></a>
 
-### Order
+## Other owners
 
-1. A ratchet in `tools/doctor` or CI: each count above may fall, never rise.
-2. Done for `Cargo.toml`, `apps/gpui/Cargo.toml`, `profiles.toml`, `toolchain.toml`,
-   `systems.toml`, `upstreams.toml`, `osv-scanner-installed.toml`, and `capabilities/*/service.toml`.
-3. Done: `tools/isa-hygiene.sh`, its test, the doctor ISA count, and every ISA ID citation in code,
-   config and docs.
-4. Code comments and READMEs, module by module, in the same pass as the layout change. READMEs
-   also move to the neutral register (`on-documentation.md`, Register).
-   Done: secondary capability README sweep (`ec859210`, refined in `cc44c287`).
-5. Done: the rename and persisted-path follow-up. Five commits cover internal identifiers
-   (`f8f4ef17`), scratch paths and `tools/sjel-context` (`8732a364`), the wire protocols
-   (`35cfaf53`), persisted names with `tools/migrate-axon-names.sh` (`620081f1`), and the first
-   prose sweep. The persisted-path and fixture cleanup is `71558dc0`. At this snapshot 533
-   occurrences remain in 120 tracked files, including compatibility reads, old
-   record formats and test fixtures. What still answers to a pre-rename name, and why each one
-   stays:
-
-   - `axon.toml` and `axon.local.toml` are read after the `sjel.*` names, so a checkout made
-     before the rename still resolves its overlay (`tools/manifest-resolution.test.sh`).
-   - `x-axon-*` headers, the `axon-device-auth/v1` signing string, and `axon-pairing/v1`,
-     `axon-sync/v1`, `sjel-node`'s predecessor: accepted, never sent. A device paired before
-     the rename keeps working without a re-pair.
-   - `/__axon/freshness` and the `/axon-status` mount: a capability built before the rename
-     cannot answer a path it has never heard of.
-   - `com.axon.*` launchd labels and `axon-*.service` systemd units: unloaded and deleted on
-     install, so a host that ran either stops carrying a supervisor entry nothing reads again.
-   - `axon-backup.toml` inside an archive, and the `sjel-bw-master` keychain entry's
-     predecessor: an archive and a stored item are records, not settings.
-   - `<!-- axon:begin -->` / `<!-- axon:projection -->` markers: read, rewritten as `sjel:` the
-     first time a note is written. No note in the vault carries one.
-   - `captured_via = "axon-clip"`: a stored tag on clips the retired extension saved.
-   - `bazel-*`: not the retired build, but the symlinks it left at the root of a checkout that
-     once ran it. `.gitignore`, `bunfig.toml`, `audit.rs` and the install-policy prune each
-     carry one line for that. The remaining build-dependency verdict lives in `upstreams.toml`.
-
-   Historical records in `research/` and the agent-harness fixture keep their original source
-   data.
-
-   Checks not run: the migration ran on this machine only, not on a Linux host, so the
-   systemd-unit rename and the `sjel_filter` nftables replacement are unexercised outside
-   their generated-output tests.
-
-### Planning outside the plans
-
-READMEs and manifests still hold open work. Rule: a README describes what is built and why, and
-open work goes to the owning area plan or an issue (`on-documentation.md`, Plans).
-
-Found 2026-10-25 by heading and by dated lines (resolved in 2026-11-03 sweep):
-
-- Done: "Not built" sections in `crates/inventory`, `entities`, `software`, `people-registry`,
-  `scouting`, `agent`, and `libs/agent` were removed or migrated to `## Considered and declined`.
-- Done: `crates/trips/decisions/travel-seams-not-built.md` moved to `crates/trips/README.md`
-  (`## Considered and declined`) and the decisions directory removed.
-- Done: `places` ("Deliberately not built") moved to `## Considered and declined`.
-- Done: `crates/trips/README.md`, `crates/transit/README.md`, `tools/sjel-cli/README.md`, `crates/documents/README.md`, `crates/finance/README.md`, `crates/scouting/README.md`, `capabilities/agentbox/README.md`, `crates/comms/README.md`, and `crates/calendar/README.md` swept to standard shape (`## Why this shape:`, `## Considered and declined`, no dated narratives or migration logs).
-- Most dated lines in READMEs remaining: none above baseline.
-- Most dated lines in TOML: `profiles.toml` (35), `toolchain.toml` (13). Review dates in
-  `upstreams.toml` and waiver dates in `osv-scanner*.toml` are data, not history, and stay.
-
-**README shape after the sweep.** What it is, `## Why this shape: <topic>`, how to run it, a link
-to the technical manual in `docs/capabilities/`, `## Considered and declined`. No history, no
-open-work list, no measurements without the command that reproduces them.
-
-## 3. Layout
-
-Decided 2026-10-25: one workspace, flat `crates/`, one API crate per capability, and a hybrid
-process model later.
-
-### Findings that drive it (measured 2026-10-25)
-
-- Two Rust workspaces for one product: the root (56 members, `Cargo.lock` 6,847 lines) and
-  `apps/gpui` (`Cargo.lock` 9,969 lines). Only 382 package versions appear in both.
-- Client and server each define the wire types. `apps/gpui/core/src/shell.rs` has 96 `pub struct`s,
-  `interior.rs` 32 and `systems.rs` 24. Only `libs/roomplan-contract` is shared by both sides.
-- "Capability" names 26 Rust crates and 21 directories of third-party software or scripts.
-- 23 capability processes use 258 MB of memory in total. `target/release` holds 33 binaries in
-  13 GB.
-- 5 capabilities are only a `main.rs` of 357–1,931 lines: `agent`, `assistant`, `sjel-status`,
-  `soundscape`, `host-net`.
-- `comms` (43k lines) and `tools/sjel-cli` (40k lines) are single crates. Eight crates in `libs/`
-  have 228–380 lines each.
-
-Reference practice: one workspace, a virtual root manifest, a flat `crates/` directory in which
-each directory name equals its package name, `publish = false`, and workspace-wide dependencies and
-lints ([Large Rust Workspaces](https://matklad.github.io/2021/08/22/large-rust-workspaces.html)).
-rust-analyzer and Zed use this layout.
-
-### Target
-
-```
-Cargo.toml          virtual manifest, members = ["crates/*"]
-crates/             every Rust crate: capabilities, their -api crates, libs, the GPUI app,
-                    Rust tools
-services/           third-party software and scripts Sjel supervises (manifests only)
-apps/gpui/ios/host/ the Xcode host project for the GPUI iPhone app
-Packs/ schemas/ docs/ research/ tools/ (scripts only)
-```
-
-- **Kind lives in the manifest, not the path.** A crate declares whether it is a capability, a
-  library, an app or a tool. `service.toml` already exists for capabilities. CONTRIBUTING.md
-  ("Three architectural nouns") changes in the same commit as the move.
-- **API crates.** `crates/<cap>-api` holds serde types and route constants with no server
-  dependencies, so it builds for iOS. The capability and `apps/gpui/core` both depend on it, and
-  the copied structs in `core` are deleted. `libs/roomplan-contract` is the pattern.
-- **Crate shape.** Every capability is a library plus a `main.rs` of about 20 lines. This allows
-  tests in the same process and a later single daemon.
-- **Splits and merges.** Split `comms` and `sjel-cli` along their existing modules where a module
-  has its own consumers. Merge micro-crates only when they have the same consumers.
-- **Hybrid process model, later.** After the move, measure build time and disk. If they justify
-  it, one daemon hosts most capability libraries. `agent` and any capability that touches paths
-  outside Sjel's data stay separate processes.
-- **Build trees.** One release location instead of `./target/release` and
-  `~/.cargo-target/release`, as decided 2026-10-24. It touches every `service.toml` `command` and
-  the `sjel-mcp` path, so it goes in the same change as the move. `tools/storage/storage` measures
-  the trees.
-
-### How the move happens
-
-Other agent sessions edit this checkout at the same time, and a move of every crate breaks
-their open edits.
-
-1. After the dashboard is deleted (fewer paths to move) — done (`143003fd`).
-2. Announce a freeze. Commit or finish open work first — done (`ec859210` through `42237f97`).
-3. One generated commit: `git mv` per crate, then path rewrites in manifests, `service.toml`
-   commands, tools, CI and docs. A script does the rewrite, and it stays in `tools/` for review
-   (`tools/migrate-layout.ts`). Done in this change.
-4. `cargo check --workspace`, `tools/doctor`, the CI legs, and a service restart prove it — done.
-5. Then the API crates and crate-shape changes, one capability per commit. Done for
-   `trips`: `crates/trips-api` (`trips-api`) extracts pure wire models and route constants
-   shared with `sjel-trips` and `sjel-gpui-core` (full retirement of remaining shadow structs
-   in `apps/gpui/core/src/travel.rs` tracked under WP 31 in `gpui.md`).
-   Done for `calendar`: `crates/calendar-api` (`calendar-api`) extracts pure wire models,
-   commitment enums, export types, and route constants shared with `sjel-calendar` and
-   `sjel-gpui-core`.
-   Done for `documents`: `crates/documents-api` (`documents-api`) extracts pure wire models,
-   duplicate review decisions, split suggestion/partition contracts, and route constants
-   shared with `sjel-documents` and `sjel-gpui-core`.
-   Done for `finance`: `crates/finance-api` (`finance-api`) extracts pure wire models,
-   dashboard projections, transactions, review candidates, subscriptions, and route constants
-   shared with `sjel-finance` and `sjel-gpui-core`.
-   Done for `inventory`: `crates/inventory-api` (`inventory-api`) extracts pure wire models,
-   wishlist items, wish groups, mail proposals, comparison models, and route constants
-   shared with `sjel-inventory` and `sjel-gpui-core`.
-   Done for `projects`: `crates/projects-api` (`projects-api`) extracts pure wire models,
-   project summaries, records, tasks, mail proposals, inventory links, and route constants
-   shared with `sjel-projects` and `sjel-gpui-core`.
-   Done for `entities`: `crates/entities-api` (`entities-api`) extracts pure wire models,
-   entity records, fields, facts, duplicate pairs, vocabularies, and route constants
-   shared with `sjel-entities` and `sjel-gpui-core`.
-   Done for `import`: `crates/import-api` (`import-api`) extracts pure wire models,
-   import plans, routes, skipped tallies, background jobs, status ledgers, and route constants
-   shared with `sjel-import` and `sjel-gpui-core`.
-   Done for `software`: `crates/software-api` (`software-api`) extracts pure wire models,
-   app records, decision models, and route constants
-   shared with `sjel-software` and `sjel-gpui-core`.
-   Done for `soundscape`: `crates/soundscape-api` (`soundscape-api`) extracts pure wire models,
-   presets, scale definitions, scene parameters, layer mixes, sessions, claims, and route constants
-   shared with `sjel-soundscape` and `sjel-gpui-core`.
-   Done for `status`: `crates/status-api` (`status-api`) extracts pure wire models,
-   health and liveness models, registry entries, agent gates and approval models, backup records
-   and responses, search hits, and route constants shared with `sjel-status` and `sjel-gpui-core`.
-   Done for `feed`: `crates/feed-api` (`feed-api`) extracts pure wire models,
-   feed entries, ranking relevance and evaluation, reader detail projections, data classification,
-   cloud review and processing states, quality flags, refresh stats, and route constants
-   shared with `sjel-gpui-core` and comms/feed services.
-   Done for `web-links`: `crates/web-links-api` (`web-links-api`) extracts pure wire models,
-   saved destinations, site groups, review candidates, history scan bounds, decision requests,
-   and route constants shared with `sjel-web-links` and `sjel-gpui-core`.
-   Done for `scouting`: `crates/scouting-api` (`scouting-api`) extracts pure wire models,
-   event route kinds, routing bases, sources, opportunities, scored results, discover responses,
-   calendar candidate and verdict contracts, and route constants shared with `sjel-scouting`
-   and `sjel-gpui-core`.
-   Done for `assistant`: `crates/assistant-api` (`assistant-api`) extracts pure wire models,
-   conversation turns, assistant requests, cloud model provider discovery roles, key statuses,
-   replies, streaming events, steer instructions, and route constants shared with `sjel-assistant`
-   and `sjel-gpui-core`.
-   Done for `transit`: `crates/transit-api` (`transit-api`) extracts pure wire models,
-   stations, legs, journeys, punctuality cells, reliability, rankings, factors, train matches,
-   split-ticket segments and confidences, contract boundaries, priorities presets, and route
-   constants shared with `sjel-transit` and `sjel-gpui-core`.
-   Done for `distribution`: `crates/distribution-api` (`distribution-api`) extracts pure wire models,
-   feature metadata, package files, package receipts, installed packages/features, available features,
-   release catalogues, sources, assets, validation helpers, and limits shared with `sjel-cli`
-   and `sjel-gpui-core`.
-   Done for `interior`: `crates/interior-api` (`interior-api`) extracts pure wire models,
-   RoomPlan dimensions, walls, openings, fixtures, uncertainties, layout items, placements, spaces,
-   alignments, reconciliations, proposals, jobs, review requests, and route constants shared with
-   `sjel-interior` and `sjel-gpui-core`.
-   Done for `devices`: `crates/devices-api` (`devices-api`) extracts pure wire models,
-   pairing challenges, claims, join requests, devices, responses, key code / comparison code /
-   QR parsing routines, and route constants shared with `sjel-devices` and `sjel-gpui-core`.
-   Done for `setup`: `crates/setup-api` (`setup-api`) extracts pure wire models,
-   probe marks, setup probes, steps, plans, verification and apply envelopes, LAN status,
-   and route constants shared with `sjel-status`, `sjel-cli`, and `sjel-gpui-core`.
-   Done for `media`: `crates/media-api` (`media-api`) extracts pure wire models,
-   volume rows, ledger statuses, ingest runs and items, perceptual hashes and reviews,
-   geotags, and route constants shared with `sjel-media` and `sjel-gpui-core`.
-   Done for `places`: `crates/places-api` (`places-api`) extracts pure wire models,
-   places, visits, person links, geocode requests and responses, search filters,
-   and route constants shared with `sjel-places` and `sjel-gpui-core`.
-   Done for `traveler`: `crates/traveler-api` (`traveler-api`) extracts pure wire models,
-   profile constraints, ranking weights, paces, anchors, derived baseline projections,
-   TELOS proposals, and route constants shared with `sjel-traveler` and `sjel-trips`.
-   Done for `punctuality`: `crates/punctuality-api` (`punctuality-api`) extracts pure wire models,
-   lookup queries, batch requests/responses, stop statistics, station results, coverage info,
-   normalization routines, and route constants shared with `sjel-punctuality` and `sjel-transit`.
-   Done for `operator-profile`: `crates/operator-profile-api` (`operator-profile-api`) extracts pure wire models,
-   profile entries, statement inputs, field values, harness targets, classifications, requests, validation routines,
-   and route constants shared with `sjel-operator-profile`.
-   Done for `agent`: `crates/agent-api` (`agent-api`) extracts pure wire models,
-   session requests and envelopes, terminal inputs and resizes, streams, tier definitions, session/terminal metadata,
-   and route constants shared with `sjel-agent-capability` and `sjel-gpui-core`.
-6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
-   and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
-   doctor updated.
-7. Retired shadow structs in `apps/gpui/core/src/shell/mod.rs`: `GlobalNote` migrated to `projects-api`,
-   and `MusicProbe`, `MusicChapter`, `MusicJob`, `MusicBuild` migrated to `media-api`, leaving
-   `shell/mod.rs` purely as an API re-exporter.
-8. Retired shadow travel plan structs in `apps/gpui/core/src/travel.rs` and `details.rs`: `Place`,
-   `Stage`, `Plan`, `Details` migrated to use `trips-api`'s canonical `PlaceRef`, `TripStage`,
-   `TripPlan`, `PlanDetails`, unifying route connections, places iteration, and wire models across
-   `sjel-trips` and `sjel-gpui`.
-9. Extracted map markers and location category categorization from `apps/gpui/ui/src/travel/mod.rs`
-   into `markers.rs`, added spend layer wire models in `crates/places-api`, and wired multi-currency
-   and per-stage cost breakdown into `overview.rs`.
-
-Naming (decided 2026-10-25): the directory name equals the package name. The `sjel-` prefix stays
-only on binaries a user types (`sjel`, `sjel-agent`, `sjel-mcp`).
-
-- **Efficiency.** Run `simplify` on each module as it moves.
-
-## 4. The public page
-
-The live demo is gone (decided 2026-11-03). The public site is `website/`, laid out after
-Vector's repository (decided 2026-11-03): `docs/` holds the user docs (architecture,
-capabilities, operations) and `docs/` keeps the contributor plans. `website/build` renders the
-landing page, the docs with a sidebar, and one reference page per unit (contract, routes read
-from each `const ROUTES` block, coupling, README), then fails on a broken internal link or a
-private marker. No capability runs in the Pages job.
-
-Open: screenshots and short animations of the GPUI app in the hero and the Two surfaces section.
-
-Screenshots are picked by hand once the GPUI port is done (decided 2026-10-28).
-`sjel demo up | mac <page> | down` (`tools/demo-shots`) captures the Mac app against the demo
-stack in a container, beside a live node. The seed covers trips with held connections, places
-and companions, the feed and Inbox, and mail in every stream, dated relative to the run.
-
-Open:
-
-1. [TODO: deferred] iPhone screenshots. The simulator must join the container's node, not the Mac's live one,
-   so the demo stack needs the LAN listener and the `devices` capability.
-2. [TODO: deferred] Mac screenshots and short animations of the GPUI app in the hero and the Two surfaces section.
-
-Done:
-
-- Finance draws key hints without overlapping the last visible row (fixed with bounded flex-1, scroll containers, and bottom padding in `apps/gpui/ui/src/finance.rs`).
-- Seeded calendar events during trips carry the destination city and guarantee at least two events per trip, allowing Calendar to cluster trip drafts (`tools/demo-seed.ts`).
-- `POST /places/api/places` validates `kind` upfront and maps CHECK constraint failures to 400 Bad Request (`crates/places/src/server.rs`).
+- Registry declarations: [data.md](data.md#registry-derived-project-views).
+- Derived views and UI component reuse: [gpui.md](gpui.md#derived-views).
+- Markdown file authority: [storage.md](storage.md#one-vault-for-prose).
+- Dependency and duplication discovery: [tooling.md](tooling.md).
+- Public screenshots and animations, including the phone demo connection:
+  [website.md](website.md#open). The phone demo needs a LAN listener and device pairing before
+  capture; production data must not appear in published media.

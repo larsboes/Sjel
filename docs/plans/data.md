@@ -1,8 +1,8 @@
 # Data: what comes in, in what shape, and what adapts
 
 Every file has one owner and one way in. Facts have one shape wherever they are stored. The
-models and keys the machine depends on are visible from one place. After Lane A's restructure in
-[`PLAN.md`](../../PLAN.md).
+models and keys the machine depends on are visible from one place.
+[`PLAN.md`](../../PLAN.md) owns priority.
 
 The scheduled Feed collector marks recognized DNS, timeout and socket failures as transient for
 the next six-hour pass. TLS and unclassified request failures remain visible as host failures.
@@ -23,7 +23,10 @@ The registry declares no view-document format and no renderer. The GPUI renderer
 views is open in [`gpui.md` §11](gpui.md#11-ui-stack).
 
 Verification: route-manifest, projects-api, sjel-projects and sjel-mcp tests and Clippy pass.
-Open acceptance: live governed reads with real data through MCP.
+Open: generate TypeScript contracts from the declaration, with a reproducible freshness check.
+MCP metadata generation is implemented; TypeScript generation is a separate outstanding part of
+the Priority 1 registry milestone. Live governed reads with real data through MCP remain
+unverified.
 
 ## Private project delivery workflows
 
@@ -569,10 +572,10 @@ Open items that belong to one capability and to no priority yet.
   raised the alert for `mac-mini-m4-pro` at €1,401.02 against a €1,500 limit.
 - **Trip numbers.** A budget on a plan and a trip id on a transaction are data entry. The finance
   per-trip route answers 200 with five zeros for an untagged trip.
-- **Web Links launcher (in progress, Mac-first; implementation is in the uncommitted working tree).** Build a personal launch surface for recurring destinations such as `x.com`, Reddit communities, GitHub notifications and frequently used tools. This is not a general bookmark/archive manager: saved articles remain in `comms` and the Sjel Clipper. The `crates/web-links` capability owns destination records, deterministic grouping, history candidates and its CLI/API; `crates/places` remains the geographic registry. The native app labels the surface Links at `sjel://links`, and the existing finder offers its destinations as results. The existing `crates/links` capability contract continues to own typed record references (`docs/capabilities/links.md`). Destination URLs remain user-controlled and locally stored; page content is not fetched for display.
+- **Web Links launcher (implemented, Mac-first; live acceptance remains open).** The launcher provides a personal launch surface for recurring destinations such as `x.com`, Reddit communities, GitHub notifications and frequently used tools. This is not a general bookmark/archive manager: saved articles remain in `comms` and the Sjel Clipper. The `crates/web-links` capability owns destination records, deterministic grouping, history candidates and its CLI/API; `crates/places` remains the geographic registry. The native app labels the surface Links at `sjel://links`, and the existing finder offers its destinations as results. The existing `crates/links` capability contract continues to own typed record references (`docs/capabilities/links.md`). Destination URLs remain user-controlled and locally stored; page content is not fetched for display.
 
   - A record represents a destination, not just a hostname: e.g. `reddit.com/r/rust` and `reddit.com/r/golang` can be independently opened and pinned. Normalize scheme and host, remove fragments, and preserve query parameters on manually entered URLs; history candidates drop query and fragment data. Group by normalized host, then apply explicit per-host tenant rules. Users can rename, regroup and pin or unpin destinations; dismissed history candidates stay dismissed. Derived suggestions never silently move or delete operator-curated records.
   - Seed through an explicit Chrome and Safari history scan, bounded to a user-selected 30-, 90- or 180-day range and a minimum of three visits. Read-only sources are snapshotted before query; candidates are staged locally, and only an explicit keep decision saves them. Manual add and paste remain available.
   - Measure co-visits locally to suggest useful sets; thresholds and retention are open design work and must be evaluated against real usage before becoming defaults. A local model may suggest names only, shadow-first, with its evidence and rationale retained; grouping remains rules/measurement-driven and operator-editable. No automatic assignment or reshuffle.
-  - Initial delivery: the `links` CLI, `web_links_` store tables, add/edit/remove and open tracking, site/tenant grouping, reviewed history candidates, a searchable Mac GPUI page and finder results. The service uses port 8109. Defer co-visit sets, model naming, browser extension integration, phone-specific UX and project/entity joins.
-  - **Working tree:** the CLI/API, SQLite tables, explicit review-before-save history scan, Links page, route, and finder results are implemented; `web-links` is enabled, healthy on port 8109, and registered for login autostart. The service was not used to scan browser history, and the Links page was not opened in the running desktop app. **Done when:** kept/dismissed candidates and repeated imports remain idempotent; curated links survive restart and can be edited; host and tenant destinations resolve; the Links page and finder open links; tests cover URL validation, deduplication and overrides; and the manual browser/app checks pass. The iPhone surface and other deferred items remain open.
+  - Initial delivery: the `links` CLI, `web_links_` store tables, add/edit/remove and open tracking, site/tenant grouping, reviewed history candidates, a searchable Mac GPUI page and finder results. Defer co-visit sets, model naming, browser extension integration, phone-specific UX and project/entity joins.
+  - **Implemented:** the tracked CLI/API, SQLite tables, explicit review-before-save history scan, Links page, route, and finder results. Live service health and autostart must be checked through Sjel tooling. Browser history scanning and the running desktop Links page still need acceptance. **Done when:** kept/dismissed candidates and repeated imports remain idempotent; curated links survive restart and can be edited; host and tenant destinations resolve; the Links page and finder open links; tests cover URL validation, deduplication and overrides; and the manual browser/app checks pass. The iPhone surface and other deferred items remain open.

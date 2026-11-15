@@ -70,12 +70,13 @@ local_build_check() {
     echo "local-build: SJEL_ALLOW_LOCAL_BUILD=1 — the power profile is bypassed for this command" >&2
     return 0
   fi
-  local bin code
+  local bin code root
   if ! bin="$(local_build_cli)"; then
     echo "local-build: no built sjel-cli, so the power profile cannot be read — heavy work is NOT battery-protected" >&2
     return 2
   fi
-  "$bin" runtime admit local-build
+  root="$(cd "$SJEL_LOCAL_BUILD_LIB/../.." && pwd)"
+  SJEL_ROOT="$root" "$bin" runtime admit local-build
   code=$?
   case "$code" in
     0|3) return "$code" ;;

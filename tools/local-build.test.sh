@@ -17,7 +17,7 @@ stub() { # stub <name> <exit> [stderr]
 expect() { # expect <description> <wanted> <stub> <env...>
   local what="$1" want="$2" bin="$3"
   shift 3
-  out="$(env SJEL_CLI_BIN="$bin" "$@" "$GUARD" 2>&1)"; status=$?
+  out="$(env -u SJEL_ROOT -u SJEL_ALLOW_LOCAL_BUILD SJEL_CLI_BIN="$bin" "$@" "$GUARD" 2>&1)"; status=$?
   if [ "$status" -ne "$want" ]; then
     echo "FAIL: $what — wanted exit $want, got $status:" >&2
     printf '%s\n' "$out" >&2
@@ -30,10 +30,18 @@ expect "a deferred profile refuses" 3 "$(stub deferred 3 'deferred by runtime pr
 expect "a binary too old to answer is undecidable, not a refusal" 2 "$(stub stale 1)"
 expect "the one-command exception bypasses the profile" 0 "$(stub deferred 3)" SJEL_ALLOW_LOCAL_BUILD=1
 
+cat > "$SCRATCH/root-check" <<'EOF'
+#!/bin/sh
+[ "${SJEL_ROOT:-}" = "$LOCAL_BUILD_TEST_ROOT" ] && [ "$*" = 'runtime admit local-build' ]
+EOF
+chmod +x "$SCRATCH/root-check"
+expect "a prebuilt CLI receives its checkout root without an inherited root" 0 "$SCRATCH/root-check" \
+  LOCAL_BUILD_TEST_ROOT="$(cd "$(dirname "$GUARD")/.." && pwd)"
+
 expect_run() {
   local what="$1" want="$2" expected="$3" bin="$4"
   shift 4
-  out="$(env -u SJEL_ALLOW_LOCAL_BUILD -u CARGO_BUILD_JOBS -u RUST_TEST_THREADS \
+  out="$(env -u SJEL_ROOT -u SJEL_ALLOW_LOCAL_BUILD -u CARGO_BUILD_JOBS -u RUST_TEST_THREADS \
     SJEL_CLI_BIN="$bin" "$@" "$GUARD" run bash -c \
     'printf "budget=%s/%s/%s\\n" "${CARGO_BUILD_JOBS:-unset}" "${RUST_TEST_THREADS:-unset}" "${SJEL_ALLOW_LOCAL_BUILD:-unset}"; exit 7' 2>&1)"; status=$?
   if [ "$status" -ne "$want" ] || ! grep -qF "$expected" <<< "$out"; then

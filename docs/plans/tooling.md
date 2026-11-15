@@ -176,6 +176,9 @@ archive includes the managed path resolver; its extracted-path regression passes
   open-file checks. The correct executable hash was preserved; the intended profile retains
   4,331,428 KiB. The installed Cargo uses `.cargo-lock` without a top-level `.fingerprint`;
   cache-root validation and custom-profile accounting cover both layouts.
+  Invalid requests fail before build admission, and the prebuilt admission CLI receives the
+  library's checkout root. Both wrapper suites pass with inherited root and build allowances
+  unset, covering the clean-runner refusal path.
   Open: controlled cold and one-source-edit comparisons, a real installed development bundle's
   Finder-launched rebuild, and runtime/energy comparison with release. Compiler-stamp changes
   and embedded documentation still invalidate builds. Measurement currently uses platform

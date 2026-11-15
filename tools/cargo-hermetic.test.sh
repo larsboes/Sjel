@@ -177,6 +177,26 @@ case_dir="$(mktemp -d "${TMPDIR:-/tmp}/sjel-hermetic-cases.XXXXXX")"
 case_dir="$(cd "$case_dir" && pwd -P)"
 trap 'rm -rf "$case_dir"' EXIT
 mkdir -p "$case_dir/bin" "$case_dir/host-tmp"
+cat > "$case_dir/bin/unavailable-cli" <<'EOF'
+#!/bin/sh
+touch "$HERMETIC_ADMISSION_REPORT"
+echo 'admission should not run' >&2
+exit 2
+EOF
+chmod +x "$case_dir/bin/unavailable-cli"
+invalid_run() {
+  out=$(env -u SJEL_ROOT -u SJEL_ALLOW_LOCAL_BUILD \
+    SJEL_CLI_BIN="$case_dir/bin/unavailable-cli" HERMETIC_ADMISSION_REPORT="$case_dir/admitted" \
+    CARGO_TARGET_DIR="$case_dir/cache" "$TOOL" "$@" 2>&1)
+  status=$?
+}
+invalid_run
+expect_refused "usage does not consult an unavailable admission CLI" "needs a cargo subcommand"
+invalid_run test --target-dir "$REPO/target"
+expect_refused "an unsafe path does not consult an unavailable admission CLI" "holds the binaries the supervisor runs"
+invalid_run test --target-dir "$REPO/target/nested/deeper"
+expect_refused "a nested unsafe path precedes admission" "Point it at scratch"
+[ ! -e "$case_dir/admitted" ] || note_fail "an invalid request consulted build admission"
 cat > "$case_dir/bin/cargo" <<'CARGO'
 #!/bin/bash
 set -eu

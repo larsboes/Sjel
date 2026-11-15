@@ -24,6 +24,7 @@ fi
 # --- what this refuses -----------------------------------------------------
 
 die() { echo "cargo-hermetic: $1" >&2; exit 2; }
+[ "$#" -gt 0 ] || die "needs a cargo subcommand, e.g. 'test --workspace --locked'. Run 'sjel help cargo'."
 
 # `--release` is refused rather than redirected. Redirecting it would still produce a
 # release build under a scratch path, which is fine, but the reason the ban exists is that
@@ -42,14 +43,6 @@ for arg in "$@"; do
   fi
   _prev="$arg"
 done
-
-
-# Explicit verification uses the battery-aware defaults before Cargo starts.
-# shellcheck source=lib/local-build.sh
-. "$_here/lib/local-build.sh"
-if [ "${1:-}" != "--print-env" ]; then
-  local_build_prepare || die "cannot determine safe build defaults"
-fi
 
 # Canonicalise a path that may not exist yet, WITHOUT creating it: walk up to the deepest
 # existing ancestor, resolve that, and re-attach the tail. `mkdir -p` first would create the
@@ -118,6 +111,13 @@ _guard_target() {
 }
 _guard_target
 
+# Explicit verification uses the battery-aware defaults after validating its request.
+# shellcheck source=lib/local-build.sh
+. "$_here/lib/local-build.sh"
+if [ "${1:-}" != "--print-env" ]; then
+  local_build_prepare || die "cannot determine safe build defaults"
+fi
+
 _cache_writable() {
   local probe
   mkdir -p "$1/debug/deps" 2>/dev/null || return 1
@@ -177,8 +177,6 @@ if [ "${1:-}" = "--print-env" ]; then
   done
   exit 0
 fi
-
-[ "$#" -gt 0 ] || die "needs a cargo subcommand, e.g. 'test --workspace --locked'. Run 'sjel help cargo'."
 
 echo "cargo-hermetic: target $CARGO_TARGET_DIR, overlay $SJEL_PERSONAL_ROOT" >&2
 # Not exec: the trap has to run so the sandbox goes away, and the exit status has to be

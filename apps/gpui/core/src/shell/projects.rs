@@ -1,6 +1,17 @@
 //! Projects, Records, Notes & Tasks shell client methods.
 
 use super::*;
+use projects_api::reads::{ProjectReadResponse, RecordReadResponse};
+use projects_api::{
+    AddNoteRequest, AddProjectRequest, AddTaskRequest, InventoryLinkDecisionRequest,
+    MailDecisionRequest, RemoveRecordRequest, RenameRecordRequest, SaveRecordRequest,
+    SetDoneRequest, SetPropertyRequest,
+};
+
+/// A typed request as the JSON body the shell sends.
+fn body(request: &impl serde::Serialize) -> ShellResult<serde_json::Value> {
+    serde_json::to_value(request).map_err(|_| ShellError::Unreadable)
+}
 
 impl Shell {
     pub async fn project_inventory_links(
@@ -42,7 +53,17 @@ impl Shell {
         } else {
             "/projects/api/inventory-links"
         };
-        let result: Result = self.json(Method::POST, path, Some(serde_json::json!({"project": project, "path": record.path, "base": record.content, "updated_at": record.updated_at, "item_ref": item_ref, "reviewed": true})), 10).await?;
+        let request = InventoryLinkDecisionRequest {
+            project: project.to_owned(),
+            path: record.path.clone(),
+            base: record.content.clone(),
+            updated_at: record.updated_at.clone(),
+            item_ref: item_ref.to_owned(),
+            reviewed: true,
+        };
+        let result: Result = self
+            .json(Method::POST, path, Some(body(&request)?), 10)
+            .await?;
         Ok(result.changed)
     }
 
@@ -70,12 +91,12 @@ impl Shell {
     pub async fn project_mail_decision(
         &self,
         id: i64,
-        body: serde_json::Value,
+        request: &MailDecisionRequest,
     ) -> ShellResult<ProjectMailDecision> {
         self.json(
             Method::POST,
             &format!("/projects/api/mail-proposals/{id}/decision"),
-            Some(body),
+            Some(body(request)?),
             10,
         )
         .await
@@ -94,27 +115,19 @@ impl Shell {
 
     /// A project's records without their content: what a list of notes draws.
     pub async fn project(&self, name: &str) -> ShellResult<Vec<ProjectRecord>> {
-        #[derive(Deserialize)]
-        struct Records {
-            records: Vec<ProjectRecord>,
-        }
         let path = with_query(
             "/projects/api/project",
             &[("name", name), ("content", "false")],
         );
-        let records: Records = self.json(Method::GET, &path, None, 10).await?;
-        Ok(records.records)
+        let read: ProjectReadResponse = self.json(Method::GET, &path, None, 10).await?;
+        Ok(read.records.into_iter().map(ProjectRecord::from).collect())
     }
 
     /// One record with its content: what the note editor opens.
     pub async fn record(&self, path: &str) -> ShellResult<ProjectRecord> {
-        #[derive(Deserialize)]
-        struct One {
-            record: ProjectRecord,
-        }
         let path = with_query("/projects/api/record", &[("path", path)]);
-        let one: One = self.json(Method::GET, &path, None, 10).await?;
-        Ok(one.record)
+        let read: RecordReadResponse = self.json(Method::GET, &path, None, 10).await?;
+        Ok(read.record.into())
     }
 
     /// Every note across projects (`GET /projects/api/records`).
@@ -180,17 +193,34 @@ impl Shell {
     /// Replaces a record's content. `base` is the content the edit started from; the capability
     /// answers 409 and writes nothing when the record changed since.
     pub async fn save_record(&self, path: &str, content: &str, base: &str) -> ShellResult<()> {
-        let body = serde_json::json!({ "path": path, "content": content, "base": base });
-        self.send(Method::POST, "/projects/api/record", Some(body), 10)
-            .await
-            .map(drop)
+        let request = SaveRecordRequest {
+            path: path.to_owned(),
+            content: content.to_owned(),
+            base: Some(base.to_owned()),
+        };
+        self.send(
+            Method::POST,
+            "/projects/api/record",
+            Some(body(&request)?),
+            10,
+        )
+        .await
+        .map(drop)
     }
 
     /// Renames a record: its file takes the new title, and every record linking `[[old]]` follows.
     pub async fn rename_record(&self, path: &str, title: &str) -> ShellResult<RenamedRecord> {
-        let body = serde_json::json!({ "path": path, "title": title });
-        self.json(Method::POST, "/projects/api/record/rename", Some(body), 30)
-            .await
+        let request = RenameRecordRequest {
+            path: path.to_owned(),
+            title: title.to_owned(),
+        };
+        self.json(
+            Method::POST,
+            "/projects/api/record/rename",
+            Some(body(&request)?),
+            30,
+        )
+        .await
     }
 
     /// Marks a task done, or open again, and answers with the record's new frontmatter.
@@ -199,9 +229,17 @@ impl Shell {
         struct Task {
             task: GlobalTask,
         }
-        let body = serde_json::json!({ "id": path, "done": done });
+        let request = SetDoneRequest {
+            id: path.to_owned(),
+            done,
+        };
         let task: Task = self
-            .json(Method::POST, "/projects/api/tasks/done", Some(body), 10)
+            .json(
+                Method::POST,
+                "/projects/api/tasks/done",
+                Some(body(&request)?),
+                10,
+            )
             .await?;
         Ok(task.task)
     }
@@ -218,12 +256,16 @@ impl Shell {
         struct Task {
             task: GlobalTask,
         }
-        let body = serde_json::json!({ "path": path, "key": key, "value": value });
+        let request = SetPropertyRequest {
+            path: path.to_owned(),
+            key: key.to_owned(),
+            value: value.to_owned(),
+        };
         let task: Task = self
             .json(
                 Method::POST,
                 "/projects/api/record/property",
-                Some(body),
+                Some(body(&request)?),
                 10,
             )
             .await?;
@@ -241,16 +283,21 @@ impl Shell {
         due: Option<&str>,
         priority: Option<u8>,
     ) -> ShellResult<()> {
-        let mut body = serde_json::json!({ "project": project, "title": title });
-        if let Some(due) = due {
-            body["due"] = serde_json::Value::String(due.to_string());
-        }
-        if let Some(p) = priority {
-            body["priority"] = serde_json::Value::Number(p.into());
-        }
-        self.send(Method::POST, "/projects/api/tasks", Some(body), 10)
-            .await
-            .map(drop)
+        let request = AddTaskRequest {
+            project: project.to_owned(),
+            title: title.to_owned(),
+            summary: String::new(),
+            due: due.map(str::to_owned),
+            priority,
+        };
+        self.send(
+            Method::POST,
+            "/projects/api/tasks",
+            Some(body(&request)?),
+            10,
+        )
+        .await
+        .map(drop)
     }
 
     /// Tasks across all live projects, optionally filtered by ?status=open|done.
@@ -269,25 +316,49 @@ impl Shell {
 
     /// Creates a project hub.
     pub async fn add_project(&self, name: &str, summary: &str) -> ShellResult<()> {
-        let body = serde_json::json!({ "name": name, "summary": summary });
-        self.send(Method::POST, "/projects/api/projects", Some(body), 10)
-            .await
-            .map(drop)
+        let request = AddProjectRequest {
+            name: name.to_owned(),
+            summary: summary.to_owned(),
+        };
+        self.send(
+            Method::POST,
+            "/projects/api/projects",
+            Some(body(&request)?),
+            10,
+        )
+        .await
+        .map(drop)
     }
 
     /// Creates a new note in a live project.
     pub async fn add_note(&self, project: &str, title: &str) -> ShellResult<()> {
-        let body = serde_json::json!({ "project": project, "title": title, "summary": "" });
-        self.send(Method::POST, "/projects/api/notes", Some(body), 10)
-            .await
-            .map(drop)
+        let request = AddNoteRequest {
+            project: project.to_owned(),
+            title: title.to_owned(),
+            summary: String::new(),
+        };
+        self.send(
+            Method::POST,
+            "/projects/api/notes",
+            Some(body(&request)?),
+            10,
+        )
+        .await
+        .map(drop)
     }
 
     /// Removes a record from the projects store and disk.
     pub async fn remove_record(&self, path: &str) -> ShellResult<()> {
-        let body = serde_json::json!({ "path": path });
-        self.send(Method::POST, "/projects/api/record/remove", Some(body), 10)
-            .await
-            .map(drop)
+        let request = RemoveRecordRequest {
+            path: path.to_owned(),
+        };
+        self.send(
+            Method::POST,
+            "/projects/api/record/remove",
+            Some(body(&request)?),
+            10,
+        )
+        .await
+        .map(drop)
     }
 }

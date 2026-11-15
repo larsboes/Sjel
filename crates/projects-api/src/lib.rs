@@ -5,8 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
-pub mod reads;
 pub mod mail_evidence;
+pub mod reads;
 pub mod registry;
 
 // ============================================================================
@@ -81,7 +81,8 @@ pub struct ProjectSummary {
     pub notes: usize,
 }
 
-/// One record of `GET /projects/api/project` and `GET /projects/api/record`.
+/// A record as the clients hold it: decoded from [`reads::RecordRead`] or read from the phone
+/// replica.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default, schemars::JsonSchema)]
 pub struct ProjectRecord {
     pub path: String,

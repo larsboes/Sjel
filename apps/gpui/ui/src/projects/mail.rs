@@ -6,7 +6,7 @@ use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context, FontWeight};
 
 use crate::data::Remote;
 use crate::theme::Palette;
-use sjel_gpui_core::shell::{self, ProjectRecord, ShellError};
+use sjel_gpui_core::shell::{self, MailDecisionRequest, ProjectRecord, ShellError};
 
 use super::Projects;
 
@@ -133,9 +133,19 @@ impl Projects {
                 cx.notify();
                 return;
             };
-            serde_json::json!({"version": proposal.version, "decision": "approve", "target_path": target.path, "base": target.content})
+            MailDecisionRequest {
+                version: proposal.version,
+                decision: "approve".into(),
+                target_path: Some(target.path.clone()),
+                base: Some(target.content.clone()),
+            }
         } else {
-            serde_json::json!({"version": proposal.version, "decision": "reject"})
+            MailDecisionRequest {
+                version: proposal.version,
+                decision: "reject".into(),
+                target_path: None,
+                base: None,
+            }
         };
         let project = proposal.project.clone();
         let id = proposal.id;
@@ -149,7 +159,7 @@ impl Projects {
         };
         self.mail_busy = true;
         self.mail_message = None;
-        let work = shell::run(async move { shell.project_mail_decision(id, body).await });
+        let work = shell::run(async move { shell.project_mail_decision(id, &body).await });
         cx.spawn(async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |view, cx| {

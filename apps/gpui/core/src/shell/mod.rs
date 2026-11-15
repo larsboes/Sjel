@@ -84,9 +84,9 @@ pub use status_api::{BackupRun, BackupStatus, Backups};
 /// `GET /projects/api/projects` (`ProjectSummary` in `crates/projects/src/server.rs`).
 pub use projects_api::{
     decode_item_ref, inventory_reference, is_external_task, project_ref, status_closes, GlobalNote,
-    GlobalTask, InventoryIdentity, ProjectInventoryLink, ProjectKind, ProjectLinkRecord,
-    ProjectMailDecision, ProjectMailPage, ProjectMailProposal, ProjectMailTarget, ProjectRecord,
-    ProjectSummary, RenamedRecord, TASK_STATUSES,
+    GlobalTask, InventoryIdentity, MailDecisionRequest, ProjectInventoryLink, ProjectKind,
+    ProjectLinkRecord, ProjectMailDecision, ProjectMailPage, ProjectMailProposal,
+    ProjectMailTarget, ProjectRecord, ProjectSummary, RenamedRecord, TASK_STATUSES,
 };
 
 pub use status_api::ServerHit;

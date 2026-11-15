@@ -1229,3 +1229,38 @@ license = "MIT"
 summary = "Native Rust terminal coding agent, candidate harness and idea source for the Sjel agent"
 why = "Audited 2026-11-07 against v0.10.0, with the method in `Packs/security/skills/vendor-audit`. The strengths are real and measurable: 338 lock entries with zero git dependencies and zero `[patch]` sections, both `build.rs` inert, CI builds `--locked`, cosign-signs every artifact and verifies its own signatures before upload with the certificate identity pinned to the workflow commit, every `uses:` SHA-pinned, no `postinstall`, and no telemetry of any kind. The verdict is not adopt because of three findings: the effect broker -- canonical intent hashing, single-use grants, fail-closed without a human, model text never counted as consent -- ships off (`cli.rs` falls through to `EffectPolicy::UnsafeHost`, which `effect.rs` maps to allow), so plain `octet` prompts for nothing and leaves the file tools unconfined; the updater pipes a fetched shell script to `sh`, outside the Sigstore chain that protects the binary; and credentials are plaintext files rather than keychain items. Extensions have no isolation and the Pi adapter declares `filesystem = \"unrestricted\"` with `builtin_tool_overrides` including `bash`. A contained run the same day measured the boundary rather than the program: direct egress refused in 60 ms, the proxy admitting only the provider's hosts, and the profile refusing a real read of the gcloud application-default credentials."
 revisit = "The runtime trial is complete; running Octet is declined under the audited defaults. Re-evaluate only after upstream changes address the effect-policy default, updater verification, credential storage and configuration blockers. Mine selected designs into existing crates/sjel-agent interfaces only for a concrete consumer; research/agent-upstream-integration.md owns that integration boundary. The contained trial refused its state-directory openat walk, and setup --manual-model failed catalog verification both inside and outside containment."
+
+[svelte]
+url = "https://github.com/sveltejs/svelte"
+verdict = "adopt"
+license = "MIT"
+summary = "Compiler and runtime for the shared object catalog"
+why = "The catalog uses escaped text and compiled Svelte components. The pinned npm package and official Vite adapter run as local build tools with install scripts disabled; model-authored code is never compiled. Static package inspection is scoped and does not establish release provenance or a complete dependency audit."
+
+[vite]
+url = "https://github.com/vitejs/vite"
+verdict = "adopt"
+license = "MIT"
+summary = "Builds the catalog's static bundle with the official Svelte adapter"
+why = "Production serves static output through the Rust gateway; Vite is not a production server. Pins and the Bun lock constrain resolution, lifecycle scripts stay disabled, and development binds loopback. Native compiler dependencies remain part of the build trust boundary."
+
+[typescript]
+url = "https://github.com/microsoft/TypeScript"
+verdict = "adopt"
+license = "Apache-2.0"
+summary = "Checks catalog code and registry-derived object types"
+why = "The catalog pins the compiler and runs it locally through svelte-check. This consumes the published compiler without install scripts; it does not grant external code access to the running node."
+
+[svelte-check]
+url = "https://github.com/sveltejs/language-tools"
+verdict = "adopt"
+license = "MIT"
+summary = "Type and accessibility diagnostics for the Svelte catalog"
+why = "The pinned checker validates components in the same check command as binding tests. It runs as a development tool with install scripts disabled; editor integration and remote language servers are outside this adoption."
+
+[playwright]
+url = "https://github.com/microsoft/playwright"
+verdict = "adopt"
+license = "Apache-2.0"
+summary = "Headless acceptance tests for the object catalog"
+why = "The pinned development package controls an isolated browser profile against fictional loopback fixtures. Install scripts and automatic browser installation remain disabled; tests use an installed Chrome channel or an explicitly configured browser executable. It does not control the signed-in browser or enter the production bundle."

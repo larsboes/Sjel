@@ -1,0 +1,11 @@
+{
+  "projects": [
+    {"name":"Kitchen renovation","archived":false,"open":2,"done":1,"notes":1,"data_class":"c1"},
+    {"name":"Kitchen renovation","archived":true,"open":0,"done":1,"notes":1,"data_class":"c2"}
+  ],
+  "records": [
+    {"path":"Kitchen renovation/Plan.md","kind":"project","title":"Kitchen renovation","done":false,"due":null,"priority":2,"archived":false,"data_class":"c1","data_class_rationale":"Fictional fixture","content":"# Kitchen renovation\n\nMeasure the room before ordering materials.\n\n<script>Never execute record content</script>","updated_at":"2026-11-13T08:00:00Z"},
+    {"path":"Kitchen renovation/Tasks/Measure.md","kind":"task","title":"Measure the room","done":false,"due":"2026-11-20","priority":1,"archived":false,"data_class":"c1","data_class_rationale":"Fictional fixture","content":"Measure floor area in m².","updated_at":"2026-11-13T08:00:00Z"},
+    {"path":"Archive/Kitchen renovation/Plan.md","kind":"project","title":"Earlier plan","done":false,"due":null,"priority":2,"archived":true,"data_class":"c2","data_class_rationale":"Fictional fixture","content":"Archived fixture.","updated_at":"2026-11-12T08:00:00Z"}
+  ]
+}

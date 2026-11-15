@@ -769,6 +769,14 @@ A view never calls a write route. A write reaches the user only as a proposal, w
 the capability's existing write mode. A cloud model gets only the schema and pseudonymized
 examples. Mail or feed text inside a view is rendered as text and never interpreted.
 
+The derived slice is in `apps/catalog`: generic lists and property details consume
+the Projects registry, with a static bundle served by `sjel-status` at `/catalog/` under its
+existing access and origin checks. Binding validation rejects unknown objects, properties and
+write routes. Loading, error/retry, empty, archived and paginated states are implemented.
+Rust asset-serving and origin-guard tests pass; browser rendering remains unverified because
+the available browser hosts did not answer. Data-contract verification and remaining acceptance
+are owned by [the registry slice](data.md#registry-derived-project-views).
+
 Open, in order:
 
 1. Derived views. An object list and an object view render from the registry declaration of

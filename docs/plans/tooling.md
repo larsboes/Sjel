@@ -667,3 +667,19 @@ cleanup; verification used the isolated Cargo runner with a writable scratch tar
 - `sjel ci-cache` reports the Actions caches against the 10 GB limit and marks the dead ones:
   superseded by a more recently restored entry with the same key prefix, or tied to a closed pull
   request. `sjel ci-cache prune` previews the deletion and `--apply` performs it.
+
+## Catalog browser verification
+
+Needed: inspect the registry catalog with fictional records. Interactive browser tools do not
+answer in this session. `apps/catalog/browser-check.ts` starts a bounded Rust fixture using
+the production static handler, then exercises navigation, keyboard use, narrow layout, escaped
+content, failure states and GET-only traffic with an isolated headless browser. Chrome aborts
+with SIGABRT and the cached headless shell with SIGTRAP before a page opens, including an
+attempted sandbox override. Browser acceptance remains open. Smallest tooling change: expose
+browser-host readiness and launch failures before starting acceptance checks.
+
+Vite cannot remove the generated `apps/catalog/dist/assets` directory (`EPERM`), including
+with an attempted sandbox override. Compilation passes with `--emptyOutDir false`; no permanent
+cleanup bypass is configured. Normal clean rebuild acceptance remains open. Bun-backed gate
+wrappers also exit without diagnostics here while explicit `bun --no-env-file` succeeds.
+The smallest wrapper fix is to disable implicit env-file loading and expose failures.

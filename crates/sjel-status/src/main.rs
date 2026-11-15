@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tower::Layer;
 
+mod catalog;
 mod device_gate;
 mod lan;
 mod proxy;
@@ -997,6 +998,22 @@ mod origin_tests {
     /// The guard runs before either, which is what these tests are about.
     fn router() -> Router {
         build_router(proxy::Proxy::new(&[], "8082"))
+    }
+
+    #[tokio::test]
+    async fn catalog_is_inside_the_origin_guard() {
+        assert_eq!(
+            answer("GET", "/catalog/", Some("https://foreign.example")).await,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            answer("GET", "/catalog", None).await,
+            StatusCode::TEMPORARY_REDIRECT
+        );
+        assert_eq!(
+            answer("GET", "/catalogue", None).await,
+            StatusCode::NOT_FOUND
+        );
     }
 
     async fn answer(method: &str, path: &str, origin: Option<&str>) -> StatusCode {

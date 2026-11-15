@@ -11,19 +11,33 @@ the next six-hour pass. TLS and unclassified request failures remain visible as 
 
 `projects-api::registry` declares project and record read projections; `route-manifest` validates
 their identities, classification inheritance, response schemas, links and governed action
-metadata. Projects publishes discovery in `/routes`, and MCP descriptions and tool metadata
-consume the same declaration. Existing read JSON is preserved.
+metadata. Projects publishes discovery in `/routes`; MCP descriptions and metadata and the
+catalog's generated TypeScript consume the same declaration. Existing read JSON is preserved.
 
 Project identity is `(name, archived)`. Record identity is its mutable Markdown path. Every
 property inherits its object's class, with no invented property provenance. Membership links
 filter the name-based aggregate read by archived state and request `content=false`; detail
 reads retrieve content separately. Inventory references are not projected by these contracts.
 
-The registry declares no view-document format and no renderer. The GPUI renderer for derived
-views is open in [`gpui.md` §11](gpui.md#11-ui-stack).
+`apps/catalog` contains generic lists and property details; `sjel-status` serves the bundle at
+`/catalog/` inside existing access and origin guards. Views resolve approved read identifiers,
+reject invalid properties and write bindings, and never execute declared actions. No adaptive
+view-document format is selected. [The research report](../../research/svelte-adaptive-ui.md)
+recommends an adapter evaluation; adopting a renderer remains separate work.
 
-Verification: route-manifest, projects-api, sjel-projects and sjel-mcp tests and Clippy pass.
-Open acceptance: live governed reads with real data through MCP.
+Verification: 189 focused Rust tests and a separate built-asset integration test pass. Clippy,
+Svelte type/accessibility checks, six catalog binding tests, generation freshness, route-schema,
+architecture-freshness, UI-package discovery, documentation-link and Bun-install-policy checks
+pass. Dependency scanning reports no advisories. Full workspace gates have not run.
+
+Open acceptance: browser rendering and navigation, live governed reads with real data,
+phone-local operation and the Swift web-view host. The tracked browser harness uses Rust-served
+assets and fictional reads, but installed Chrome aborts with SIGABRT and the cached headless
+shell with SIGTRAP before opening a page, including an attempted sandbox override. Interactive
+browser tooling is also unavailable. Normal build cleanup fails with `EPERM`; compilation passes
+with Vite output cleaning disabled. Bun gate wrappers need explicit `--no-env-file` here.
+Doctor separately reports stale Comms delivery, stale home-automation backup and host-patch
+audit failures. Services have not been redeployed; no push has been made.
 
 ## Mail evidence for projects and inventory
 

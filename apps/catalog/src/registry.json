@@ -1,0 +1,226 @@
+{
+  "capability": "projects",
+  "objects": [
+    {
+      "id": "projects.project",
+      "label": "Projects",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "A project summary with the strictest class of its source records.",
+        "properties": {
+          "archived": {
+            "default": false,
+            "type": "boolean"
+          },
+          "data_class": {
+            "type": "string"
+          },
+          "done": {
+            "default": 0,
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "notes": {
+            "default": 0,
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "open": {
+            "default": 0,
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "archived",
+          "open",
+          "done",
+          "notes",
+          "data_class"
+        ],
+        "title": "ClassifiedProjectSummary",
+        "type": "object"
+      },
+      "identity": [
+        "name",
+        "archived"
+      ],
+      "title": "name",
+      "inactive_property": "archived",
+      "classification": {
+        "field": "data_class",
+        "derivation": "Maximum class of non-domain records grouped by name and archived; all properties inherit it.",
+        "inheritance": "all_properties"
+      },
+      "reads": [
+        {
+          "id": "list",
+          "method": "GET",
+          "path": "/api/projects",
+          "member": "projects",
+          "many": true,
+          "parameters": [],
+          "fixed_parameters": {}
+        }
+      ],
+      "links": [
+        {
+          "label": "Records",
+          "target": "projects.record",
+          "read": "project",
+          "parameters": {
+            "name": "name"
+          },
+          "equals": {
+            "archived": "archived"
+          }
+        }
+      ],
+      "actions": []
+    },
+    {
+      "id": "projects.record",
+      "label": "Records",
+      "schema": {
+        "$defs": {
+          "ProjectKind": {
+            "enum": [
+              "project",
+              "task",
+              "note"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "A record's classified read projection; omitted content is not an empty record.",
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "content": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "data_class": {
+            "type": "string"
+          },
+          "data_class_rationale": {
+            "type": "string"
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "due": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/$defs/ProjectKind"
+          },
+          "path": {
+            "type": "string"
+          },
+          "priority": {
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "title",
+          "done",
+          "due",
+          "priority",
+          "archived",
+          "data_class",
+          "data_class_rationale"
+        ],
+        "title": "RecordRead",
+        "type": "object"
+      },
+      "identity": [
+        "path"
+      ],
+      "title": "title",
+      "inactive_property": "archived",
+      "classification": {
+        "field": "data_class",
+        "derivation": "Vault path default raised by record frontmatter; all properties inherit it. updated_at is a row timestamp, not property provenance.",
+        "inheritance": "all_properties"
+      },
+      "reads": [
+        {
+          "id": "project",
+          "method": "GET",
+          "path": "/api/project",
+          "member": "records",
+          "many": true,
+          "parameters": [
+            "name"
+          ],
+          "fixed_parameters": {
+            "content": "false"
+          }
+        },
+        {
+          "id": "detail",
+          "method": "GET",
+          "path": "/api/record",
+          "member": "record",
+          "many": false,
+          "parameters": [
+            "path"
+          ],
+          "fixed_parameters": {}
+        }
+      ],
+      "links": [
+        {
+          "label": "Record",
+          "target": "projects.record",
+          "read": "detail",
+          "parameters": {
+            "path": "path"
+          },
+          "equals": {}
+        }
+      ],
+      "actions": [
+        {
+          "method": "POST",
+          "path": "/api/record/property",
+          "governance": "capability-policy"
+        },
+        {
+          "method": "POST",
+          "path": "/api/record",
+          "governance": "capability-policy"
+        }
+      ]
+    }
+  ]
+}

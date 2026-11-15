@@ -282,6 +282,9 @@ pub(crate) async fn strip_self_prefix(mut req: Request, next: Next) -> Response 
 /// Router fallback: proxy when a prefix claims the path, otherwise 404.
 pub(crate) async fn fallback(State(proxy): State<Proxy>, req: Request) -> Response {
     let path = req.uri().path().to_string();
+    if path == "/catalog" || path.starts_with("/catalog/") {
+        return crate::catalog::serve(req).await;
+    }
     match proxy.route_for(&path) {
         Some(route) => forward(&proxy, route.clone(), req).await,
         // The routing table is resolved at startup: a capability enabled later has no route

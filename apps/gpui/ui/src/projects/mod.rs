@@ -2796,7 +2796,7 @@ impl Projects {
             let body = match (&self.all_notes.value, &self.all_notes.error) {
                 (_, Some(error)) => note(error.to_string(), palette.red),
                 (None, None) => placeholder(320.),
-                (Some(notes), None) => self.all_notes_table(notes, &search_input, palette, cx),
+                (Some(notes), None) => self.all_notes_table(notes, &search_input, cx),
             };
             return div()
                 .id("all-notes")
@@ -3285,6 +3285,25 @@ mod tests {
             })
         });
         projects.read_with(cx, |projects, _| assert!(projects.task_panel.is_none()));
+    }
+
+    #[gpui::test]
+    fn ely_grouping_toggle_preserves_the_projects_table_state(cx: &mut TestAppContext) {
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, cx| {
+            let mut page = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
+            page.tab = ProjectsTab::AllTasks;
+            page.all_tasks.value = Some(Vec::new());
+            page.group_by_project = false;
+            page
+        });
+        for expected in [true, false] {
+            let toggle = cx
+                .debug_bounds("toggle Group by project")
+                .expect("grouping toggle renders");
+            cx.simulate_click(toggle.center(), gpui::Modifiers::none());
+            cx.run_until_parked();
+            page.read_with(cx, |page, _| assert_eq!(page.group_by_project, expected));
+        }
     }
 
     #[gpui::test]

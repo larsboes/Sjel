@@ -854,6 +854,11 @@ Optional list conversions stay last.
 
 Shared Ely tabs for Inventory, Backup and Systems shipped in `f2324efe`.
 
+The shared counted-filter adapter now uses the pinned Ely `ToggleButton` for Projects,
+Documents, Feed and Inbox. Domain callbacks still own exclusive selection and grouping.
+All 205 UI tests pass, including document pointer/keyboard filtering and Projects grouping.
+Installation and live acceptance of this adapter remain open.
+
 Verification: all 203 UI tests pass, including production Inventory pointer and arrow-key
 selection inside Kit Root. UI Clippy passes with three warnings in untouched Projects, Travel
 and People code. The documentation link check passes for 419 documents. Live light/dark and

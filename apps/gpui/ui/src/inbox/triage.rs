@@ -489,21 +489,18 @@ impl Render for Inbox {
                 "New",
                 count(Filter::New),
                 self.filter == Filter::New,
-                palette,
                 cx.listener(|view, _, _, cx| view.set_filter(Filter::New, cx)),
             ))
             .child(filter_pill(
                 "Done",
                 count(Filter::Done),
                 self.filter == Filter::Done,
-                palette,
                 cx.listener(|view, _, _, cx| view.set_filter(Filter::Done, cx)),
             ))
             .child(filter_pill(
                 "Dismissed",
                 count(Filter::Dismissed),
                 self.filter == Filter::Dismissed,
-                palette,
                 cx.listener(|view, _, _, cx| view.set_filter(Filter::Dismissed, cx)),
             ));
 

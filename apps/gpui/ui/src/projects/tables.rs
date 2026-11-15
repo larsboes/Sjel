@@ -480,7 +480,6 @@ impl Projects {
                 label,
                 count(filter),
                 self.global_status == filter,
-                palette,
                 cx.listener(move |view, _, _, cx| {
                     view.global_status = filter;
                     cx.notify();
@@ -506,7 +505,6 @@ impl Projects {
                 .collect::<std::collections::HashSet<_>>()
                 .len(),
             self.group_by_project,
-            palette,
             cx.listener(|view, _, _, cx| {
                 view.group_by_project = !view.group_by_project;
                 cx.notify();
@@ -722,7 +720,6 @@ impl Projects {
         &self,
         notes: &[GlobalNote],
         search_input: &Entity<InputState>,
-        palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let cols = self.columns();
@@ -744,7 +741,6 @@ impl Projects {
                         "All",
                         notes.len(),
                         self.note_kind_filter == NoteKindFilter::All,
-                        palette,
                         cx.listener(|view, _, _, cx| {
                             view.note_kind_filter = NoteKindFilter::All;
                             cx.notify();
@@ -754,7 +750,6 @@ impl Projects {
                         "Hubs ★",
                         hubs_count,
                         self.note_kind_filter == NoteKindFilter::Hubs,
-                        palette,
                         cx.listener(|view, _, _, cx| {
                             view.note_kind_filter = NoteKindFilter::Hubs;
                             cx.notify();
@@ -764,7 +759,6 @@ impl Projects {
                         "Notes ≡",
                         regular_count,
                         self.note_kind_filter == NoteKindFilter::Notes,
-                        palette,
                         cx.listener(|view, _, _, cx| {
                             view.note_kind_filter = NoteKindFilter::Notes;
                             cx.notify();

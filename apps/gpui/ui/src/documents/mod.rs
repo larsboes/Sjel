@@ -1249,28 +1249,24 @@ impl Render for Documents {
                             "Inbox",
                             inbox,
                             self.filter == Filter::Inbox,
-                            palette,
                             cx.listener(|view, _, _, cx| view.set_filter(Filter::Inbox, cx)),
                         ))
                         .child(filter_pill(
                             "Filed",
                             filed,
                             self.filter == Filter::Filed,
-                            palette,
                             cx.listener(|view, _, _, cx| view.set_filter(Filter::Filed, cx)),
                         ))
                         .child(filter_pill(
                             "All",
                             active,
                             self.filter == Filter::All,
-                            palette,
                             cx.listener(|view, _, _, cx| view.set_filter(Filter::All, cx)),
                         ))
                         .child(filter_pill(
                             "Needs review",
                             next,
                             self.filter == Filter::NeedsReview,
-                            palette,
                             cx.listener(|view, _, _, cx| view.set_filter(Filter::NeedsReview, cx)),
                         ))
                         .child(
@@ -2369,6 +2365,46 @@ mod tests {
             matched_pages: Vec::new(),
             workflow_stage: "analyze".into(),
         }
+    }
+
+    #[gpui::test]
+    fn ely_filters_change_the_document_rows_by_pointer_and_keyboard(cx: &mut TestAppContext) {
+        use gpui_kit::test::TestWindowExt;
+
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, _| {
+            let mut page = Documents::new(Repo::new(Err(ShellError::NotSetUp)));
+            let mut filed = summary("filed", Some("Home"), "filed.pdf");
+            filed.status = "filed".into();
+            page.rows.value = Some(vec![summary("inbox", None, "inbox.pdf"), filed]);
+            page
+        });
+        let filed = cx
+            .debug_bounds("toggle Filed")
+            .expect("Filed filter renders");
+        cx.simulate_click(filed.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.filter, Filter::Filed);
+            assert_eq!(page.order.len(), 1);
+            assert_eq!(
+                page.rows.value.as_ref().unwrap()[page.order[0].index].id,
+                "filed"
+            );
+        });
+        cx.update(|window, cx| {
+            window.blur(cx);
+            window.focus_next(cx);
+            window.press("space", cx);
+        });
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.filter, Filter::Inbox);
+            assert_eq!(page.order.len(), 1);
+            assert_eq!(
+                page.rows.value.as_ref().unwrap()[page.order[0].index].id,
+                "inbox"
+            );
+        });
     }
 
     /// The list's order is what the keyboard steps through, so a filter narrows both.

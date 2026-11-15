@@ -23,7 +23,6 @@ impl Feed {
                 label,
                 self.count(filter),
                 self.filter == filter,
-                palette,
                 cx.listener(move |view, _, _, cx| view.set_filter(filter, cx)),
             )
         };

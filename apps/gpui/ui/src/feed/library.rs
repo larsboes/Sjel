@@ -37,7 +37,6 @@ impl Feed {
                 label,
                 count(status),
                 self.library_status == status,
-                palette,
                 cx.listener(move |view, _, _, cx| {
                     view.library_status = status;
                     view.library_rev = view.library_rev.wrapping_add(1);

@@ -1,10 +1,12 @@
 //! Status badges, pills, and indicator chips.
 
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, FontWeight, SharedString, Window,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, App, FontWeight, SharedString, Window};
 
 use super::tokens::{dot, RADIUS_SM};
+use crate::ely::{
+    buttons::{ToggleButton, ToggleItem},
+    theme::ControlSize,
+};
 use crate::theme::{tint, Palette};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -40,41 +42,21 @@ pub fn due_status(due: Option<&str>, done: bool, today: &str) -> DueStatus {
     }
 }
 
+/// A counted filter toggle; the caller owns exclusive selection or independent toggling.
 pub fn filter_pill(
     label: &'static str,
     count: usize,
     active: bool,
-    palette: Palette,
-    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    on_change: impl Fn(&bool, &mut Window, &mut App) + 'static,
 ) -> AnyElement {
-    div()
-        .id(SharedString::from(format!("filter-pill-{label}")))
-        .flex()
-        .items_center()
-        .gap_1()
-        .px_2()
-        .py(px(2.))
-        .rounded(px(8.))
-        .text_xs()
-        .cursor_pointer()
-        .when(active, |el| {
-            el.bg(rgba(tint(palette.accent, 0x22)))
-                .text_color(rgb(palette.accent))
-                .font_weight(FontWeight::SEMIBOLD)
-        })
-        .when(!active, |el| {
-            el.bg(rgba(palette.raised))
-                .text_color(rgb(palette.muted))
-                .hover(|s| s.text_color(rgb(palette.text)))
-        })
-        .on_click(on_click)
-        .child(label)
-        .child(
-            div()
-                .opacity(if active { 1.0 } else { 0.7 })
-                .child(format!("({count})")),
-        )
-        .into_any_element()
+    ToggleButton::new(
+        SharedString::from(format!("filter-pill-{label}")),
+        ToggleItem::new(label).label(format!("{label} ({count})")),
+        active,
+    )
+    .size(ControlSize::Sm)
+    .on_toggle(move |on, window, cx| on_change(&on, window, cx))
+    .into_any_element()
 }
 
 pub fn priority_pill(priority: u8, palette: Palette) -> AnyElement {

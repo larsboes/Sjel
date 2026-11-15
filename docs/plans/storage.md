@@ -357,6 +357,10 @@ Open:
    in `4fa41461`; all 16 backup tests, 452 CLI tests and scoped Clippy pass.
    Live run inspection on 2026-11-15 returned `invalid or missing authentication token`,
    including with `SJEL_AGENT=1` and the enrolled agent helper.
+   Source inspection shows `crates/sjel-status/src/main.rs` never calls `admit_agents`;
+   the refusal does not establish a broken token. Define and test narrowly scoped read-only
+   backup inspection without opening lifecycle, setup or credential routes to agents.
+   Token rotation is not the diagnostic remedy.
    Scheduled firing, mounted-target failure recording and isolated live restores remain
    unverified; no timer or credential was changed.
 3. **Per-kind proof.** A target kind counts as verified only when its own restore passes. Only

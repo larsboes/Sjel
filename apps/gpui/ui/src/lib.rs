@@ -6,6 +6,10 @@
 #[cfg(feature = "gpui")]
 extern crate gpui_kit as gpui;
 
+/// Ely components on the same GPUI Kit (`docs/plans/gpui.md` §11, Components from Ely).
+#[cfg(feature = "gpui")]
+pub use ely_gpui_component as ely;
+
 #[cfg(feature = "gpui")]
 pub mod accounts;
 #[cfg(feature = "gpui")]

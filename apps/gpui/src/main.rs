@@ -49,11 +49,16 @@ struct MainWindow {
 
 impl Global for MainWindow {}
 
+/// Ely's files first, then GPUI Kit's. Both ship Lucide icons under the same paths.
+fn assets() -> impl gpui::AssetSource {
+    sjel_gpui_ui::ely::Assets::before(gpui_kit::assets::Assets::new(""))
+}
+
 fn main() {
     sjel_gpui_ui::documents::set_default_pdf_renderer(sjel_gpui_ui::pdf_kit::default_renderer);
     sjel_gpui_ui::clipper::set_rich_clipboard_reader(clipboard::read_rich_clipboard);
     let (url_tx, mut url_rx) = futures::channel::mpsc::unbounded::<String>();
-    let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets::new(""));
+    let app = gpui_kit::application().with_assets(assets());
     app.on_open_urls(move |urls| {
         for url in urls {
             let _ = url_tx.unbounded_send(url);
@@ -64,6 +69,7 @@ fn main() {
     });
     app.run(move |cx: &mut App| {
         gpui_kit::init(cx);
+        sjel_gpui_ui::ely::init(cx).expect("Ely's assets ship in the app's asset source");
         // The theme mode saved in Settings, unless SJEL_GPUI_APPEARANCE overrides it for a test.
         let forced = match std::env::var("SJEL_GPUI_APPEARANCE").as_deref() {
             Ok("light") => Some(WindowAppearance::Light),
@@ -350,4 +356,30 @@ fn probe_audio(seconds: u64, cx: &mut App) {
         cx.update(|cx| cx.quit());
     })
     .detach();
+}
+
+#[cfg(test)]
+mod asset_tests {
+    use gpui::AssetSource;
+
+    #[test]
+    fn every_ely_file_loads_through_the_app_source() {
+        let ely = sjel_gpui_ui::ely::Assets
+            .list("")
+            .expect("Ely lists its files");
+        assert!(
+            ely.iter().any(|path| path.ends_with(".ttf")),
+            "Ely ships its fonts"
+        );
+        let source = super::assets();
+        let missing: Vec<_> = ely
+            .iter()
+            .filter(|path| !matches!(source.load(path), Ok(Some(_))))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "missing from the app source: {missing:?}"
+        );
+        assert!(matches!(source.load("icons/check.svg"), Ok(Some(_))));
+    }
 }

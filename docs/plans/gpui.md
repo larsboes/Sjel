@@ -762,13 +762,17 @@ that the Mac app selects, and it moves with each Kit upgrade (§6). A component 
 replaces the hand-built one in `ui/`, and the old code is deleted in the same change. A component
 that Ely lacks is built in the fork, not in `ui/`. The phone is NSH and does not use Ely.
 
+Built: the fork is pinned at `435226f` in `apps/gpui/Cargo.toml` and re-exported as
+`sjel_gpui_ui::ely` under the `gpui` feature, so the phone build carries no Ely. `src/main.rs`
+serves Ely's files before GPUI Kit's and calls `ely::init`. The two share 290 Lucide icon paths;
+289 draw the same, and `icons/credit-card.svg` now draws Ely's version. Ely's tab bindings
+apply only inside Ely's focus context.
+
 Open, in order:
 
-1. Pin the fork in `apps/gpui` and load Ely's assets and key bindings beside the Kit's. Done when
-   the Mac app builds with GPUI Fast and the default `gpui-pre`.
-2. A theme bridge: `ui/src/theme/palette.rs` sets Ely's palette (`Theme::set_palette`), so an
+1. A theme bridge: `ui/src/theme/palette.rs` sets Ely's palette (`Theme::set_palette`), so an
    Ely control matches the Sjel page around it in light and dark.
-3. The first replacement: `ui/src/primitives/data_table.rs` and `tables.rs` (1,066 lines) move to
+2. The first replacement: `ui/src/primitives/data_table.rs` and `tables.rs` (1,066 lines) move to
    Ely's tables. Done when every page that used them keeps its sort, selection and keyboard
    behavior and the two files are deleted.
 

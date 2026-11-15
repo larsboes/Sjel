@@ -90,8 +90,10 @@ fn render(schema: &Value, root: &Value, refs: &mut Vec<String>) -> Result<String
             let props = schema["properties"]
                 .as_object()
                 .ok_or("object has no properties")?;
+            let mut properties: Vec<_> = props.iter().collect();
+            properties.sort_unstable_by_key(|(key, _)| *key);
             let mut fields = Vec::with_capacity(props.len());
-            for (key, value) in props {
+            for (key, value) in properties {
                 let required = schema["required"]
                     .as_array()
                     .is_some_and(|keys| keys.iter().any(|k| k == key));
@@ -124,6 +126,18 @@ mod tests {
         assert!(output.contains("\"body\"?: string;"));
         assert!(output.contains("\"due\": string | null;"));
         assert!(output.contains("\"items\": Array<\"note\" | \"task\">;"));
+    }
+
+    #[test]
+    fn object_fields_are_canonical_regardless_of_schema_insertion_order() {
+        let schema = serde_json::from_str(
+            r#"{"title":"Read","type":"object","properties":{"z":{"type":"string"},"a":{"type":"object","properties":{"y":{"type":"boolean"},"b":{"type":"integer"}}}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            declaration(&schema).unwrap(),
+            "export type Read = {\n  \"a\"?: {\n    \"b\"?: number;\n    \"y\"?: boolean;\n  };\n  \"z\"?: string;\n};\n"
+        );
     }
 
     #[test]

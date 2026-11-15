@@ -471,7 +471,11 @@ mod http_tests {
             .unwrap();
         assert_eq!(named.status().as_u16(), 200);
 
-        for (method, path) in [("GET", "/triage"), ("POST", "/triage/x/status"), ("POST", "/whoami")] {
+        for (method, path) in [
+            ("GET", "/triage"),
+            ("POST", "/triage/x/status"),
+            ("POST", "/whoami"),
+        ] {
             let response = client
                 .request(method.parse().unwrap(), format!("{base}{path}"))
                 .bearer_auth("agent-token")

@@ -27,9 +27,9 @@ upstream references.
 └─────────────────────────────────┘
 ```
 
-1. **Canonical store**: SQLite stores raw note contents and frontmatter properties. Attachments stay files in
-   the rendered tree, not rows ([`crates/projects/src/store.rs`](../../crates/projects/src/store.rs)).
-2. **Second copy**: Every write to a record renders its markdown to `<overlay>/data/projects/`.
+1. **Files are the authority**: the Markdown files under `<overlay>/data/projects/` hold every record,
+   and attachments stay files beside them ([`crates/projects/src/store.rs`](../../crates/projects/src/store.rs)).
+2. **Index**: SQLite holds each record's bytes and derived properties, kept at the files by `reindex`.
 3. **Security boundary**: Attachments (`GET /api/file`) serve images and PDFs inline, while all other
    mime types (including HTML and SVGs with scripts) are served with `Content-Disposition: attachment`
    and `sandbox` restrictions ([`crates/projects/src/server.rs`](../../crates/projects/src/server.rs)).

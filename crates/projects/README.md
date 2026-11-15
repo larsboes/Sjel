@@ -2,9 +2,13 @@
 
 Sjel's record store for projects, tasks, notes and their attachments. The CLI and API share the same write operations.
 
-## Why this shape: records and rendered files
+## Why this shape: files and their index
 
-A record's Markdown path and bytes are stored together, with queryable properties derived from that content. Writes render the complete record under the overlay's `data/projects/` tree. The store remains authoritative; the rendered tree provides ordinary files for inspection and backup.
+The Markdown files under the overlay's `data/projects/` tree are the authority for every record, and any editor can change them. The shared store is their index: a row holds a record's path and bytes, with queryable properties derived from them.
+
+- A write from Sjel writes the file first and the row second. It refuses when the file holds bytes the index has not seen, so an edit made elsewhere is never overwritten; `save` answers with the file's content as the current version.
+- `projects reindex` adopts edited and new files and drops rows whose file was deleted. Every CLI command except `verify` and `reindex` runs it first, and the server runs it every 10 seconds. A root that is missing or holds no Markdown file while rows exist is refused, so an unmounted tree cannot empty the index.
+- The index refuses a file whose frontmatter `class` is invalid or below its folder floor, and keeps the previous row. Domain records (`Atlas/`, `Journal/`) answer to their own folder floor; project records answer as `Projects/<path>`. The deployment can raise floors in `<overlay>/config/vault-classes.json` (`schemas/vault-classes.json.example`).
 
 Attachments stay as files rather than database rows. Projects also owns reviewed references to Inventory items; those references record what was checked, not a guarantee that the item remains unchanged.
 
@@ -17,6 +21,7 @@ projects add <project> <title>
 projects new-project <name>
 projects new-note <project> <title>
 projects verify
+projects reindex
 ```
 
 The service is managed through `tools/service-runner.sh` and its `service.toml` manifest. The live HTTP contract is available at `GET /routes`.

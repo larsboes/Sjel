@@ -10,13 +10,13 @@ pub use ops::Task;
 pub use record::{Kind, Record};
 pub use store::Projects;
 
-/// Open the shared store and the overlay's rendered tree.
+/// Open the overlay's record files and their index in the shared store.
 ///
 /// # Errors
-/// No overlay is configured, so a write would have no second copy, or the store cannot open.
+/// No overlay is configured, so there are no files, or the store cannot open.
 pub async fn open_default() -> Result<Projects, Box<dyn std::error::Error + Send + Sync>> {
     let root = Projects::default_root()
-        .ok_or("SJEL_PERSONAL_ROOT is not set: no overlay to render projects into")?;
+        .ok_or("SJEL_PERSONAL_ROOT is not set: no overlay holds the project files")?;
     let projects = Projects::open(&sjel_config::database_path(), root).await?;
     Ok(projects.with_sources(sjel_config::overlay_config("projects-sources.json")))
 }

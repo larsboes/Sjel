@@ -395,7 +395,10 @@ pub(crate) async fn backup_runs_handler(
     let limit = query.limit.unwrap_or(50).clamp(1, 500);
     let runs = store.runs(limit).map_err(gateway)?;
     let running = store.running_count().map_err(gateway)?;
-    Ok((PUBLIC_FIELDS, Json(json!({ "runs": runs, "running": running }))))
+    Ok((
+        PUBLIC_FIELDS,
+        Json(json!({ "runs": runs, "running": running })),
+    ))
 }
 
 #[derive(Deserialize, Default)]

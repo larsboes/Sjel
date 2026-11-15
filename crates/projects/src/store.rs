@@ -1,8 +1,10 @@
-//! The shared store holds every record; each write re-renders that record's file in the same call.
+//! The Markdown files under `<overlay>/data/projects/` are the authority for every record; the
+//! shared store is their index.
 //!
-//! The database is canonical. The rendered tree under `<overlay>/data/projects/` is the second
-//! copy Principle 8 asks for, written the way finance writes its decisions: whole file,
-//! temp-plus-rename, mode 0600.
+//! A write from Sjel writes the file first (whole file, temp-plus-rename, mode 0600) and the index
+//! second, and refuses when the file holds bytes the index has not seen: an edit made in another
+//! editor is never overwritten. [`Projects::reindex`] adopts such edits, drops rows whose file was
+//! deleted, and refuses a file whose frontmatter lowers its folder's data class.
 //!
 //! The database is LibSQL through `sjel-turso`, so every read and write is awaited. The rendered
 //! tree stays ordinary synchronous file I/O: it is a few KB per record on the overlay, and
@@ -130,7 +132,7 @@ pub enum Attached {
     Differs,
 }
 
-/// What `verify` found wrong between the store and the rendered tree.
+/// What `verify` found different between the index and the files.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Drift {
     /// Rows whose file is missing or holds other bytes.
@@ -139,8 +141,40 @@ pub struct Drift {
     pub orphaned: Vec<String>,
 }
 
+/// What [`Projects::reindex`] changed in the index.
+#[derive(Debug, Default, Serialize)]
+pub struct Reindexed {
+    /// Rows that took their file's newer bytes.
+    pub adopted: Vec<String>,
+    /// Files that had no row.
+    pub added: Vec<String>,
+    /// Rows whose file is gone.
+    pub dropped: Vec<String>,
+    /// Files the index refuses, with the reason. Their previous row, if any, stays.
+    pub refused: Vec<(String, String)>,
+    /// Files that are not records (unreadable, or a path no record can take).
+    pub skipped: Vec<(String, String)>,
+}
+
+/// A file holds bytes the index has not seen, so a write from Sjel would overwrite an edit made
+/// elsewhere. `projects reindex` adopts the edit.
+#[derive(Debug)]
+pub struct NewerFile(pub String);
+
+impl std::fmt::Display for NewerFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}: the file changed outside Sjel; reindex before writing",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for NewerFile {}
+
 impl Projects {
-    /// Open the store and name the directory records render into.
+    /// Open the index and name the directory that holds the record files.
     ///
     /// # Errors
     /// The database cannot be opened or migrated.
@@ -293,6 +327,9 @@ impl Projects {
         if changed != 1 {
             return Ok(None);
         }
+        if let Some((path, base)) = target.filter(|_| updated.is_some()) {
+            self.check_file(path, Some(base))?;
+        }
         tx.commit().await?;
         proposal.status = status.to_string();
         proposal.version += 1;
@@ -373,12 +410,50 @@ impl Projects {
         Ok(Some(changed != 0))
     }
 
-    /// Insert or replace one record, then render its file.
+    /// Write one record's file, then its row.
     ///
     /// # Errors
-    /// The write or the render failed. A failed render leaves the row written; `render_all`
-    /// repairs the file, and `verify` reports it until then.
+    /// [`NewerFile`] when the file holds bytes the index has not seen; the write or the index
+    /// update failed. A failed index update leaves the file written, and `reindex` adopts it.
     pub async fn put(&self, record: &Record) -> Fallible<()> {
+        let prior = self.get(&record.path).await?.map(|r| r.content);
+        self.check_file(&record.path, prior.as_deref())?;
+        self.render(record)?;
+        self.index(record).await
+    }
+
+    /// The file's bytes when they differ from the row the index holds for `path`, or nothing when
+    /// they agree or there is no file.
+    ///
+    /// # Errors
+    /// The row or the file cannot be read.
+    pub async fn newer_file(&self, path: &str) -> Fallible<Option<String>> {
+        let prior = self.get(path).await?.map(|r| r.content);
+        match fs::read_to_string(self.root.join(path)) {
+            Ok(bytes) if Some(&bytes) != prior.as_ref() => Ok(Some(bytes)),
+            Ok(_) => Ok(None),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Refuse when the file at `path` is not the bytes `prior` names: a different file, a file
+    /// where no row is, or no file where a row is.
+    fn check_file(&self, path: &str, prior: Option<&str>) -> Fallible<()> {
+        let on_disk = match fs::read(self.root.join(path)) {
+            Ok(bytes) => Some(bytes),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => return Err(e.into()),
+        };
+        if on_disk.as_deref() == prior.map(str::as_bytes) {
+            Ok(())
+        } else {
+            Err(NewerFile(path.to_string()).into())
+        }
+    }
+
+    /// Insert or replace one row from a record, without touching its file.
+    async fn index(&self, record: &Record) -> Fallible<()> {
         let tx = self.db.begin().await?;
         tx.execute(
             &format!(
@@ -405,14 +480,102 @@ impl Projects {
         )
         .await?;
         tx.commit().await?;
-        self.render(record)
+        Ok(())
     }
 
-    /// Delete one record and its rendered file. Returns whether a row was there.
+    /// Bring the index to the files: adopt newer bytes, add new files, drop rows whose file is
+    /// gone, and refuse a file whose frontmatter declares a class that is invalid or below its
+    /// folder floor.
     ///
     /// # Errors
-    /// The delete or the file removal failed.
+    /// The root is not a directory, it holds no Markdown file while rows exist (an unmounted or
+    /// emptied root must not empty the index), or the index cannot be written.
+    pub async fn reindex(&self) -> Fallible<Reindexed> {
+        if !self.root.is_dir() {
+            return Err(format!(
+                "{}: not a directory; nothing reindexed",
+                self.root.display()
+            )
+            .into());
+        }
+        let rows: std::collections::HashMap<String, String> = self
+            .all()
+            .await?
+            .into_iter()
+            .map(|r| (r.path, r.content))
+            .collect();
+        let tree = markdown_root::MarkdownRoot::declare(&self.root)?;
+        let files = tree.markdown_files_recursive()?;
+        if files.is_empty() && !rows.is_empty() {
+            return Err(format!(
+                "{}: no Markdown file while the index holds {} rows; nothing reindexed",
+                self.root.display(),
+                rows.len()
+            )
+            .into());
+        }
+        let mut report = Reindexed::default();
+        let mut seen = std::collections::HashSet::new();
+        for file in files {
+            let Some(id) = tree.relative_id(&file) else {
+                continue;
+            };
+            seen.insert(id.clone());
+            let content = match fs::read_to_string(&file) {
+                Ok(content) => content,
+                Err(e) => {
+                    report.skipped.push((id, format!("unreadable: {e}")));
+                    continue;
+                }
+            };
+            if rows.get(&id) == Some(&content) {
+                continue;
+            }
+            let record = match Record::from_content(&id, content) {
+                Ok(record) => record,
+                Err(reason) => {
+                    report.skipped.push((id, reason));
+                    continue;
+                }
+            };
+            if let Some(reason) = crate::ops::class_refusal(&record) {
+                report.refused.push((id, reason));
+                continue;
+            }
+            self.index(&record).await?;
+            if rows.contains_key(&id) {
+                report.adopted.push(id);
+            } else {
+                report.added.push(id);
+            }
+        }
+        let mut gone: Vec<&String> = rows.keys().filter(|path| !seen.contains(*path)).collect();
+        gone.sort();
+        for path in gone {
+            let tx = self.db.begin().await?;
+            tx.execute(
+                "DELETE FROM projects_inventory_links WHERE record_path = ?1",
+                [path.as_str()],
+            )
+            .await?;
+            tx.execute(
+                "DELETE FROM projects_records WHERE path = ?1",
+                [path.as_str()],
+            )
+            .await?;
+            tx.commit().await?;
+            report.dropped.push(path.clone());
+        }
+        Ok(report)
+    }
+
+    /// Delete one record and its file. Returns whether a row was there.
+    ///
+    /// # Errors
+    /// [`NewerFile`] when the file changed outside Sjel; the delete or the file removal failed.
     pub async fn remove(&self, path: &str) -> Fallible<bool> {
+        let prior = self.get(path).await?.map(|r| r.content);
+        self.check_file(path, prior.as_deref())?;
         let tx = self.db.begin().await?;
         tx.execute(
             "DELETE FROM projects_inventory_links WHERE record_path = ?1",
@@ -446,6 +609,7 @@ impl Projects {
         let Some(record) = self.get(from).await? else {
             return Ok(false);
         };
+        self.check_file(from, Some(&record.content))?;
         let moved =
             Record::from_content(to, record.content).map_err(|why| format!("{to}: {why}"))?;
         if self.root.join(to).exists() {
@@ -635,16 +799,7 @@ impl Projects {
         Ok(())
     }
 
-    /// Re-render every record. Repairs any file `verify` reports as stale.
-    pub async fn render_all(&self) -> Fallible<usize> {
-        let records = self.all().await?;
-        for record in &records {
-            self.render(record)?;
-        }
-        Ok(records.len())
-    }
-
-    /// Compare the store with the rendered tree, byte for byte.
+    /// Compare the index with the files, byte for byte.
     pub async fn verify(&self) -> Fallible<Drift> {
         let records = self.all().await?;
         let mut drift = Drift::default();
@@ -839,7 +994,7 @@ pub(crate) mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
 
-    /// Rows rebuilt from the rendered tree equal the live rows.
+    /// Rows rebuilt from the files equal the live rows.
     #[tokio::test]
     async fn a_store_rebuilt_from_the_files_is_identical() {
         let (projects, dir) = scratch("roundtrip").await;
@@ -895,20 +1050,80 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn verify_reports_a_changed_file_and_an_orphan() {
+    async fn an_edit_elsewhere_is_adopted_and_never_overwritten() {
         let (projects, dir) = scratch("drift").await;
         let record = task("A/Tasks/One.md", false);
         projects.put(&record).await.unwrap();
-        fs::write(projects.root().join(&record.path), "edited").unwrap();
+        let edited = "---\ntype: task\ndone: true\npriority: 1\n---\n\nedited in another editor\n";
+        fs::write(projects.root().join(&record.path), edited).unwrap();
         fs::write(projects.root().join("A/stray.md"), "x").unwrap();
         let drift = projects.verify().await.unwrap();
         assert_eq!(drift.stale, vec!["A/Tasks/One.md"]);
         assert_eq!(drift.orphaned, vec!["A/stray.md"]);
-        projects.render_all().await.unwrap();
-        assert!(projects.verify().await.unwrap().stale.is_empty());
+
+        let overwrite = projects
+            .put(&task("A/Tasks/One.md", false))
+            .await
+            .unwrap_err();
+        assert!(
+            overwrite.downcast_ref::<NewerFile>().is_some(),
+            "{overwrite}"
+        );
+        assert!(projects.remove("A/Tasks/One.md").await.is_err());
+        assert_eq!(
+            fs::read_to_string(projects.root().join(&record.path)).unwrap(),
+            edited
+        );
+
+        let report = projects.reindex().await.unwrap();
+        assert_eq!(report.adopted, vec!["A/Tasks/One.md"]);
+        assert_eq!(report.added, vec!["A/stray.md"]);
+        assert!(projects.get("A/Tasks/One.md").await.unwrap().unwrap().done);
+        assert_eq!(projects.verify().await.unwrap(), Drift::default());
+
         assert!(projects.remove("A/Tasks/One.md").await.unwrap());
         assert!(!projects.root().join("A/Tasks/One.md").exists());
         assert!(!projects.remove("A/Tasks/One.md").await.unwrap());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn reindex_drops_deleted_files_and_refuses_a_lowered_class() {
+        let (projects, dir) = scratch("reindex").await;
+        projects.put(&task("A/Tasks/One.md", false)).await.unwrap();
+        let finance = Record::from_content(
+            "Atlas/Finance/Depot.md",
+            "---\ntype: note\n---\n\nbalance\n".into(),
+        )
+        .unwrap();
+        projects.put(&finance).await.unwrap();
+
+        let lowered = "---\ntype: note\nclass: c1\n---\n\nbalance\n";
+        fs::write(projects.root().join(&finance.path), lowered).unwrap();
+        fs::remove_file(projects.root().join("A/Tasks/One.md")).unwrap();
+        let report = projects.reindex().await.unwrap();
+        assert_eq!(report.dropped, vec!["A/Tasks/One.md"]);
+        assert_eq!(report.refused.len(), 1);
+        assert_eq!(report.refused[0].0, "Atlas/Finance/Depot.md");
+        assert!(report.refused[0].1.contains("below the folder floor c2"));
+        assert_eq!(
+            projects.get(&finance.path).await.unwrap().unwrap().content,
+            finance.content,
+            "a refused file leaves the previous row"
+        );
+        assert!(projects.get("A/Tasks/One.md").await.unwrap().is_none());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_empty_or_missing_root_never_empties_the_index() {
+        let (projects, dir) = scratch("empty-root").await;
+        projects.put(&task("A/Tasks/One.md", false)).await.unwrap();
+        fs::remove_file(projects.root().join("A/Tasks/One.md")).unwrap();
+        assert!(projects.reindex().await.is_err());
+        fs::remove_dir_all(projects.root()).unwrap();
+        assert!(projects.reindex().await.is_err());
+        assert!(projects.get("A/Tasks/One.md").await.unwrap().is_some());
         fs::remove_dir_all(dir).unwrap();
     }
 }

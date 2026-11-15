@@ -1,0 +1,6 @@
+{
+  "floors": [
+    { "folder": "Atlas/Reflections", "class": "c2" },
+    { "folder": "Projects/Example-Client", "class": "c2" }
+  ]
+}

@@ -16,15 +16,15 @@ const USAGE: &str = "usage: projects <command>
   done <task-id>  |  reopen <task-id>
   set <path> <key> [value]                     set one property; no value clears it
   attach <path> <file>                         store a binary attachment in a live project
-  remove <path>                                delete a record and its rendered file
+  remove <path>                                delete a record and its file
   rename <path> <title>                        move a record's file to the new title and
                                                rewrite the [[links]] that name the old one
   normalize [--apply]                          put every task on the status schema; dry run first
   import <vault>/Projects [--only PROJECT]     copy vault project notes into the store
   import <vault> --folder Atlas/<Domain>       copy one domain folder, keeping its path
   freeze-vault <vault>/Projects [--only PROJECT]  mark imported vault notes as moved
-  verify                                       compare the store with the rendered files
-  render                                       re-render every record
+  verify                                       compare the index with the files
+  reindex                                      adopt file edits; refuse a lowered class
   workspace adopt <manifest.json>              adopt private indexes and delivery assets
   workspace setup <name> <template-directory>   prepare a private project from Markdown templates
   workspace status [--github]                   source tasks, next actions, checkout and optional CI
@@ -62,6 +62,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .ok_or(USAGE)
     };
     let projects = open_default().await?;
+    // The files are the authority, so every command but the two that inspect the index starts
+    // from them.
+    if !matches!(command.as_str(), "verify" | "reindex") {
+        report_reindex(&projects.reindex().await?, false);
+    }
     match command.as_str() {
         "workspace" => projects::workspace::run(&projects, &args[1..]).await?,
         "list" => {
@@ -293,15 +298,47 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 println!("orphaned {path}");
             }
             if drift.stale.is_empty() && drift.orphaned.is_empty() {
-                println!("store and rendered files match");
+                println!("index and files match");
             } else {
-                return Err(
-                    "store and rendered files differ; `projects render` repairs stale files".into(),
-                );
+                return Err("index and files differ; `projects reindex` adopts the files".into());
             }
         }
-        "render" => println!("rendered {} records", projects.render_all().await?),
+        "reindex" => report_reindex(&projects.reindex().await?, true),
         _ => return Err(USAGE.into()),
     }
     Ok(())
+}
+
+/// Changes go to stderr on an implicit reindex, so a command's own output stays parseable.
+fn report_reindex(report: &projects::store::Reindexed, explicit: bool) {
+    let line = |text: String| {
+        if explicit {
+            println!("{text}");
+        } else {
+            eprintln!("projects: {text}");
+        }
+    };
+    for path in &report.adopted {
+        line(format!("adopted  {path}"));
+    }
+    for path in &report.added {
+        line(format!("added    {path}"));
+    }
+    for path in &report.dropped {
+        line(format!("dropped  {path}"));
+    }
+    for (path, why) in &report.refused {
+        line(format!("refused  {path}: {why}"));
+    }
+    for (path, why) in &report.skipped {
+        line(format!("skipped  {path}: {why}"));
+    }
+    if explicit
+        && report.adopted.is_empty()
+        && report.added.is_empty()
+        && report.dropped.is_empty()
+        && report.refused.is_empty()
+    {
+        println!("index and files match");
+    }
 }

@@ -26,7 +26,7 @@
 //! the serialized contract rather than reaching into another capability's
 //! storage or implementation.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Bump only with the schema's `schema_version` const, and only for a change
@@ -290,7 +290,30 @@ impl DataClass {
     /// Invalid declarations and attempts to lower it retain the folder floor,
     /// with a rationale that identifies the refusal. Publication is separate.
     pub fn classify_vault_note(id: &str, declared: Option<&str>) -> Self {
+        Self::classify_vault_note_with(&VaultFloors::default(), id, declared)
+    }
+
+    /// [`Self::classify_vault_note`] with the deployment's configured folder floors, which can
+    /// only raise the built-in ones.
+    pub fn classify_vault_note_with(
+        floors: &VaultFloors,
+        id: &str,
+        declared: Option<&str>,
+    ) -> Self {
         let mut fallback = Self::vault_folder_default(id);
+        if let Some(floor) = floors.floor_for(id) {
+            if class_rank(&floor.class) > class_rank(&fallback.value) {
+                fallback = Self::new(
+                    floor.class.clone(),
+                    format!(
+                        "The deployment sets {} as the floor of {}.",
+                        floor.class, floor.folder
+                    ),
+                    METHOD_DETERMINISTIC,
+                    VAULT_CLASSIFIER_VERSION,
+                );
+            }
+        }
         if let Some(raw) = declared.map(str::trim).filter(|d| !d.is_empty()) {
             if valid(raw) && class_rank(raw) >= class_rank(&fallback.value) {
                 return Self::set_by_human(raw, "The note's frontmatter declares this class.");
@@ -329,6 +352,88 @@ impl DataClass {
                 VAULT_CLASSIFIER_VERSION,
             ),
         }
+    }
+}
+
+/// The overlay file, under `<overlay>/config/`, that sets folder floors for Markdown notes.
+pub const VAULT_FLOORS_CONFIG: &str = "vault-classes.json";
+
+/// One configured floor: every note under `folder` is at least `class`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FolderFloor {
+    /// A vault-relative folder, matched on whole segments and without case.
+    pub folder: String,
+    pub class: String,
+}
+
+/// The deployment's folder floors (`{"floors": [{"folder": "Atlas/Health", "class": "c2"}]}`).
+/// Empty is the built-in rule alone. The deepest matching folder answers.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct VaultFloors {
+    #[serde(default)]
+    pub floors: Vec<FolderFloor>,
+}
+
+impl VaultFloors {
+    /// Parse and check a floors file.
+    ///
+    /// # Errors
+    /// The JSON is malformed, a class is not one of [`DATA_CLASSES`], or a folder is empty or
+    /// names a parent directory.
+    pub fn from_json(body: &str) -> Result<Self, String> {
+        let floors: Self = serde_json::from_str(body).map_err(|e| e.to_string())?;
+        for floor in &floors.floors {
+            if !valid(&floor.class) {
+                return Err(format!(
+                    "{}: class {:?} is not one of {}",
+                    floor.folder,
+                    floor.class,
+                    DATA_CLASSES.join(", ")
+                ));
+            }
+            let folder = floor.folder.trim_matches('/');
+            if folder.is_empty()
+                || folder
+                    .split('/')
+                    .any(|s| s.is_empty() || s == "." || s == "..")
+            {
+                return Err(format!("{:?} is not a vault-relative folder", floor.folder));
+            }
+        }
+        Ok(floors)
+    }
+
+    /// Read a floors file; a missing file is the built-in rule alone.
+    ///
+    /// # Errors
+    /// The file exists and cannot be read or parsed.
+    pub fn from_file(path: &std::path::Path) -> Result<Self, String> {
+        match std::fs::read_to_string(path) {
+            Ok(body) => Self::from_json(&body).map_err(|e| format!("{}: {e}", path.display())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(e) => Err(format!("{}: {e}", path.display())),
+        }
+    }
+
+    fn floor_for(&self, id: &str) -> Option<&FolderFloor> {
+        let lowered = id.to_ascii_lowercase();
+        let folders: Vec<&str> = lowered.split('/').collect();
+        let folders = folders.split_last().map(|(_, f)| f).unwrap_or(&[]);
+        self.floors
+            .iter()
+            .filter(|floor| {
+                let want: Vec<String> = floor
+                    .folder
+                    .trim_matches('/')
+                    .to_ascii_lowercase()
+                    .split('/')
+                    .map(str::to_string)
+                    .collect();
+                folders.len() >= want.len() && folders.iter().zip(&want).all(|(a, b)| *a == b)
+            })
+            .max_by_key(|floor| floor.folder.trim_matches('/').split('/').count())
     }
 }
 
@@ -1848,6 +1953,60 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn configured_floors_raise_the_builtin_rule_and_never_lower_it() {
+        let floors = VaultFloors::from_json(
+            r#"{"floors": [
+                {"folder": "Projects/Hearth", "class": "c2"},
+                {"folder": "Projects/Hearth/Public", "class": "c3"},
+                {"folder": "Atlas/Finance", "class": "c0"}
+            ]}"#,
+        )
+        .unwrap();
+        let hub = DataClass::classify_vault_note_with(&floors, "Projects/Hearth/Hearth.md", None);
+        assert_eq!(hub.value, "c2");
+        assert!(hub.rationale.contains("Projects/Hearth"));
+        let deeper =
+            DataClass::classify_vault_note_with(&floors, "projects/hearth/public/a.md", None);
+        assert_eq!(
+            deeper.value, "c3",
+            "the deepest folder answers, without case"
+        );
+        let lowered = DataClass::classify_vault_note_with(&floors, "Atlas/Finance/a.md", None);
+        assert_eq!(
+            lowered.value, "c2",
+            "a configured floor cannot lower the built-in one"
+        );
+        let refused =
+            DataClass::classify_vault_note_with(&floors, "Projects/Hearth/a.md", Some("c1"));
+        assert_eq!(refused.value, "c2");
+        assert_eq!(refused.method, METHOD_DETERMINISTIC);
+        let sibling = DataClass::classify_vault_note_with(&floors, "Projects/HearthX/a.md", None);
+        assert_eq!(sibling.value, "c1", "segments match whole");
+        assert_eq!(
+            DataClass::classify_vault_note_with(&floors, "Projects/Hearth", None).value,
+            "c1",
+            "a file named like the folder is not inside it"
+        );
+    }
+
+    #[test]
+    fn a_floors_file_with_a_bad_class_or_folder_is_refused() {
+        for body in [
+            r#"{"floors": [{"folder": "Atlas", "class": "c9"}]}"#,
+            r#"{"floors": [{"folder": "../Atlas", "class": "c2"}]}"#,
+            r#"{"floors": [{"folder": "", "class": "c2"}]}"#,
+            r#"{"floors": [{"folder": "Atlas", "class": "c2", "extra": 1}]}"#,
+        ] {
+            assert!(VaultFloors::from_json(body).is_err(), "{body}");
+        }
+        assert_eq!(
+            VaultFloors::from_file(std::path::Path::new("/nonexistent/vault-classes.json"))
+                .unwrap(),
+            VaultFloors::default()
+        );
     }
 
     #[test]

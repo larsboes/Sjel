@@ -2225,7 +2225,7 @@ async fn import_subscription_notes(State(state): State<AppState>) -> ApiResponse
 /// Render every subscription's series into the overlay, the second copy PRD Q47 asks for.
 ///
 /// Until 2026-10-20 this wrote a marked region into each vault note. The notes moved to
-/// `projects`, whose rendered tree nobody edits, so the copy is now one whole file per
+/// `projects`, so the copy is now one whole file per
 /// subscription beside the decision ledger's (`subscription_notes::PROJECTION_DIR`).
 async fn writeback(State(state): State<AppState>) -> ApiResponse {
     let Some(overlay) = state.overlay_root.clone() else {

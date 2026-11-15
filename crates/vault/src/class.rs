@@ -30,8 +30,19 @@ pub struct Report {
     pub notes: Vec<Classified>,
 }
 
-fn classify(note: &Note) -> Classified {
-    let class = DataClass::classify_vault_note(&note.id, note.field(CLASS_KEY));
+/// The deployment's configured folder floors (`content_item::VAULT_FLOORS_CONFIG`).
+///
+/// # Errors
+/// The file exists and does not parse; a classifier must not run on floors it could not read.
+pub fn deployment_floors() -> Result<content_item::VaultFloors, String> {
+    match sjel_config::overlay_config(content_item::VAULT_FLOORS_CONFIG) {
+        Some(path) => content_item::VaultFloors::from_file(&path),
+        None => Ok(content_item::VaultFloors::default()),
+    }
+}
+
+fn classify(floors: &content_item::VaultFloors, note: &Note) -> Classified {
+    let class = DataClass::classify_vault_note_with(floors, &note.id, note.field(CLASS_KEY));
     Classified {
         id: note.id.clone(),
         class: class.value,
@@ -41,14 +52,14 @@ fn classify(note: &Note) -> Classified {
     }
 }
 
-pub fn report(notes: &[Note]) -> Report {
+pub fn report(floors: &content_item::VaultFloors, notes: &[Note]) -> Report {
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
     let mut overridden = Vec::new();
     let mut refused = Vec::new();
     let mut all = Vec::with_capacity(notes.len());
 
     for note in notes {
-        let row = classify(note);
+        let row = classify(floors, note);
         *counts.entry(row.class.clone()).or_insert(0) += 1;
 
         let declared = note
@@ -57,9 +68,9 @@ pub fn report(notes: &[Note]) -> Report {
             .is_some_and(|d| !d.is_empty());
         if declared {
             if row.method == content_item::METHOD_HUMAN {
-                overridden.push(classify(note));
+                overridden.push(classify(floors, note));
             } else {
-                refused.push(classify(note));
+                refused.push(classify(floors, note));
             }
         }
         all.push(row);
@@ -102,7 +113,10 @@ mod tests {
 
     #[test]
     fn every_class_gets_a_row_even_at_zero() {
-        let rep = report(&[note("Journal/a.md", None)]);
+        let rep = report(
+            &content_item::VaultFloors::default(),
+            &[note("Journal/a.md", None)],
+        );
         for class in content_item::DATA_CLASSES {
             assert!(rep.counts.contains_key(class), "{class} has no row");
         }
@@ -112,13 +126,16 @@ mod tests {
 
     #[test]
     fn an_override_and_a_refusal_are_counted_apart() {
-        let rep = report(&[
-            note("Atlas/People/a.md", None),
-            note("Atlas/People/b.md", Some("c3")),
-            note("Atlas/People/c.md", Some("c22")),
-            note("Journal/d.md", Some("   ")),
-            note("Atlas/People/e.md", Some("c1")),
-        ]);
+        let rep = report(
+            &content_item::VaultFloors::default(),
+            &[
+                note("Atlas/People/a.md", None),
+                note("Atlas/People/b.md", Some("c3")),
+                note("Atlas/People/c.md", Some("c22")),
+                note("Journal/d.md", Some("   ")),
+                note("Atlas/People/e.md", Some("c1")),
+            ],
+        );
         assert_eq!(rep.overridden.len(), 1);
         assert_eq!(rep.overridden[0].id, "Atlas/People/b.md");
         assert_eq!(rep.refused.len(), 2);
@@ -132,7 +149,10 @@ mod tests {
 
     #[test]
     fn the_report_carries_the_reason_and_not_just_the_class() {
-        let rep = report(&[note("Atlas/Finance/Depot.md", None)]);
+        let rep = report(
+            &content_item::VaultFloors::default(),
+            &[note("Atlas/Finance/Depot.md", None)],
+        );
         assert_eq!(rep.notes[0].class, "c2");
         assert_eq!(rep.notes[0].label, "Others");
         assert!(

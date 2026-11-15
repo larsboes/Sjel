@@ -221,6 +221,9 @@ type Shared = Arc<Projects>;
 /// The handlers await the store directly now, so there is no `spawn_blocking` join error to fold
 /// into the 500 branch; only the capability's own refusal reaches here.
 fn api_error(refused_is_bad: bool, error: Box<dyn std::error::Error + Send + Sync>) -> ApiError {
+    if error.downcast_ref::<projects::store::NewerFile>().is_some() {
+        return ApiError(StatusCode::CONFLICT, error.to_string());
+    }
     let status = if refused_is_bad {
         StatusCode::BAD_REQUEST
     } else {
@@ -907,7 +910,37 @@ async fn serve() {
             std::process::exit(1);
         }
     };
-    sjel_server::serve_local_with("projects", port, router(Arc::new(projects)), AGENT_ROUTES).await;
+    let projects = Arc::new(projects);
+    tokio::spawn(reindex_loop(projects.clone()));
+    sjel_server::serve_local_with("projects", port, router(projects), AGENT_ROUTES).await;
+}
+
+/// How often the server adopts edits made to the files in another editor.
+const REINDEX_EVERY: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Keep the index at the files. A failed pass is reported and retried; it never empties the index
+/// (`Projects::reindex`).
+async fn reindex_loop(projects: Arc<Projects>) {
+    loop {
+        match projects.reindex().await {
+            Ok(report) => {
+                for (path, why) in &report.refused {
+                    eprintln!("projects: refused {path}: {why}");
+                }
+                let changed = report.adopted.len() + report.added.len() + report.dropped.len();
+                if changed > 0 {
+                    eprintln!(
+                        "projects: reindexed {} adopted, {} added, {} dropped",
+                        report.adopted.len(),
+                        report.added.len(),
+                        report.dropped.len()
+                    );
+                }
+            }
+            Err(error) => eprintln!("projects: reindex failed: {error}"),
+        }
+        tokio::time::sleep(REINDEX_EVERY).await;
+    }
 }
 
 fn main() {
@@ -1602,7 +1635,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn approval_reports_a_committed_write_when_render_fails() {
+    async fn an_approval_never_overwrites_an_edit_made_outside_sjel() {
         let dir =
             std::env::temp_dir().join(format!("sjel-projects-mail-render-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1629,8 +1662,7 @@ mod tests {
         );
         let (_, staged) = call(&router, post("/api/mail-proposals", json!({"source_id":"m","line_id":"1","event":"project_evidence","project":"W","title":"t","evidence":"quoted","data_class":"c1"}))).await;
         let id = staged["proposal"]["id"].as_i64().unwrap();
-        std::fs::remove_dir_all(dir.join("rendered/W/Notes")).unwrap();
-        std::fs::write(dir.join("rendered/W/Notes"), "blocker").unwrap();
+        std::fs::write(dir.join("rendered/W/Notes/a.md"), "# Edited elsewhere\n").unwrap();
         let request =
             json!({"version":1,"decision":"approve","target_path":"W/Notes/a.md","base":base});
         let (status, result) = call(
@@ -1641,25 +1673,18 @@ mod tests {
             ),
         )
         .await;
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(result["applied"], true);
-        assert_eq!(result["rendered"], false);
-        assert!(result["render_error"].is_string());
-        assert!(
-            call(&router, get("/api/record?path=W/Notes/a.md")).await.1["record"]["content"]
-                .as_str()
-                .unwrap()
-                .contains("quoted")
+        assert_eq!(status, StatusCode::CONFLICT, "{result}");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("rendered/W/Notes/a.md")).unwrap(),
+            "# Edited elsewhere\n"
         );
         assert_eq!(
-            call(
-                &router,
-                post(&format!("/api/mail-proposals/{id}/decision"), request)
-            )
-            .await
-            .0,
-            StatusCode::CONFLICT
+            call(&router, get("/api/record?path=W/Notes/a.md")).await.1["record"]["content"],
+            base,
+            "nothing was committed"
         );
+        let (_, pending) = call(&router, get("/api/mail-proposals")).await;
+        assert_eq!(pending["proposals"][0]["status"], "pending");
         std::fs::remove_dir_all(dir).unwrap();
     }
 

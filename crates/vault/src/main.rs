@@ -84,7 +84,9 @@ fn main() {
     if cmd == "classify" {
         let id = flag(&args, "--id").unwrap_or_else(|| die("classify requires --id"));
         let declared = flag(&args, "--declared");
-        let classified = content_item::DataClass::classify_vault_note(&id, declared.as_deref());
+        let floors = class::deployment_floors().unwrap_or_else(|e| die(e));
+        let classified =
+            content_item::DataClass::classify_vault_note_with(&floors, &id, declared.as_deref());
         if json {
             println!("{}", serde_json::to_string(&classified).unwrap_or_default());
         } else {
@@ -384,7 +386,8 @@ fn main() {
         // decided so the folder defaults can be checked against a real vault
         // rather than believed.
         "class" => {
-            let rep = class::report(&notes);
+            let floors = class::deployment_floors().unwrap_or_else(|e| die(e));
+            let rep = class::report(&floors, &notes);
             let only = flag(&args, "--only");
             if json {
                 println!("{}", serde_json::to_string_pretty(&rep).unwrap_or_default());

@@ -156,15 +156,17 @@ Prose lives in one folder of Markdown files, and the files are the authority for
 Obsidian is one editor for them, and the Sjel app can carry another ([product page](../product.md#the-vault)). Typed facts stay in Sjel's
 stores. Open, in order:
 
-1. Give each top folder of the vault a default data class. Frontmatter can raise it and cannot
-   lower it. Existing folder-floor enforcement and shared Projects classification shipped
-   in `4fa41461`; 66 classifier/vault tests and 50 Projects tests pass.
-   Configurable top-folder defaults and index rejection remain open.
-   Done when the index refuses a note whose frontmatter lowers its folder's class.
-2. Move the Markdown tree under `<overlay>/data/projects/` into the vault and make
-   `crates/projects` read the files as the authority. Today the store is the authority and the
-   tree is a rendered copy (`crates/projects/README.md`). Done when an edit in any editor appears in
-   `projects list` and no write from Sjel overwrites a newer file.
+1. Folder floors: done. `<overlay>/config/vault-classes.json` raises the built-in floors
+   (`content_item::VaultFloors`), and both `vault class` and the `projects` index read it. The
+   `projects` index refuses a file whose `class` is invalid or below its floor and keeps the
+   previous row. Domain records now answer to their own floor: the 7 `Atlas/Finance` notes in
+   `projects` had classified as c1 under a `Projects/` prefix.
+2. Files as the authority in `crates/projects`: done. Writes go file first and refuse over bytes
+   the index has not seen; `projects reindex` adopts outside edits, runs before every CLI command
+   and every 10 seconds in the server. The live cutover on 2026-11-15 adopted two Hearth notes
+   edited outside Sjel on 2026-11-08, which `projects render` would have overwritten. Not done:
+   moving the tree into the vault. That conflicts with the 2026-11-08 ruling that the vault
+   holds learning only, so the owner decides which folder is "the vault" first.
 3. Deny cloud harnesses read access to every folder above class `c1`, and prove it with a test
    per harness.
 4. A Sjel search returns the path of a matching note.

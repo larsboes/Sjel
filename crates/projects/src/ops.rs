@@ -52,10 +52,47 @@ pub fn classify_record(record: &Record) -> DataClass {
 }
 
 fn classify_fields(path: &str, fields: &std::collections::HashMap<String, String>) -> DataClass {
-    DataClass::classify_vault_note(
-        &format!("Projects/{path}"),
+    DataClass::classify_vault_note_with(
+        vault_floors(),
+        &vault_id(path),
         fields.get(CLASS_KEY).map(String::as_str),
     )
+}
+
+/// The vault path a record answers to: a domain record keeps its own (`Atlas/Finance/...`), so
+/// its folder floor applies; a project record sits under `Projects/`.
+fn vault_id(path: &str) -> String {
+    match path.split('/').next() {
+        Some(top) if record::is_domain(top) => path.to_string(),
+        _ => format!("Projects/{path}"),
+    }
+}
+
+/// The deployment's configured floors, read once per process. A file that does not parse leaves
+/// the built-in floors, which configured ones can only raise, and says so on stderr.
+fn vault_floors() -> &'static content_item::VaultFloors {
+    static FLOORS: std::sync::OnceLock<content_item::VaultFloors> = std::sync::OnceLock::new();
+    FLOORS.get_or_init(|| {
+        let Some(path) = sjel_config::overlay_config(content_item::VAULT_FLOORS_CONFIG) else {
+            return content_item::VaultFloors::default();
+        };
+        content_item::VaultFloors::from_file(&path).unwrap_or_else(|error| {
+            eprintln!("projects: configured folder floors ignored: {error}");
+            content_item::VaultFloors::default()
+        })
+    })
+}
+
+/// Why the index refuses `record`, when its frontmatter declares a class that is invalid or
+/// below its folder floor. The file stays as written; only the index refuses it.
+pub fn class_refusal(record: &Record) -> Option<String> {
+    let fields = record.fields();
+    let declared = fields
+        .get(CLASS_KEY)
+        .map(|d| d.trim())
+        .filter(|d| !d.is_empty())?;
+    let class = classify_fields(&record.path, &fields);
+    (class.value != declared).then_some(class.rationale)
 }
 
 impl Task {
@@ -458,6 +495,13 @@ pub async fn save(
         crate::sources::require_local_tasks(projects, &record.project)?;
     }
     let record = inherit_project_class(projects, record).await?;
+    if let Some(reason) = class_refusal(&record) {
+        return Err(SaveError::Refused(reason).into());
+    }
+    // An edit made in another editor is the current content, whatever the index says.
+    if let Some(newer) = projects.newer_file(path).await? {
+        return Err(SaveError::Stale(newer).into());
+    }
     match (projects.get(path).await?, base) {
         (Some(current), Some(base)) if current.content == base => {}
         (Some(current), Some(_)) => return Err(SaveError::Stale(current.content).into()),
@@ -1277,6 +1321,42 @@ mod tests {
                 .is_err()
         );
         assert_eq!(tasks(&projects, Some("open")).await.unwrap().len(), 1);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn save_returns_an_outside_edit_as_the_current_content() {
+        let (projects, dir) = scratch("save-outside").await;
+        add_project(&projects, "W", "").await.unwrap();
+        let hub = projects.get("W/W.md").await.unwrap().unwrap();
+        let outside = format!("{}\nedited in Obsidian\n", hub.content);
+        fs::write(projects.root().join("W/W.md"), &outside).unwrap();
+        let stale = save(&projects, "W/W.md", "x", Some(&hub.content))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(stale.downcast_ref::<SaveError>(), Some(SaveError::Stale(c)) if *c == outside)
+        );
+        assert_eq!(
+            fs::read_to_string(projects.root().join("W/W.md")).unwrap(),
+            outside
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_domain_record_keeps_its_folder_floor_and_cannot_lower_it() {
+        let (projects, dir) = scratch("domain-floor").await;
+        let depot = Record::from_content("Atlas/Finance/Depot.md", "# Depot\n".into()).unwrap();
+        assert_eq!(classify_record(&depot).value, "c2");
+        let lowered = "---\nclass: c1\n---\n# Depot\n";
+        let refused = save(&projects, "Atlas/Finance/Depot.md", lowered, None)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(refused.downcast_ref::<SaveError>(), Some(SaveError::Refused(why)) if why.contains("folder floor c2")),
+            "{refused}"
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 

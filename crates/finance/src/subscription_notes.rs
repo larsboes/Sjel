@@ -552,7 +552,7 @@ pub const PROJECTION_DIR: &str = "data/finance/subscriptions";
 /// PRD Q47 counts those series among the irreplaceable rows, because a price is observed
 /// once, on the day it changed. Until 2026-10-20 this copy went into a marked region of the
 /// human's vault note, or into a projected vault file when no note existed (PRD Q31). The
-/// note now lives in `projects`, whose rendered tree nobody edits, so the copy is always this
+/// note now lives in `projects`, so the copy is always this
 /// whole file in the overlay, the way the decision ledger's is.
 pub fn render_projection(sub: &Subscription, today: &str, rates: &[FxObservation]) -> String {
     let mut out = String::from("---\n");

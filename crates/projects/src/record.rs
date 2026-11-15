@@ -1,6 +1,6 @@
 //! One record is one markdown file: its path under the projects root and its bytes.
 //!
-//! Every other column is derived from those two, so a store rebuilt from the rendered files
+//! Every other column is derived from those two, so an index rebuilt from the files
 //! equals the live store. The selection rules are the ones the retired vault task reader applied
 //! (`crates/vault/src/tasks.rs` in git history before 2026-10-18), so a task kept its meaning
 //! across the import.

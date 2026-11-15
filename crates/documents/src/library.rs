@@ -2703,7 +2703,10 @@ mod tests {
         value["id"] = forged.clone().into();
         let forged_path = records.join(format!("{forged}.json"));
         fs::write(&forged_path, serde_json::to_vec(&value).unwrap()).unwrap();
-        assert!(library.restore_index().is_err(), "an unrelated id must not restore");
+        assert!(
+            library.restore_index().is_err(),
+            "an unrelated id must not restore"
+        );
         fs::remove_file(&forged_path).unwrap();
 
         value["id"] = document.sha256.clone().into();

@@ -9,24 +9,12 @@ the next six-hour pass. TLS and unclassified request failures remain visible as 
 
 ## Registry-derived project views
 
-`projects-api::registry` declares project and record read projections; `route-manifest` validates
-their identities, classification inheritance, response schemas, links and governed action
-metadata. Projects publishes discovery in `/routes`, and MCP descriptions and tool metadata
-consume the same declaration. Existing read JSON is preserved.
+Registry-derived MCP metadata and TypeScript read contracts with freshness verification shipped
+through `a5942b22` ([`route-manifest`](../../crates/route-manifest/README.md#typescript-read-contracts)).
 
-Project identity is `(name, archived)`. Record identity is its mutable Markdown path. Every
-property inherits its object's class, with no invented property provenance. Membership links
-filter the name-based aggregate read by archived state and request `content=false`; detail
-reads retrieve content separately. Inventory references are not projected by these contracts.
-
-The registry declares no view-document format and no renderer. The GPUI renderer for derived
-views is open in [`gpui.md` §11](gpui.md#11-ui-stack).
-
-Verification: route-manifest, projects-api, sjel-projects and sjel-mcp tests and Clippy pass.
-Open: generate TypeScript contracts from the declaration, with a reproducible freshness check.
-MCP metadata generation is implemented; TypeScript generation is a separate outstanding part of
-the Priority 1 registry milestone. Live governed reads with real data through MCP remain
-unverified.
+Verification: 14 route-manifest and projects-api tests, focused Clippy and strict TypeScript
+compilation pass. Full workspace checks and live governed MCP reads with real data did not run.
+The Mac and phone derived-view acceptance stays in [`gpui.md` §11](gpui.md#derived-views).
 
 ## Private project delivery workflows
 

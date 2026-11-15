@@ -26,7 +26,7 @@ sjel-pseudonymize = { path = "../pseudonymize" }
 # connection pool are decided there, not at each call site (libs/sjel-http).
 sjel-http = { path = "../sjel-http" }
 sjel-config = { path = "../sjel-config" }
-# The people-by-name contract and `/api/links` body, shared with entities (website/content/capabilities/links.md).
+# The people-by-name contract and `/api/links` body, shared with entities (docs/capabilities/links.md).
 sjel-links = { path = "../links" }
 sjel-server = { path = "../sjel-server" }
 sjel-store = { path = "../sjel-store" }

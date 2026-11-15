@@ -231,7 +231,7 @@ build-here member: W, because it reuses a platform component and the catalog is 
 to version for as long as it exists.
 
 Sjel had already set this direction before the council and neither the red-team nor the council
-read it: [`projects-ui.md` §2](../website/content/architecture/projects-ui.md#2-generative-and-intelligent-ui-evolution)
+read it: [`projects-ui.md` §2](../docs/architecture/projects-ui.md#2-generative-and-intelligent-ui-evolution)
 describes generated UI as a declarative component catalog, with OpenUI Lang 1.0 as a candidate
 format, bindings to local capability endpoints, and confirmation for mutating actions. The
 council's option D reached the same shape independently.

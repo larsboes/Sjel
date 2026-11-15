@@ -5,7 +5,7 @@ It owns neither transport search nor event discovery: clients compose `transit` 
 and read bounded `calendar` entries as trip fixpoints. Trips stores only the references the
 operator explicitly adds to the itinerary, with inert provider payloads.
 
-The technical manual for Travel and Trips is in [`website/content/capabilities/travel.md`](../../website/content/capabilities/travel.md).
+The technical manual for Travel and Trips is in [`docs/capabilities/travel.md`](../../docs/capabilities/travel.md).
 
 ## Contract
 

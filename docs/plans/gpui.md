@@ -861,7 +861,7 @@ what is still open, and state each check that did not run.
 
 A view is a document that a schema validates. It names Sjel components and binds them to read
 routes from `route-manifest`. No model-written code runs
-([product page](../../website/content/product.md#views), Product Rule 6).
+([product page](../product.md#views), Product Rule 6).
 
 A view never calls a write route. A write reaches the user only as a proposal, which goes through
 the capability's existing write mode. A cloud model gets only the schema and pseudonymized

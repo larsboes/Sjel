@@ -1,12 +1,12 @@
 // website/scripts/markdown.ts — Markdown to HTML for the site, with Bun's built-in renderer.
 //
 // Links are rewritten so the rendered page works where it is published: a link into
-// website/content/ becomes the matching page on the site, an in-repository link becomes the
+// docs/ becomes the matching page on the site, an in-repository link becomes the
 // file on GitHub, and an external or in-page link is left alone.
 import { posix } from "node:path";
 import { REPO } from "./style.ts";
 
-export const CONTENT = "website/content";
+export const CONTENT = "docs";
 
 export interface Rendered {
   title: string;

@@ -186,7 +186,7 @@ These need an answer before the work package that depends on them starts.
   and continuation dates. Done when a user can plan A → B, stay at B, then continue to C, edit
   the stay without losing selected legs, and distinguish a planned stay from a transfer buffer.
   Booking-site integration follows the existing
-  [build, ingest or link-out rule](../../website/content/product.md#what-sjel-builds-ingests-and-links-to).
+  [build, ingest or link-out rule](../product.md#what-sjel-builds-ingests-and-links-to).
 - Road traffic for road legs: named segments on the routes, polled only inside watch windows.
 - OpenStreetMap right-of-way priors and the hierarchical leg model for regions with no history.
 - Correlated sampling in the evaluator (layer 5), replacing the independent product.

@@ -251,7 +251,7 @@ function uiPaths(pkg: Package, pkgs: Package[], inventory: string[], nodes: Map<
 
 function pagesInput(file: string): boolean {
   // Pages checks self before rendering; self scans manifests, Cargo coupling and source routes.
-  return /^(?:website\/|brand\/|\.github\/assets\/|\.github\/workflows\/pages\.ya?ml$)/.test(file) ||
+  return /^(?:website\/|docs\/|brand\/|\.github\/assets\/|\.github\/workflows\/pages\.ya?ml$)/.test(file) ||
     /(?:^|\/)(?:README\.md|Cargo\.(?:toml|lock)|service\.toml|pack\.toml)$/.test(file) ||
     /^(?:self\.json|upstreams\.toml|systems\.toml|sjel\.toml|rust-toolchain\.toml|ARCHITECTURE\.md)$/.test(file) ||
     /^(?:crates\/|services\/|capabilities\/|Packs\/|libs\/|tools\/|\.cargo\/)/.test(file) || /\.rs$/.test(file);

@@ -3,7 +3,7 @@
 #
 #   site/
 #     index.html        scripts/landing.ts    what Sjel is and how it fits together
-#     docs/**           scripts/docs.ts       website/content/**/*.md, with a sidebar
+#     docs/**           scripts/docs.ts       docs/**/*.md, with a sidebar
 #     reference/**      scripts/reference.ts  one page per unit; scripts/self-model.ts
 #     favicon.svg, hedgehog.png
 #

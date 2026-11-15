@@ -1,4 +1,4 @@
-// website/scripts/docs.ts — the user docs: every Markdown file under website/content/, rendered
+// website/scripts/docs.ts — every Markdown file under docs/, user docs and area plans alike, rendered
 // with a section sidebar and an on-this-page column.
 //
 //   bun website/scripts/docs.ts --out <site>     write <site>/docs/**
@@ -15,6 +15,7 @@ const SECTIONS: Array<[string, string]> = [
   ["architecture", "Architecture"],
   ["capabilities", "Capabilities"],
   ["operations", "Operations"],
+  ["plans", "Plans"],
 ];
 
 interface Doc { rel: string; from: string; page: string; rendered: Rendered }

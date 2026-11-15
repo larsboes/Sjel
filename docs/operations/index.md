@@ -8,7 +8,7 @@ sjel search <task>
 ```
 
 Use the active overlay and runtime output for machine identity, enabled capabilities, ports, and
-health. The [generated architecture](../../../ARCHITECTURE.md) describes public declarations.
+health. The [generated architecture](../../ARCHITECTURE.md) describes public declarations.
 
 ## Release preparation and later testing
 
@@ -72,7 +72,7 @@ the standalone entry point; its authenticated manual-download path remains below
 
 #### Existing draft and manual installation
 
-The [CLI distribution workflow](../../../.github/workflows/cli-distribution.yml) builds these
+The [CLI distribution workflow](../../.github/workflows/cli-distribution.yml) builds these
 archives and rehearses the generated POSIX bootstrap, a compatible update and rollback in isolated
 homes. The existing draft filenames are:
 
@@ -167,7 +167,7 @@ Sjel binary or developer runtime is installed; policy remains in versioned helpe
 
 ### Prepare files without installing
 
-The [manual distribution workflow](../../../.github/workflows/distribution.yml) builds Mac, Linux
+The [manual distribution workflow](../../.github/workflows/distribution.yml) builds Mac, Linux
 or iOS artifacts on an isolated runner and retains them for 14 days. It has no release-write
 permission, signing credentials, installation step or TestFlight upload. Select the artifact,
 host and version in GitHub Actions after the changes are committed. The official artifact
@@ -205,7 +205,7 @@ access, asset name, byte count and SHA-256 in `release.json`'s `capabilities` ar
 merges these entries and verifies each one against its release asset. This metadata is not an
 installation approval: a client must require `friend_ready: true`, match the running runtime's
 version and platform, and pass the digest to `sjel distribution install-package`. The published
-catalogue shape is defined by [`release-catalogue.schema.json`](../../../schemas/release-catalogue.schema.json).
+catalogue shape is defined by [`release-catalogue.schema.json`](../../schemas/release-catalogue.schema.json).
 
 The app's runtime is read-only inside the bundle. `sjel distribution place` copies it to
 `~/Library/Application Support/Sjel/runtime/<version>` and creates an empty overlay at
@@ -267,7 +267,7 @@ The Simulator path is `apps/gpui/ios/run-sim`. It does not install from TestFlig
 ### Optional capabilities and the later friend trial
 
 The initial package is Calendar. Its archive contains `package.json`, a prebuilt executable
-and a build-free `service.toml`. The [package schema](../../../schemas/capability-package.schema.json)
+and a build-free `service.toml`. The [package schema](../../schemas/capability-package.schema.json)
 defines the file contract. The CLI verifies the whole archive's SHA-256, host platform, bounded
 file sizes, individual file hashes, paths and service command before accepting it. Archive
 symlinks and extra entries are never installed: declared bytes become regular files.
@@ -319,7 +319,7 @@ as part of this documentation update.
 ### 1. Prepare the source and host tools
 
 Use macOS or Linux with Git, Bash, a Rust toolchain and the platform compiler/linker.
-[toolchain.toml](../../../toolchain.toml) owns the full host-tool requirements
+[toolchain.toml](../../toolchain.toml) owns the full host-tool requirements
 and platform installation hints; check its report after setup rather than assuming these four
 tools satisfy every enabled capability or maintenance workflow. Containers and local models
 are unnecessary for the shell-only service.
@@ -336,8 +336,8 @@ capability, harness-integration and persistence choices; skip integrations you d
 Missing tools are reported, not automatically installed. A non-interactive run skips capability
 selection, so reaching “Setup done” does not establish that a node is running.
 
-For a release checkout, [bootstrap.sh](../../../bootstrap.sh) provides `usage` and `development`
-clone profiles; see [release installation](../../../CONTRIBUTING.md#getting-onto-the-line).
+For a release checkout, [bootstrap.sh](../../bootstrap.sh) provides `usage` and `development`
+clone profiles; see [release installation](../../CONTRIBUTING.md#getting-onto-the-line).
 
 ### 2. Select capabilities and provision authentication
 
@@ -458,7 +458,7 @@ separate fixes. See the [doctor guide](doctor.md).
 - [Doctor diagnostics](doctor.md): report modes, check owners, and failure investigation.
 - [Service persistence](persistence.md): start and stop behavior, generated host units, and image
   identity in backups.
-- [Store backup contract](../../../services/store/README.md#commands): live SQLite snapshots and
+- [Store backup contract](../../services/store/README.md#commands): live SQLite snapshots and
   isolated restore verification.
 
 ## Patch first

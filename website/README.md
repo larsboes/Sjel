@@ -6,7 +6,7 @@ Nothing on it runs a capability, and nothing is fetched while a page renders.
 | Path on the site | Source | Built by |
 |---|---|---|
 | `/` | hand-written copy, counts and the capability index from `self.json` | `scripts/landing.ts` |
-| `/docs/**` | `website/content/**/*.md` | `scripts/docs.ts` |
+| `/docs/**` | `docs/**/*.md`: user docs and the area plans in `docs/plans/` | `scripts/docs.ts` |
 | `/reference/<unit>.html` | `self.json`, each capability's `const ROUTES` block, the unit's README | `scripts/reference.ts`, `scripts/routes.ts` |
 | `/reference/self-model.html` | `self.json` | `scripts/self-model.ts` |
 
@@ -23,16 +23,17 @@ command in `.github/workflows/pages.yml`, and deploys only from `main`.
 
 ## Writing docs
 
-Add a Markdown file under `website/content/<section>/`. The sidebar groups files by folder; a
+`docs/` is the one home for documentation; the site only renders it. Add a Markdown file under
+`docs/<section>/`. The sidebar groups files by folder; a
 folder's `index.md` comes first, the rest sort by their first heading. Links between docs use
 relative `.md` paths and become site pages; any other link into the repository becomes the file
 on GitHub. Markdown is rendered by Bun's built-in renderer, so the site has no npm dependency.
 
-Contributor material (plans, open work) stays in `docs/`, not here.
+The area plans in `docs/plans/` render as the Plans section. `PLAN.md` and `research/` stay on
+GitHub and are linked from the pages.
 
 ## Layout
 
 - `build`: the one entry point.
 - `scripts/`: the generators, `style.ts` (the shell every page shares) and `markdown.ts`.
 - `assets/`: files copied into the site as they are.
-- `content/`: the user docs.

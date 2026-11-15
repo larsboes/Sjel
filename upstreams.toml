@@ -82,7 +82,7 @@ url = "https://github.com/rust-lang/rust-analyzer"
 verdict = "inspiration"
 license = "MIT OR Apache-2.0"
 summary = "Language server whose architecture guide informs Sjel's entry-point and invariant documentation"
-why = "Its architecture guide separates a high-level model from entry points, a code map and explicit invariants, which is the shape website/content/architecture/ uses beside the generated manifest inventory. Documentation structure only; no source or prose copied, no runtime dependency."
+why = "Its architecture guide separates a high-level model from entry points, a code map and explicit invariants, which is the shape docs/architecture/ uses beside the generated manifest inventory. Documentation structure only; no source or prose copied, no runtime dependency."
 
 [tigerbeetle]
 url = "https://github.com/tigerbeetle/tigerbeetle"

@@ -2,7 +2,7 @@
 
 Technical reference manual for `crates/media`: the exact-byte ingest gate, the volume
 integrity ledger, private local attachment library, and HTTP surface. The operator
-workflow — every verb, its guards and its flags — is in [`crates/media/README.md`](../../../crates/media/README.md).
+workflow — every verb, its guards and its flags — is in [`crates/media/README.md`](../../crates/media/README.md).
 
 ```mermaid
 flowchart TD
@@ -123,7 +123,7 @@ external filesystem edits and storage failure.
 
 ## 3. The HTTP surface
 
-`media serve` starts a process capability on port **8102** ([`service.toml`](../../../crates/media/service.toml)).
+`media serve` starts a process capability on port **8102** ([`service.toml`](../../crates/media/service.toml)).
 Mounted-volume routes are read-only. The attachment intake writes only to the private local
 attachment root and its metadata tables. Content decisions write reviewed metadata, never originals. Verbs that move or organize mounted-library files stay
 operator-invoked commands with their own approval lists and are not exposed.

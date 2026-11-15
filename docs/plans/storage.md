@@ -65,7 +65,7 @@ power-loss test at each durable write, and any check of a started primary.
   3. `sjel mirror build`, which copies tables out of the shared file.
 
 **Docs to correct when the split starts.** `services/store/README.md` and
-`website/content/architecture/storage.md` justify one file with cross-schema joins. Only one statement in all
+`docs/architecture/storage.md` justify one file with cross-schema joins. Only one statement in all
 capabilities spans two table prefixes, and it is a migration helper.
 
 ## 2. Decisions
@@ -153,7 +153,7 @@ about the expanded archive refers to the whole archive, not this filtered intake
 ### One vault for prose
 
 Prose lives in one folder of Markdown files, and the files are the authority for their text.
-Obsidian is one editor for them, and the Sjel app can carry another ([product page](../../website/content/product.md#the-vault)). Typed facts stay in Sjel's
+Obsidian is one editor for them, and the Sjel app can carry another ([product page](../product.md#the-vault)). Typed facts stay in Sjel's
 stores. Open, in order:
 
 1. Give each top folder of the vault a default data class. Frontmatter can raise it and cannot

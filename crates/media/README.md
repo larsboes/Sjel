@@ -2,7 +2,7 @@
 
 Exact-byte ingest gate and integrity ledger for media libraries on mounted volumes, plus a private local attachment library. It indexes files by SHA-256, verifies mirrors, records ingest dispositions and previews reviewed organization mappings. Local attachments retain originals and source filenames; explicit local analysis supplies reviewable tag and collection proposals without cloud calls. Its backup contract covers local attachment originals; it does not delete library content.
 
-The technical manual is [`website/content/capabilities/media.md`](../../website/content/capabilities/media.md). It documents the ledger, CLI, HTTP surface, safety constraints and isolated acceptance probes.
+The technical manual is [`docs/capabilities/media.md`](../../docs/capabilities/media.md). It documents the ledger, CLI, HTTP surface, safety constraints and isolated acceptance probes.
 
 ## Why this shape: bytes and locations are distinct
 
@@ -38,7 +38,7 @@ Metadata, decisions and private previews use Media's shared-store tables and its
 
 Apple Vision supplies labels, not the collection taxonomy or a deletion verdict. Its scores
 are not calibrated probabilities, and three video frames cannot describe every scene. The
-[technical manual](../../website/content/capabilities/media.md#content-evidence-and-review)
+[technical manual](../../docs/capabilities/media.md#content-evidence-and-review)
 documents limits, retry semantics, privacy and native contract checks.
 
 ## Considered and declined

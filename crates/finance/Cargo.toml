@@ -37,7 +37,7 @@ sjel-store = { path = "../sjel-store" }
 candidate-fingerprint = { path = "../candidate-fingerprint" }
 markdown-root = { path = "../markdown-root" }
 route-manifest = { path = "../route-manifest" }
-# Typed ids and the `/api/links` body every capability answers alike (website/content/capabilities/links.md).
+# Typed ids and the `/api/links` body every capability answers alike (docs/capabilities/links.md).
 sjel-links = { path = "../links" }
 finance-api = { path = "../finance-api" }
 serde = { workspace = true, features = ["derive"] }

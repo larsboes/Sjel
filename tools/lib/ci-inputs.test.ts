@@ -207,7 +207,7 @@ describe("runtime and missing inputs", () => {
     expect(plan.bun).toEqual([]);
     expect(plan.shell).toEqual([]);
     expect(plan.ui).toEqual([]);
-    expect(plan.pages).toBe(false);
+    expect(plan.pages).toBe(true);
     expect(plan.security).toEqual({ deps: false, images: false, codeql: [] });
     expect(plan.gates).toContain("publication-hygiene");
   });
@@ -435,7 +435,7 @@ describe("gates and full verification", () => {
 
 describe("Pages and security boundaries", () => {
   test.each([
-    "website/build", "website/content/guide.md", "crates/thing/README.md", "crates/thing/service.toml", "Packs/a/pack.toml",
+    "website/build", "docs/guide.md", "crates/thing/README.md", "crates/thing/service.toml", "Packs/a/pack.toml",
     "self.json", "tools/self", "tools/lib/sjel-cli.sh", "crates/sjel-cli/src/self_model/mod.rs", "Cargo.toml", "Cargo.lock",
     "apps/gpui/core/src/lib.rs", ".github/workflows/pages.yml", "upstreams.toml", "brand/sjel-hedgehog.svg",
   ])("Pages includes %s", (file) => expect(select([file]).pages).toBe(true));

@@ -1,6 +1,6 @@
 # Projects and Tasks UI/UX Architecture
 
-Projects, tasks, and project notes are owned by Sjel ([`crates/projects`](../../../crates/projects/README.md)).
+Projects, tasks, and project notes are owned by Sjel ([`crates/projects`](../../crates/projects/README.md)).
 This document records how they are stored and rendered, the direction for generative UI, and the
 upstream references.
 
@@ -28,30 +28,30 @@ upstream references.
 ```
 
 1. **Canonical store**: SQLite stores raw note contents and frontmatter properties. Attachments stay files in
-   the rendered tree, not rows ([`crates/projects/src/store.rs`](../../../crates/projects/src/store.rs)).
+   the rendered tree, not rows ([`crates/projects/src/store.rs`](../../crates/projects/src/store.rs)).
 2. **Second copy**: Every write to a record renders its markdown to `<overlay>/data/projects/`.
 3. **Security boundary**: Attachments (`GET /api/file`) serve images and PDFs inline, while all other
    mime types (including HTML and SVGs with scripts) are served with `Content-Disposition: attachment`
-   and `sandbox` restrictions ([`crates/projects/src/server.rs`](../../../crates/projects/src/server.rs)).
+   and `sandbox` restrictions ([`crates/projects/src/server.rs`](../../crates/projects/src/server.rs)).
 
 ---
 
 ## 2. Generative and Intelligent UI Evolution
 
 The step following figure embeds is **Generative UI from the typed core**
-([Product Rule 6](../../../CONTRIBUTING.md#product-rules): *"Screens and assistant tools come from the typed data"*).
+([Product Rule 6](../../CONTRIBUTING.md#product-rules): *"Screens and assistant tools come from the typed data"*).
 
 Rather than streaming unstructured markdown or generating insecure arbitrary HTML, intelligent agents in
 Sjel compose structured interfaces out of an audited, declarative component catalog. The build
 plan and its done-when are in
-[`docs/plans/gpui.md`, Derived views](../../../docs/plans/gpui.md#derived-views).
+[`docs/plans/gpui.md`, Derived views](../plans/gpui.md#derived-views).
 
 ### Architectural Principles
 
 1. **Declarative Component Schema**: The model emits a structured AST or declarative UI language (such as OpenUI Lang 1.0) specifying layout, data binding, and state variables (`$variables`).
-2. **Local Model Execution ([Product Rule 1](../../../CONTRIBUTING.md#product-rules))**: UI generation runs locally on Apple Silicon (AFM / Ollama models like `qwen3.8:27b` or `gpt-oss:20b`), requiring low latency to the first token.
-3. **Data Boundary & Privacy ([Product Rule 4](../../../CONTRIBUTING.md#product-rules))**: Components bind to local capability endpoints (SQL, TOML, links); raw personal context does not leave the device.
-4. **Action Confirmation ([Product Rule 5](../../../CONTRIBUTING.md#product-rules))**: Reversible actions execute seamlessly; mutating or irreversible actions require explicit approval.
+2. **Local Model Execution ([Product Rule 1](../../CONTRIBUTING.md#product-rules))**: UI generation runs locally on Apple Silicon (AFM / Ollama models like `qwen3.8:27b` or `gpt-oss:20b`), requiring low latency to the first token.
+3. **Data Boundary & Privacy ([Product Rule 4](../../CONTRIBUTING.md#product-rules))**: Components bind to local capability endpoints (SQL, TOML, links); raw personal context does not leave the device.
+4. **Action Confirmation ([Product Rule 5](../../CONTRIBUTING.md#product-rules))**: Reversible actions execute seamlessly; mutating or irreversible actions require explicit approval.
 
 ---
 
@@ -73,9 +73,7 @@ The following external projects inform Sjel's UI/UX:
 ## 4. Unification: Documentation and Research
 
 Sjel maintains two distinct public content trees:
-- `docs/`: How the system is designed, operated, configured, and migrated.
-- `research/`: Why the system exists, empirical benchmarks, and upstream audit verdicts.
-
-Both are hosted persistently on the documentation site (`website/content`). Future work will unify
-their shared navigation, search, and reading paths so that architecture decisions directly cite their supporting
-empirical research and upstream audit entries.
+- `docs/`: How the system is designed, operated, configured, and migrated, plus the area plans
+  in `docs/plans/`. The documentation site renders all of it.
+- `research/`: Why the system exists, empirical benchmarks, and upstream audit verdicts. The site
+  links to it on GitHub.

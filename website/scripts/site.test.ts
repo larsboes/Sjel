@@ -28,13 +28,14 @@ describe("routes", () => {
 });
 
 describe("markdown links", () => {
-  const from = "website/content/architecture/index.md";
+  const from = "docs/architecture/index.md";
   const page = "docs/architecture/index.html";
   test("a docs link becomes a site page, a repository link becomes GitHub, others stay", () => {
     expect(rewriteHref("security.md#data-classes", from, page)).toBe("security.html#data-classes");
     expect(rewriteHref("../index.md", from, page)).toBe("../index.html");
-    expect(rewriteHref("../../../CONTRIBUTING.md#x", from, page)).toBe("https://github.com/larsboes/Sjel/blob/main/CONTRIBUTING.md#x");
-    expect(rewriteHref("../../../libs/sjel-server/", from, page)).toBe("https://github.com/larsboes/Sjel/tree/main/libs/sjel-server");
+    expect(rewriteHref("../plans/gpui.md#derived-views", from, page)).toBe("../plans/gpui.html#derived-views");
+    expect(rewriteHref("../../CONTRIBUTING.md#x", from, page)).toBe("https://github.com/larsboes/Sjel/blob/main/CONTRIBUTING.md#x");
+    expect(rewriteHref("../../libs/sjel-server/", from, page)).toBe("https://github.com/larsboes/Sjel/tree/main/libs/sjel-server");
     expect(rewriteHref("https://example.org/a.md", from, page)).toBe("https://example.org/a.md");
     expect(rewriteHref("#local", from, page)).toBe("#local");
   });

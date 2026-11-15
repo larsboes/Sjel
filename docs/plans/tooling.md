@@ -40,7 +40,7 @@ The root README and Operations guide document authenticated draft downloads, pla
 prerequisites and explicit profile activation; installer behavior and tagged assets are unchanged.
 The distribution workflow targets Ubuntu 24.04 x86-64/ARM64 and macOS 15 ARM64 and runs
 `cli-smoke.sh` in an isolated home. Commands, requirements and the HTTPS/checksum trust model are owned by
-[Operations](../../website/content/operations/index.md#cli-only-coding-installation).
+[Operations](../../docs/operations/index.md#cli-only-coding-installation).
 
 The existing Bun distribution owner was extended rather than introducing another release
 framework. Bootstrap remains Bash so installation needs no developer runtime. No new release

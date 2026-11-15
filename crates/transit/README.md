@@ -3,7 +3,7 @@
 HAFAS journey search, split-ticket solving, rail ticket extraction, journey reliability scoring,
 and fuzzy trip-search sessions.
 
-The technical manual for Travel and Transit is in [`website/content/capabilities/travel.md`](../../website/content/capabilities/travel.md).
+The technical manual for Travel and Transit is in [`docs/capabilities/travel.md`](../../docs/capabilities/travel.md).
 
 ## Surface
 

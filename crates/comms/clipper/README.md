@@ -56,7 +56,7 @@ without truncating the stored clip.
 Authenticated API and MCP callers can discover and read saved clips through `GET /clips` and
 `GET /clips/document?key=<document_key>`. The same agent gate as mail applies: capability mode,
 trust tier, data-class cap and pseudonymization. Clip responses declare `c2`; this interface
-does not reclassify clips or start enrichment. The [API contract](../../../website/content/capabilities/feed-and-comms.md#clip-reads)
+does not reclassify clips or start enrichment. The [API contract](../../../docs/capabilities/feed-and-comms.md#clip-reads)
 defines search and pagination. Writes, deletion, settings and the Interpreter stay on the socket.
 
 ## YouTube clips

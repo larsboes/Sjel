@@ -25,7 +25,7 @@ const ACTIVE_ITEMS: Item[] = [
     title: "GPUI Desktop & Mobile Port (Ongoing)",
     badge: "Core UI",
     desc: "Unifying all macOS and iOS surfaces in Zed's native GPUI Rust framework. Delivering sub-10ms rendering, offline trip itineraries, calendar rescheduling, and session approvals.",
-    href: `${REPO}/blob/main/docs/plans/gpui.md`,
+    href: "../docs/plans/gpui.html",
   },
   {
     title: "Agent Containment & Privacy Gates",
@@ -37,7 +37,7 @@ const ACTIVE_ITEMS: Item[] = [
     title: "Flat Workspace Consolidation",
     badge: "Architecture",
     desc: "Restructuring Sjel into a lean, single Cargo workspace with flat crates/, eliminating lingering dashboard dependencies and trimming codebase footprint.",
-    href: `${REPO}/blob/main/docs/plans/restructure.md`,
+    href: "../docs/plans/restructure.html",
   },
 ];
 
@@ -64,7 +64,7 @@ const PLANNED_ITEMS: Item[] = [
     title: "Transit Corridor Reliability Ingest",
     badge: "Travel",
     desc: "Automated punctuality collection and delay monitoring for regional rail corridors while the Mac is closed.",
-    href: `${REPO}/blob/main/docs/plans/transit.md`,
+    href: "../docs/plans/transit.html",
   },
 ];
 

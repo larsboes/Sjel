@@ -2,7 +2,7 @@
 
 The one ordered plan for Sjel. It orders the work by priority and names where each area stands.
 It is not a task list and it holds no decisions. What Sjel is and how it is shaped is in
-[`website/content/product.md`](website/content/product.md). Each area has one file in
+[`docs/product.md`](docs/product.md). Each area has one file in
 [`docs/plans/`](docs/plans/). Concrete, testable work can also be a GitHub Issue.
 
 ## Priority 0: concrete failures in existing use
@@ -16,7 +16,7 @@ belong to [`tooling.md`](docs/plans/tooling.md). Diagnose a stale receipt before
 
 Code unification, cleanup, precision and less repeated work precede agent features. The
 [maintenance review](research/plan-maintenance-review.md) records the evidence and candidate
-tools. The first four items build the shape in the [product page](website/content/product.md).
+tools. The first four items build the shape in the [product page](docs/product.md).
 Finish them before any other framework or surface is introduced.
 
 1. One registry. A capability declares its object types, properties with data class, links and
@@ -31,7 +31,7 @@ Finish them before any other framework or surface is introduced.
    ([`gpui.md` §11](docs/plans/gpui.md#derived-views)). Mac pages take their controls from Sjel's
    Ely fork ([`gpui.md` §11](docs/plans/gpui.md#components-from-ely)).
 4. Audit every capability against the build rule in the
-   [product page](website/content/product.md#what-sjel-builds-ingests-and-links-to): build,
+   [product page](docs/product.md#what-sjel-builds-ingests-and-links-to): build,
    ingest or link out. A capability that fails the rule shrinks to a connector or a link.
 5. Reconcile plans with source: remove shipped detail, repair stale paths, keep one owner per
    open item, and distinguish implemented work from outstanding live acceptance.
@@ -95,7 +95,7 @@ Each needs a command or log query that shows its current value.
 ## Decisions
 
 This plan holds none. A decision is stated in the document that owns its subject, in the present
-tense: the [product page](website/content/product.md) for what Sjel is, a capability's README for
+tense: the [product page](docs/product.md) for what Sjel is, a capability's README for
 that capability, the area plan for work that is still open. Git records when it changed.
 
 ## Rules for this plan

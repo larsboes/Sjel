@@ -31,7 +31,7 @@ sjel-store = { path = "../sjel-store" }
 candidate-fingerprint = { path = "../candidate-fingerprint" }
 places-api = { path = "../places-api" }
 route-manifest = { path = "../route-manifest" }
-# The typed-id minter, shared so a place id is `place:<hex>` like every other (website/content/capabilities/links.md).
+# The typed-id minter, shared so a place id is `place:<hex>` like every other (docs/capabilities/links.md).
 sjel-links = { path = "../links" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

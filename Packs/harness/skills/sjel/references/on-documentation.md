@@ -7,7 +7,7 @@ the owner and delete the copy.
 
 Keep each fact with its owner:
 
-- `website/content/product.md`: what Sjel is, which problems it solves, the build rule and the
+- `docs/product.md`: what Sjel is, which problems it solves, the build rule and the
   shape of the architecture.
 
 - Root README: human-facing Sjel architecture and durable repository doctrine.
@@ -20,7 +20,7 @@ Keep each fact with its owner:
 
 - `PLAN.md`: the order of work, and nothing else.
 - `docs/plans/<area>.md`: open work with a done-when check.
-- `website/content/capabilities/<name>.md`: a capability's technical manual (interface contracts, data
+- `docs/capabilities/<name>.md`: a capability's technical manual (interface contracts, data
   flows, Mermaid diagrams, guarantees). The capability README stays a lean entry point with the
   why and a link to the manual.
 

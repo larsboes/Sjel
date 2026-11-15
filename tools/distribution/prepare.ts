@@ -195,7 +195,7 @@ function runtime(options: Options, stage: string) {
   for (const name of ["lib", "templates"]) copyPublicTree(`tools/${name}`, join(stage, "tools", name));
   for (const name of ["storage/storage", "capability-auth/capability-auth", "fda-launcher/install"]) copy(join(root, "tools", name), join(stage, "tools", name));
   copy(join(root, "toolchain.toml"), join(stage, "toolchain.toml"));
-  for (const name of ["schemas", "docs", "website/content"]) copyPublicTree(name, join(stage, name));
+  for (const name of ["schemas", "docs"]) copyPublicTree(name, join(stage, name));
   writeFileSync(join(stage, "distribution.json"), JSON.stringify({ schema: 1, version: options.version, platform, core, source_builds: false }, null, 2) + "\n");
   files(stage); // Refuse developer symlinks in the portable payload.
 }
@@ -283,7 +283,7 @@ function main() {
   const compiledSources = build(options);
   mkdirSync(options.out, { recursive: true });
   if (options.kind === "cli") writeFileSync(join(options.out, "READINESS.txt"), "CLI PREPARATION ARTIFACT — NOT YET CLEARED FOR A FRIEND TEST\nNo CLI installation, explicit self-update or rollback was tested by producing these files.\nLinux clean-user testing is deferred. No node services or desktop app are included.\n" + ((options.build || options.prepareDependencies) ? "Pi production dependencies prepared with frozen lockfiles and lifecycle scripts disabled.\n" : "Fixture only: Pi package dependencies unprepared; dependency-backed packages are omitted and held.\n"));
-  else writeFileSync(join(options.out, "READINESS.txt"), "PREPARATION ARTIFACT — NOT YET CLEARED FOR A FRIEND TEST\nNo installation was tested by producing these files.\nMac first-run create/connect-node UI, writable runtime placement, browser login and update/rollback integration must be completed before a clean-user trial.\nUse website/content/operations/index.md#release-preparation-and-later-testing for the owner rehearsal.\n");
+  else writeFileSync(join(options.out, "READINESS.txt"), "PREPARATION ARTIFACT — NOT YET CLEARED FOR A FRIEND TEST\nNo installation was tested by producing these files.\nMac first-run create/connect-node UI, writable runtime placement, browser login and update/rollback integration must be completed before a clean-user trial.\nUse docs/operations/index.md#release-preparation-and-later-testing for the owner rehearsal.\n");
   const stage = mkdtempSync(join(tmpdir(), "sjel-release-"));
   try {
     if (options.kind === "cli") {

@@ -2,14 +2,14 @@
 
 Capabilities that use the shared relational store open the same SQLite file and own distinct
 table prefixes. Other state, such as mounted media or a vault, retains its own storage contract.
-The [store capability](../../../services/store/README.md) owns the shared file's backup contract;
-[`sjel-store`](../../../crates/sjel-store/README.md) owns connection and migration behavior.
+The [store capability](../../services/store/README.md) owns the shared file's backup contract;
+[`sjel-store`](../../crates/sjel-store/README.md) owns connection and migration behavior.
 
 ## Database specifications
 
-[`sjel-config`](../../../crates/sjel-config/src/lib.rs) resolves `SJEL_DB_PATH`, then
+[`sjel-config`](../../crates/sjel-config/src/lib.rs) resolves `SJEL_DB_PATH`, then
 `<overlay>/data/sjel/sjel.db`, with a temporary scratch file as its fallback when no overlay
-resolves. [`sjel-store`](../../../crates/sjel-store/src/lib.rs) applies these settings to each pooled
+resolves. [`sjel-store`](../../crates/sjel-store/src/lib.rs) applies these settings to each pooled
 connection:
 
 ```sql
@@ -34,7 +34,7 @@ Migrations run once per database file and table prefix in each process, through
 
 ## LibSQL integration
 
-[`sjel-turso`](../../../crates/sjel-turso/README.md) opens local libSQL databases and owns connection
+[`sjel-turso`](../../crates/sjel-turso/README.md) opens local libSQL databases and owns connection
 setup and migrations. The current Sjel integration does not use embedded replicas; that support was
 removed before it was used.
 
@@ -46,12 +46,12 @@ separate files.
 
 Resolve deployment paths through the owning configuration API. Machine state mounts are declared
 in the active overlay's `config/machine.toml`; see the
-[machine schema](../../../schemas/machine.toml.example).
+[machine schema](../../schemas/machine.toml.example).
 
 The shared store uses `backup_sqlite_online`: `tools/backup.sh` takes a live SQLite `.backup`
 snapshot. Do not copy an open database file without its SQLite snapshot protocol. Container-owned
 SQLite files use the separate cold-backup contract described in the
-[service schema](../../../schemas/service.toml.example).
+[service schema](../../schemas/service.toml.example).
 
 ## Backups before migrations
 

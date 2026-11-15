@@ -446,7 +446,7 @@ capability already has, and the operator decides them. Examples: triage classifi
 step and records it as blocked. It does not wait.
 
 **Queue.** A queued task is one kind of proposal in the one proposal queue
-([product page](../../website/content/product.md#architecture)), not a second task system. A
+([product page](../product.md#architecture)), not a second task system. A
 task names its prompt, the capabilities it may read, the proposal routes it may write and its
 limits. The operator approves a task before its first run.
 

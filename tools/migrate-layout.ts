@@ -636,7 +636,7 @@ replaceInFile(
 - **Capability**: Autonomous domain units under \`capabilities/<name>/\`, declared via \`service.toml\`.
 - **Pack**: Modular agent know-how and workflows under \`Packs/<name>/\`.
 
-See [website/content/architecture/index.md](website/content/architecture/index.md) for full topology and boundary rules.
+See [docs/architecture/index.md](docs/architecture/index.md) for full topology and boundary rules.
 Shared utilities belong in \`libs/\`; contracts belong in \`schemas/\`; operator tools belong in \`tools/\`.`,
   `- **Spine**: The core runtime and developer surface: root manifests, \`schemas/\`, \`tools/\` (scripts),
   \`crates/\` (shared crates, apps and tools), the \`sjel-status\` gateway and the apps in \`apps/\`.
@@ -644,7 +644,7 @@ Shared utilities belong in \`libs/\`; contracts belong in \`schemas/\`; operator
   supervised third-party software and scripts under \`services/<name>/\`).
 - **Pack**: Modular agent know-how and workflows under \`Packs/<name>/\`.
 
-See [website/content/architecture/index.md](website/content/architecture/index.md) for full topology and boundary rules.
+See [docs/architecture/index.md](docs/architecture/index.md) for full topology and boundary rules.
 Shared Rust code belongs in \`crates/\`; third-party services in \`services/\`; contracts belong in \`schemas/\`; operator tools belong in \`tools/\`.`
 );
 

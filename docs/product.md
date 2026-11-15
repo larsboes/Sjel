@@ -2,7 +2,7 @@
 
 This page states the product: what Sjel is, which problems it must solve, what it builds and what
 it leaves to other tools, and the architecture that follows. The order of work is in
-[`PLAN.md`](../../PLAN.md).
+[`PLAN.md`](../PLAN.md).
 
 ## In one paragraph
 
@@ -16,13 +16,13 @@ owner adds or removes, and the class of each value decides which model may read 
 ## Where the need comes from
 
 1. Daily life runs through many separate tools, and each keeps its own copy of the data
-   ([`research/why-sjel.md`](../../research/why-sjel.md)).
+   ([`research/why-sjel.md`](../research/why-sjel.md)).
 2. No single tool sees the connection between a mail, a calendar entry, a payment, a place and a
    person. The owner makes that connection by hand, or not at all.
 3. Assistants are useful in proportion to the context they receive. Handing them everything
    sends facts about other people to a cloud provider.
 4. Every earlier attempt by the author ended in a migration: Notion, then Obsidian, then several
-   vault layouts ([`README.md`](../../README.md#why-i-built-it)). The lesson was that the notes
+   vault layouts ([`README.md`](../README.md#why-i-built-it)). The lesson was that the notes
    tool was never the problem. The missing part was the layer under the tools.
 
 ## What Sjel must solve
@@ -31,10 +31,10 @@ owner adds or removes, and the class of each value decides which model may read 
 |---|---|---|---|
 | 1 | Facts are spread over tools | One registry of object types, properties, links and actions | A question that needs three sources is answered from one place |
 | 2 | Connections are made by hand | Links and extraction across sources, proposed by a local model and decided by the owner | A mail that concerns a project appears on that project without a manual step |
-| 3 | Privacy needs constant attention | Every value has a data class, and the class decides which provider reads it | `comms egress-log --audit` reports zero violations ([`PLAN.md`](../../PLAN.md#success-measures)) |
+| 3 | Privacy needs constant attention | Every value has a data class, and the class decides which provider reads it | `comms egress-log --audit` reports zero violations ([`PLAN.md`](../PLAN.md#success-measures)) |
 | 4 | Every person needs different views | Views are data, composed from a fixed set of components | A saved view renders on the phone and the Mac without new code |
 | 5 | Agents need the same facts | One contract serves the CLI, MCP and the views | A capability is finished only when `sjel` can find it, check it and call it |
-| 6 | External tools change fast | A dated verdict for every external project, re-checked on a stated condition | [`upstreams.toml`](../../upstreams.toml) has no row without a verdict |
+| 6 | External tools change fast | A dated verdict for every external project, re-checked on a stated condition | [`upstreams.toml`](../upstreams.toml) has no row without a verdict |
 
 ## What Sjel builds, ingests and links to
 
@@ -69,7 +69,7 @@ capabilities against this rule is open work.
    runs at a time.
 2. **The class travels with the value.** A derived value takes the highest class of its inputs.
    A class rises by itself, and only a person lowers it, with a written reason.
-3. **Screens come from the typed data** ([Product rule 6](../../CONTRIBUTING.md#product-rules)).
+3. **Screens come from the typed data** ([Product rule 6](../CONTRIBUTING.md#product-rules)).
    A hand-built screen needs a reason that a derived view cannot meet.
 4. **One way in.** The CLI, MCP tools and views read the same contract.
 5. **Built for one owner first.** The design keeps a second household possible: a core that runs
@@ -161,7 +161,7 @@ one owner.
 
 ## The audited list
 
-[`upstreams.toml`](../../upstreams.toml) records every external project Sjel uses, watches or
+[`upstreams.toml`](../upstreams.toml) records every external project Sjel uses, watches or
 rejected, with a verdict, a reason and the condition that reopens the verdict. The list is part
 of the product: it tells a reader which tool Sjel recommends for a job and why Sjel did not
 build that job itself. Publishing it as a page of this site, grouped by job, is open work.

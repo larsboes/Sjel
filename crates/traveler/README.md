@@ -2,7 +2,7 @@
 
 Personal travel profile containing hard constraints, destination and journey ranking weights, interests, pace, anchors and provenance for each field.
 
-The technical manual for Travel capabilities is [`website/content/capabilities/travel.md`](../../website/content/capabilities/travel.md).
+The technical manual for Travel capabilities is [`docs/capabilities/travel.md`](../../docs/capabilities/travel.md).
 
 ## Why this shape: preferences remain explicit
 

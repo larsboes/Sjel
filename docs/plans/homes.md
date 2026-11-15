@@ -2,7 +2,7 @@
 
 Status: deferred. Household deployment repositories own their configuration, documentation,
 network investigation and operating procedures. A new Sjel capability is not required to hold
-those documents. Reconciled 2026-11-08; the earlier site-notes capability proposal is retired.
+those documents. The earlier site-notes capability proposal is retired.
 
 ## Boundary
 

@@ -63,7 +63,7 @@ screen is NSH (`ui/src/nsh_*.rs`, §11).
 ### What may live on the phone
 
 `sjel mirror build` deliberately leaves comms, documents and finance out of the phone's copy
-(`tools/sjel-cli/src/mirror.rs`, `PHONE_SET`). Mail and documents on the phone follow three rules
+(`crates/sjel-cli/src/mirror.rs`, `PHONE_SET`). Mail and documents on the phone follow three rules
 (decided 2026-10-25):
 
 1. **Online first.** Mail and documents are read live from the Mac through the signed device
@@ -76,7 +76,7 @@ screen is NSH (`ui/src/nsh_*.rs`, §11).
 
 ### Documents
 
-1. Done: `Documents` (`ui/src/documents.rs`) and Core Graphics PDF rendering (`ui/src/pdf_kit.rs`)
+1. Done: `Documents` (`ui/src/documents/`) and Core Graphics PDF rendering (`ui/src/pdf_kit/`)
    on the Mac. The phone no longer reaches this GPUI page: its Documents is the NSH reader.
 2. Built as the NSH reader (§11): the phone lists documents from `GET /api/documents` in pages of
    500, and opens the original in PDFKit at fit width after checking its SHA-256 against the
@@ -231,10 +231,10 @@ Open work:
 Shipped (awaiting manual check in the running app):
 
 - `/feed/[id]`: queueing and running a cloud job (`/comms/content/cloud-jobs`), and lowering a
-  data class with a required rationale (`apps/gpui/ui/src/feed.rs`).
+  data class with a required rationale (`apps/gpui/ui/src/feed/`).
 - `/inventory`: state history (`GET /inventory/api/items/{id}/state`), state transitions, and layout
   impact preview (`POST /interior/api/items/{id}/impact`) in the item edit form
-  (`apps/gpui/ui/src/inventory.rs`).
+  (`apps/gpui/ui/src/inventory/owned.rs`).
 - Stay ranking board: candidates stored as `stay` items on the trip plan and ranked through
   `PATCH /trips/api/plans/{plan_id}/items/{item_id}/fields` (`apps/gpui/ui/src/travel/pages.rs`,
   `apps/gpui/core/src/travel/edit.rs`).
@@ -301,7 +301,7 @@ one costs 1.5 µs a block, 80 µs a typical note and 3.0 ms for the largest of 1
 in shaping and editor integration, not in the mapping.
 
 Prototype shipped in `bdcd538b`: one paragraph uses route 2 behind `SJEL_GPUI_LIVE_PREVIEW=1`;
-the default editor is unchanged. Implementation: `core/src/inline.rs`, `ui/src/editor.rs` and
+the default editor is unchanged. Implementation: `core/src/inline.rs`, `ui/src/editor/` and
 `ui/src/editor/preview.rs` under `apps/gpui/`.
 
 Decided 2026-11-03: prototype route 2 on one paragraph behind `SJEL_GPUI_LIVE_PREVIEW=1`, then
@@ -510,8 +510,8 @@ Use a three-layer split across `gpui-fast` and `nsh`:
   replacing the duplicate hand-rolled Markdown/table/block parsers in `ui/src/research/articles.rs`
   and `ui/src/docs/render.rs` while preserving internal doc-slug routing and `#anchor` scrolling via
   `TextViewState::reveal_range`.
-- **Tables.** Built (2026-11-08): `ui/src/primitives/data_table.rs` provides declarative `RowTable<R>` and `TableColumn<R>` wrapped over `gpui-component`'s `DataTable` (`TableState<RowTable<R>>`), adding native drag-to-resize columns, double-click auto-fit sizing (`fit_column`), keyboard row navigation, column reordering, tie-breaker sorting, and run-length grouping (`grouped_by`), replacing manual column width hashmaps and sort enum boilers; wired into Finance Transactions (`ui/src/finance/transactions.rs`), Inventory Owned (`ui/src/inventory/owned.rs`), and Finance Import Candidates (`ui/src/finance/import.rs`). Documents library (`ui/src/documents/mod.rs`) unified with declarative `DocColDef` / `DOC_COLUMNS` consolidating default widths and header sort routing. Projects tables (`ui/src/projects/tables.rs`, `ui/src/projects/mod.rs`) unified with density-aware `Columns::get`, `from_col_id` bindings, and unified `cycle_project_sort`, `cycle_task_sort`, and `cycle_note_sort` state transitions across Projects Hub, Project Tasks, All Tasks, and All Notes.
-  Earlier primitives (`SortableColumn`, `SortOrder`, `resizable_table_header`, `tabular_cell` in `ui/src/primitives/tables.rs`) kept for backward-compatibility with custom layouts.
+- **Tables.** Pages draw tables on Ely's data table. `08cc5f14` removed the earlier `RowTable`
+  wrapper and the table primitives.
 - **Projects & Tasks UX.** Built (2026-11-08): Full keyboard navigation across Projects Hub, All Tasks, and Project Tasks (`j`/`k` or `up`/`down` for selection, `Enter` or `l` to open/inspect, `Space` to toggle completion), in-place task title renaming (`e` or `✎` button) committing via `rename_record`, and Kanban Board drag-and-drop card status transitions (`open`, `doing`, `waiting`, `done`) with rapid keyboard stage progression (`[` / `]`).
 - **Calendar.** Built (2026-11-08, `102dfe5f`): Keeps the 24-hour timeline, quarter-hour drag/resize and
   availability grid in `ui/src/calendar/`, extends the 24-hour time grid to a 7-day week view (`View::Week`,
@@ -587,9 +587,9 @@ the budget on either build, so the 2026-11-02 table above is out of date for tha
 
 | # | What | Result |
 |---|---|---|
-| E1 | Feed's Reading list draws one row per item on screen: `ListState` and `list()` in `ui/src/feed.rs`, the order cached in `Feed::reading_order` and rebuilt only when the entries, the filter or a status move. Feed owns its scroller and every other tab in the page keeps one of its own. `j`/`k` reveals the cursor's row. | 71.7 → 1.7–3.7 ms p50 for 362 rows, of which about 15 are drawn. |
-| E2 | Shared `virtual_list` helper in `ui/src/primitives.rs` wraps `ListState`, scrollbar, and `flex_1 + min_h_0`, wired across Feed Reading, Feed Library, and Documents. | Three lists share `virtual_list`. |
-| E3 | Filter, sort, count pills, and `Board::from_records` removed from `render()` across `ui/src/projects.rs`, `ui/src/feed.rs` (`sync_reading`, `sync_library`), and `ui/src/documents.rs` (`sync_order`). | Unchanged frames allocate no per-row filter/sort vectors. |
+| E1 | Feed's Reading list draws one row per item on screen: `ListState` and `list()` in `ui/src/feed/reading.rs`, the order cached in `Feed::reading_order` and rebuilt only when the entries, the filter or a status move. Feed owns its scroller and every other tab in the page keeps one of its own. `j`/`k` reveals the cursor's row. | 71.7 → 1.7–3.7 ms p50 for 362 rows, of which about 15 are drawn. |
+| E2 | Shared `virtual_list` helper in `ui/src/primitives/cards.rs` wraps `ListState`, scrollbar, and `flex_1 + min_h_0`, wired across Feed Reading, Feed Library, and Documents. | Three lists share `virtual_list`. |
+| E3 | Filter, sort, count pills, and `Board::from_records` removed from `render()` across `ui/src/projects/`, `ui/src/feed/mod.rs` (`sync_reading`, `sync_library`), and `ui/src/documents/mod.rs` (`sync_order`). | Unchanged frames allocate no per-row filter/sort vectors. |
 | E4 | Poll hygiene: `UPDATE_CHECK` runs at most every 5 minutes, and `Remote::settle_changed` + `data::read_quiet` / `read_repo_quiet` notify only when the value or error moved. | Idle polls and unchanged SSE snapshots wake no repaint. |
 | E5 | `SystemsPage` beats (`MACMON_BEAT`, `AGENT_BEAT`, storage, updates, findings, runtime) use `data::read_quiet` over `PartialEq` models. | Beats reporting an unchanged reading paint nothing. |
 

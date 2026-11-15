@@ -54,3 +54,19 @@ Every Rust capability with an HTTP server.
 
 Consumers declare the workspace path dependency in Cargo. The served JSON remains the
 external contract; the crate gives every server one implementation of it.
+
+## TypeScript read contracts
+
+`typescript::declaration` renders the serialized JSON schemas used by registry discovery.
+It preserves required properties, nullable values, scalar enums, arrays and local references.
+Unsupported shapes and recursive references fail generation rather than widening to `any`.
+Numeric ranges remain runtime schema constraints; TypeScript represents integers as `number`.
+
+Projects owns the first generated contract at `schemas/projects.generated.ts`:
+
+```sh
+sjel cargo run --locked -p projects-api --example typescript
+sjel cargo run --locked -p projects-api --example typescript -- --check
+```
+
+The `projects-api` unit test also checks freshness against the registry and read responses.

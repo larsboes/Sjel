@@ -26,6 +26,7 @@
 //! contract.
 
 pub mod registry;
+pub mod typescript;
 
 use serde::Serialize;
 use serde_json::{json, Value};

@@ -20,21 +20,13 @@ use sjel_gpui_core::shell::{self, FinanceCandidate, ShellError};
 
 use crate::ely::data_display::Tone;
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
+use crate::ely::theme::Density;
 use crate::primitives::tabular_cell;
 use crate::theme::Palette;
 
 use super::FinancePage;
 
-/// The actions a candidate row can offer; a confirm from the mail source names that account.
-fn candidate_columns(mail_source: Option<&str>) -> [Column; 5] {
-    let mut actions = vec![
-        RowAction::new("transfer", "Reconcile transfer"),
-        RowAction::new("confirm", "Confirm proposed account").primary(),
-    ];
-    if let Some(account) = mail_source {
-        actions.push(RowAction::new("confirm-mail", format!("Confirm from {account}")).primary());
-    }
-    actions.push(RowAction::new("reject", "Reject"));
+fn candidate_columns() -> [Column; 5] {
     [
         Column::new("cand_date", "DATE").width(rems(6.)).muted(),
         Column::new("cand_description", "DESCRIPTION"),
@@ -42,9 +34,12 @@ fn candidate_columns(mail_source: Option<&str>) -> [Column; 5] {
             .width(rems(11.))
             .muted(),
         Column::new("cand_amount", "AMOUNT").width(rems(7.)).end(),
-        Column::new("cand_actions", "")
-            .width(rems(14.))
-            .actions(actions),
+        Column::new("cand_actions", "").width(rems(12.)).actions([
+            RowAction::new("transfer", "Reconcile"),
+            RowAction::new("confirm", "Confirm").primary(),
+            RowAction::new("confirm-mail", "Confirm").primary(),
+            RowAction::new("reject", "Reject"),
+        ]),
     ]
 }
 
@@ -72,11 +67,19 @@ fn offered(c: &FinanceCandidate, has_mail_source: bool) -> &'static [&'static st
     }
 }
 
-fn candidate_row(c: &FinanceCandidate, has_mail_source: bool) -> Row {
-    let offered = offered(c, has_mail_source)
+/// A candidate's row. A mail row that confirms from `mail_source` names that account under its proposed one.
+fn candidate_row(c: &FinanceCandidate, mail_source: Option<&str>) -> Row {
+    let offered = offered(c, mail_source.is_some())
         .iter()
         .copied()
         .map(SharedString::from);
+    let account = match mail_source.filter(|_| is_mail(c) && exact_transfer(c).is_none()) {
+        Some(source) => Cell::Lines(
+            c.proposed_account.clone().into(),
+            format!("from {source}").into(),
+        ),
+        None => Cell::Text(c.proposed_account.clone().into()),
+    };
     let tone = if c.amount_cents < 0 {
         Tone::Danger
     } else {
@@ -87,7 +90,7 @@ fn candidate_row(c: &FinanceCandidate, has_mail_source: bool) -> Row {
         [
             Cell::Text(c.booked_at.clone().into()),
             Cell::Text(c.description.clone().into()),
-            Cell::Text(c.proposed_account.clone().into()),
+            account,
             Cell::Figure(
                 format_money(c.amount_cents, &c.currency).into(),
                 c.amount_cents as f64,
@@ -160,14 +163,14 @@ impl FinancePage {
 
     /// The pending candidates shown, newest first, built once per change.
     pub(super) fn import_rows(&mut self) -> Rc<Vec<Row>> {
-        let has_mail_source = self.mail_source_account().is_some();
+        let mail_source = self.mail_source_account();
         let key = (
             self.candidates.loaded_at,
             self.review_rev,
             self.pending_limit,
-            has_mail_source,
+            mail_source.clone(),
         );
-        if self.import_rows_key != Some(key) {
+        if self.import_rows_key.as_ref() != Some(&key) {
             self.import_rows_key = Some(key);
             self.sync_import_derived();
             let candidates = self.candidates.value.as_deref().unwrap_or_default();
@@ -182,7 +185,7 @@ impl FinancePage {
             self.import_rows = Rc::new(
                 pending
                     .into_iter()
-                    .map(|c| candidate_row(c, has_mail_source))
+                    .map(|c| candidate_row(c, mail_source.as_deref()))
                     .collect(),
             );
         }
@@ -527,7 +530,6 @@ impl FinancePage {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let rows = self.import_rows();
-        let mail_source = self.mail_source_account();
         let page = cx.entity();
         let pending_count = self.import_derived.pending_indices.len();
         let queue = div()
@@ -535,19 +537,17 @@ impl FinancePage {
             .flex_col()
             .gap_1p5()
             .child(
-                DataTable::new(
-                    "finance-candidates",
-                    candidate_columns(mail_source.as_deref()),
-                )
-                .rows(rows)
-                .sorts([SortKey {
-                    column: "cand_date".into(),
-                    rising: false,
-                }])
-                .on_action(move |id, action, _, cx| {
-                    page.update(cx, |page, cx| page.candidate_action(id, action, cx))
-                })
-                .empty("No pending import candidates to review."),
+                DataTable::new("finance-candidates", candidate_columns())
+                    .rows(rows)
+                    .density(Density::Comfortable)
+                    .sorts([SortKey {
+                        column: "cand_date".into(),
+                        rising: false,
+                    }])
+                    .on_action(move |id, action, _, cx| {
+                        page.update(cx, |page, cx| page.candidate_action(id, action, cx))
+                    })
+                    .empty("No pending import candidates to review."),
             )
             .children((pending_count > self.pending_limit).then(|| {
                 Button::new("finance-pending-more")
@@ -1460,8 +1460,41 @@ mod tests {
     }
 
     #[test]
+    fn a_mail_row_names_the_account_it_confirms_from() {
+        let row = |c: &FinanceCandidate| candidate_row(c, Some("assets:bank:checking"));
+        let mail = candidate(Some("gmail:abc"), &[], -450);
+        assert_eq!(
+            row(&mail),
+            Row::new(
+                "c1",
+                [
+                    Cell::Text("2026-11-14".into()),
+                    Cell::Text("Coffee".into()),
+                    Cell::Lines("expenses:food".into(), "from assets:bank:checking".into()),
+                    Cell::Figure(format_money(-450, "EUR").into(), -450.0, Tone::Danger),
+                    Cell::Actions(vec!["confirm-mail".into(), "reject".into()]),
+                ],
+            )
+        );
+        assert_eq!(
+            row(&candidate(None, &[], -450)),
+            Row::new(
+                "c1",
+                [
+                    Cell::Text("2026-11-14".into()),
+                    Cell::Text("Coffee".into()),
+                    Cell::Text("expenses:food".into()),
+                    Cell::Figure(format_money(-450, "EUR").into(), -450.0, Tone::Danger),
+                    Cell::Actions(vec!["confirm".into(), "reject".into()]),
+                ],
+            ),
+            "a bank row confirms from its own source"
+        );
+    }
+
+    #[test]
     fn income_reads_green_and_spending_red() {
-        let row = candidate_row(&candidate(None, &[], 900), false);
+        let row = candidate_row(&candidate(None, &[], 900), None);
         let income = Row::new(
             "c1",
             [

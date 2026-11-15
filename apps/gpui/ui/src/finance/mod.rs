@@ -110,7 +110,7 @@ pub struct FinancePage {
     pub search_query: String,
     pub selected_category: Option<String>,
     pub(super) import_rows: std::rc::Rc<Vec<crate::ely::tables::Row>>,
-    pub(super) import_rows_key: Option<(Option<std::time::Instant>, u64, usize, bool)>,
+    pub(super) import_rows_key: Option<(Option<std::time::Instant>, u64, usize, Option<String>)>,
     pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     pub(super) filter_rev: u64,
     pub(super) review_rev: u64,

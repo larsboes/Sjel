@@ -804,8 +804,13 @@ Open:
    Moved: `inventory/owned.rs` and `finance/import.rs`. Inventory puts kind, size, color,
    quantity and note on one line under the name. Its value is a muted figure. A missing price
    or size now sorts last. Import offers each candidate only the actions its source allows
-   (`offered` in `finance/import.rs`). Headless tests cover the rows and the Edit press. Not
-   checked: how either page looks. Nobody has opened them on Ely's table yet.
+   (`offered` in `finance/import.rs`). The buttons read Confirm, Reconcile and Reject, so they
+   fit a 12rem column. A mail row names the account it confirms from under its proposed
+   account. Headless tests cover the rows and the Edit press. Not checked: how either page
+   looks. Nobody has opened them on Ely's table yet.
+
+   Gaps against the old table: Ely's table has no accessibility label and no outer border.
+   The current row (below) brings back keyboard row selection.
 
    Next: `projects` and `documents`, which need the current row, `on_sort`, `Check` and
    `choices`.

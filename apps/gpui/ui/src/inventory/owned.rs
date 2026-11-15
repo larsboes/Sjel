@@ -38,7 +38,7 @@ pub(super) fn owned_columns() -> [Column; 5] {
         Column::new("dimensions", "DIMENSIONS").width(rems(10.)),
         Column::new("price", "VALUE").width(rems(7.)).end(),
         Column::new("actions", "")
-            .width(rems(5.))
+            .width(rems(6.))
             .actions([RowAction::new("edit", "Edit")]),
     ]
 }

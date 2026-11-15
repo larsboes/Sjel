@@ -846,7 +846,7 @@ Live light/dark visual acceptance for tables, charts, calendar and the migrated 
 
 Tables, `test_support.rs`, Calendar (`c3d0ed19`), interactive Charts (`f0d20861`) and
 People/Inventory forms (`8171f0c5`, `475c9800`) have landed; live light/dark acceptance remains
-open. Workspace feedback and shared test setup are implemented. The menus/overlays audit below
+open. Workspace feedback and shared test setup shipped in `944b0eb5`. The menus/overlays audit below
 keeps the slash menu and dock until their contracts can be preserved. Remaining adoption work
 moves through navigation/layout, then interaction-gated
 `mail/`, `documents::BlockEditor` and `ely::terminal` (after a fork remote-transport API).
@@ -871,6 +871,10 @@ and the phone-host integration test. Six core tests remain ignored; the audio-de
 explicitly skipped because it requires the host device. Feedback tests verify window isolation,
 one toast for a failed production mutation and an empty Kit notification queue. Live light/dark
 acceptance and fork interaction tests for the deferred replacements have not run.
+
+The simulator launcher uses checkout-owned `tools/cargo-hermetic`; the smoke workflow explicitly
+permits its build. The preflight suite passes with an isolated checkout and a rejected installed
+`sjel` command, so host tooling cannot hide an undeclared CLI dependency. No local simulator ran.
 
 #### Table acceptance
 

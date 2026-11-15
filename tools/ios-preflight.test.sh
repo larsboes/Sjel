@@ -6,6 +6,16 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin" "$work/home"
+launcher_root="$work/project"
+mkdir -p "$launcher_root/apps/gpui/ios/host" "$launcher_root/tools"
+cp "$root/apps/gpui/ios/run-sim" "$root/apps/gpui/ios/run-device" "$launcher_root/apps/gpui/ios/"
+cp "$root/apps/gpui/ios/host/project.yml" "$launcher_root/apps/gpui/ios/host/project.yml"
+cat > "$launcher_root/tools/cargo-hermetic" <<'EOF'
+#!/bin/bash
+echo "cargo-hermetic $*" >> "$TEST_LOG"
+exec cargo "$@"
+EOF
+chmod +x "$launcher_root/tools/cargo-hermetic"
 
 cat > "$work/bin/uname" <<'EOF'
 #!/bin/bash
@@ -26,6 +36,11 @@ cat > "$work/bin/cargo" <<'EOF'
 echo 'cargo' >> "$TEST_LOG"
 exit 47
 EOF
+cat > "$work/bin/sjel" <<'EOF'
+#!/bin/bash
+echo 'unexpected installed CLI dependency' >&2
+exit 99
+EOF
 cat > "$work/bin/xcodegen" <<'EOF'
 #!/bin/bash
 echo 'xcodegen' >> "$TEST_LOG"
@@ -34,7 +49,6 @@ EOF
 chmod +x "$work/bin/"*
 export PATH="$work/bin:$PATH" HOME="$work/home" TEST_LOG="$work/commands"
 export IPHONEOS_DEPLOYMENT_TARGET=17.0
-launcher_root="$root"
 
 run() {
   : > "$TEST_LOG"
@@ -83,10 +97,6 @@ selected=
 run run-sim
 [ "$status" -eq 47 ] || { echo "FAIL: newest runtime did not reach Cargo: $output" >&2; exit 1; }
 
-launcher_root="$work/project"
-mkdir -p "$launcher_root/apps/gpui/ios/host"
-cp "$root/apps/gpui/ios/run-sim" "$launcher_root/apps/gpui/ios/run-sim"
-cp "$root/apps/gpui/ios/host/project.yml" "$launcher_root/apps/gpui/ios/host/project.yml"
 cat > "$work/bin/cargo" <<'EOF'
 #!/bin/bash
 if [ "$IPHONEOS_DEPLOYMENT_TARGET" != 27.0 ]; then echo 'wrong iOS deployment target' >&2; exit 66; fi
@@ -144,6 +154,8 @@ run run-sim --smoke
 export TEST_XCODE_STATUS=0
 run run-sim --smoke
 [ "$status" -eq 0 ] || { echo "FAIL: successful smoke test failed: $output" >&2; exit 1; }
+grep -Fq -- 'cargo-hermetic build --locked --lib --target aarch64-apple-ios-sim' "$TEST_LOG"
+grep -Fq -- 'cargo-hermetic metadata --locked --no-deps --format-version 1' "$TEST_LOG"
 run run-sim --tap
 [ "$status" -eq 0 ] || { echo "FAIL: full touch suite failed: $output" >&2; exit 1; }
 grep -Fq -- '-only-testing:SjelIOSUITests ' "$TEST_LOG"

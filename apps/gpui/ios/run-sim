@@ -34,6 +34,7 @@ done
 command -v xcodegen >/dev/null || { echo "ios/run-sim: needs xcodegen (brew install xcodegen)" >&2; exit 1; }
 
 IOS_DIR="$(cd "$(dirname "$0")" && pwd)"
+root="$(cd "$IOS_DIR/../../.." && pwd)"
 HOST="$IOS_DIR/host"
 BUNDLE_ID="dev.sjel.ios"
 
@@ -74,8 +75,8 @@ xcrun swiftc -typecheck -sdk "$sdk" -target "arm64-apple-ios${IPHONEOS_DEPLOYMEN
 if $typecheck_only; then exit 0; fi
 
 # SJEL_IOS_FEATURES adds cargo features to the Rust library.
-(cd "$IOS_DIR" && sjel cargo build --locked --lib --target aarch64-apple-ios-sim ${SJEL_IOS_FEATURES:+--features "$SJEL_IOS_FEATURES"})
-target_dir="$(cd "$IOS_DIR" && sjel cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
+(cd "$IOS_DIR" && "$root/tools/cargo-hermetic" build --locked --lib --target aarch64-apple-ios-sim ${SJEL_IOS_FEATURES:+--features "$SJEL_IOS_FEATURES"})
+target_dir="$(cd "$IOS_DIR" && "$root/tools/cargo-hermetic" metadata --locked --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
 rust_lib="$target_dir/aarch64-apple-ios-sim/debug/libsjel_gpui_ios.a"
 
 mkdir -p "$HOST/build"

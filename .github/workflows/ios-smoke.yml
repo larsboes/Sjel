@@ -48,6 +48,7 @@ jobs:
       - name: Render Documents and Mail
         env:
           SJEL_IOS_RESULTS: ${{ runner.temp }}/ios-smoke
+          SJEL_ALLOW_LOCAL_BUILD: "1"
         run: apps/gpui/ios/run-sim --smoke
       - name: Retain screenshots and test results
         if: always()

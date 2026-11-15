@@ -639,5 +639,16 @@ mod tests {
             .map(|index| refs[index].title.as_str())
             .collect();
         assert_eq!(found, ["Anna notes", "Call Anna"]);
+        let ranked = search::rank("notes/n.md", &refs, |hit| {
+            (hit.title.as_str(), vec![hit.detail.as_str(), hit.kind])
+        });
+        assert_eq!(ranked.len(), 1);
+        let note = refs[ranked[0]];
+        assert_eq!(note.detail, "Atlas/Notes/n.md");
+        assert!(matches!(
+            &note.open,
+            Open::Record { project, path }
+                if project == "Atlas" && path == &note.detail
+        ));
     }
 }

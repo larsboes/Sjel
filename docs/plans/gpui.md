@@ -982,24 +982,23 @@ A view never calls a write route. A write reaches the user only as a proposal, w
 the capability's existing write mode. A cloud model gets only the schema and pseudonymized
 examples. Mail or feed text inside a view is rendered as text and never interpreted.
 
+Shipped: generic Mac object lists, properties and relation navigation (`2029238f`), with layout
+and focus corrections (`2161a596`). Installed `627805fd` passed live light/dark Projects reads,
+property opening, relation navigation and focus checks through the proxy
+([`data.md`](data.md#registry-derived-project-views)).
+
 Open, in order:
 
-1. Generic Mac object lists, properties and read-only relation navigation shipped in `2029238f`.
-   Projects opens through Browse objects and `sjel://objects/projects`; the proxy exposes
-   discovery for API-only services. Three registry tests, two headless pointer/loading tests,
-   deep-link tests and 15 proxy tests pass. The Mac build and focused Clippy pass with unrelated
-   warnings. The installed `627805fd` app loads Projects, opens properties, follows Records
-   and opens a related record through the live proxy
-   ([`data.md`](data.md#registry-derived-project-views)). Layout and focus corrections shipped
-   in `2161a596`: tables have object-specific state and explicit column widths; property pages
-   retain focus. Live light/dark retests verify title-first relation columns and enabled Go
-   navigation after opening a row. At 1040 × 720 visible headings remain separate; reaching
-   offscreen registry columns by horizontal gesture remains unverified.
+1. Mac acceptance: reach offscreen registry columns by horizontal gesture at 1040 × 720.
+   Visible headings remain separate at that size; horizontal gesture acceptance has not run.
 2. The same views on the phone as NSH screens, fed from the local copy. The existing replica
    readers omit classification metadata; extend their read contract before supplying registry
    projections, preserving object identity and class rather than inventing defaults.
-3. Saved views. A model composes a view once and it reloads without a model after an app
+
+Saved and live views follow Priority 1 under [`PLAN.md`](../../PLAN.md#priority-3-agent-features-and-expansion):
+
+1. Saved views. A model composes a view once and it reloads without a model after an app
    restart.
-4. Live views inside the app's agent panel.
-5. The view document format. Candidates: A2UI behind an adapter, and OpenUI Lang
+2. Live views inside the app's agent panel.
+3. The view document format. Candidates: A2UI behind an adapter, and OpenUI Lang
    (`open-intelligent-ui` in `upstreams.toml`). Not chosen. Neither has been read for this item.

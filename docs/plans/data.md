@@ -12,10 +12,8 @@ the next six-hour pass. TLS and unclassified request failures remain visible as 
 Registry-derived MCP metadata and TypeScript read contracts with freshness verification shipped
 through `a5942b22` ([`route-manifest`](../../crates/route-manifest/README.md#typescript-read-contracts)).
 
-Verification: 15 route-manifest and projects-api tests pass with default JSON maps and with
-`serde_json/preserve_order`. Generated object fields use canonical order in both configurations.
-Focused Clippy and strict TypeScript compilation pass. The regression covers property order at
-each nesting level. Live governed MCP reads with real data did not run.
+Open acceptance: live governed MCP reads with real data have not run. The generated-contract
+freshness test and route-manifest suite pass (15 tests).
 The Mac and phone derived-view acceptance stays in [`gpui.md` §11](gpui.md#derived-views).
 
 ## Private project delivery workflows

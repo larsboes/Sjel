@@ -17,7 +17,8 @@ belong to [`tooling.md`](docs/plans/tooling.md). Diagnose a stale receipt before
 Code unification, cleanup, precision and less repeated work precede agent features. The
 [maintenance review](research/plan-maintenance-review.md) records the evidence and candidate
 tools. The first four items build the shape in the [product page](docs/product.md).
-Finish them before any other framework or surface is introduced.
+Finish their remaining work before any other framework or surface is introduced. The linked
+area plans distinguish shipped implementation, outstanding acceptance and undecided scope.
 
 1. One registry. A capability declares its object types, properties with data class, links and
    actions in its manifest, and `route-manifest` carries a response schema for every read route.

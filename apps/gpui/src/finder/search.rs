@@ -166,7 +166,7 @@ pub(super) fn record_hits(
     });
     let notes = notes.into_iter().map(|note| Hit {
         kind: "note",
-        detail: note.project.clone(),
+        detail: note.path.clone(),
         open: Open::Record {
             project: note.project.clone(),
             path: note.path.clone(),

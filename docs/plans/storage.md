@@ -152,32 +152,31 @@ about the expanded archive refers to the whole archive, not this filtered intake
 
 ### One vault for prose
 
-Prose lives in one folder of Markdown files, and the files are the authority for their text.
-Obsidian is one editor for them, and the Sjel app can carry another ([product page](../product.md#the-vault)). Typed facts stay in Sjel's
-stores. Open, in order:
+The Markdown files in `<overlay>/data/projects/` are the authority for project prose; the
+Obsidian vault holds learning only ([Projects](../../crates/projects/README.md#why-this-shape-files-and-their-index),
+`77c41b4c`). Typed facts stay in Sjel's stores.
 
-1. Folder floors: done. `<overlay>/config/vault-classes.json` raises the built-in floors
-   (`content_item::VaultFloors`), and both `vault class` and the `projects` index read it. The
-   `projects` index refuses a file whose `class` is invalid or below its floor and keeps the
-   previous row. Domain records now answer to their own floor: the 7 `Atlas/Finance` notes in
-   `projects` had classified as c1 under a `Projects/` prefix.
-2. Files as the authority in `crates/projects`: done. Writes go file first and refuse over bytes
-   the index has not seen; `projects reindex` adopts outside edits, runs before every CLI command
-   and every 10 seconds in the server. The live cutover on 2026-11-15 adopted two Hearth notes
-   edited outside Sjel on 2026-11-08, which `projects render` would have overwritten. The tree
-   stays in `<overlay>/data/projects/` as the prose folder; it does not move into the Obsidian
-   vault, which holds learning only (decided 2026-11-15).
-3. Cloud-harness isolation. Contained ring: proven. Every contained harness starts through
-   `sjel-contain`, and `a_contained_run_cannot_read_a_c2_folder` reads a c2 file under the
-   overlay's `data/` and a vault `Atlas/People` note through it and is refused, while pi's prepared
-   home stays writable; `the_pi_wrapper_opens_no_overlay_data` pins that wrapper's opened
-   directories (`crates/containment/tests/containment.rs`). Trusted ring (Claude Code, Codex):
-   open, and the owner's call. [`containment.md`](containment.md#1-the-rule) keeps the overlay
-   readable to that ring (C1, amended 2026-11-04), which this item would reverse.
-4. A Sjel search returns the path of a matching note.
+Shipped:
 
-The table records what an earlier pass moved out of the vault. Rows marked done stay as they
-are. Only prose returns to the vault.
+- File authority, external-edit adoption and configurable classification floors: `0cd23b7f`.
+- Contained-harness refusal of private folders and pi wrapper isolation: `48a65349`.
+
+Open, in order:
+
+1. Trusted-harness policy. Claude Code and Codex retain direct overlay access under
+   [`containment.md`](containment.md#1-the-rule). Removing that access requires an explicit
+   product decision; contained-ring isolation does not establish trusted-ring isolation.
+2. Note-path search acceptance. The Mac Finder displays and searches each note's relative
+   Markdown path (`apps/gpui/src/finder/search.rs::record_hits`). Done when an installed-app
+   search by title and by path displays the path and opens that note. Installed-app acceptance
+   has not run; this change does not add body search or a status-server note source.
+
+Verification: eight Projects store tests and two Finder tests pass, including external-edit
+adoption, class-floor refusal and path-based note lookup. Full-workspace and phone checks have
+not run in this pass.
+
+The table records earlier vault migrations. Completed domain moves remain in place; the
+Projects prose tree stays separate from the learning vault.
 
 | Component | State |
 |---|---|

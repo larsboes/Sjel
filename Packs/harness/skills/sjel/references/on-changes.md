@@ -51,6 +51,22 @@ That branch is its work branch: the session opens a draft PR from it rather than
 - Run the proportionate checks in `references/on-verification.md`.
 - Never rewrite history on a branch another session or the user works on.
 
+## Hand off unfinished work
+
+Do these steps when a session stops with work open, or when the user asks for a handoff:
+
+1. Write the durable part into the area plan first: decisions, work that is built, work that is
+   open, and checks that did not run. The prompt points at the plan. It does not repeat it.
+2. Put only the volatile part into the prompt: commits that are not pushed, the state of the
+   build, files that another session holds, and the first question for the user.
+3. Queue the prompt with `comms prompts add --title "Sjel handoff: <area> (<date>)"`, and pass
+   the body on stdin. If `comms` is not on `PATH`, use `target/debug/comms`. Confirm the
+   `queued draft <id>` receipt. The user copies the prompt from Today ("Prompts for you") into
+   the next session.
+4. If the outbox is not available, show the prompt in one code block and say why.
+
+Keep handoff prompts out of tracked files.
+
 ## When an issue is still worth filing
 
 Only when something must outlive the change itself: a defect being left unfixed, a decision that

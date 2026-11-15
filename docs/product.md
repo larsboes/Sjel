@@ -59,7 +59,7 @@ Three examples under this rule:
   builds it. Hotel and train search stay with the booking sites.
 
 A capability that fails the rule shrinks to a connector or a link. The audit of the existing
-capabilities against this rule is open work.
+capabilities and its remaining reductions live in the [product plan](plans/product.md).
 
 ## Principles
 

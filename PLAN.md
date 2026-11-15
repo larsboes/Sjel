@@ -33,6 +33,7 @@ Finish them before any other framework or surface is introduced.
 4. Audit every capability against the build rule in the
    [product page](docs/product.md#what-sjel-builds-ingests-and-links-to): build,
    ingest or link out. A capability that fails the rule shrinks to a connector or a link.
+   Findings and remaining reductions: [`product.md`](docs/plans/product.md).
 5. Reconcile plans with source: remove shipped detail, repair stale paths, keep one owner per
    open item, and distinguish implemented work from outstanding live acceptance.
 6. Finish shared API contracts and remove remaining client copies and adapters

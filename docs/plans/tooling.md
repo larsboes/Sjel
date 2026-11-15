@@ -10,13 +10,14 @@ covers it.
 
 ## Diagnostic binaries against the active deployment
 
-- **Stream reviewed evaluation sources through their owning capability.** The pilot supplies
-  admitted, pseudonymized mail bodies to the evaluator on stdin from MCP reads. A new token
-  representation changes the input fingerprint and requires a fresh review. Add a bounded,
-  capability-owned source adapter that resolves frozen message references, rechecks whole-message
-  classification and streams eligible text directly to local evaluation. Done when a fresh
-  session can replay the same labels without temporary body files or agent access to raw stores,
-  and stale sources or stricter classification fail closed before inference.
+- **Accept native evaluation replay on the active deployment.** Owner-only native freeze/run
+  endpoints shipped in `45e3aa48`; ten synthetic adapter tests cover fresh reads, changed inputs,
+  whole-thread classification, context drift and model-free evaluation. The existing capability
+  caller can submit metadata-only request files. Live owner-run review/replay remains unverified;
+  it needs fresh native labels, not converted session pseudonyms. Done when separate owner
+  sessions replay the same labels without temporary body files or agent access to raw stores,
+  and stale inputs or stricter classification refuse extraction. Acceptance is owned by
+  [the data plan](data.md#mail-evidence-semantics-and-resolution).
 - **Run a newly built read-only evaluator against the active overlay.** `sjel cargo run`
   correctly substitutes hermetic test state, so it cannot freeze private labels into the active
   overlay or resolve the deployed inference roles. The mail-evidence evaluation built through

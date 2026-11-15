@@ -37,6 +37,14 @@ Strict purchase-section parsing, rules-only scanning/evaluation and bounded Inve
 resolution shipped in `29f6c2c9` ([contracts](../capabilities/mail-evidence.md)).
 Reviewed scoped aliases, product/physical identity separation and retained revocations shipped
 in `1da10eb6` ([alias contract](../capabilities/mail-evidence.md#reviewed-aliases)).
+Owner-only native message freeze/replay, classification rechecks and rules-default evaluation
+shipped in `45e3aa48` ([native evaluation](../capabilities/mail-evidence.md#native-message-evaluation)).
+
+Native adapter verification: 536 Comms tests, including ten adapter tests, all-target Clippy,
+route-schema, documentation-link, publication, store-transaction and self-model checks passed.
+Live deployment, owner-run native review/replay, AFM admission and production chunking acceptance
+did not run. Full workspace tests did not run. Doctor retains one unrelated failure; architecture
+freshness fails on unrelated database-service and coding-Pack descriptions.
 
 Remaining work, in order:
 
@@ -57,9 +65,11 @@ Remaining work, in order:
    checks but failed shared model admission (`model_admission`). No AFM accuracy result exists. Diagnose
    that gate through the owning capability without bypassing it. Add human review,
    project assignments, English physical-purchase positives and actual physical returns before
-   broader acceptance. The English additions are negative cases. A native
-   per-message source adapter remains necessary for production classification/chunking coverage
-   and repeatability across pseudonymization sessions. Done when a repeatable local run reports
+   broader acceptance. The English additions are negative cases. Deploy and exercise the native
+   adapter from an owner context with fresh independent labels; the pseudonymized pilot cannot
+   be silently converted. Its synthetic fresh-read tests establish repeatability without model
+   access, but live classification, AFM admission and chunking acceptance remain open. Done when
+   a repeatable local run reports
    false claims, missed claims, incorrect targets and duplicates with provenance and no retained
    full bodies. A first small baseline does not set an acceptance threshold.
 2. **Integrate reviewed identities into the source and review workflow.** Canonical references

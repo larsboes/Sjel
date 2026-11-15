@@ -266,6 +266,17 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
         };
         return Some(Target::Docs(slug.to_owned()));
     }
+    if let Some(capability) = path_only.strip_prefix("/objects/") {
+        if capability.is_empty()
+            || !capability
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-')
+            || path != path_only
+        {
+            return None;
+        }
+        return Some(Target::Record(format!("registry:{capability}")));
+    }
     if path_only == "/record" {
         let id = reqwest::Url::parse(&format!("http://127.0.0.1{path}"))
             .ok()?
@@ -450,6 +461,12 @@ mod tests {
         assert_eq!(parse_deep_link("sjel://terminal"), Some(Target::Terminal));
         assert_eq!(parse_deep_link("sjel://terminal/"), Some(Target::Terminal));
         assert_eq!(parse_deep_link("sjel://../etc"), None);
+        assert_eq!(
+            parse_deep_link("sjel://objects/projects"),
+            Some(Target::Record("registry:projects".into()))
+        );
+        assert_eq!(parse_deep_link("sjel://objects/projects?write=true"), None);
+        assert_eq!(parse_deep_link("sjel://objects/projects/extra"), None);
         assert_eq!(parse_deep_link("https://calendar"), None);
         for page in Page::ALL {
             assert_eq!(

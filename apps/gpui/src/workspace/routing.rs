@@ -429,7 +429,30 @@ impl Workspace {
             Page::Projects => {
                 self.projects
                     .update(cx, |projects, cx| projects.set_palette(palette, cx));
-                self.projects.clone().into_any_element()
+                gpui_kit::div()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        sjel_gpui_ui::ely::buttons::Button::new(
+                            "projects-registry",
+                            "Browse objects",
+                        )
+                        .variant(sjel_gpui_ui::ely::buttons::ButtonVariant::Ghost)
+                        .on_click(cx.listener(|workspace, _, _, cx| {
+                            workspace.go(Page::Record, cx);
+                            workspace.ensure_record_page(cx).update(cx, |page, cx| {
+                                page.open("registry:projects".into(), cx);
+                            });
+                        })),
+                    )
+                    .child(
+                        gpui_kit::div()
+                            .flex_1()
+                            .min_h_0()
+                            .child(self.projects.clone()),
+                    )
+                    .into_any_element()
             }
             Page::Travel => {
                 self.travel.update(cx, |travel, cx| {

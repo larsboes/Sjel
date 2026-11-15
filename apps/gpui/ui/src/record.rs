@@ -8,10 +8,13 @@ use crate::data::{self, Remote, Repo};
 use crate::primitives::{card, note, placeholder, section};
 use crate::theme::ThemeContext;
 
+mod registry;
+
 pub struct RecordPage {
     repo: Repo,
     id: String,
     detail: Remote<View>,
+    registry: Option<gpui_kit::Entity<registry::RegistryPage>>,
 }
 
 impl RecordPage {
@@ -20,10 +23,19 @@ impl RecordPage {
             repo,
             id: String::new(),
             detail: Remote::default(),
+            registry: None,
         }
     }
 
     pub fn open(&mut self, id: String, cx: &mut Context<Self>) {
+        if let Some(capability) = id.strip_prefix("registry:") {
+            let repo = self.repo.clone();
+            let capability = capability.to_owned();
+            self.registry = Some(cx.new(|cx| registry::RegistryPage::new(repo, capability, cx)));
+            cx.notify();
+            return;
+        }
+        self.registry = None;
         self.id = id;
         self.detail = Remote::default();
         self.load(cx);
@@ -44,6 +56,9 @@ impl RecordPage {
 
 impl Render for RecordPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(registry) = &self.registry {
+            return registry.clone().into_any_element();
+        }
         let palette = ThemeContext::of(window, cx).palette;
         let Some(view) = self.detail.value.as_ref() else {
             let body = match (&self.detail.error, self.detail.loading) {

@@ -172,6 +172,15 @@ impl Proxy {
                 inject_comms_auth: comms,
                 capability: svc.name.clone(),
             });
+            if svc.proxy_api_only == "true" {
+                routes.push(Route {
+                    prefix: format!("/{}/routes", svc.name),
+                    target: target.clone(),
+                    strip: Some(format!("/{}", svc.name)),
+                    inject_comms_auth: comms,
+                    capability: svc.name.clone(),
+                });
+            }
             for extra in &svc.proxy_extra {
                 routes.push(Route {
                     prefix: extra.clone(),
@@ -484,9 +493,19 @@ mod tests {
     #[test]
     fn api_only_mounts_deeper_than_it_strips() {
         let t = table(&[svc("finance", "8090", true, &[])]);
-        let r = &t[0];
+        let r = t
+            .iter()
+            .find(|route| route.prefix == "/finance/api")
+            .unwrap();
         assert_eq!(r.prefix, "/finance/api");
         assert_eq!(r.strip.as_deref(), Some("/finance"));
+        let discovery = t
+            .iter()
+            .find(|route| route.prefix == "/finance/routes")
+            .unwrap();
+        assert_eq!(discovery.strip.as_deref(), Some("/finance"));
+        assert_eq!(discovery.target, r.target);
+        assert!(!matches("/finance/routes-other", &discovery.prefix));
     }
 
     /// A `proxy_extra` prefix is a path that predates the uniform rule, so it passes through

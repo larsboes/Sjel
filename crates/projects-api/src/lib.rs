@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 
 pub mod reads;
 pub mod registry;
+/// Shared discovery types used by clients of the object registry.
+pub use route_manifest;
 
 // ============================================================================
 // Route Constants

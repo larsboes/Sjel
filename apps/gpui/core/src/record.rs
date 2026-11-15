@@ -5,6 +5,8 @@ use serde::Deserialize;
 
 use crate::shell::{CalendarEntry, CalendarEntryDetail, Shell, ShellError, ShellResult};
 
+pub mod registry;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Basis {
     Reference,

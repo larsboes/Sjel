@@ -164,9 +164,9 @@ stores. Open, in order:
 2. Files as the authority in `crates/projects`: done. Writes go file first and refuse over bytes
    the index has not seen; `projects reindex` adopts outside edits, runs before every CLI command
    and every 10 seconds in the server. The live cutover on 2026-11-15 adopted two Hearth notes
-   edited outside Sjel on 2026-11-08, which `projects render` would have overwritten. Not done:
-   moving the tree into the vault. That conflicts with the 2026-11-08 ruling that the vault
-   holds learning only, so the owner decides which folder is "the vault" first.
+   edited outside Sjel on 2026-11-08, which `projects render` would have overwritten. The tree
+   stays in `<overlay>/data/projects/` as the prose folder; it does not move into the Obsidian
+   vault, which holds learning only (decided 2026-11-15).
 3. Cloud-harness isolation. Contained ring: proven. Every contained harness starts through
    `sjel-contain`, and `a_contained_run_cannot_read_a_c2_folder` reads a c2 file under the
    overlay's `data/` and a vault `Atlas/People` note through it and is refused, while pi's prepared
@@ -356,8 +356,9 @@ Open:
    capability has about 270 failed attempts and 5 or fewer successes: runs land only while the
    external drive is attached. Run rows do not record whether the timer or a person started
    them, so "scheduled success" rests on timing (successes 30 minutes after a failure on
-   2026-11-05 and 2026-11-09). Open: why the timer was off from 2026-10-22, and a `trigger`
-   column on runs.
+   2026-11-05 and 2026-11-09). The external drive stays the only target (decided 2026-11-15); a
+   backup lands when it is attached. Open: why the timer was off from 2026-10-22, and a
+   `trigger` column on runs.
 2. **Live run inspection.** Backup status/history commands and new-receipt enforcement shipped
    in `4fa41461`. The agent token now reads `GET /backups`, `/backup/targets` and
    `/backup/runs` on `sjel-status` and nothing else there: `AgentRoutes::only` closes every

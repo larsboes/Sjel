@@ -47,6 +47,12 @@ async fn health() -> &'static str {
 /// What this capability answers. `route_manifest::undeclared_routes` reads the router from this
 /// source and fails when a route is missing here.
 const ROUTES: &[route_manifest::Route] = &[
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/items/resolve",
+        summary: "Resolve an item reference or retrieve review-only title candidates. Never changes inventory.",
+        request_schema: Some(route_manifest::schema_of::<inventory_api::resolution::ResolveRequest>),
+    },
     r("GET", "/", "Every entry as a page, rendered from the rows."),
     r("GET", "/health", "Liveness."),
     r("GET", "/routes", "This catalogue."),
@@ -824,6 +830,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/inventory", get(api_inventory))
         .route("/api/item-refs/{reference}", get(api_item_ref))
         .route(
+            "/api/items/resolve",
+            post(crate::resolution::resolve).layer(axum::extract::DefaultBodyLimit::max(2048)),
+        )
+        .route(
             "/api/mail-proposals",
             get(crate::mail_proposals::list)
                 .post(crate::mail_proposals::stage)
@@ -871,6 +881,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
     sjel_server::agent_policy::AgentRoutes {
         closed: &[
+            ("POST", "/api/items/resolve"),
             ("GET", "/api/mail-proposals"),
             ("GET", "/api/item-refs/{reference}"),
             ("GET", "/api/items/{id}/mail-match-snapshot"),
@@ -901,6 +912,7 @@ mod route_manifest_tests {
     #[test]
     fn mail_routes_are_closed_to_agent_tokens() {
         for (method, path) in [
+            ("POST", "/api/items/resolve"),
             ("GET", "/api/mail-proposals"),
             ("GET", "/api/item-refs/inv:61"),
             ("POST", "/api/mail-proposals"),

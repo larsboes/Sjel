@@ -31,6 +31,8 @@ pub struct ScanReport {
     pub inventory_staged: usize,
     pub projects_staged: usize,
     pub already_staged: usize,
+    pub structured_messages: usize,
+    pub rule_abstentions: usize,
     /// Model rows dropped for breaking a rule, by rule. Their siblings still stage.
     pub dropped_rows: BTreeMap<&'static str, usize>,
     pub failure_stages: BTreeMap<&'static str, usize>,
@@ -384,6 +386,7 @@ fn withdraw(owners: [(&reqwest::blocking::Client, &str); 2], thread: &str) -> Re
 /// must be a literal HTTP loopback origin. `role` names an inference role, else
 /// [`DEFAULT_ROLE`]; it must resolve to AFM and declare
 /// `max_input_tokens`. Retry failed IDs; owner writes are idempotent.
+/// `rules_only` skips role resolution and project extraction.
 /// Runs blocking I/O and must not be called on an async executor thread.
 pub fn scan(
     runtime: &sjel_runtime::Status,
@@ -391,6 +394,7 @@ pub fn scan(
     inventory_base_url: &str,
     role: Option<&str>,
     show: bool,
+    rules_only: bool,
     ids: &[String],
 ) -> ScanReport {
     let mut report = ScanReport::default();
@@ -409,12 +413,18 @@ pub fn scan(
         let inventory_client =
             client(cfg.inventory_context.timeout_ms).map_err(|_| "owner_config")?;
         let client = client(cfg.projects_context.timeout_ms).map_err(|_| "owner_config")?;
-        let role = match role {
-            Some(name) => cfg.inference.role(name),
-            None => cfg.inference.role(DEFAULT_ROLE),
-        }
-        .filter(|r| r.is_afm() && r.max_input_tokens.is_some())
-        .ok_or("afm_config")?;
+        let role = if rules_only {
+            None
+        } else {
+            Some(
+                match role {
+                    Some(name) => cfg.inference.role(name),
+                    None => cfg.inference.role(DEFAULT_ROLE),
+                }
+                .filter(|r| r.is_afm() && r.max_input_tokens.is_some())
+                .ok_or("afm_config")?,
+            )
+        };
         let store = Store::open(&cfg.database_path).map_err(|_| "store")?;
         Ok((
             inventory,
@@ -447,7 +457,7 @@ pub fn scan(
         Err(()) => report.fail(id, "withdraw"),
     };
     let mut token = None;
-    let mut names = None;
+    let mut names = rules_only.then(Vec::new);
     for id in ids {
         report.considered += 1;
         let item = match store.get_triage(id) {
@@ -518,7 +528,32 @@ pub fn scan(
             };
             // The whole body is classified above; a piece only has to fit the model window.
             'stages: for stage in [Stage::Inventory, Stage::Projects] {
-                for text in chunks(&message.text, chunk_budget(stage, class, names, &role)) {
+                if stage == Stage::Inventory && message.text.len() <= mail_evidence::MAX_MAIL_BYTES
+                {
+                    match crate::purchase_sections::extract(&source, class, &message.text) {
+                        Ok(Some(parsed)) => {
+                            pending.extend(parsed.proposals.into_iter().map(|p| (stage, p)));
+                            report.structured_messages += 1;
+                            continue 'stages;
+                        }
+                        Ok(None) => {}
+                        Err(_) => {
+                            failure = Some("structured_extraction");
+                            break 'stages;
+                        }
+                    }
+                }
+                if stage == Stage::Inventory {
+                    report.rule_abstentions += 1;
+                }
+                if rules_only {
+                    continue 'stages;
+                }
+                let Some(role) = role.as_ref() else {
+                    failure = Some("afm_config");
+                    break 'stages;
+                };
+                for text in chunks(&message.text, chunk_budget(stage, class, names, role)) {
                     let extraction = Extraction {
                         stage,
                         class,
@@ -526,7 +561,7 @@ pub fn scan(
                         source: &source,
                         show,
                     };
-                    match model(runtime, cfg, &role, &extraction, names) {
+                    match model(runtime, cfg, role, &extraction, names) {
                         Ok(parsed) => {
                             for rule in parsed.dropped {
                                 *report.dropped_rows.entry(rule).or_default() += 1;
@@ -645,6 +680,29 @@ fn body_failure_stage(error: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rules_only_scan_reaches_source_lookup_without_any_inference_role() {
+        let mut cfg = Config::load();
+        cfg.inference = Default::default();
+        cfg.projects_context.base_url = "http://127.0.0.1:9".into();
+        cfg.database_path =
+            std::env::temp_dir().join(format!("comms-rules-only-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&cfg.database_path);
+        let report = scan(
+            &sjel_runtime::Status::unresolved("no model admission"),
+            &cfg,
+            "http://127.0.0.1:9",
+            None,
+            false,
+            true,
+            &["missing".into()],
+        );
+        assert_eq!(report.considered, 1);
+        assert_eq!(report.failure_stages.get("store"), Some(&1));
+        assert!(!report.failure_stages.contains_key("afm_config"));
+        std::fs::remove_file(&cfg.database_path).unwrap();
+    }
 
     #[test]
     fn non_afm_generation_is_refused_before_network_or_gate_access() {

@@ -88,7 +88,11 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
         let sources: Vec<Source> =
             serde_json::from_str(&input).map_err(|_| "invalid source JSON")?;
         let cfg = comms::config::Config::load();
-        let runtime = sjel_runtime::current().map_err(|_| "runtime unavailable")?;
+        let runtime = if args[3] == "rules" {
+            sjel_runtime::Status::normal("rules-only-evaluation")
+        } else {
+            sjel_runtime::current().map_err(|_| "runtime unavailable")?
+        };
         let report = mail_evidence_eval::run(&corpus, &sources, &cfg, &runtime, &args[3])?;
         private_write(Path::new(&args[2]), &report)?;
         println!("{}", serde_json::to_string_pretty(&report)?);

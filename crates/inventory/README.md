@@ -11,6 +11,8 @@ Wish groups keep alternatives and shared needs together. Their comparison uses e
 Mail-derived evidence is staged as a proposal. It cannot change inventory until reviewed, and C2 proposals cannot create item records.
 The shared [mail evidence contract](../../docs/capabilities/mail-evidence.md) defines purchase
 events, source claims and reviewed identity links.
+The [deterministic resolver](../../docs/capabilities/mail-evidence.md#deterministic-item-resolution)
+retrieves bounded review candidates without a model or additional stored state.
 
 ## Run
 

@@ -6,6 +6,8 @@
 [reviewed local evaluator](../../../docs/capabilities/mail-evidence.md#reviewed-local-evaluation)
 freezes private labels and measures local model predictions without storing message bodies or
 staging owner changes. It evaluates purchase claims separately from the triage categories below.
+The `rules` selector measures the Sjel-owned section parser against those same labels without
+calling a model. Unsupported layouts remain explicit abstentions and count toward missed claims.
 
 ## Not here: the OCR engine gate
 

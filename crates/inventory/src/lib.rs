@@ -11,4 +11,5 @@ pub mod identity;
 pub mod import;
 pub mod intake;
 mod mail_proposals;
+mod resolution;
 pub mod store;

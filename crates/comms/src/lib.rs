@@ -44,6 +44,7 @@ pub mod media;
 pub mod normalize;
 pub mod people_registry;
 pub mod provenance;
+pub mod purchase_sections;
 pub mod quality;
 pub mod quiet;
 pub mod redaction_eval;

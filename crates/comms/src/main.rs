@@ -95,6 +95,7 @@ fn print_help() {
     println!("                                  comms.json.");
     println!("       [--role NAME]              a loopback inference role with max_input_tokens;");
     println!("                                  AFM only; default role summarization_light.");
+    println!("       [--rules-only]             supported inventory sections only; no model or project extraction.");
     println!("       [--show]                   also print each prompted mail text and the raw");
     println!("                                  model reply to stderr. Private content: for an");
     println!("                                  operator at the terminal only. c3 is never shown.");
@@ -1035,19 +1036,31 @@ fn cmd_mail_evidence(args: &[String], cfg: &Config) {
             "--inventory" | "--projects" | "--role" => {
                 rest.next();
             }
-            "--show" => {}
+            "--show" | "--rules-only" => {}
             id => ids.push(id.to_owned()),
         }
     }
     if !comms::mail_evidence_scan::valid_batch(&ids) {
-        eprintln!("error: usage: comms mail evidence <thread-id>... [--inventory URL] [--projects URL] [--role NAME]");
+        eprintln!("error: usage: comms mail evidence <thread-id>... [--inventory URL] [--projects URL] [--role NAME | --rules-only]");
         eprintln!("       1 to 50 unique provider IDs");
         std::process::exit(2);
     }
     let role = arg_after(args, "--role").map(String::as_str);
     let show = args.iter().any(|a| a == "--show");
-    let report =
-        comms::mail_evidence_scan::scan(&runtime_status(), &cfg, &inventory, role, show, &ids);
+    let rules_only = args.iter().any(|a| a == "--rules-only");
+    if rules_only && role.is_some() {
+        eprintln!("error: --rules-only cannot be combined with --role");
+        std::process::exit(2);
+    }
+    let report = comms::mail_evidence_scan::scan(
+        &runtime_status(),
+        &cfg,
+        &inventory,
+        role,
+        show,
+        rules_only,
+        &ids,
+    );
     println!(
         "{}",
         serde_json::to_string_pretty(&report).expect("report serializes")

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::api::AppState;
-use crate::store::Store;
+use crate::store::{item_snapshot, Store};
 
 type Error = (StatusCode, String);
 fn internal(e: impl std::fmt::Display) -> Error {
@@ -164,35 +164,6 @@ pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<serde_json:
         .collect::<Result<_, _>>()
         .map_err(internal)?;
     Ok(Json(serde_json::json!({"proposals": proposals})))
-}
-
-#[derive(Serialize)]
-struct ItemSnapshot {
-    item_id: String,
-    title: String,
-    item_revision: i64,
-    state: Option<String>,
-    state_id: Option<i64>,
-}
-
-fn item_snapshot(conn: &rusqlite::Connection, id: &str) -> rusqlite::Result<Option<ItemSnapshot>> {
-    conn.query_row(
-        "SELECT i.id, i.label, i.revision, s.state, s.id FROM inventory_item i
-         LEFT JOIN inventory_item_state s ON s.id = (SELECT id FROM inventory_item_state
-             WHERE item_id = i.id ORDER BY since DESC, id DESC LIMIT 1)
-         WHERE i.id = ?1",
-        [id],
-        |row| {
-            Ok(ItemSnapshot {
-                item_id: row.get(0)?,
-                title: row.get(1)?,
-                item_revision: row.get(2)?,
-                state: row.get(3)?,
-                state_id: row.get(4)?,
-            })
-        },
-    )
-    .optional()
 }
 
 pub async fn snapshot(

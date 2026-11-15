@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod mail_evidence;
+pub mod resolution;
 
 // ============================================================================
 // Route Constants
@@ -16,6 +17,7 @@ pub const ROUTE_ITEM_REFS: &str = "/api/item-refs/{reference}";
 pub const ROUTE_MAIL_PROPOSALS: &str = "/api/mail-proposals";
 pub const ROUTE_MAIL_PROPOSAL_DECISION: &str = "/api/mail-proposals/{id}/decision";
 pub const ROUTE_MAIL_MATCH_SNAPSHOT: &str = "/api/items/{id}/mail-match-snapshot";
+pub const ROUTE_RESOLVE: &str = "/api/items/resolve";
 pub const ROUTE_ITEMS: &str = "/api/items";
 pub const ROUTE_ITEM_BY_ID: &str = "/api/items/{id}";
 pub const ROUTE_ITEM_STATE: &str = "/api/items/{id}/state";

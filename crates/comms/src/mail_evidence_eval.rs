@@ -191,6 +191,7 @@ pub fn freeze(review: Review) -> Result<Corpus, &'static str> {
 /// Separate error counts; source text and predicted labels never enter the report.
 #[derive(Default, Debug, Serialize)]
 pub struct Counts {
+    pub abstained: bool,
     pub scored: usize,
     pub expected_claims: usize,
     pub expected_project_claims: usize,
@@ -336,12 +337,22 @@ pub fn run(
             })
             .collect::<Result<Vec<_>, _>>()?,
     })?;
-    let role = cfg
-        .inference
-        .role(role_name)
-        .filter(|r| r.is_afm() && r.max_input_tokens.is_some())
-        .ok_or("AFM role unavailable; other generative backends are not supported")?;
-    let conventions = serde_json::json!({"chat_template_kwargs":role.chat_template_kwargs,"request_overrides":role.request_overrides,"max_input_tokens":role.max_input_tokens});
+    let role = if role_name == "rules" {
+        None
+    } else {
+        Some(
+            cfg.inference
+                .role(role_name)
+                .filter(|r| r.is_afm() && r.max_input_tokens.is_some())
+                .ok_or("AFM role unavailable; other generative backends are not supported")?,
+        )
+    };
+    let conventions = match &role {
+        Some(role) => {
+            serde_json::json!({"chat_template_kwargs":role.chat_template_kwargs,"request_overrides":role.request_overrides,"max_input_tokens":role.max_input_tokens})
+        }
+        None => serde_json::json!({"adapter":crate::purchase_sections::REVISION}),
+    };
     let mut report = Report {
         corpus_hash: digest(&serde_json::to_string(corpus).map_err(|_| "invalid corpus")?),
         role: role_name.into(),
@@ -349,14 +360,24 @@ pub fn run(
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|_| "clock unavailable")?
             .as_secs(),
-        extraction_version: mail_evidence::EXTRACTION_VERSION,
-        backend: role.backend_name.clone(),
-        model: role.model.clone(),
-        context_tokens: role.max_input_tokens,
+        extraction_version: if role.is_some() {
+            mail_evidence::EXTRACTION_VERSION
+        } else {
+            crate::purchase_sections::REVISION
+        },
+        backend: role
+            .as_ref()
+            .map(|r| r.backend_name.clone())
+            .unwrap_or_else(|| "sjel".into()),
+        model: role
+            .as_ref()
+            .map(|r| r.model.clone())
+            .unwrap_or_else(|| "none".into()),
+        context_tokens: role.as_ref().and_then(|r| r.max_input_tokens),
         conventions_hash: digest(&conventions.to_string()),
         initial_admission_failure: role
-            .runtime_admission_with(runtime)
-            .err()
+            .as_ref()
+            .and_then(|r| r.runtime_admission_with(runtime).err())
             .map(|e| e.to_string()),
         cases: BTreeMap::new(),
         failures: BTreeMap::new(),
@@ -373,7 +394,30 @@ pub fn run(
             source: &source.source_id,
             show: false,
         };
-        match crate::mail_evidence_scan::model(runtime, cfg, &role, &extraction, &source.projects) {
+        if role.is_none() {
+            let parsed = if source.stage == Stage::Inventory {
+                crate::purchase_sections::extract(
+                    &source.source_id,
+                    &source.data_class,
+                    &source.mail,
+                )
+                .map_err(|_| "invalid structured source")?
+            } else {
+                None
+            };
+            let abstained = parsed.is_none();
+            let parsed = parsed.unwrap_or(Parsed {
+                proposals: vec![],
+                dropped: vec![],
+                duplicates: 0,
+            });
+            let mut counts = score(&case.expected, &parsed);
+            counts.abstained = abstained;
+            report.cases.insert(case.id.clone(), counts);
+            continue;
+        }
+        let role = role.as_ref().ok_or("AFM role unavailable")?;
+        match crate::mail_evidence_scan::model(runtime, cfg, role, &extraction, &source.projects) {
             Ok(parsed) => {
                 report
                     .cases
@@ -539,6 +583,41 @@ mod tests {
             "missing",
         );
         assert_eq!(result.err(), Some("source changed since review"));
+    }
+
+    #[test]
+    fn rules_baseline_needs_no_model_or_runtime_admission_and_counts_abstentions() {
+        let mut supported = source();
+        supported.mail =
+            "Thank you for your purchase!\nOrder summary\nBlue mug × 1\n$12.00\nSubtotal".into();
+        let mut expected = label();
+        expected.evidence = "Blue mug × 1".into();
+        let mut unsupported = source();
+        unsupported.id = "case-2".into();
+        unsupported.source_id = "mail:v1:thread:other".into();
+        let mut r = review(supported.clone(), vec![expected]);
+        r.cases.push(ReviewedCase {
+            source: unsupported.clone(),
+            expected: vec![label()],
+        });
+        let corpus = freeze(r).unwrap();
+        let mut cfg = crate::config::Config::load();
+        cfg.inference = Default::default();
+        let report = run(
+            &corpus,
+            &[supported, unsupported],
+            &cfg,
+            &sjel_runtime::Status::unresolved("no runtime required"),
+            "rules",
+        )
+        .unwrap();
+        assert_eq!(report.backend, "sjel");
+        assert_eq!(report.model, "none");
+        assert!(report.failures.is_empty());
+        assert_eq!(report.cases["case-1"].correct_claims, 1);
+        assert!(!report.cases["case-1"].abstained);
+        assert!(report.cases["case-2"].abstained);
+        assert_eq!(report.cases["case-2"].missed_claims, 1);
     }
 
     #[test]

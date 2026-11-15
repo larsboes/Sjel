@@ -549,6 +549,35 @@ pub struct Store {
 
 type Error = Box<dyn std::error::Error>;
 
+pub(crate) const SNAPSHOT_SELECT: &str =
+    "SELECT i.id, i.label, i.revision, s.state, s.id FROM inventory_item i
+    LEFT JOIN inventory_item_state s ON s.id = (SELECT id FROM inventory_item_state
+        WHERE item_id = i.id ORDER BY since DESC, id DESC LIMIT 1)";
+
+pub(crate) fn read_snapshot(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<inventory_api::MailMatchSnapshot> {
+    Ok(inventory_api::MailMatchSnapshot {
+        item_id: row.get(0)?,
+        title: row.get(1)?,
+        item_revision: row.get(2)?,
+        state: row.get(3)?,
+        state_id: row.get(4)?,
+    })
+}
+
+pub(crate) fn item_snapshot(
+    conn: &Connection,
+    id: &str,
+) -> rusqlite::Result<Option<inventory_api::MailMatchSnapshot>> {
+    conn.query_row(
+        &format!("{SNAPSHOT_SELECT} WHERE i.id = ?1"),
+        [id],
+        read_snapshot,
+    )
+    .optional()
+}
+
 /// The prefix is interpolated into DDL, so it is validated instead of bound.
 fn validate_prefix(prefix: &str) -> Result<(), Error> {
     if !prefix

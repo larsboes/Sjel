@@ -30,6 +30,20 @@ AFM is the only generative backend admitted by this pipeline. The default role i
 Other local or hosted generators are refused before inference. AFM proposes grounded fields;
 Sjel owns parsing, normalization, validation, identity resolution and review decisions.
 
+Before generation, Comms tries the strict order/shipment section parser in
+[`purchase_sections`](../../crates/comms/src/purchase_sections.rs). It recognizes bounded German
+and English section frames and product rows with explicit quantities. Unknown rows, missing
+section boundaries, competing frames and duplicate excerpts cause the whole adapter to abstain.
+The excerpt retains quantity; a proposal remains one order line, with no inferred physical-item
+identity. Cancellation, return, delivery and arbitrary prose remain unsupported by this adapter.
+
+`comms mail evidence <thread-id>... --rules-only` stages only supported Inventory proposals.
+It resolves no model role, makes no generation calls and performs no project extraction.
+`structured_messages` and `rule_abstentions` expose coverage. Classification, source freshness,
+withdrawal and owner review checks still apply. Without this flag, unsupported input falls
+through to AFM; project evidence also uses AFM. A downstream failure still prevents that thread's
+handoff. The scheduled scan and HTTP replay remain disabled.
+
 The flow is source message → grounded proposal → owner review → record change or reviewed link.
 An order or shipment cannot create an owned item. Only a reviewed delivery may do so. A
 cancellation or return remains evidence for review; it does not change item state automatically.
@@ -41,7 +55,7 @@ Truth and correct attribution still require review. A separate delivery statemen
 travels as `claim`, rather than disappearing when the item title occurs in another paragraph.
 Both fields remain sensitive source excerpts. No full mail body is retained by this handoff.
 
-`extraction_version` identifies the prompt/parser contract. It is separate from the proposal's
+`extraction_version` identifies the prompt/parser or deterministic adapter contract. It is separate from the proposal's
 review `version`; it does not identify the inference backend or model. Legacy proposals omit
 the extraction revision and separate claim. Inventory migrates its existing table with nullable
 columns; Projects retains the optional field in its existing proposal payload.
@@ -55,6 +69,31 @@ The caller supplies classification and source identity. The model cannot select 
 is excluded before prompting. `c2` evidence stays local; Inventory refuses item creation from it
 because item records do not retain classification. Projects refuses evidence that would lower
 the destination's classification.
+
+## Deterministic item resolution
+
+Inventory owns `POST /api/items/resolve`, with the shared
+[`ResolveRequest`](../../crates/inventory-api/src/resolution.rs). Supply exactly one of
+`reference` (a canonical `inv:` reference) or `title` (a mention of at most 256 bytes).
+The operation reads current item/state snapshots and changes no record, proposal or link.
+It is closed to agent tokens, like the existing item-reference and mail-match reads.
+
+A reference resolves to `exact` only when that item exists; a missing reference is `unknown`.
+A title returns `ambiguous` whenever it retrieves candidates, including one identical label.
+An identical product name cannot establish which physical item a message concerns. No lexical
+result is promoted to an identity or an automatic link. A title with no shared token returns `unknown`.
+
+Candidate retrieval uses Unicode alphanumeric tokens, lowercase normalization and set overlap.
+`overlap_bp` is intersection divided by union in basis points, not a confidence probability.
+Reference results leave it null. `reason` distinguishes `reference`, `title_equal` and
+`token_overlap`; `shared_tokens` explains lexical results. Accents and model digits are retained.
+Results include `item_revision`, `state_id` and state for the existing guarded review decision.
+That decision rechecks the snapshot before applying a match.
+
+The implementation scans existing labels and retains at most ten candidates, ordered by score
+then item ID. `total_candidates` exposes truncation. It adds no table, embedding, learned state,
+dependency or service. Source-scoped keys and reviewed aliases remain separate work in the
+[data plan](../plans/data.md#mail-evidence-semantics-and-resolution).
 
 ## Verification
 
@@ -93,6 +132,10 @@ repository. Supply source text from an admitted source adapter without a tempora
 `run CORPUS REPORT ROLE` reads an array of the same sources on stdin. It validates every
 fingerprint before inference and refuses changed sources, classifications or project candidates.
 The role must resolve to AFM; use `summarization_light` on deployments that provide it.
+The reserved `rules` selector instead evaluates the strict section parser with no model or
+runtime admission dependency. It uses the same frozen inputs, labels and scoring. Unsupported
+cases set `abstained: true`; their expected claims still count as missed. This keeps a narrow
+parser's lack of coverage visible. AFM evaluation isolates the generative path for comparison.
 A pseudonymized source representation must be supplied identically on repeat runs; token changes
 require a fresh review and corpus. Pseudonymized thread bodies measure that representation,
 separately from production's raw per-message classification and chunking.

@@ -35,36 +35,42 @@ The body-free reviewed-label evaluator shipped in `2d88fe76`
 AFM-only mail dispatch and evaluation shipped in `7f21c12b`.
 Strict purchase-section parsing, rules-only scanning/evaluation and bounded Inventory candidate
 resolution shipped in `29f6c2c9` ([contracts](../capabilities/mail-evidence.md)).
+Reviewed scoped aliases, product/physical identity separation and retained revocations shipped
+in `1da10eb6` ([alias contract](../capabilities/mail-evidence.md#reviewed-aliases)).
 
 Remaining work, in order:
 
-1. **Broaden measured extraction coverage.** The private pilot has seven independently
-   agent-reviewed cases, five expected purchase claims and three negative cases. It covers an
-   order, shipment, cancellation, delivery, shipment preparation and a feedback request. Labels
+1. **Broaden measured extraction coverage.** The private pilot has twelve
+   agent-reviewed cases, seven expected purchase claims and six negative cases. It covers an
+   order, shipment, cancellation, delivery, shipment preparation, a feedback request, a rail
+   booking, a digital-service refund and marketing that uses the word “returns.” Labels
    were frozen before model output; they are not human ground truth. The source representation
    is pseudonymized `c1` thread bodies, supplied on stdin and never stored. Corpus and report
    files stay in the private overlay with mode `0600`. The `rules` baseline measured on
-   2026-11-15 found two of five expected claims, with zero false claims, three missed claims and
-   five case abstentions. It used no generation, embeddings or learned state. This is narrow
+   2026-11-15 found two of seven expected claims, with zero false claims, five missed claims and
+   ten case abstentions. Five new cases were labelled before prediction with the unchanged
+   parser; all five abstained. It used no generation, embeddings or learned state. This is narrow
    order/shipment coverage, not a broad accuracy result. Add independently reviewed formats
    before extending adapters; unsupported layouts must keep abstaining as a whole.
    Generation is AFM-only; other local and
-   hosted generators are excluded. AFM passes the profile and context checks on all seven cases
-   but fails shared model admission (`model_admission`). No accuracy result exists. Diagnose
+   hosted generators are excluded. The original seven-case AFM run passed profile and context
+   checks but failed shared model admission (`model_admission`). No AFM accuracy result exists. Diagnose
    that gate through the owning capability without bypassing it. Add human review,
-   project assignments, English cases and actual returns before broader acceptance. A native
+   project assignments, English physical-purchase positives and actual physical returns before
+   broader acceptance. The English additions are negative cases. A native
    per-message source adapter remains necessary for production classification/chunking coverage
    and repeatability across pseudonymization sessions. Done when a repeatable local run reports
    false claims, missed claims, incorrect targets and duplicates with provenance and no retained
    full bodies. A first small baseline does not set an acceptance threshold.
-2. **Complete reviewed identity resolution.** The first resolver establishes identity only from
-   canonical references; title equality and token overlap retrieve at most ten review candidates.
-   Candidate review is not yet connected to the native UI. Use source-scoped identifiers before label
-   similarity. Return explicit exact, ambiguous and unknown results with candidate item IDs and
-   reasons. A model may propose candidates; the owner validates identifiers and the reviewer
-   selects a current item/state snapshot. Never use an order number alone as a global key.
-   Done when aliases, two identical physical products, accessory mail and reused order labels
-   do not produce a false automatic link; unknown and ambiguous mentions remain reviewable.
+2. **Integrate reviewed identities into the source and review workflow.** Canonical references
+   and uniquely resolved owner-reviewed physical aliases establish identity; product aliases and
+   lexical matches remain candidates. Alias review checks current item/state revisions, retains
+   provenance and revocations, and prevents reactivation through item-ID reuse. Native candidate
+   and alias review are not yet connected. Source adapters must supply a stable namespace and
+   identifier kind; never use an order number alone as a global key or treat a product identifier
+   as a physical-instance identifier. Done when real evidence resolves through an owner-reviewed
+   alias, the reviewer sees its provenance, and stale or revoked evidence cannot silently supply
+   an automatic link. Unknown and ambiguous mentions must remain reviewable.
 3. **Make review provenance visible.** The current client proposal model ignores the new optional
    delivery statement and extraction revision. Extend its read contract and review view after
    concurrent Inventory UI work lands. Done when the reviewer sees both the product excerpt and
@@ -81,15 +87,15 @@ Remaining work, in order:
    automated reasoning remain deferred until an interoperability or inference requirement
    cannot be met by these contracts.
 
-Verification: all 590 Comms/Inventory tests and all-target Clippy passed, including rules-only
-operation without inference roles, whole-section abstention, identical-product/accessory ambiguity,
-stable top-ten truncation and unchanged review snapshots. Route-schema, store-transaction, relative-document-link,
-publication-hygiene and self-model checks passed. The existing architecture freshness failure is
-an unrelated stale `sqld` description; doctor reports an overdue backup. The AFM pilot passed
-profile/context admission but failed the shared model gate. The rules-only pilot completed against
-the frozen labels. Live owner staging, resolver reads against real Inventory, service installation,
-native UI acceptance and workspace-wide checks have not run. Scheduled scanning and HTTP replay
-remain disabled.
+Verification: all 69 Inventory tests and all-target Clippy passed for scoped aliases, including
+snapshot conflicts, exact scope/case, product ambiguity, bounded results, retained idempotent
+revocations, historical ownership and item-ID reuse. Comms all-target compilation passed against
+the extended shared API. The prior parser/resolver slice passed 590 Comms/Inventory tests.
+Route-schema, store-transaction, relative-document-link, publication-hygiene and self-model checks
+passed. The twelve-case rules-only evaluation completed without model calls. Doctor reports an
+overdue backup. Architecture freshness and workspace-wide gates were not rerun. Live owner
+staging, alias creation against real Inventory, service installation and native UI acceptance
+have not run. Scheduled scanning and HTTP replay remain disabled.
 
 ## Mail evidence for projects and inventory
 

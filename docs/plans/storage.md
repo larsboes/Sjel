@@ -167,8 +167,13 @@ stores. Open, in order:
    edited outside Sjel on 2026-11-08, which `projects render` would have overwritten. Not done:
    moving the tree into the vault. That conflicts with the 2026-11-08 ruling that the vault
    holds learning only, so the owner decides which folder is "the vault" first.
-3. Deny cloud harnesses read access to every folder above class `c1`, and prove it with a test
-   per harness.
+3. Cloud-harness isolation. Contained ring: proven. Every contained harness starts through
+   `sjel-contain`, and `a_contained_run_cannot_read_a_c2_folder` reads a c2 file under the
+   overlay's `data/` and a vault `Atlas/People` note through it and is refused, while pi's prepared
+   home stays writable; `the_pi_wrapper_opens_no_overlay_data` pins that wrapper's opened
+   directories (`crates/containment/tests/containment.rs`). Trusted ring (Claude Code, Codex):
+   open, and the owner's call. [`containment.md`](containment.md#1-the-rule) keeps the overlay
+   readable to that ring (C1, amended 2026-11-04), which this item would reverse.
 4. A Sjel search returns the path of a matching note.
 
 The table records what an earlier pass moved out of the vault. Rows marked done stay as they

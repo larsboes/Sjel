@@ -401,3 +401,81 @@ fn a_credential_the_catalogue_cannot_resolve_stops_the_run() {
     }
     let _ = std::fs::remove_dir_all(&project);
 }
+
+/// Storage plan, "One vault for prose" item 3: a contained harness reads no folder above `c1`.
+/// Every contained harness starts through this launcher; the run below also opens the prepared
+/// home `tools/contain/pi` adds, which is the only directory a wrapper opens inside the overlay.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_contained_run_cannot_read_a_c2_folder() {
+    let base = std::env::temp_dir().join(format!("sjel-contain-c2-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let overlay = base.join("overlay");
+    let finance = overlay.join("data/projects/Atlas/Finance");
+    let people = base.join("vault/Atlas/People");
+    let home = overlay.join("contained-pi/home");
+    let project = base.join("project");
+    for dir in [&finance, &people, &home, &project] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    std::fs::write(finance.join("Depot.md"), "balance-secret").unwrap();
+    std::fs::write(people.join("Someone.md"), "person-secret").unwrap();
+    let script = format!(
+        "cat '{f}/Depot.md' 2>/dev/null || echo finance-denied; \
+         cat '{p}/Someone.md' 2>/dev/null || echo people-denied; \
+         ls '{f}' 2>/dev/null || echo list-denied; \
+         echo h > '{h}/state' && echo home-ok",
+        f = finance.display(),
+        p = people.display(),
+        h = home.display()
+    );
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_sjel-contain"))
+        .args(["/bin/sh", "--provider", "unlisted", "--project"])
+        .arg(&project)
+        .arg("--read")
+        .arg(&home)
+        .arg("--write")
+        .arg(&home)
+        .args(["--", "-c", &script])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for expected in ["finance-denied", "people-denied", "list-denied", "home-ok"] {
+        assert!(stdout.contains(expected), "{expected}: {stdout}");
+    }
+    assert!(!stdout.contains("secret"), "{stdout}");
+    assert!(!stdout.contains("Depot.md"), "{stdout}");
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// The pi wrapper opens its prepared home and pi's own install, and nothing else under the
+/// overlay: no `data/`, no vault, not the overlay root.
+#[test]
+fn the_pi_wrapper_opens_no_overlay_data() {
+    let wrapper = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/contain/pi");
+    let text = std::fs::read_to_string(&wrapper).unwrap();
+    let home_line = text
+        .lines()
+        .find(|line| line.trim_start().starts_with("home="))
+        .expect("the wrapper names its prepared home");
+    assert_eq!(
+        home_line.trim(),
+        "home=\"$SJEL_PERSONAL_ROOT/contained-pi/home\""
+    );
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let opened: Vec<&str> = words
+        .windows(2)
+        .filter(|pair| pair[0] == "--read" || pair[0] == "--write")
+        .map(|pair| pair[1].trim_matches('"'))
+        .collect();
+    assert!(
+        !opened.is_empty(),
+        "the wrapper opens no directory: {wrapper:?}"
+    );
+    for dir in opened {
+        assert!(
+            dir == "$home" || dir.starts_with("$HOME/.pi/agent/"),
+            "the pi wrapper opens {dir}"
+        );
+    }
+}

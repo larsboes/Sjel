@@ -867,6 +867,20 @@ app and `ui`. In the fork, 1735 tests passed on `gpui-pre` and 1734 on GPUI Fast
 leak test does not run. Update this checklist with
 what is still open, and state each check that did not run.
 
+#### Remaining sortable lists
+
+Accounts, software inventory, storage classes/package updates and benchmark runs use Ely
+`DataTable` (`14be1d2f`); credential connection forms, software decision editors and the benchmark
+case matrix remain separate from the sortable rows. Feed and capability cards remain lists.
+
+Verification: 194 UI library tests pass, including account row identity and software size order,
+pointer opening and keyboard opening. The UI Cargo check, Clippy, app no-default-features check
+and UI NSH feature check pass. Clippy retains unrelated warnings. Workspace tests stop at
+`audio::tests::the_default_device_can_be_opened` (45 passed, 1 failed): CoreAudio reports
+OSStatus 560947818 for the default output device. Live light/dark visual acceptance has not run.
+Fork tests have not run because this change does not modify the fork.
+The documentation link check exits 1 without diagnostics; focused whitespace checks pass.
+
 ### Derived views
 
 A view is a document that a schema validates. It names Sjel components and binds them to read

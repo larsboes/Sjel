@@ -67,9 +67,9 @@ impl Mode {
 ///
 /// `Pseudonymized` is the default for any cloud model. `Zdr` is a route whose zero data
 /// retention was verified for the account and endpoint. `Trusted` is a route the owner trusts
-/// without that proof. Both read the same view, [`sjel_pseudonymize::view::trusted_view`]; the
-/// tier is logged so a call shows which promise it relied on
-/// (`docs/architecture/data-processing-policy.md`).
+/// without that proof. Every tier reads the pseudonymized view, so no response pairs a real
+/// name with other facts about that person; the tier is logged so a call shows which promise
+/// it relied on (`docs/architecture/data-processing-policy.md`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Tier {
     Pseudonymized,
@@ -90,11 +90,6 @@ impl Tier {
 
     pub fn parse(text: &str) -> Option<Tier> {
         Tier::ALL.into_iter().find(|t| t.as_str() == text)
-    }
-
-    /// Whether names reach the agent verbatim.
-    pub fn reads_names(self) -> bool {
-        self != Tier::Pseudonymized
     }
 }
 

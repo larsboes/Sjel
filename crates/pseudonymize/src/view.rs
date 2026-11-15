@@ -179,22 +179,15 @@ const LOCATION_KEYS: &[&str] = &[
 /// in any string is replaced. A sender keeps its display name, plus its domain when that is an
 /// organisation's.
 pub fn trusted_view(value: &mut Value) -> ViewReport {
-    trusted_view_public(value, &[])
-}
-
-/// [`trusted_view`], with the `public` keys the capability declared for this response kept
-/// verbatim, as [`agent_view_public`] keeps them. An identity key is still rewritten.
-pub fn trusted_view_public(value: &mut Value, public: &[&str]) -> ViewReport {
     let mut report = ViewReport::default();
-    trusted_walk(value, None, public, &mut report);
+    trusted_walk(value, None, &mut report);
     report
 }
 
-fn trusted_walk(value: &mut Value, key: Option<&str>, public: &[&str], report: &mut ViewReport) {
+fn trusted_walk(value: &mut Value, key: Option<&str>, report: &mut ViewReport) {
     match value {
         Value::String(s) => match key {
             Some(k) if is_structural(k) => {}
-            Some(k) if public.contains(&k) && !IDENTITY_KEYS.contains(&k) => {}
             Some(k) if IDENTITY_KEYS.contains(&k) => *s = trusted_identity(s),
             _ => *s = trusted_text(s),
         },
@@ -203,7 +196,7 @@ fn trusted_walk(value: &mut Value, key: Option<&str>, public: &[&str], report: &
             items.retain(|item| !is_secret_object(item));
             report.withheld_secret += before - items.len();
             for item in items {
-                trusted_walk(item, key, public, report);
+                trusted_walk(item, key, report);
             }
         }
         Value::Object(map) => {
@@ -214,7 +207,7 @@ fn trusted_walk(value: &mut Value, key: Option<&str>, public: &[&str], report: &
                     report.withheld_secret += 1;
                     continue;
                 }
-                trusted_walk(v, Some(k.as_str()), public, report);
+                trusted_walk(v, Some(k.as_str()), report);
             }
         }
         _ => {}
@@ -512,20 +505,6 @@ mod tests {
             trusted_identity("DHL Paket <noreply@dhl.de>"),
             "DHL Paket (dhl.de)"
         );
-    }
-
-    #[test]
-    fn trusted_public_keys_stay_verbatim_and_identities_do_not() {
-        let digest = "9f2c4e7a1b3d5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff";
-        let mut value = json!({
-            "sha256": digest,
-            "note": digest,
-            "from": "Erika Mustermann <erika@example.com>",
-        });
-        trusted_view_public(&mut value, &["sha256", "from"]);
-        assert_eq!(value["sha256"], digest);
-        assert_eq!(value["note"], "[token]");
-        assert_eq!(value["from"], "Erika Mustermann (example.com)");
     }
 
     #[test]

@@ -588,10 +588,10 @@ mod http_tests {
         assert_eq!(echoed[0]["from_matches"], true, "{echoed}");
     }
 
-    /// The same response, read by the default token and then by a token the owner set to
-    /// `trusted`: names appear only for the second, and the c3 row stays out for both.
+    /// No tier reads a real name beside other facts: the same response stays pseudonymized
+    /// after the owner sets the token to `trusted`, and the c3 row stays out for both.
     #[tokio::test]
-    async fn a_trusted_tier_reads_names_and_still_never_reads_secrets() {
+    async fn no_tier_pairs_a_real_name_with_other_facts() {
         let (access, files) = agent_access_in("tier", agent_policy::Mode::Auto);
         let auth = InboundAuth::with_token(Some("full".into())).with_agent_access(access);
         let base = serve_agent_router(auth).await;
@@ -606,16 +606,22 @@ mod http_tests {
                 .await
                 .unwrap()
         };
-        let masked = read(base.clone()).await;
-        assert!(!masked.contains("Erika"), "{masked}");
-        files
-            .set_tier("default", agent_policy::Tier::Trusted)
-            .unwrap();
-        let named = read(base).await;
-        assert!(named.contains("Scans from Erika"), "{named}");
-        assert!(named.contains("Erika Mustermann (example.com)"), "{named}");
-        assert!(!named.contains("erika@example.com"), "{named}");
-        assert!(!named.contains("616685"), "{named}");
+        for tier in agent_policy::Tier::ALL {
+            files.set_tier("default", tier).unwrap();
+            let body = read(base.clone()).await;
+            assert!(!body.contains("Erika"), "{}: {body}", tier.as_str());
+            assert!(
+                !body.contains("erika@example.com"),
+                "{}: {body}",
+                tier.as_str()
+            );
+            assert!(!body.contains("616685"), "{}: {body}", tier.as_str());
+            assert!(
+                body.contains("18f3a9c2b7d41e05"),
+                "{}: the row itself stays",
+                tier.as_str()
+            );
+        }
         assert_eq!(
             files.mode_for("comms"),
             agent_policy::Mode::Auto,

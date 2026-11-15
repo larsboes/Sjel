@@ -48,13 +48,15 @@ file under `secrets/agent/`, which no agent can write.
 | Tier | Meaning | View |
 |---|---|---|
 | `pseudonymized` | Any cloud model. The default for an unnamed or unknown token. | Names and identities become session tokens (`agent_view_public`). |
-| `zdr` | A route whose zero data retention was verified for the account and endpoint. | `trusted_view` |
-| `trusted` | A route the owner trusts without that proof. | `trusted_view` |
+| `zdr` | A route whose zero data retention was verified for the account and endpoint. | The same pseudonymized view. |
+| `trusted` | A route the owner trusts without that proof. | The same pseudonymized view. |
 
-`trusted_view` (`libs/pseudonymize/src/view.rs`) keeps names. It still removes every c3 object,
-drops coordinate and street-address keys, and replaces email addresses, phone numbers, IBANs and
-token-shaped values. An ISO date stays. A sender keeps its display name and an organisation's
-domain. Each call log line records the agent name and tier.
+No tier reads a real name beside other facts about that person, so a provider cannot build a
+profile of a named person (`crates/sjel-server/src/agent.rs`, `pseudonymize_response`). The tier
+decides which routes answer, such as the live mail body below, and is recorded on each call log
+line. The pseudonymizer tokenizes the names it recognises: identity fields always, and names in
+free text when the entity registry holds them. A name the registry does not hold can still
+appear in free text.
 
 The gate gives each admitted agent request an `AdmittedAgent` extension that holds the name and
 tier. It is a request extension and not a header, so a client cannot set it. A handler that

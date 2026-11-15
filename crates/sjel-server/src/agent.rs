@@ -45,7 +45,7 @@ use sha2::{Digest, Sha256};
 use crate::agent_policy::{
     write_digest, AgentCall, AgentRoutes, Consumed, Mode, PolicyFiles, Tier,
 };
-use sjel_pseudonymize::view::{agent_view_public, cap_view, is_withheld, trusted_view_public};
+use sjel_pseudonymize::view::{agent_view_public, cap_view, is_withheld};
 use sjel_pseudonymize::{EntityRegistry, PseudonymizerSession};
 
 /// The header an agent may send to scope its tokens to one conversation.
@@ -337,14 +337,13 @@ pub(crate) async fn admit_agent(
         tier,
     });
     let cap = access.cap(&agent);
-    let (response, decision) = decide_and_run(&access, tier, cap.as_deref(), request, next).await;
+    let (response, decision) = decide_and_run(&access, cap.as_deref(), request, next).await;
     access.log(&agent, &method, &path, response.status().as_u16(), decision);
     response
 }
 
 async fn decide_and_run(
     access: &Arc<AgentAccess>,
-    tier: Tier,
     cap: Option<&str>,
     mut request: Request,
     next: Next,
@@ -400,7 +399,7 @@ async fn decide_and_run(
 
     if !is_write {
         return (
-            pseudonymize_response(access, tier, cap, &id, next.run(request).await, true).await,
+            pseudonymize_response(access, cap, &id, next.run(request).await, true).await,
             "read",
         );
     }
@@ -513,7 +512,7 @@ async fn decide_and_run(
     parts.headers.remove(APPROVAL_HEADER);
     let request = Request::from_parts(parts, axum::body::Body::from(restored));
     (
-        pseudonymize_response(access, tier, cap, &id, next.run(request).await, false).await,
+        pseudonymize_response(access, cap, &id, next.run(request).await, false).await,
         decision,
     )
 }
@@ -595,7 +594,6 @@ fn unknown_token_refusal(token: &str) -> Response {
 /// reduced to its status, because the write has already happened and the agent needs to know.
 async fn pseudonymize_response(
     access: &AgentAccess,
-    tier: Tier,
     cap: Option<&str>,
     id: &str,
     response: Response,
@@ -660,20 +658,13 @@ async fn pseudonymize_response(
         .map(str::trim)
         .filter(|k| !k.is_empty())
         .collect();
-    let (report, receipt) = if tier.reads_names() {
-        let report = trusted_view_public(&mut value, &public);
-        let receipt = format!(
-            "tier {}: names verbatim; contact, account and location fields removed",
-            tier.as_str()
-        );
-        (report, Some(receipt))
-    } else {
-        access.with_session(id, |session| {
-            session.take_findings();
-            let report = agent_view_public(&mut value, session, &access.registry, &public);
-            (report, session.receipt())
-        })
-    };
+    // Every tier reads the pseudonymized view: no response pairs a real name with other facts
+    // about that person (docs/plans/containment.md, C1). The tier is logged, not widened.
+    let (report, receipt) = access.with_session(id, |session| {
+        session.take_findings();
+        let report = agent_view_public(&mut value, session, &access.registry, &public);
+        (report, session.receipt())
+    });
     let out = serde_json::to_vec(&value).unwrap_or_default();
     parts.headers.remove(header::CONTENT_LENGTH);
     let receipt = receipt.unwrap_or_else(|| "nothing replaced".to_string());

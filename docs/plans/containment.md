@@ -181,8 +181,8 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
    `content_item::cloud_admission` admits `c2` as a `trusted_view` derivative to a `c2` provider
    only. The doctrine changes in the same commit: `docs/architecture/security.md` (Data classes)
    and `shared-data-boundaries.md`. The trusted harnesses keep the overlay (§1, 2026-11-04).
-   Done when: a `trusted` agent token reads a `c2` mail with names readable and its sender's
-   address replaced, a `pseudonymized` token gets the same mail tokenized, and
+   Done when: every agent tier gets a `c2` mail with its names tokenized (since 2026-11-15, C1;
+   `no_tier_pairs_a_real_name_with_other_facts`), and
    `comms egress-log --audit` counts `c2` sent to a non-`c2` provider as a violation.
 8. **Session ratchet.** An agent session records the highest data class it has read. A session
    that has read `c2` cannot continue on a provider whose `highest_data_class` is lower, and its

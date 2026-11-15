@@ -47,6 +47,10 @@ pub struct Route {
     /// The JSON Schema of the request body, when the route declares one.
     #[serde(default)]
     pub request_schema: Option<Value>,
+    #[serde(default)]
+    pub object: Option<Value>,
+    #[serde(default)]
+    pub response_schema: Option<Value>,
 }
 
 /// A capability's gate as `<overlay>/data/agent-gates/<name>.json` writes it.
@@ -68,6 +72,7 @@ pub struct Tool {
     pub name: String,
     pub description: String,
     pub input_schema: Value,
+    pub metadata: Value,
     pub method: String,
     pub path: String,
 }
@@ -235,13 +240,14 @@ pub fn tools_for(capability: &str, mode: Mode, routes: &[Route], gate: &Gate) ->
              unchanged to act on that value in this same capability.",
         );
         tools.push(Tool {
+            metadata: json!({"sjel/object": route.object, "sjel/response-schema": route.response_schema}),
             name: tool_name(capability, &method, &route.path),
             description: format!(
                 "{capability}: {} ({method} {}) {}",
                 route.summary,
                 route.path,
                 notes.join(" ")
-            ),
+            ) + &route.object.as_ref().map(|object| format!(" Object {}. {}", object["id"].as_str().unwrap_or("unknown"), object["classification"]["derivation"].as_str().unwrap_or(""))).unwrap_or_default(),
             input_schema: json!({
                 "type": "object",
                 "properties": properties,
@@ -351,6 +357,26 @@ pub fn value_as_text(value: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn registry_metadata_survives_tool_discovery() {
+        let routes: Vec<super::Route> = serde_json::from_value(serde_json::json!([{
+            "method": "GET", "path": "/api/projects", "summary": "Projects",
+            "object": {"id": "projects.project", "identity": ["name", "archived"], "classification": {"field": "data_class"}},
+            "response_schema": {"type": "object"}
+        }])).unwrap();
+        let gate = super::Gate {
+            capability: "projects".into(),
+            get_writes: vec![],
+            confirm: vec![],
+        };
+        let tools = super::tools_for("projects", super::Mode::ReadOnly, &routes, &gate);
+        assert_eq!(
+            tools[0].metadata["sjel/object"]["identity"],
+            serde_json::json!(["name", "archived"])
+        );
+        assert_eq!(tools[0].metadata["sjel/response-schema"]["type"], "object");
+    }
+
     use super::*;
     use serde_json::json;
 

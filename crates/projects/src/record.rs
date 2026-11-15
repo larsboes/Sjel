@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use markdown_root::frontmatter_spanned;
-use serde::Serialize;
+pub use projects_api::ProjectKind as Kind;
 
 /// The folder segment that marks a finished project.
 pub const ARCHIVE: &str = "Archive";
@@ -19,24 +19,6 @@ pub const DOMAINS: [&str; 2] = ["Atlas", "Journal"];
 const TASKS: &str = "Tasks";
 const DEFAULT_PRIORITY: u8 = 2;
 const MAX_TITLE_CHARS: usize = 200;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Kind {
-    Project,
-    Task,
-    Note,
-}
-
-impl Kind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Kind::Project => "project",
-            Kind::Task => "task",
-            Kind::Note => "note",
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {

@@ -25,6 +25,8 @@
 //! Consumers link this as an ordinary crate and serve its JSON as the external
 //! contract.
 
+pub mod registry;
+
 use serde::Serialize;
 use serde_json::{json, Value};
 
@@ -93,6 +95,56 @@ pub fn manifest(capability: &str, routes: &[Route]) -> Value {
         "capability": capability,
         "routes": rendered,
     })
+}
+
+/// A success-response schema derived from a route's serialized wire type.
+#[derive(Debug, Clone, Copy)]
+pub struct ResponseSchema {
+    pub method: &'static str,
+    pub path: &'static str,
+    pub schema: fn() -> Value,
+}
+
+/// Render response schemas alongside the existing request declarations.
+///
+/// # Errors
+/// A response names an undeclared method/path pair or declares the same pair twice.
+pub fn manifest_with_responses(
+    capability: &str,
+    routes: &[Route],
+    responses: &[ResponseSchema],
+) -> Result<Value, String> {
+    let mut body = manifest(capability, routes);
+    for (index, response) in responses.iter().enumerate() {
+        if responses[..index]
+            .iter()
+            .any(|other| other.method == response.method && other.path == response.path)
+        {
+            return Err(format!(
+                "duplicate response schema: {} {}",
+                response.method, response.path
+            ));
+        }
+        let Some(route_index) = routes
+            .iter()
+            .position(|route| route.method == response.method && route.path == response.path)
+        else {
+            return Err(format!(
+                "response schema names an undeclared route: {} {}",
+                response.method, response.path
+            ));
+        };
+        body["routes"][route_index]["response_schema"] = (response.schema)();
+    }
+    Ok(body)
+}
+
+/// Derive the shape emitted by serialization, including defaulted output fields.
+pub fn response_schema_of<T: schemars::JsonSchema>() -> Value {
+    let generator = schemars::generate::SchemaSettings::default()
+        .for_serialize()
+        .into_generator();
+    serde_json::to_value(generator.into_root_schema_for::<T>()).expect("JSON Schema serializes")
 }
 
 /// Helper so a consumer writes `schema_of::<CreatePlan>` and nothing else.
@@ -330,6 +382,53 @@ mod tests {
         assert_eq!(body["routes"][0]["method"], "GET");
         assert_eq!(body["routes"][1]["path"], "/api/things");
         assert_eq!(body["routes"][1]["summary"], "Every thing.");
+    }
+
+    #[test]
+    fn response_schemas_match_method_and_path_without_changing_legacy_manifests() {
+        const SHARED_PATH: &[Route] = &[
+            get("GET", "/api/things", "List things."),
+            Route {
+                method: "POST",
+                path: "/api/things",
+                summary: "Create a thing.",
+                request_schema: Some(schema_of::<CreateThing>),
+            },
+        ];
+        const RESPONSES: &[ResponseSchema] = &[ResponseSchema {
+            method: "GET",
+            path: "/api/things",
+            schema: schema_of::<Vec<CreateThing>>,
+        }];
+        let body = manifest_with_responses("things", SHARED_PATH, RESPONSES).unwrap();
+        assert_eq!(body["routes"][0]["response_schema"]["type"], "array");
+        assert!(body["routes"][1].get("response_schema").is_none());
+        assert!(body["routes"][1]["request_schema"].is_object());
+        assert_eq!(
+            manifest_with_responses("things", ROUTES, &[]).unwrap(),
+            manifest("things", ROUTES)
+        );
+    }
+
+    #[test]
+    fn response_schemas_refuse_orphan_and_duplicate_declarations() {
+        let response = ResponseSchema {
+            method: "GET",
+            path: "/api/things",
+            schema: schema_of::<CreateThing>,
+        };
+        assert!(
+            manifest_with_responses("things", ROUTES, &[response, response])
+                .unwrap_err()
+                .contains("duplicate")
+        );
+        let orphan = ResponseSchema {
+            method: "POST",
+            ..response
+        };
+        assert!(manifest_with_responses("things", ROUTES, &[orphan])
+            .unwrap_err()
+            .contains("undeclared"));
     }
 
     #[test]

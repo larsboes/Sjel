@@ -167,6 +167,7 @@ fn dispatch(method: &str, params: &Value, registered: &Registry) -> Result<Value
                         "name": tool.name,
                         "description": tool.description,
                         "inputSchema": tool.input_schema,
+                        "_meta": tool.metadata,
                     }))
                     .collect::<Vec<_>>()
             });

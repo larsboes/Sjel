@@ -3650,8 +3650,10 @@ dependencies = [
 name = "projects-api"
 version = "0.1.0"
 dependencies = [
+ "route-manifest",
  "schemars",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

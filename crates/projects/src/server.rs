@@ -8,10 +8,17 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use projects::{ops, Kind, Projects};
+use projects_api::{
+    reads::{
+        ClassifiedProjectSummary, ProjectListResponse, ProjectReadResponse, RecordRead,
+        RecordReadResponse,
+    },
+    ProjectSummary,
+};
 
 mod inventory_links;
 
@@ -196,17 +203,7 @@ struct RecordQuery {
     path: String,
 }
 
-#[derive(Serialize, Default)]
-struct ProjectSummary {
-    name: String,
-    archived: bool,
-    open: usize,
-    done: usize,
-    notes: usize,
-    /// The strictest class of the project's records, so a reader can keep the name out of a
-    /// context that class may not enter.
-    data_class: String,
-}
+use projects_api::registry::READ_RESPONSES;
 
 struct ApiError(StatusCode, String);
 
@@ -240,8 +237,29 @@ async fn ready(State(projects): State<Shared>) -> Result<Json<Value>, ApiError> 
     Ok(Json(json!({ "status": "ready", "service": "projects" })))
 }
 
-async fn routes() -> Json<Value> {
-    Json(route_manifest::manifest("projects", ROUTES))
+async fn routes() -> Result<Json<Value>, ApiError> {
+    let result = (|| {
+        let mut manifest =
+            route_manifest::manifest_with_responses("projects", ROUTES, READ_RESPONSES)?;
+        let registry = projects_api::registry::declaration();
+        registry.validate(&manifest, AGENT_ROUTES.get_writes)?;
+        for object in &registry.objects {
+            for read in &object.reads {
+                if let Some(route) = manifest["routes"].as_array_mut().and_then(|routes| {
+                    routes
+                        .iter_mut()
+                        .find(|route| route["method"] == read.method && route["path"] == read.path)
+                }) {
+                    route["object"] = json!({"id": object.id, "identity": object.identity, "classification": object.classification, "read": read});
+                }
+            }
+        }
+        manifest["objects"] = serde_json::to_value(&registry.objects).map_err(|e| e.to_string())?;
+        Ok(manifest)
+    })();
+    result
+        .map(Json)
+        .map_err(|error| ApiError(StatusCode::INTERNAL_SERVER_ERROR, error))
 }
 
 async fn inventory_link_list(
@@ -510,21 +528,25 @@ async fn list_tasks(
     Ok(Json(json!({ "tasks": tasks })))
 }
 
-async fn list_projects(State(projects): State<Shared>) -> Result<Json<Value>, ApiError> {
+async fn list_projects(
+    State(projects): State<Shared>,
+) -> Result<Json<ProjectListResponse>, ApiError> {
     let records = projects.all().await.map_err(|e| api_error(false, e))?;
-    let mut summaries: Vec<ProjectSummary> = Vec::new();
+    let mut summaries: Vec<ClassifiedProjectSummary> = Vec::new();
     for r in records.into_iter().filter(|r| !r.domain) {
         let index = match summaries
             .iter()
-            .position(|s| s.name == r.project && s.archived == r.archived)
+            .position(|s| s.summary.name == r.project && s.summary.archived == r.archived)
         {
             Some(i) => i,
             None => {
-                summaries.push(ProjectSummary {
-                    name: r.project.clone(),
-                    archived: r.archived,
+                summaries.push(ClassifiedProjectSummary {
+                    summary: ProjectSummary {
+                        name: r.project.clone(),
+                        archived: r.archived,
+                        ..Default::default()
+                    },
                     data_class: "c0".into(),
-                    ..Default::default()
                 });
                 summaries.len() - 1
             }
@@ -533,13 +555,17 @@ async fn list_projects(State(projects): State<Shared>) -> Result<Json<Value>, Ap
         // Class literals order by strictness: c0 < c1 < c2 < c3.
         s.data_class = s.data_class.clone().max(ops::classify_record(&r).value);
         match (r.kind, r.done) {
-            (Kind::Task, false) => s.open += 1,
-            (Kind::Task, true) => s.done += 1,
-            _ => s.notes += 1,
+            (Kind::Task, false) => s.summary.open += 1,
+            (Kind::Task, true) => s.summary.done += 1,
+            _ => s.summary.notes += 1,
         }
     }
-    summaries.sort_by(|a, b| (a.archived, &a.name).cmp(&(b.archived, &b.name)));
-    Ok(Json(json!({ "projects": summaries })))
+    summaries.sort_by(|a, b| {
+        (a.summary.archived, &a.summary.name).cmp(&(b.summary.archived, &b.summary.name))
+    });
+    Ok(Json(ProjectListResponse {
+        projects: summaries,
+    }))
 }
 
 async fn list_records(
@@ -605,30 +631,31 @@ async fn get_file(State(projects): State<Shared>, Query(query): Query<FileQuery>
 }
 
 /// One record in the shape `GET /api/project` and `GET /api/record` share.
-///
-/// `updated_at` is left out of the reads that do not carry it, so the shape stays one shape and a
-/// reader that never looks at the key never has to.
-fn record_json(record: &projects::Record, with_content: bool, updated_at: Option<&str>) -> Value {
+fn record_read(
+    record: &projects::Record,
+    with_content: bool,
+    updated_at: Option<&str>,
+) -> RecordRead {
     let class = ops::classify_record(record);
-    let mut value = json!({
-        "path": record.path, "kind": record.kind, "title": record.title,
-        "done": record.done, "due": record.due, "priority": record.priority,
-        "archived": record.archived,
-        "data_class": class.value, "data_class_rationale": class.rationale,
-    });
-    if with_content {
-        value["content"] = json!(record.content);
+    RecordRead {
+        path: record.path.clone(),
+        kind: record.kind,
+        title: record.title.clone(),
+        done: record.done,
+        due: record.due.clone(),
+        priority: record.priority,
+        archived: record.archived,
+        data_class: class.value,
+        data_class_rationale: class.rationale,
+        content: with_content.then(|| record.content.clone()),
+        updated_at: updated_at.map(str::to_owned),
     }
-    if let Some(updated_at) = updated_at {
-        value["updated_at"] = json!(updated_at);
-    }
-    value
 }
 
 async fn get_project(
     State(projects): State<Shared>,
     Query(query): Query<ProjectQuery>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<ProjectReadResponse>, ApiError> {
     let name = query.name;
     let with_content = query.content.unwrap_or(true);
     let records = projects
@@ -638,26 +665,26 @@ async fn get_project(
     if records.is_empty() {
         return Err(ApiError(StatusCode::NOT_FOUND, "no such project".into()));
     }
-    let records: Vec<Value> = records
+    let records = records
         .iter()
-        .map(|(record, updated_at)| record_json(record, with_content, Some(updated_at)))
+        .map(|(record, updated_at)| record_read(record, with_content, Some(updated_at)))
         .collect();
-    Ok(Json(json!({ "records": records })))
+    Ok(Json(ProjectReadResponse { records }))
 }
 
 async fn get_record(
     State(projects): State<Shared>,
     Query(query): Query<RecordQuery>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<RecordReadResponse>, ApiError> {
     let path = query.path;
     let (record, updated_at) = projects
         .get_timed(&path)
         .await
         .map_err(|e| api_error(false, e))?
         .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "no such record".into()))?;
-    Ok(Json(
-        json!({ "record": record_json(&record, true, Some(&updated_at)) }),
-    ))
+    Ok(Json(RecordReadResponse {
+        record: record_read(&record, true, Some(&updated_at)),
+    }))
 }
 
 async fn add_task(
@@ -886,10 +913,73 @@ mod tests {
     use tower::util::ServiceExt;
 
     #[test]
+    fn registry_rejects_invalid_properties_members_and_write_bindings() {
+        let manifest =
+            route_manifest::manifest_with_responses("projects", ROUTES, READ_RESPONSES).unwrap();
+        let valid = projects_api::registry::declaration();
+        valid.validate(&manifest, &[]).unwrap();
+        let mut invalid = valid.clone();
+        invalid.objects[0].inactive_property = Some("name".into());
+        assert!(invalid
+            .validate(&manifest, &[])
+            .unwrap_err()
+            .contains("inactive property"));
+        let mut invalid = valid.clone();
+        invalid.objects[1].reads[0]
+            .fixed_parameters
+            .insert("name".into(), "fixed".into());
+        assert!(invalid
+            .validate(&manifest, &[])
+            .unwrap_err()
+            .contains("fixed parameter"));
+        let mut invalid = valid.clone();
+        invalid.objects[0].identity.push("missing".into());
+        assert!(invalid
+            .validate(&manifest, &[])
+            .unwrap_err()
+            .starts_with("projects.project:"));
+        let mut invalid = valid.clone();
+        invalid.objects[0].reads[0].method = "POST".into();
+        assert!(invalid
+            .validate(&manifest, &[])
+            .unwrap_err()
+            .contains("write route"));
+        assert!(valid
+            .validate(&manifest, &[("GET", projects_api::ROUTE_PROJECTS)])
+            .unwrap_err()
+            .contains("write route"));
+        let mut invalid = valid.clone();
+        invalid.objects[0].reads[0].member = "missing".into();
+        assert!(invalid.validate(&manifest, &[]).is_err());
+        let mut invalid = valid.clone();
+        invalid.objects[0].links[0].parameters.clear();
+        assert!(invalid.validate(&manifest, &[]).is_err());
+        let mut invalid = valid.clone();
+        invalid.objects[0].links[0]
+            .equals
+            .insert("missing".into(), "archived".into());
+        assert!(invalid.validate(&manifest, &[]).is_err());
+        let mut invalid = valid;
+        invalid.objects[1].actions[0].governance = "direct".into();
+        assert!(invalid.validate(&manifest, &[]).is_err());
+    }
+
+    #[test]
     fn manifest_covers_routes_and_write_schemas() {
         let source = include_str!("server.rs");
         assert!(route_manifest::undeclared_routes(source, ROUTES).is_empty());
         assert!(route_manifest::bodies_without_schemas(ROUTES).is_empty());
+        let manifest =
+            route_manifest::manifest_with_responses("projects", ROUTES, READ_RESPONSES).unwrap();
+        for response in READ_RESPONSES {
+            let declaration = manifest["routes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|route| route["method"] == response.method && route["path"] == response.path)
+                .unwrap();
+            assert_eq!(declaration["response_schema"], (response.schema)());
+        }
         assert!(AGENT_ROUTES.closes("GET", "/api/mail-proposals"));
         assert!(AGENT_ROUTES.closes("POST", "/api/mail-proposals"));
         assert!(AGENT_ROUTES.closes("POST", "/api/mail-proposals/7/decision"));
@@ -1544,6 +1634,20 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["projects"][0]["name"], json!("W"));
         assert_eq!(body["projects"][0]["open"], json!(1));
+        let typed: ProjectListResponse = serde_json::from_value(body.clone()).unwrap();
+        assert_eq!(typed.projects[0].summary.name, "W");
+        assert_eq!(typed.projects[0].data_class, "c1");
+        assert_eq!(serde_json::to_value(typed).unwrap(), body);
+        let (status, manifest) = call(&router, get("/routes")).await;
+        assert_eq!(status, StatusCode::OK);
+        let reads: Vec<_> = manifest["routes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|route| route.get("response_schema").is_some())
+            .collect();
+        assert_eq!(reads.len(), READ_RESPONSES.len());
+        assert!(reads.iter().all(|route| route["method"] == "GET"));
 
         let (status, body) = call(
             &router,
@@ -1636,6 +1740,9 @@ mod tests {
 
         let (status, body) = call(&router, get("/api/project?name=R&content=false")).await;
         assert_eq!(status, StatusCode::OK);
+        let typed: ProjectReadResponse = serde_json::from_value(body.clone()).unwrap();
+        assert!(typed.records.iter().all(|record| record.content.is_none()));
+        assert_eq!(serde_json::to_value(typed).unwrap(), body);
         let listed = body["records"].as_array().expect("records");
         assert_eq!(listed.len(), 3, "the hub and both tasks");
         for record in listed {
@@ -1658,6 +1765,10 @@ mod tests {
             body["record"]["updated_at"].as_str().is_some(),
             "the single read stamps too: {body}"
         );
+        let typed: RecordReadResponse = serde_json::from_value(body.clone()).unwrap();
+        assert!(typed.record.content.is_some());
+        assert!(typed.record.updated_at.is_some());
+        assert_eq!(serde_json::to_value(typed).unwrap(), body);
         let base = body["record"]["content"].as_str().expect("content");
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         let (status, _) = call(

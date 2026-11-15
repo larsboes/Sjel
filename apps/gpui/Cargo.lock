@@ -6861,8 +6861,10 @@ dependencies = [
 name = "projects-api"
 version = "0.1.0"
 dependencies = [
+ "route-manifest",
  "schemars",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -7587,6 +7589,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4045a00dc327d084a2bbf126976e14125b54f23bd30511d45b842eba76c52d74"
 dependencies = [
  "str_indices",
+]
+
+[[package]]
+name = "route-manifest"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -54,9 +54,10 @@ function noticeFiles(directory: string, prefix = ""): string[] {
 
 const rustSupplements = [
   { name: "alloc-stdlib", versions: ["0.2.4", "0.3.0"], license: "BSD-3-Clause", files: ["rust-alloc-no-stdlib.LICENSE"] },
-  { name: "html-to-markdown-rs", versions: ["3.21.2"], license: "MIT", files: ["html-to-markdown-rs-3.21.2.LICENSE"] },
+  { name: "html-to-markdown-rs", versions: ["3.21.2", "3.22.2"], license: "MIT", files: ["html-to-markdown-rs-3.21.2.LICENSE"] },
   { name: "qcms", versions: ["0.3.0"], license: "MIT", files: ["qcms-0.3.0.COPYING"] },
   { name: "xberg", versions: ["1.3.10"], license: "MIT", files: ["xberg-1.3.10.LICENSE", "xberg-1.3.10.THIRD_PARTY_LICENSES.md"] },
+  { name: "xberg", versions: ["1.4.0"], license: "MIT", files: ["xberg-1.3.10.LICENSE", "xberg-1.4.0.THIRD_PARTY_LICENSES.md"] },
 ];
 
 export function writeRustNotices(stage: string, sources: RustSource[], version: string, platform: string) {

@@ -76,6 +76,34 @@ test("reviewed crate omissions get scoped upstream grants, not a blanket license
   expect(() => writeRustNotices(root, [{ ...source, version: "0.4.0" }], "v0.0.3", "example")).toThrow("no license notice");
 });
 
+test("HTML converter's source-only archive gets the reviewed grant for its exact version", () => {
+  const { root, directory } = fixture();
+  rmSync(join(directory, "LICENSE"));
+  writeFileSync(join(directory, "Cargo.toml"), '[package]\nname = "html-to-markdown-rs"\nversion = "3.22.2"\nlicense = "MIT"\ninclude = ["/Cargo.toml", "/Cargo.lock", "/src/**", "/README.md"]\n');
+  mkdirSync(join(directory, "src"));
+  writeFileSync(join(directory, "src/lib.rs"), "pub fn convert() {}\n");
+  const source = { name: "html-to-markdown-rs", version: "3.22.2", license: "MIT", directory };
+  writeRustNotices(root, [source], "v0.0.3", "example");
+  const notice = "THIRD_PARTY/rust/html-to-markdown-rs-3.22.2/html-to-markdown-rs-3.21.2.LICENSE";
+  expect(readFileSync(join(root, notice), "utf8")).toBe(readFileSync(join(import.meta.dir, "notices/html-to-markdown-rs-3.21.2.LICENSE"), "utf8"));
+  expect(readFileSync(join(root, "THIRD_PARTY.md"), "utf8")).toContain(notice);
+  expect(() => writeRustNotices(root, [{ ...source, version: "3.22.3" }], "v0.0.3", "example")).toThrow("no license notice");
+  expect(() => writeRustNotices(root, [{ ...source, license: "Apache-2.0" }], "v0.0.3", "example")).toThrow("no license notice");
+});
+
+test("Xberg's upgraded archive retains its grant and current native-library inventory", () => {
+  const { root, directory } = fixture();
+  rmSync(join(directory, "LICENSE"));
+  writeFileSync(join(directory, "Cargo.toml"), '[package]\nname = "xberg"\nversion = "1.4.0"\nlicense = "MIT"\ninclude = ["/src/**", "/Cargo.toml", "/Cargo.lock", "/LICENSE*", "/README*"]\n');
+  const source = { name: "xberg", version: "1.4.0", license: "MIT", directory };
+  writeRustNotices(root, [source], "v0.0.3", "example");
+  for (const file of ["xberg-1.3.10.LICENSE", "xberg-1.4.0.THIRD_PARTY_LICENSES.md"]) {
+    expect(readFileSync(join(root, "THIRD_PARTY/rust/xberg-1.4.0", file), "utf8"))
+      .toBe(readFileSync(join(import.meta.dir, "notices", file), "utf8"));
+  }
+  expect(() => writeRustNotices(root, [{ ...source, version: "1.4.1" }], "v0.0.3", "example")).toThrow("no license notice");
+});
+
 test("unknown registry sources and absent cached crates fail closed", () => {
   const { root, directory, sources } = fixture();
   rmSync(directory, { recursive: true });

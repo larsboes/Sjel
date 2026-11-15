@@ -41,6 +41,16 @@ fn run_trusted(
         .arg(harness_bin)
         .args(harness_args);
     cmd.current_dir(project_dir).env("SJEL_AGENT", "1");
+    // The token the run's Sjel tools present: `sjel-agent-token.<harness>`, else the default.
+    if std::env::var_os("SJEL_AGENT_NAME").is_none() {
+        if let Some(name) = std::path::Path::new(harness_bin)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .filter(|n| n.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
+        {
+            cmd.env("SJEL_AGENT_NAME", name);
+        }
+    }
     for (name, value) in env_pairs {
         cmd.env(name, value);
     }

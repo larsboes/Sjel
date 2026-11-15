@@ -545,7 +545,7 @@ fn a_trusted_run_keeps_the_machine_but_not_personal_data_or_credentials() {
          echo x > '{o}/data/sjel/new' 2>/dev/null || echo data-write-denied; \
          cat '{o}/config/machine.toml'; echo; cat '{h}/.claude/settings.json'; echo; \
          cat '{e}/notes.txt'; echo; echo w > '{e}/written' && echo write-ok; \
-         echo agent=$SJEL_AGENT",
+         echo agent=$SJEL_AGENT; echo name=$SJEL_AGENT_NAME",
         o = overlay.display(),
         h = home.display(),
         e = other.display()
@@ -557,6 +557,7 @@ fn a_trusted_run_keeps_the_machine_but_not_personal_data_or_credentials() {
         .env("HOME", &home)
         .env("SJEL_OVERLAY_ROOT", &overlay)
         .env("SJEL_PROVIDERS_PATH", &providers)
+        .env_remove("SJEL_AGENT_NAME")
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -571,6 +572,7 @@ fn a_trusted_run_keeps_the_machine_but_not_personal_data_or_credentials() {
         "elsewhere-ok",
         "write-ok",
         "agent=1",
+        "name=sh",
     ] {
         assert!(stdout.contains(expected), "{expected}: {stdout}");
     }

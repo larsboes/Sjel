@@ -75,6 +75,22 @@ pub fn server_command() -> Vec<String> {
     ]
 }
 
+/// The variables the server starts with in `harness`: an agent session, under the agent name
+/// whose token `capability-auth` reads (`sjel-agent-token.<name>`, else the default token).
+pub fn agent_env(harness: &str) -> [(&'static str, String); 2] {
+    [
+        ("SJEL_AGENT", "1".into()),
+        ("SJEL_AGENT_NAME", harness.into()),
+    ]
+}
+
+fn env_flags(flag: &str, harness: &str) -> Vec<String> {
+    agent_env(harness)
+        .into_iter()
+        .flat_map(|(name, value)| [flag.to_string(), format!("{name}={value}")])
+        .collect()
+}
+
 /// pi's entry. `exposure: codemode` keeps eighty-odd tool schemas out of every prompt, and the
 /// server's own guidance says to filter large capability payloads inside a script — one
 /// `GET /triage` answers 384 rows, about 147k tokens, and ignores a `limit` parameter.
@@ -83,6 +99,7 @@ pub fn pi_entry() -> Value {
     json!({
         "command": command[0],
         "args": command[1..].to_vec(),
+        "env": agent_env("pi").into_iter().collect::<std::collections::BTreeMap<_, _>>(),
         "exposure": "codemode",
         "timeout": PI_TIMEOUT_SECONDS,
         "description": DESCRIPTION,
@@ -130,8 +147,9 @@ pub fn claude_add_args() -> Vec<String> {
         SERVER_NAME.to_string(),
         "--scope".to_string(),
         "user".to_string(),
-        "--".to_string(),
     ];
+    args.extend(env_flags("-e", "claude-code"));
+    args.push("--".to_string());
     args.extend(server_command());
     args
 }
@@ -143,8 +161,9 @@ pub fn codex_add_args() -> Vec<String> {
         "mcp".to_string(),
         "add".to_string(),
         SERVER_NAME.to_string(),
-        "--".to_string(),
     ];
+    args.extend(env_flags("--env", "codex"));
+    args.push("--".to_string());
     args.extend(server_command());
     args
 }
@@ -522,6 +541,8 @@ mod tests {
     fn the_entry_carries_the_timeout_pi_cannot_set() {
         let entry = pi_entry();
         assert_eq!(entry["timeout"], json!(180));
+        assert_eq!(entry["env"]["SJEL_AGENT_NAME"], json!("pi"));
+        assert_eq!(entry["env"]["SJEL_AGENT"], json!("1"));
         assert_eq!(entry["exposure"], json!("codemode"));
     }
 
@@ -587,6 +608,7 @@ mod tests {
             .position(|arg| arg == "--")
             .expect("-- separator");
         assert_eq!(&args[separator + 1..], server_command().as_slice());
+        assert!(args[..separator].contains(&"SJEL_AGENT_NAME=claude-code".to_string()));
         assert_eq!(
             claude_remove_args(),
             vec!["mcp", "remove", SERVER_NAME, "--scope", "user"]
@@ -604,8 +626,13 @@ mod tests {
     #[test]
     fn codex_is_registered_through_its_own_cli() {
         let args = codex_add_args();
-        assert_eq!(&args[..4], ["mcp", "add", SERVER_NAME, "--"]);
-        assert_eq!(&args[4..], server_command().as_slice());
+        assert_eq!(&args[..3], ["mcp", "add", SERVER_NAME]);
+        assert_eq!(
+            &args[3..7],
+            ["--env", "SJEL_AGENT=1", "--env", "SJEL_AGENT_NAME=codex"]
+        );
+        assert_eq!(args[7], "--");
+        assert_eq!(&args[8..], server_command().as_slice());
         assert_eq!(codex_remove_args(), vec!["mcp", "remove", SERVER_NAME]);
     }
 }

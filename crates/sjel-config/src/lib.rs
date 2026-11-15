@@ -138,6 +138,17 @@ pub fn resolve_port(fallback_env: Option<&str>, file_port: Option<u16>, default:
         .unwrap_or(default)
 }
 
+/// Whether this process runs inside an agent harness. `SJEL_AGENT=1` marks one by hand (the
+/// `sjel run` launcher and the harness templates set it), `CLAUDECODE=1` is Claude Code's own
+/// marker, and `SJEL_AGENT=0` turns it off for the operator. Owner-only commands refuse it.
+pub fn in_agent_session() -> bool {
+    match std::env::var("SJEL_AGENT").as_deref() {
+        Ok("1") => true,
+        Ok("0") => false,
+        _ => std::env::var("CLAUDECODE").as_deref() == Ok("1"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

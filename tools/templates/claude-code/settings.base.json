@@ -163,6 +163,7 @@
     }
   },
   "env": {
+    "SJEL_AGENT_NAME": "claude-code",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "ENABLE_EXPERIMENTAL_MCP_CLI": "true",
     "AUTO_COMPACT_WINDOW": "900000",

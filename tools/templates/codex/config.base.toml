@@ -10,6 +10,7 @@ enabled = false
 
 [shell_environment_policy]
 ignore_default_excludes = false
+set = { SJEL_AGENT = "1", SJEL_AGENT_NAME = "codex" }
 
 [shell_environment_policy.filters]
 "*PASSWORD*" = "exclude"

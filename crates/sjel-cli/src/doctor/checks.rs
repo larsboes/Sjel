@@ -84,6 +84,7 @@ fn entries() -> Vec<Entry> {
         ),
         One("AI assistant integrations", integrations),
         One("Claude Code settings (sjel claude)", claude_settings),
+        One("Harness sandboxes (overlay data/ walls)", harness_sandboxes),
         One("Copilot guard hook (sjel copilot)", copilot_guard),
         One("Capabilities (enabled set)", enabled_set),
         One("Capabilities (external references)", external_refs),
@@ -807,6 +808,59 @@ fn cargo_target(ctx: &Ctx) -> PathBuf {
         .ok()
         .filter(|v| !v.is_empty())
         .map_or_else(|| ctx.root.join("target"), PathBuf::from)
+}
+
+/// Which wall keeps each installed harness out of the overlay's `data/`, read from its own
+/// configuration. How a harness is started is not visible here, so a harness without a sandbox
+/// of its own is a warning that names `sjel run` (docs/plans/containment.md, C1).
+fn harness_sandboxes(ctx: &mut Ctx) {
+    if ctx.overlay_path.is_empty() {
+        ctx.ok("no overlay configured — nothing to wall off");
+        return;
+    }
+    let home = PathBuf::from(home());
+    let data = Path::new(&ctx.overlay_path)
+        .join("data")
+        .display()
+        .to_string();
+    let read = |path: PathBuf| std::fs::read_to_string(path).ok();
+    let claude_dir = std::env::var("CLAUDE_CONFIG_DIR")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .map_or_else(|| home.join(".claude"), |d| PathBuf::from(expand_home(&d)));
+    let enrolled: BTreeSet<String> =
+        std::fs::read_dir(Path::new(&ctx.overlay_path).join("config/agent-tokens"))
+            .map(|dir| {
+                dir.flatten()
+                    .filter_map(|e| {
+                        e.file_name()
+                            .to_str()?
+                            .strip_suffix(".sha256")
+                            .map(str::to_owned)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+    let codex = read(home.join(".codex/config.toml"));
+    let claude = read(claude_dir.join("settings.json"));
+    let walls = super::pure::harness_walls(&super::pure::HarnessWalls {
+        data: &data,
+        codex: codex.as_deref(),
+        claude: claude.as_deref(),
+        pi: home.join(".pi/agent/bin/pi").exists(),
+        antigravity: home.join(".local/bin/agy").exists(),
+        enrolled: &enrolled,
+    });
+    if walls.is_empty() {
+        ctx.ok("no agent harness installed");
+    }
+    for (level, message) in walls {
+        match level {
+            super::pure::Level::Ok => ctx.ok(message),
+            super::pure::Level::Warn => ctx.warn(message),
+            super::pure::Level::Bad => ctx.bad(message),
+        }
+    }
 }
 
 fn claude_settings(ctx: &mut Ctx) {

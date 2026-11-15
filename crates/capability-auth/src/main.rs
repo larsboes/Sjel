@@ -172,6 +172,10 @@ fn enroll(name: &str) -> Result<(), String> {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("enroll") {
+        if sjel_config::in_agent_session() {
+            eprintln!("sjel-capability-auth: agent tokens are enrolled by the owner; run this in your own shell");
+            return ExitCode::from(2);
+        }
         let name = match args.get(1..).unwrap_or_default() {
             [] => "default",
             [name] if valid_name(name) => name.as_str(),

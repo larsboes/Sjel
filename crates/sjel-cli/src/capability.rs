@@ -382,16 +382,7 @@ fn url(root: &Path, name: &str) -> Result<String, String> {
         .ok_or_else(|| format!("sjel: capability '{name}' has no registered HTTP surface"))
 }
 
-/// An agent session is pseudonymized by the gate on every response. `SJEL_AGENT=1`
-/// marks one by hand, `CLAUDECODE=1` is Claude Code's own marker, and `SJEL_AGENT=0` turns it
-/// off for the operator.
-pub fn in_agent_session() -> bool {
-    match std::env::var("SJEL_AGENT").as_deref() {
-        Ok("1") => true,
-        Ok("0") => false,
-        _ => std::env::var("CLAUDECODE").as_deref() == Ok("1"),
-    }
-}
+pub use sjel_config::in_agent_session;
 
 /// Which token, if any, rides with a call.
 enum Auth {

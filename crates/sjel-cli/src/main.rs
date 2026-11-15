@@ -245,6 +245,11 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "testflight" => testflight::run(root, rest),
         "backup" => backup::run(root, rest),
         "agent" => match rest.first().map(String::as_str) {
+            // Owner-only, like tier and cap: an agent that minted itself a second token would
+            // read past the cap set on its own.
+            Some("enroll") if capability::in_agent_session() => {
+                fail("sjel: agent tokens are enrolled by the owner; run this in your own shell")
+            }
             Some("enroll") => exec(
                 Command::new(tool("tools/capability-auth/capability-auth"))
                     .arg("enroll")

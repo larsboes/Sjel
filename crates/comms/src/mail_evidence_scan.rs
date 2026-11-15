@@ -18,7 +18,7 @@ use crate::{
 
 pub const MAX_THREADS: usize = 50;
 /// The inference role a scan uses when none is named.
-pub const DEFAULT_ROLE: &str = "mail_evidence";
+pub const DEFAULT_ROLE: &str = "summarization_light";
 const REPLY_TOKENS: u32 = 1200;
 const MAX_PROJECT_RESPONSE: u64 = 128 * 1024;
 
@@ -212,6 +212,9 @@ pub(crate) fn model(
     extraction: &Extraction<'_>,
     projects: &[String],
 ) -> Result<Parsed, &'static str> {
+    if !role.is_afm() {
+        return Err("afm_required");
+    }
     let Extraction {
         stage,
         class,
@@ -222,8 +225,6 @@ pub(crate) fn model(
     role.runtime_admission_with(runtime)
         .map_err(|_| "runtime_busy")?;
     let request = mail_evidence::prompt(stage, class, text, projects).map_err(|_| "prompt")?;
-    crate::quiet::runtime_admission(runtime, role, request.chars().count(), REPLY_TOKENS)
-        .map_err(|_| "runtime_busy")?;
     if !summarize::fits_window(
         request.chars().count(),
         REPLY_TOKENS,
@@ -231,6 +232,8 @@ pub(crate) fn model(
     ) {
         return Err("prompt_too_large");
     }
+    crate::quiet::runtime_admission(runtime, role, request.chars().count(), REPLY_TOKENS)
+        .map_err(|_| "runtime_busy")?;
     let target = crate::digest::to_target(cfg, role, runtime);
     let endpoint = reqwest::Url::parse(&target.endpoint).map_err(|_| "local_model_config")?;
     let host = endpoint.host_str().ok_or("local_model_config")?;
@@ -247,7 +250,7 @@ pub(crate) fn model(
         return Err("local_model_config");
     }
     let _admission = match &target.gate {
-        Some(gate) => Some(gate.acquire().map_err(|_| "runtime_busy")?),
+        Some(gate) => Some(gate.acquire().map_err(|_| "model_admission")?),
         None => None,
     };
     let http = sjel_http::builder(
@@ -379,7 +382,7 @@ fn withdraw(owners: [(&reqwest::blocking::Client, &str); 2], thread: &str) -> Re
 
 /// Explicitly analyze indexed thread IDs, without recording progress. The inventory URL
 /// must be a literal HTTP loopback origin. `role` names an inference role, else
-/// [`DEFAULT_ROLE`], else the light summarization role; it must be loopback and declare
+/// [`DEFAULT_ROLE`]; it must resolve to AFM and declare
 /// `max_input_tokens`. Retry failed IDs; owner writes are idempotent.
 /// Runs blocking I/O and must not be called on an async executor thread.
 pub fn scan(
@@ -408,13 +411,10 @@ pub fn scan(
         let client = client(cfg.projects_context.timeout_ms).map_err(|_| "owner_config")?;
         let role = match role {
             Some(name) => cfg.inference.role(name),
-            None => cfg
-                .inference
-                .role(DEFAULT_ROLE)
-                .or_else(|| cfg.light_summarization_role()),
+            None => cfg.inference.role(DEFAULT_ROLE),
         }
-        .filter(|r| r.is_loopback() && r.max_input_tokens.is_some())
-        .ok_or("local_model_config")?;
+        .filter(|r| r.is_afm() && r.max_input_tokens.is_some())
+        .ok_or("afm_config")?;
         let store = Store::open(&cfg.database_path).map_err(|_| "store")?;
         Ok((
             inventory,
@@ -645,6 +645,56 @@ fn body_failure_stage(error: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn non_afm_generation_is_refused_before_network_or_gate_access() {
+        let mut cfg = Config::load();
+        cfg.inference = serde_json::from_value(serde_json::json!({
+            "backends": { "test": { "api":"openai", "base_url":"http://127.0.0.1:9/v1" } },
+            "roles": { "test": { "backend":"test", "model":"other-model", "max_input_tokens":4096 } }
+        })).unwrap();
+        let role = cfg.inference.role("test").unwrap();
+        let extraction = Extraction {
+            stage: Stage::Inventory,
+            class: "c1",
+            text: "Order: mug",
+            source: "s",
+            show: false,
+        };
+        let result = model(
+            &sjel_runtime::Status::normal("test"),
+            &cfg,
+            &role,
+            &extraction,
+            &[],
+        );
+        assert_eq!(result.err(), Some("afm_required"));
+    }
+
+    #[test]
+    fn afm_window_failure_is_distinct_from_runtime_deferral() {
+        let mut cfg = Config::load();
+        cfg.inference = serde_json::from_value(serde_json::json!({
+            "backends": { "foundation-models": { "api":"openai", "base_url":"http://127.0.0.1:9/v1" } },
+            "roles": { "test": { "backend":"foundation-models", "model":"apple-foundationmodel", "max_input_tokens":1024 } }
+        })).unwrap();
+        let role = cfg.inference.role("test").unwrap();
+        let extraction = Extraction {
+            stage: Stage::Inventory,
+            class: "c1",
+            text: "Order: mug",
+            source: "s",
+            show: false,
+        };
+        let result = model(
+            &sjel_runtime::Status::normal("test"),
+            &cfg,
+            &role,
+            &extraction,
+            &[],
+        );
+        assert_eq!(result.err(), Some("prompt_too_large"));
+    }
 
     #[test]
     fn only_a_failure_that_is_not_a_limit_is_retried() {

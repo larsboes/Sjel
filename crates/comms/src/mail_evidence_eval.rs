@@ -274,6 +274,7 @@ pub struct Report {
     pub extraction_version: &'static str,
     pub backend: String,
     pub model: String,
+    pub context_tokens: Option<u32>,
     pub conventions_hash: String,
     pub initial_admission_failure: Option<String>,
     pub cases: BTreeMap<String, Counts>,
@@ -338,8 +339,8 @@ pub fn run(
     let role = cfg
         .inference
         .role(role_name)
-        .filter(|r| r.is_loopback() && r.max_input_tokens.is_some())
-        .ok_or("local role unavailable")?;
+        .filter(|r| r.is_afm() && r.max_input_tokens.is_some())
+        .ok_or("AFM role unavailable; other generative backends are not supported")?;
     let conventions = serde_json::json!({"chat_template_kwargs":role.chat_template_kwargs,"request_overrides":role.request_overrides,"max_input_tokens":role.max_input_tokens});
     let mut report = Report {
         corpus_hash: digest(&serde_json::to_string(corpus).map_err(|_| "invalid corpus")?),
@@ -351,6 +352,7 @@ pub fn run(
         extraction_version: mail_evidence::EXTRACTION_VERSION,
         backend: role.backend_name.clone(),
         model: role.model.clone(),
+        context_tokens: role.max_input_tokens,
         conventions_hash: digest(&conventions.to_string()),
         initial_admission_failure: role
             .runtime_admission_with(runtime)

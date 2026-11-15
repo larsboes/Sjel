@@ -25,6 +25,11 @@ not silently become either identity. The existing `inv:` reference identifies an
 
 ## Extraction and review
 
+AFM is the only generative backend admitted by this pipeline. The default role is
+`summarization_light`; an explicit role must also resolve to AFM with a declared context window.
+Other local or hosted generators are refused before inference. AFM proposes grounded fields;
+Sjel owns parsing, normalization, validation, identity resolution and review decisions.
+
 The flow is source message → grounded proposal → owner review → record change or reviewed link.
 An order or shipment cannot create an owned item. Only a reviewed delivery may do so. A
 cancellation or return remains evidence for review; it does not change item state automatically.
@@ -87,6 +92,7 @@ repository. Supply source text from an admitted source adapter without a tempora
 
 `run CORPUS REPORT ROLE` reads an array of the same sources on stdin. It validates every
 fingerprint before inference and refuses changed sources, classifications or project candidates.
+The role must resolve to AFM; use `summarization_light` on deployments that provide it.
 A pseudonymized source representation must be supplied identically on repeat runs; token changes
 require a fresh review and corpus. Pseudonymized thread bodies measure that representation,
 separately from production's raw per-message classification and chunking.

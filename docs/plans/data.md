@@ -26,6 +26,50 @@ live project-view inspection passed. Full workspace gates, live CI inspection an
 acceptance did not run. General Markdown file authority remains separate work in
 [`storage.md`](storage.md#one-vault-for-prose).
 
+## Mail evidence semantics and resolution
+
+Shared typed staging, retained delivery provenance and owner-aligned deduplication shipped in
+`f1e0f3ef` ([mail evidence contract](../capabilities/mail-evidence.md)).
+
+Remaining work, in order:
+
+1. **Measure extraction separately from resolution.** Run a reviewed local corpus through the
+   configured mail-evidence role. Label expected events, source excerpts, item mentions and
+   target projects before measuring. Report false claims, missed claims, incorrect targets and
+   duplicates separately; include negative mail and multiple-item orders. Record the actual
+   backend/model alongside the prompt/parser revision. The synthetic corpus verifies parser
+   behavior only. Done when a repeatable local evaluation reports these categories without
+   retaining full mail bodies or publishing private fixtures.
+2. **Resolve item mentions through Inventory.** Use source-scoped identifiers before label
+   similarity. Return explicit exact, ambiguous and unknown results with candidate item IDs and
+   reasons. A model may propose candidates; the owner validates identifiers and the reviewer
+   selects a current item/state snapshot. Never use an order number alone as a global key.
+   Done when aliases, two identical physical products, accessory mail and reused order labels
+   do not produce a false automatic link; unknown and ambiguous mentions remain reviewable.
+3. **Make review provenance visible.** The current client proposal model ignores the new optional
+   delivery statement and extraction revision. Extend its read contract and review view after
+   concurrent Inventory UI work lands. Done when the reviewer sees both the product excerpt and
+   separate statement, legacy rows remain readable, and Mac/phone acceptance is recorded.
+4. **Represent lifecycle corrections without erasure.** An excerpt hash is not an order-line or
+   item identity. Relate reviewed order, delivery, cancellation and return evidence across
+   messages using source-scoped identities and owner links. Keep conflicting claims and
+   reviewer decisions. Done when a delivery followed by a return remains traceable and never
+   creates a second item or silently changes ownership.
+5. **Extend the existing registry only after this slice passes.** Express evidence relationships
+   through capability-owned object/link declarations; reuse the Projects registry rather than
+   introduce a parallel ontology store. Done when one query follows source evidence to a
+   reviewed item and project with classification and provenance preserved. RDF storage and
+   automated reasoning remain deferred until an interoperability or inference requirement
+   cannot be met by these contracts.
+
+Verification: all 625 tests across Comms, Inventory and Projects passed, including the 12-case
+synthetic corpus, legacy migrations and retained provenance. Clippy for all three packages and
+all targets passed with pre-existing manifest lint-inheritance warnings. Route-schema,
+store-transaction, relative-document-link, publication-hygiene and self-model checks passed.
+The architecture freshness gate reports an unrelated stale `sqld` description; doctor reports
+an overdue home-automation backup. Live model evaluation, real-mail replay, service installation,
+UI acceptance and workspace-wide checks have not run. Scanning remains disabled.
+
 ## Mail evidence for projects and inventory
 
 Decided 2026-10-28: scan existing indexed mail and new mail for evidence relevant to projects

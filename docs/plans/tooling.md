@@ -12,8 +12,9 @@ covers it.
 
 - **Import a private source workspace with history.** Consolidating a sibling application
   workspace required a verified Git bundle, a local history fetch and a prefixed tree import.
-  Protected local files prevented an intact directory rename, so the original checkout remains
-  a recovery source. Add an explicit-destination import command to `tools/repos` that preserves
+  Protected local files prevented an intact directory rename. Local state required in-place
+  copies, SQLite online backups and file-only credential renames without reading values.
+  Add an explicit-destination import command to `tools/repos` that preserves
   unrelated edits, records the source commit as a parent and reports local-state handoff paths
   without reading credentials. Done when a dirty destination and protected local files have
   regression coverage and the imported source tree matches the original.

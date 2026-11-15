@@ -823,6 +823,14 @@ Open:
 
    Gaps against the old table: Ely's table has no accessibility label and no outer border.
 
+#### Chart acceptance
+
+Finance's grouped bars and storage history use Ely in `9f5fe4d1`; 195 UI tests, Cargo check and Clippy pass.
+
+Open: inspect Finance and Systems storage in light and dark appearances, including tooltips,
+legend toggles, narrow layouts, missing months and empty histories. Live appearance, the app
+workspace, GPUI Fast and NSH checks did not run for this chart change.
+
 #### Resume checklist (Ely)
 
 The fork is pinned, the app launches with Ely, and the theme bridge is built. Continue in this

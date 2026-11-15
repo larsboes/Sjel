@@ -30,16 +30,25 @@ acceptance did not run. General Markdown file authority remains separate work in
 
 Shared typed staging, retained delivery provenance and owner-aligned deduplication shipped in
 `f1e0f3ef` ([mail evidence contract](../capabilities/mail-evidence.md)).
+The body-free reviewed-label evaluator shipped in `2d88fe76`
+([evaluation contract](../capabilities/mail-evidence.md#reviewed-local-evaluation)).
 
 Remaining work, in order:
 
-1. **Measure extraction separately from resolution.** Run a reviewed local corpus through the
-   configured mail-evidence role. Label expected events, source excerpts, item mentions and
-   target projects before measuring. Report false claims, missed claims, incorrect targets and
-   duplicates separately; include negative mail and multiple-item orders. Record the actual
-   backend/model alongside the prompt/parser revision. The synthetic corpus verifies parser
-   behavior only. Done when a repeatable local evaluation reports these categories without
-   retaining full mail bodies or publishing private fixtures.
+1. **Complete the first live measurement.** The private pilot has seven independently
+   agent-reviewed cases, five expected purchase claims and three negative cases. It covers an
+   order, shipment, cancellation, delivery, shipment preparation and a feedback request. Labels
+   were frozen before model output; they are not human ground truth. The source representation
+   is pseudonymized `c1` thread bodies, supplied on stdin and never stored. Corpus and report
+   files stay in the private overlay with mode `0600`. The configured Qwen role scored zero
+   cases because `On the go` excluded `other-local-models`; the permitted Apple role also
+   deferred all cases. No model accuracy result exists. Owner runtime controls reject agent
+   tokens. Resume the bounded run after an owner admits the configured role. Add human review,
+   project assignments, English cases and actual returns before broader acceptance. A native
+   per-message source adapter remains necessary for production classification/chunking coverage
+   and repeatability across pseudonymization sessions. Done when a repeatable local run reports
+   false claims, missed claims, incorrect targets and duplicates with provenance and no retained
+   full bodies. A first small baseline does not set an acceptance threshold.
 2. **Resolve item mentions through Inventory.** Use source-scoped identifiers before label
    similarity. Return explicit exact, ambiguous and unknown results with candidate item IDs and
    reasons. A model may propose candidates; the owner validates identifiers and the reviewer
@@ -62,13 +71,13 @@ Remaining work, in order:
    automated reasoning remain deferred until an interoperability or inference requirement
    cannot be met by these contracts.
 
-Verification: all 625 tests across Comms, Inventory and Projects passed, including the 12-case
-synthetic corpus, legacy migrations and retained provenance. Clippy for all three packages and
-all targets passed with pre-existing manifest lint-inheritance warnings. Route-schema,
-store-transaction, relative-document-link, publication-hygiene and self-model checks passed.
-The architecture freshness gate reports an unrelated stale `sqld` description; doctor reports
-an overdue home-automation backup. Live model evaluation, real-mail replay, service installation,
-UI acceptance and workspace-wide checks have not run. Scanning remains disabled.
+Verification: all 519 Comms tests and all-target Clippy passed for the evaluator, including nine
+scoring, privacy and source-fingerprint checks. The earlier shared-contract slice passed 625
+tests across Comms, Inventory and Projects. Route-schema, store-transaction, relative-document-link,
+publication-hygiene and self-model checks passed. The existing architecture freshness failure is
+an unrelated stale `sqld` description; doctor reports an overdue backup. Both real-mail model
+attempts produced only deferrals. Production replay, service installation, UI acceptance and
+workspace-wide checks have not run. Scanning remains disabled.
 
 ## Mail evidence for projects and inventory
 

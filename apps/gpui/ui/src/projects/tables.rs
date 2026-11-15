@@ -1,21 +1,87 @@
 //! Task and cross-project task/note tables for Projects.
 
-use gpui_kit::component::checkbox::Checkbox;
+use std::rc::Rc;
+
 use gpui_kit::component::input::{Escape, Input, InputState};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString,
-};
+use gpui_kit::{div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, Entity, SharedString};
 
-use crate::primitives::{
-    due_badge, filter_pill, list, priority_pill, resizable_table_header, row_for_density,
-    status_pill, SortOrder, SortableColumn,
-};
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
+use crate::ely::theme::Density as ElyDensity;
+use crate::primitives::{filter_pill, row_for_density, status_pill};
 use crate::tasks::{self, NoteSort, StatusFilter, TaskFilter, TaskSort, TASK_STATUSES};
-use crate::theme::{tint, Palette};
+use crate::theme::{Density, Palette};
 use sjel_gpui_core::shell::{GlobalNote, GlobalTask, ProjectRecord};
 
-use super::{column, search_box, NoteKindFilter, Projects, ProjectsTab};
+use super::{search_box, NoteKindFilter, Projects, ProjectsTab};
+
+fn ely_density(density: Density) -> ElyDensity {
+    match density {
+        Density::Compact | Density::Mobile => ElyDensity::Compact,
+        Density::Desktop => ElyDensity::Standard,
+        Density::Comfortable => ElyDensity::Comfortable,
+    }
+}
+
+fn status_tone(status: &str) -> Tone {
+    match status {
+        "done" => Tone::Success,
+        "doing" => Tone::Accent,
+        "waiting" | "blocked" => Tone::Warning,
+        "cancelled" => Tone::Danger,
+        _ => Tone::Neutral,
+    }
+}
+
+fn priority_label(priority: u8) -> &'static str {
+    match priority.clamp(1, 3) {
+        1 => "P1",
+        2 => "P2",
+        _ => "P3",
+    }
+}
+
+fn priority_value(choice: &str) -> &'static str {
+    match choice {
+        "P1" | "1" => "1",
+        "P2" | "2" => "2",
+        _ => "3",
+    }
+}
+
+fn priority_tone(priority: u8) -> Tone {
+    match priority.clamp(1, 3) {
+        1 => Tone::Danger,
+        2 => Tone::Warning,
+        _ => Tone::Neutral,
+    }
+}
+
+fn due_cell(due: Option<&str>, done: bool, today: &str) -> Cell {
+    let Some(date) = due.filter(|d| !d.is_empty()) else {
+        return Cell::Empty;
+    };
+    let tone = if done {
+        Tone::Neutral
+    } else if date < today {
+        Tone::Danger
+    } else if date == today {
+        Tone::Warning
+    } else {
+        Tone::Neutral
+    };
+    Cell::Tag(date.to_owned().into(), tone)
+}
+
+fn title_cell(title: &str, content: Option<&str>) -> Cell {
+    match content.and_then(tasks::parse_subtask_progress) {
+        Some((done, total)) => {
+            Cell::Lines(title.to_owned().into(), format!("{done}/{total} subtasks").into())
+        }
+        None => Cell::Text(title.to_owned().into()),
+    }
+}
 
 pub(super) fn parse_frontmatter_status(content: &str, done: bool) -> String {
     let mut in_fm = false;
@@ -89,6 +155,60 @@ pub(super) fn project_record_to_global_task(rec: &ProjectRecord) -> GlobalTask {
 }
 
 impl Projects {
+    fn inline_edit_bar(&self, palette: Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if let Some((_, _, input, _)) = &self.task_title_edit {
+            return Some(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_3()
+                    .py_2()
+                    .mb_2()
+                    .rounded(px(6.))
+                    .bg(rgba(palette.raised))
+                    .border_1()
+                    .border_color(rgba(palette.border))
+                    .capture_action(cx.listener(|view, _: &Escape, _, cx| {
+                        view.cancel_task_title(cx);
+                        cx.stop_propagation();
+                    }))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child("Rename task:"),
+                    )
+                    .child(div().flex_1().child(Input::new(input).small()))
+                    .into_any_element(),
+            );
+        }
+        if let Some((path, input, _)) = &self.due_edit {
+            return Some(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_3()
+                    .py_2()
+                    .mb_2()
+                    .rounded(px(6.))
+                    .bg(rgba(palette.raised))
+                    .border_1()
+                    .border_color(rgba(palette.border))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child("Due date:"),
+                    )
+                    .child(self.due_editor(path.clone(), input, 0, 220., palette, cx))
+                    .into_any_element(),
+            );
+        }
+        None
+    }
+
     pub(super) fn task_table(
         &self,
         records: &[ProjectRecord],
@@ -98,272 +218,157 @@ impl Projects {
     ) -> AnyElement {
         let cols = self.columns();
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let entity = cx.entity();
-        let mut header_cols = vec![
-            SortableColumn::spacer(px(24.)),
-            SortableColumn::flex("title", "TASK"),
-        ];
-        if let Some(w) = cols.status {
-            header_cols.push(SortableColumn::fixed("status", "STATUS", px(w)));
-        }
-        header_cols.push(SortableColumn::fixed("due", "DUE", px(cols.due)));
-        header_cols.push(SortableColumn::fixed(
-            "priority",
-            "PRIORITY",
-            px(cols.priority),
-        ));
-        header_cols.push(SortableColumn::spacer(px(28.)));
-
-        let header = resizable_table_header(
-            "project-tasks",
-            header_cols,
-            cols.density,
-            palette,
-            |_, _, _| {},
-            move |col_id, _, cx| {
-                entity.update(cx, |view, cx| view.resize_column(col_id, cx));
-            },
-        );
-        let mut rows = vec![header];
-
         let filtered: Vec<_> = tasks::ordered(records)
             .into_iter()
             .filter(|t| self.task_filter.matches(t.done))
             .collect();
 
-        if filtered.is_empty() && !records.is_empty() {
-            rows.push(
-                row_for_density(cols.density)
-                    .min_h(px(40.))
-                    .py_2()
-                    .text_sm()
-                    .text_color(rgb(palette.muted))
-                    .child(match self.task_filter {
-                        TaskFilter::Open => "No open tasks in this project.",
-                        TaskFilter::Done => "No completed tasks yet.",
-                        TaskFilter::All => "No tasks in this project.",
-                    })
-                    .into_any_element(),
-            );
+        let columns = vec![
+            Column::new("done", "").width(rems((32.) / 16.)).editable(),
+            Column::new("title", "TASK").editable(),
+            Column::new("status", "STATUS")
+                .width(rems((cols.status.unwrap_or(100.) / 16.)))
+                .choices(TASK_STATUSES),
+            Column::new("due", "DUE").width(rems((cols.due) / 16.)).editable(),
+            Column::new("priority", "PRIORITY")
+                .width(rems((cols.priority) / 16.))
+                .choices(["P1", "P2", "P3"]),
+            Column::new("actions", "")
+                .width(rems((110.) / 16.))
+                .actions([RowAction::new("due", "Due"), RowAction::new("delete", "Delete")]),
+        ];
+
+        let mut hidden: Vec<&'static str> = Vec::new();
+        if cols.status.is_none() {
+            hidden.push("status");
         }
 
-        for (index, task) in filtered.into_iter().enumerate() {
-            let (toggle, open, del) = (task.clone(), task.clone(), task.clone());
-            let due = task.due.clone().filter(|d| !d.is_empty());
-            let editing = self
-                .due_edit
-                .as_ref()
-                .filter(|(path, _, _)| *path == task.path)
-                .map(|(_, input, _)| input.clone());
-            let due_cell = match editing {
-                Some(input) => {
-                    self.due_editor(task.path.clone(), &input, index, cols.due, palette, cx)
-                }
-                None => {
-                    let edit = task.clone();
-                    div()
-                        .id(("due", index))
-                        .w(px(cols.due))
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |view, _, window, cx| {
-                            view.edit_due(edit.path.clone(), edit.due.clone(), window, cx)
-                        }))
-                        .child(due_badge(due.as_deref(), task.done, &today, palette))
-                        .into_any_element()
-                }
-            };
-            let subtask_badge =
-                tasks::parse_subtask_progress(&task.content).map(|(done, total)| {
-                    div()
-                        .px_1p5()
-                        .py(px(0.5))
-                        .rounded(px(4.))
-                        .bg(rgba(if done == total {
-                            tint(palette.green, 0x22)
-                        } else {
-                            palette.raised
-                        }))
-                        .text_xs()
-                        .text_color(rgb(if done == total {
-                            palette.green
-                        } else {
-                            palette.muted
-                        }))
-                        .child(format!("{done}/{total}"))
-                });
-            let status = parse_frontmatter_status(&task.content, task.done);
-            let status_cell = match self.status_edit.as_deref() {
-                Some(edit_path) if edit_path == task.path => {
-                    column(cols.status).child(self.status_chips(&task.path, &status, palette, cx))
-                }
-                _ => {
-                    let pick = task.path.clone();
-                    column(cols.status).child(
-                        div()
-                            .id(("task-status", index))
-                            .cursor_pointer()
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.status_edit = Some(pick.clone());
-                                cx.notify();
-                            }))
-                            .child(status_pill(&status, palette)),
+        let rows: Rc<Vec<Row>> = Rc::new(
+            filtered
+                .iter()
+                .map(|task| {
+                    let status = parse_frontmatter_status(&task.content, task.done);
+                    let mut action_keys = vec!["due"];
+                    if !sjel_gpui_core::shell::is_external_task(&task.path) {
+                        action_keys.push("delete");
+                    }
+                    Row::new(
+                        task.path.clone(),
+                        [
+                            Cell::Check(task.done),
+                            title_cell(&task.title, Some(&task.content)),
+                            Cell::Tag(status.clone().into(), status_tone(&status)),
+                            due_cell(task.due.as_deref(), task.done, &today),
+                            Cell::Tag(
+                                priority_label(task.priority).into(),
+                                priority_tone(task.priority),
+                            ),
+                            Cell::Actions(action_keys.into_iter().map(Into::into).collect()),
+                        ],
                     )
-                }
-            };
-            let is_row_selected = self.selected_task_index == Some(index)
-                || self
-                    .task_panel
-                    .as_ref()
-                    .is_some_and(|p| p.path == task.path);
-            let cycle = task.clone();
-            let priority = task.priority.clamp(1, 3);
-            let is_editing_title = self
-                .task_title_edit
-                .as_ref()
-                .is_some_and(|(p, ..)| *p == task.path);
-            let title_cell = if is_editing_title {
-                let input = self
-                    .task_title_edit
-                    .as_ref()
-                    .map(|(_, _, input, _)| input.clone())
-                    .unwrap();
+                })
+                .collect(),
+        );
+
+        let empty_msg = match self.task_filter {
+            TaskFilter::Open => "No open tasks in this project.",
+            TaskFilter::Done => "No completed tasks yet.",
+            TaskFilter::All => "No tasks in this project.",
+        };
+
+        let due_map: std::collections::HashMap<String, Option<String>> = filtered
+            .iter()
+            .map(|t| (t.path.clone(), t.due.clone()))
+            .collect();
+
+        let (on_curr, on_open, on_edit, on_act) =
+            (cx.entity(), cx.entity(), cx.entity(), cx.entity());
+        let table = DataTable::new("project-tasks", columns)
+            .rows(rows)
+            .hidden(hidden)
+            .density(ely_density(cols.density))
+            .current(self.selected_task_path.clone())
+            .on_current(move |key, _, cx| {
+                on_curr.update(cx, |view, cx| {
+                    view.selected_task_path = Some(key.to_string());
+                    cx.notify();
+                });
+            })
+            .on_open(move |key, window, cx| {
+                on_open.update(cx, |view, cx| {
+                    view.selected_task_path = Some(key.to_string());
+                    view.open_task_by_path(key, window, cx);
+                });
+            })
+            .on_edit(move |row_key, col_key, value, window, cx| {
+                let (row_key, value) = (row_key.to_string(), value.trim().to_string());
+                on_edit.update(cx, |view, cx| match col_key.as_ref() {
+                    "done" => {
+                        if !sjel_gpui_core::shell::is_external_task(&row_key) {
+                            view.toggle_task(row_key, value == "true", window, cx);
+                        }
+                    }
+                    "title" => {
+                        if !value.is_empty() {
+                            view.rename_task(row_key, value, window, cx);
+                        }
+                    }
+                    "status" => {
+                        view.set_task_property(row_key, "status", value, window, cx);
+                    }
+                    "due" => {
+                        if tasks::valid_due(&value) {
+                            view.set_task_property(row_key, "due", value, window, cx);
+                        }
+                    }
+                    "priority" => {
+                        view.set_task_property(
+                            row_key,
+                            "priority",
+                            priority_value(&value).to_owned(),
+                            window,
+                            cx,
+                        );
+                    }
+                    _ => {}
+                });
+            })
+            .on_action(move |row_key, action, window, cx| {
+                let row_key = row_key.to_string();
+                let due = due_map.get(&row_key).cloned().flatten();
+                on_act.update(cx, |view, cx| match action.as_ref() {
+                    "due" => view.edit_due(row_key, due, window, cx),
+                    "delete" => view.remove_record(row_key, window, cx),
+                    _ => {}
+                });
+            })
+            .empty(empty_msg);
+
+        let add_row = row_for_density(cols.density)
+            .min_h(px(40.))
+            .py_1()
+            .child(
                 div()
-                    .flex_1()
-                    .min_w_0()
-                    .capture_action(cx.listener(|view, _: &Escape, _, cx| {
-                        view.cancel_task_title(cx);
-                        cx.stop_propagation();
-                    }))
-                    .child(Input::new(&input).small().appearance(false).px_0())
-                    .into_any_element()
-            } else {
-                let edit_task = task.clone();
-                div()
-                    .id(("task", index))
-                    .flex_1()
-                    .min_w_0()
+                    .w(px(24.))
                     .flex()
                     .items_center()
-                    .gap_2()
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.selected_task_index = Some(index);
-                        let global = project_record_to_global_task(&open);
-                        view.select_task(&global, window, cx);
-                    }))
-                    .child(
-                        div()
-                            .truncate()
-                            .text_sm()
-                            .when(task.done, |title| title.line_through())
-                            .hover(move |style| style.text_color(rgb(palette.accent)))
-                            .child(task.title.clone()),
-                    )
-                    .child(
-                        div()
-                            .id(("edit-task-title", index))
-                            .cursor_pointer()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .opacity(0.)
-                            .group_hover("task-row", |s| s.opacity(0.8))
-                            .hover(move |s| s.text_color(rgb(palette.accent)).opacity(1.))
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                cx.stop_propagation();
-                                view.selected_task_index = Some(index);
-                                view.edit_task_title(
-                                    edit_task.path.clone(),
-                                    edit_task.title.clone(),
-                                    window,
-                                    cx,
-                                );
-                            }))
-                            .child("✎"),
-                    )
-                    .children(subtask_badge)
-                    .into_any_element()
-            };
-            rows.push(
-                row_for_density(cols.density)
-                    .id(("task-row", index))
-                    .group("task-row")
-                    .min_h(px(40.))
-                    .py_1()
-                    .hover(move |s| s.bg(rgba(tint(palette.raised, 0x55))))
-                    .when(is_row_selected, |row| {
-                        row.bg(rgba(tint(palette.accent, 0x18)))
-                    })
-                    .when(task.done, |row| row.opacity(0.55))
-                    .child(div().w(px(24.)).flex().items_center().child(
-                        Checkbox::new(("task-done", index)).checked(task.done).when(
-                            !sjel_gpui_core::shell::is_external_task(&task.path),
-                            |checkbox| {
-                                checkbox.on_click(cx.listener(
-                                    move |view, done: &bool, window, cx| {
-                                        view.toggle_task(toggle.path.clone(), *done, window, cx)
-                                    },
-                                ))
-                            },
-                        ),
-                    ))
-                    .child(title_cell)
-                    .child(status_cell)
-                    .child(due_cell)
-                    .child(
-                        div()
-                            .id(("priority", index))
-                            .w(px(cols.priority))
-                            .cursor_pointer()
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                let next = cycle.priority.clamp(1, 3) % 3 + 1;
-                                view.set_task_field(
-                                    &cycle,
-                                    "priority",
-                                    next.to_string(),
-                                    window,
-                                    cx,
-                                )
-                            }))
-                            .child(priority_pill(priority, palette)),
-                    )
-                    .child(
-                        div().w(px(28.)).flex().justify_center().child(
-                            div()
-                                .id(("del-task", index))
-                                .cursor_pointer()
-                                .text_color(rgb(palette.muted))
-                                .opacity(0.)
-                                .group_hover("task-row", |s| s.opacity(1.))
-                                .hover(move |s| s.text_color(rgb(palette.red)))
-                                .on_click(cx.listener(move |view, _, window, cx| {
-                                    view.remove_record(del.path.clone(), window, cx)
-                                }))
-                                .child("×"),
-                        ),
-                    )
-                    .into_any_element(),
+                    .text_color(rgb(palette.muted))
+                    .child("+"),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .child(Input::new(new_task).appearance(false).px_0()),
             );
-        }
-        rows.push(
-            row_for_density(cols.density)
-                .min_h(px(40.))
-                .py_1()
-                .child(
-                    div()
-                        .w(px(24.))
-                        .flex()
-                        .items_center()
-                        .text_color(rgb(palette.muted))
-                        .child("+"),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .child(Input::new(new_task).appearance(false).px_0()),
-                )
-                .into_any_element(),
-        );
-        list(rows, palette)
+
+        div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .children(self.inline_edit_bar(palette, cx))
+            .child(table)
+            .child(add_row)
+            .into_any_element()
     }
 
     /// The due-date field and its preset chips, for the task at `path`.
@@ -520,52 +525,8 @@ impl Projects {
             )
             .child(search_box(cols.search).child(Input::new(search_input).small()));
 
-        let (sort, ascending) = self.task_sort;
-        let sort_state =
-            |column: TaskSort| (sort == column).then(|| SortOrder::from_bool(ascending));
-        let mut header_cols = vec![
-            SortableColumn::spacer(px(24.)),
-            SortableColumn::flex("title", "TASK").sorted(sort_state(TaskSort::Title)),
-        ];
-        if let Some(w) = cols.project {
-            header_cols.push(
-                SortableColumn::fixed("project", "PROJECT", px(w))
-                    .sorted(sort_state(TaskSort::Project)),
-            );
-        }
-        if let Some(w) = cols.status {
-            header_cols.push(
-                SortableColumn::fixed("status", "STATUS", px(w))
-                    .sorted(sort_state(TaskSort::Status)),
-            );
-        }
-        header_cols.push(
-            SortableColumn::fixed("due", "DUE", px(cols.due)).sorted(sort_state(TaskSort::Due)),
-        );
-        header_cols.push(
-            SortableColumn::fixed("priority", "PRIO", px(cols.priority))
-                .sorted(sort_state(TaskSort::Priority)),
-        );
-        let sort_entity = cx.entity();
-        let resize_entity = cx.entity();
-        let header = resizable_table_header(
-            "all-tasks",
-            header_cols,
-            cols.density,
-            palette,
-            move |col_id, _, cx| {
-                if let Some(column) = TaskSort::from_col_id(col_id) {
-                    sort_entity.update(cx, |view, cx| view.cycle_task_sort(column, cx));
-                }
-            },
-            move |col_id, _, cx| {
-                resize_entity.update(cx, |view, cx| view.resize_column(col_id, cx));
-            },
-        );
-        let mut rows = vec![header];
-
         let query = self.search_query.as_str();
-        let mut filtered: Vec<&GlobalTask> = tasks
+        let filtered: Vec<&GlobalTask> = tasks
             .iter()
             .filter(|t| self.global_status.matches(t.status()))
             .filter(|t| {
@@ -574,255 +535,169 @@ impl Projects {
                     || t.project.to_lowercase().contains(query)
             })
             .collect();
-        tasks::sort_tasks(&mut filtered, sort, ascending);
 
-        if filtered.is_empty() && !tasks.is_empty() {
-            rows.push(
-                row_for_density(cols.density)
-                    .min_h(px(40.))
-                    .py_2()
-                    .text_sm()
-                    .text_color(rgb(palette.muted))
-                    .child(if query.is_empty() {
-                        "No tasks in this filter view.".to_string()
-                    } else {
-                        format!("No tasks matching \"{query}\".")
-                    })
-                    .into_any_element(),
-            );
+        let columns = vec![
+            Column::new("done", "").width(rems((32.) / 16.)).editable(),
+            Column::new("title", "TASK"),
+            Column::new("project", "PROJECT").width(rems((cols.project.unwrap_or(140.) / 16.))),
+            Column::new("status", "STATUS")
+                .width(rems((cols.status.unwrap_or(100.) / 16.)))
+                .choices(TASK_STATUSES),
+            Column::new("due", "DUE").width(rems((cols.due) / 16.)).editable(),
+            Column::new("priority", "PRIO")
+                .width(rems((cols.priority) / 16.))
+                .choices(["P1", "P2", "P3"]),
+            Column::new("actions", "")
+                .width(rems((120.) / 16.))
+                .actions([RowAction::new("due", "Due"), RowAction::new("project", "Project")]),
+        ];
+
+        let mut hidden: Vec<&'static str> = Vec::new();
+        if cols.project.is_none() {
+            hidden.push("project");
+        }
+        if cols.status.is_none() {
+            hidden.push("status");
         }
 
-        let mut index = 0;
-        if self.group_by_project {
-            for (project, group) in tasks::group_by_project(&filtered) {
-                let folded = self.collapsed_groups.contains(&project);
-                let name = project.clone();
-                rows.push(
-                    row_for_density(cols.density)
-                        .id(SharedString::from(format!("group-{project}")))
-                        .min_h(px(32.))
-                        .py_1()
-                        .gap_2()
-                        .bg(rgba(tint(palette.raised, 0x18)))
-                        .text_sm()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |view, _, _, cx| {
-                            if !view.collapsed_groups.remove(&name) {
-                                view.collapsed_groups.insert(name.clone());
-                            }
-                            cx.notify();
-                        }))
-                        .child(
-                            div()
-                                .w(px(24.))
-                                .text_color(rgb(palette.muted))
-                                .child(if folded { "▸" } else { "▾" }),
-                        )
-                        .child(project)
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(rgb(palette.muted))
-                                .child(format!("{}", group.len())),
-                        )
-                        .into_any_element(),
-                );
-                if !folded {
-                    for task in group {
-                        rows.push(self.global_task_row(task, index, &today, palette, cx));
-                        index += 1;
-                    }
+        let rows: Rc<Vec<Row>> = Rc::new(
+            filtered
+                .iter()
+                .map(|task| {
+                    let status = task.status().to_owned();
+                    let closed = tasks::status_closes(&status);
+                    Row::new(
+                        task.id.clone(),
+                        [
+                            Cell::Check(task.done),
+                            title_cell(&task.title, task.summary.as_deref()),
+                            Cell::Tag(task.project.clone().into(), Tone::Accent),
+                            Cell::Tag(status.clone().into(), status_tone(&status)),
+                            due_cell(task.due.as_deref(), closed, &today),
+                            Cell::Tag(
+                                priority_label(task.priority).into(),
+                                priority_tone(task.priority),
+                            ),
+                            Cell::Actions(vec!["due".into(), "project".into()]),
+                        ],
+                    )
+                })
+                .collect(),
+        );
+
+        let (sort, ascending) = self.task_sort;
+        let sorts: Vec<SortKey> = match sort {
+            TaskSort::Default => Vec::new(),
+            _ => vec![SortKey {
+                column: match sort {
+                    TaskSort::Title => "title",
+                    TaskSort::Project => "project",
+                    TaskSort::Status => "status",
+                    TaskSort::Due => "due",
+                    TaskSort::Priority => "priority",
+                    TaskSort::Default => unreachable!(),
                 }
-            }
+                .into(),
+                rising: ascending,
+            }],
+        };
+
+        let empty_msg = if query.is_empty() {
+            "No tasks in this filter view.".to_string()
         } else {
-            for task in filtered {
-                rows.push(self.global_task_row(task, index, &today, palette, cx));
-                index += 1;
-            }
-        }
+            format!("No tasks matching \"{query}\".")
+        };
+
+        let meta_map: Rc<std::collections::HashMap<String, (bool, Option<String>, String)>> =
+            Rc::new(
+                filtered
+                    .iter()
+                    .map(|t| (t.id.clone(), (t.read_only(), t.due.clone(), t.project.clone())))
+                    .collect(),
+            );
+        let edit_meta = meta_map.clone();
+
+        let (on_curr, on_open, on_sort, on_edit, on_act) =
+            (cx.entity(), cx.entity(), cx.entity(), cx.entity(), cx.entity());
+        let table = DataTable::new("all-tasks", columns)
+            .rows(rows)
+            .hidden(hidden)
+            .sorts(sorts)
+            .when(self.group_by_project, |t| t.group_by("project"))
+            .density(ely_density(cols.density))
+            .current(self.selected_task_path.clone())
+            .on_current(move |key, _, cx| {
+                on_curr.update(cx, |view, cx| {
+                    view.selected_task_path = Some(key.to_string());
+                    cx.notify();
+                });
+            })
+            .on_open(move |key, window, cx| {
+                on_open.update(cx, |view, cx| {
+                    view.selected_task_path = Some(key.to_string());
+                    view.open_task_by_path(key, window, cx);
+                });
+            })
+            .on_sort(move |keys, _, cx| {
+                let next = keys
+                    .first()
+                    .and_then(|k| TaskSort::from_col_id(&k.column).map(|c| (c, k.rising)))
+                    .unwrap_or((TaskSort::Default, true));
+                on_sort.update(cx, |view, cx| {
+                    view.task_sort = next;
+                    cx.notify();
+                });
+            })
+            .on_edit(move |row_key, col_key, value, window, cx| {
+                let (row_key, value) = (row_key.to_string(), value.trim().to_string());
+                let read_only = edit_meta.get(&row_key).is_some_and(|m| m.0);
+                on_edit.update(cx, |view, cx| match col_key.as_ref() {
+                    "done" if !read_only => {
+                        view.toggle_global_task(row_key, value == "true", window, cx);
+                    }
+                    "status" => {
+                        view.set_task_property(row_key, "status", value, window, cx);
+                    }
+                    "due" => {
+                        if tasks::valid_due(&value) {
+                            view.set_task_property(row_key, "due", value, window, cx);
+                        }
+                    }
+                    "priority" => {
+                        view.set_task_property(
+                            row_key,
+                            "priority",
+                            priority_value(&value).to_owned(),
+                            window,
+                            cx,
+                        );
+                    }
+                    _ => {}
+                });
+            })
+            .on_action(move |row_key, action, window, cx| {
+                let Some((_, due, proj)) = meta_map.get(row_key.as_ref()).cloned() else {
+                    return;
+                };
+                let row_key = row_key.to_string();
+                on_act.update(cx, |view, cx| match action.as_ref() {
+                    "due" => view.edit_due(row_key, due, window, cx),
+                    "project" => {
+                        view.open_project(proj, cx);
+                        view.tab = ProjectsTab::Hubs;
+                    }
+                    _ => {}
+                });
+            })
+            .empty(empty_msg);
+
         div()
             .flex()
             .flex_col()
             .gap_1()
             .child(filter_bar)
-            .child(list(rows, palette))
-            .into_any_element()
-    }
-
-    fn global_task_row(
-        &self,
-        task: &GlobalTask,
-        index: usize,
-        today: &str,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let cols = self.columns();
-        let status = task.status().to_owned();
-        let closed = tasks::status_closes(&status);
-        let selected = self.selected_task_index == Some(index)
-            || self.task_panel.as_ref().is_some_and(|p| p.path == task.id);
-        let (toggle, select, cycle, edit, pick) = (
-            task.id.clone(),
-            task.clone(),
-            task.id.clone(),
-            task.id.clone(),
-            task.id.clone(),
-        );
-        let proj_name = task.project.clone();
-        let priority = task.priority.clamp(1, 3);
-        let subtask_badge = task
-            .summary
-            .as_deref()
-            .and_then(tasks::parse_subtask_progress)
-            .map(|(done, total)| {
-                div()
-                    .px_1p5()
-                    .py(px(0.5))
-                    .rounded(px(4.))
-                    .bg(rgba(if done == total {
-                        tint(palette.green, 0x22)
-                    } else {
-                        palette.raised
-                    }))
-                    .text_xs()
-                    .text_color(rgb(if done == total {
-                        palette.green
-                    } else {
-                        palette.muted
-                    }))
-                    .child(format!("{done}/{total}"))
-            });
-
-        let status_cell = if self.status_edit.as_deref() == Some(task.id.as_str()) {
-            div()
-                .w(px(cols.status.unwrap_or(0.).max(220.)))
-                .child(self.status_chips(&task.id, &status, palette, cx))
-                .into_any_element()
-        } else {
-            column(cols.status)
-                .child(
-                    div()
-                        .id(("all-task-status", index))
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |view, _, _, cx| {
-                            view.status_edit = Some(pick.clone());
-                            cx.notify();
-                        }))
-                        .child(status_pill(&status, palette)),
-                )
-                .into_any_element()
-        };
-        let editing = self
-            .due_edit
-            .as_ref()
-            .filter(|(path, _, _)| *path == task.id)
-            .map(|(_, input, _)| input.clone());
-        let due_cell = match editing {
-            Some(input) => self.due_editor(task.id.clone(), &input, index, cols.due, palette, cx),
-            None => {
-                let due = task.due.clone().filter(|d| !d.is_empty());
-                let current = due.clone();
-                div()
-                    .id(("all-task-due", index))
-                    .w(px(cols.due))
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.edit_due(edit.clone(), current.clone(), window, cx)
-                    }))
-                    .child(due_badge(due.as_deref(), closed, today, palette))
-                    .into_any_element()
-            }
-        };
-
-        row_for_density(cols.density)
-            .id(("all-task-row", index))
-            .group("all-task-row")
-            .min_h(px(40.))
-            .py_1()
-            .when(selected, |row| row.bg(rgba(tint(palette.accent, 0x14))))
-            .hover(move |s| s.bg(rgba(tint(palette.raised, 0x55))))
-            .when(closed, |row| row.opacity(0.55))
-            .child(
-                div().w(px(24.)).flex().items_center().child(
-                    Checkbox::new(("all-task-done", index))
-                        .checked(task.done)
-                        .when(!task.read_only(), |checkbox| {
-                            checkbox.on_click(cx.listener(move |view, done: &bool, window, cx| {
-                                view.toggle_global_task(toggle.clone(), *done, window, cx)
-                            }))
-                        }),
-                ),
-            )
-            .child(
-                div()
-                    .id(("all-task", index))
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.selected_task_index = Some(index);
-                        view.select_task(&select, window, cx)
-                    }))
-                    .child(
-                        div()
-                            .truncate()
-                            .text_sm()
-                            .when(closed, |title| title.line_through())
-                            .hover(move |style| style.text_color(rgb(palette.accent)))
-                            .child(task.title.clone()),
-                    )
-                    .children(subtask_badge),
-            )
-            .child(
-                column(cols.project).child(
-                    div()
-                        .id(("proj-tag", index))
-                        .px_2()
-                        .py(px(1.5))
-                        .rounded(px(4.))
-                        .bg(rgba(tint(palette.accent, 0x12)))
-                        .border_1()
-                        .border_color(rgba(tint(palette.accent, 0x24)))
-                        .text_color(rgb(palette.accent))
-                        .text_xs()
-                        .font_weight(FontWeight::MEDIUM)
-                        .truncate()
-                        .cursor_pointer()
-                        .hover(move |s| {
-                            s.bg(rgba(tint(palette.accent, 0x22)))
-                                .text_color(rgb(palette.text))
-                        })
-                        .on_click(cx.listener(move |view, _, _, cx| {
-                            view.open_project(proj_name.clone(), cx);
-                            view.tab = ProjectsTab::Hubs;
-                        }))
-                        .child(task.project.clone()),
-                ),
-            )
-            .child(status_cell)
-            .child(due_cell)
-            .child(
-                div()
-                    .id(("all-task-priority", index))
-                    .w(px(cols.priority))
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        let next = priority % 3 + 1;
-                        view.set_task_property(
-                            cycle.clone(),
-                            "priority",
-                            next.to_string(),
-                            window,
-                            cx,
-                        )
-                    }))
-                    .child(priority_pill(priority, palette)),
-            )
+            .children(self.inline_edit_bar(palette, cx))
+            .child(table)
             .into_any_element()
     }
 
@@ -881,44 +756,8 @@ impl Projects {
             )
             .child(search_box(cols.search).child(Input::new(search_input).small()));
 
-        let (note_sort, ascending) = self.note_sort;
-        let sort_state =
-            |column: NoteSort| (note_sort == column).then(|| SortOrder::from_bool(ascending));
-        let mut header_cols = vec![
-            SortableColumn::spacer(px(24.)),
-            SortableColumn::flex("title", "NOTE").sorted(sort_state(NoteSort::Title)),
-        ];
-        if let Some(w) = cols.project {
-            header_cols.push(
-                SortableColumn::fixed("project", "PROJECT", px(w))
-                    .sorted(sort_state(NoteSort::Project)),
-            );
-        }
-        if let Some(w) = cols.kind {
-            header_cols.push(
-                SortableColumn::fixed("kind", "TYPE", px(w)).sorted(sort_state(NoteSort::Kind)),
-            );
-        }
-        let sort_entity = cx.entity();
-        let resize_entity = cx.entity();
-        let header = resizable_table_header(
-            "all-notes",
-            header_cols,
-            cols.density,
-            palette,
-            move |col_id, _, cx| {
-                if let Some(column) = NoteSort::from_col_id(col_id) {
-                    sort_entity.update(cx, |view, cx| view.cycle_note_sort(column, cx));
-                }
-            },
-            move |col_id, _, cx| {
-                resize_entity.update(cx, |view, cx| view.resize_column(col_id, cx));
-            },
-        );
-        let mut rows = vec![header];
-
         let query = self.notes_search_query.as_str();
-        let mut filtered: Vec<_> = notes
+        let filtered: Vec<_> = notes
             .iter()
             .filter(|n| {
                 let matches_kind = match self.note_kind_filter {
@@ -933,129 +772,105 @@ impl Projects {
                         || n.path.to_lowercase().contains(query))
             })
             .collect();
-        tasks::sort_notes(&mut filtered, note_sort, ascending);
 
-        if filtered.is_empty() && !notes.is_empty() {
-            rows.push(
-                row_for_density(cols.density)
-                    .min_h(px(40.))
-                    .py_2()
-                    .text_sm()
-                    .text_color(rgb(palette.muted))
-                    .child(format!("No notes matching \"{query}\"."))
-                    .into_any_element(),
-            );
+        let columns = vec![
+            Column::new("title", "NOTE"),
+            Column::new("project", "PROJECT").width(rems((cols.project.unwrap_or(140.) / 16.))),
+            Column::new("kind", "TYPE").width(rems((cols.kind.unwrap_or(80.) / 16.))),
+            Column::new("actions", "")
+                .width(rems((80.) / 16.))
+                .actions([RowAction::new("project", "Project")]),
+        ];
+
+        let mut hidden: Vec<&'static str> = Vec::new();
+        if cols.project.is_none() {
+            hidden.push("project");
+        }
+        if cols.kind.is_none() {
+            hidden.push("kind");
         }
 
-        for (index, note) in filtered.into_iter().enumerate() {
-            let open_path = note.path.clone();
-            let proj_name = note.project.clone();
-            let is_hub = note.kind == "project";
-            rows.push(
-                row_for_density(cols.density)
-                    .id(("all-note-row", index))
-                    .group("all-note-row")
-                    .min_h(px(40.))
-                    .py_1()
-                    .hover(move |s| s.bg(rgba(tint(palette.raised, 0x55))))
-                    .child(
-                        div().w(px(24.)).flex().items_center().child(
-                            div()
-                                .size(px(20.))
-                                .rounded(px(4.))
-                                .bg(rgba(palette.raised))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_xs()
-                                .text_color(rgb(if is_hub {
-                                    palette.accent
-                                } else {
-                                    palette.muted
-                                }))
-                                .child(if is_hub { "★" } else { "≡" }),
-                        ),
+        let rows: Rc<Vec<Row>> = Rc::new(
+            filtered
+                .iter()
+                .map(|note| {
+                    let is_hub = note.kind == "project";
+                    Row::new(
+                        note.path.clone(),
+                        [
+                            Cell::Text(note.title.clone().into()),
+                            Cell::Tag(note.project.clone().into(), Tone::Accent),
+                            Cell::Tag(
+                                note.kind.clone().into(),
+                                if is_hub { Tone::Accent } else { Tone::Neutral },
+                            ),
+                            Cell::Actions(vec!["project".into()]),
+                        ],
                     )
-                    .child(
-                        div()
-                            .id(("all-note", index))
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .text_sm()
-                            .cursor_pointer()
-                            .hover(move |s| s.text_color(rgb(palette.accent)))
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                view.open_note(open_path.clone(), true, window, cx);
-                            }))
-                            .child(note.title.clone()),
-                    )
-                    .child(
-                        column(cols.project).child(
-                            div()
-                                .id(("all-note-proj", index))
-                                .px_2()
-                                .py(px(1.5))
-                                .rounded(px(4.))
-                                .bg(rgba(tint(palette.accent, 0x12)))
-                                .border_1()
-                                .border_color(rgba(tint(palette.accent, 0x24)))
-                                .text_color(rgb(palette.accent))
-                                .text_xs()
-                                .font_weight(FontWeight::MEDIUM)
-                                .truncate()
-                                .cursor_pointer()
-                                .hover(move |s| {
-                                    s.bg(rgba(tint(palette.accent, 0x22)))
-                                        .text_color(rgb(palette.text))
-                                })
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.open_project(proj_name.clone(), cx);
-                                    view.tab = ProjectsTab::Hubs;
-                                }))
-                                .child(note.project.clone()),
-                        ),
-                    )
-                    .child(
-                        column(cols.kind).child(
-                            div()
-                                .px_2()
-                                .py(px(1.5))
-                                .rounded(px(4.))
-                                .bg(rgba(if is_hub {
-                                    tint(palette.accent, 0x18)
-                                } else {
-                                    palette.raised
-                                }))
-                                .border_1()
-                                .border_color(rgba(if is_hub {
-                                    tint(palette.accent, 0x30)
-                                } else {
-                                    palette.border
-                                }))
-                                .text_xs()
-                                .font_weight(if is_hub {
-                                    FontWeight::SEMIBOLD
-                                } else {
-                                    FontWeight::NORMAL
-                                })
-                                .text_color(rgb(if is_hub {
-                                    palette.accent
-                                } else {
-                                    palette.muted
-                                }))
-                                .child(note.kind.clone()),
-                        ),
-                    )
-                    .into_any_element(),
-            );
-        }
+                })
+                .collect(),
+        );
+
+        let (note_sort, ascending) = self.note_sort;
+        let sorts: Vec<SortKey> = match note_sort {
+            NoteSort::Default => Vec::new(),
+            _ => vec![SortKey {
+                column: match note_sort {
+                    NoteSort::Title => "title",
+                    NoteSort::Project => "project",
+                    NoteSort::Kind => "kind",
+                    NoteSort::Default => unreachable!(),
+                }
+                .into(),
+                rising: ascending,
+            }],
+        };
+
+        let proj_map: std::collections::HashMap<String, String> = filtered
+            .iter()
+            .map(|n| (n.path.clone(), n.project.clone()))
+            .collect();
+
+        let (on_open, on_sort, on_act) = (cx.entity(), cx.entity(), cx.entity());
+        let table = DataTable::new("all-notes", columns)
+            .rows(rows)
+            .hidden(hidden)
+            .sorts(sorts)
+            .density(ely_density(cols.density))
+            .on_open(move |key, window, cx| {
+                let path = key.to_string();
+                on_open.update(cx, |view, cx| {
+                    view.open_note(path, true, window, cx);
+                });
+            })
+            .on_sort(move |keys, _, cx| {
+                let next = keys
+                    .first()
+                    .and_then(|k| NoteSort::from_col_id(&k.column).map(|c| (c, k.rising)))
+                    .unwrap_or((NoteSort::Default, true));
+                on_sort.update(cx, |view, cx| {
+                    view.note_sort = next;
+                    cx.notify();
+                });
+            })
+            .on_action(move |row_key, action, _, cx| {
+                if action.as_ref() == "project" {
+                    if let Some(proj) = proj_map.get(row_key.as_ref()).cloned() {
+                        on_act.update(cx, |view, cx| {
+                            view.open_project(proj, cx);
+                            view.tab = ProjectsTab::Hubs;
+                        });
+                    }
+                }
+            })
+            .empty(format!("No notes matching \"{query}\"."));
+
         div()
             .flex()
             .flex_col()
             .gap_1()
             .child(filter_bar)
-            .child(list(rows, palette))
+            .child(table)
             .into_any_element()
     }
 }

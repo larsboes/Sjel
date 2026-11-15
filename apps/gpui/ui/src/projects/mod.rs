@@ -295,6 +295,7 @@ pub struct Projects {
     pub focus: FocusHandle,
     pub selected_index: Option<usize>,
     pub selected_task_index: Option<usize>,
+    pub selected_task_path: Option<String>,
     pub(super) task_title_edit: Option<(String, String, Entity<InputState>, Subscription)>,
 }
 
@@ -359,6 +360,7 @@ impl Projects {
             focus: cx.focus_handle(),
             selected_index: None,
             selected_task_index: None,
+            selected_task_path: None,
             task_title_edit: None,
         }
     }
@@ -373,6 +375,7 @@ impl Projects {
         self.status_edit = None;
         self.due_edit = None;
         self.selected_task_index = None;
+        self.selected_task_path = None;
         self.task_title_edit = None;
         self.project = None;
         cx.notify();
@@ -649,40 +652,14 @@ impl Projects {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.project.is_some() {
-            if self.project_section == ProjectSection::Tasks {
-                let tasks = self.current_project_tasks();
-                if !tasks.is_empty() {
-                    self.selected_task_index = Some(match self.selected_task_index {
-                        Some(i) => (i + 1).min(tasks.len().saturating_sub(1)),
-                        None => 0,
-                    });
-                    cx.notify();
-                }
-            }
-        } else {
-            match self.tab {
-                ProjectsTab::Hubs => {
-                    let projects = self.filtered_projects();
-                    if !projects.is_empty() {
-                        self.selected_index = Some(match self.selected_index {
-                            Some(i) => (i + 1).min(projects.len().saturating_sub(1)),
-                            None => 0,
-                        });
-                        cx.notify();
-                    }
-                }
-                ProjectsTab::AllTasks => {
-                    let tasks = self.filtered_all_tasks();
-                    if !tasks.is_empty() {
-                        self.selected_task_index = Some(match self.selected_task_index {
-                            Some(i) => (i + 1).min(tasks.len().saturating_sub(1)),
-                            None => 0,
-                        });
-                        cx.notify();
-                    }
-                }
-                ProjectsTab::AllNotes => {}
+        if self.project.is_none() && self.tab == ProjectsTab::Hubs {
+            let projects = self.filtered_projects();
+            if !projects.is_empty() {
+                self.selected_index = Some(match self.selected_index {
+                    Some(i) => (i + 1).min(projects.len().saturating_sub(1)),
+                    None => 0,
+                });
+                cx.notify();
             }
         }
     }
@@ -693,40 +670,14 @@ impl Projects {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.project.is_some() {
-            if self.project_section == ProjectSection::Tasks {
-                let tasks = self.current_project_tasks();
-                if !tasks.is_empty() {
-                    self.selected_task_index = Some(match self.selected_task_index {
-                        Some(i) => i.saturating_sub(1),
-                        None => 0,
-                    });
-                    cx.notify();
-                }
-            }
-        } else {
-            match self.tab {
-                ProjectsTab::Hubs => {
-                    let projects = self.filtered_projects();
-                    if !projects.is_empty() {
-                        self.selected_index = Some(match self.selected_index {
-                            Some(i) => i.saturating_sub(1),
-                            None => 0,
-                        });
-                        cx.notify();
-                    }
-                }
-                ProjectsTab::AllTasks => {
-                    let tasks = self.filtered_all_tasks();
-                    if !tasks.is_empty() {
-                        self.selected_task_index = Some(match self.selected_task_index {
-                            Some(i) => i.saturating_sub(1),
-                            None => 0,
-                        });
-                        cx.notify();
-                    }
-                }
-                ProjectsTab::AllNotes => {}
+        if self.project.is_none() && self.tab == ProjectsTab::Hubs {
+            let projects = self.filtered_projects();
+            if !projects.is_empty() {
+                self.selected_index = Some(match self.selected_index {
+                    Some(i) => i.saturating_sub(1),
+                    None => 0,
+                });
+                cx.notify();
             }
         }
     }
@@ -734,39 +685,55 @@ impl Projects {
     fn on_activate_selected(
         &mut self,
         _: &actions::ActivateSelected,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_none() && self.tab == ProjectsTab::Hubs {
+            let projects = self.filtered_projects();
+            if let Some(i) = self.selected_index {
+                if let Some(p) = projects.get(i) {
+                    self.open_project(p.name.clone(), cx);
+                }
+            }
+        }
+    }
+
+    fn selected_project_task(&self) -> Option<ProjectRecord> {
+        let tasks = self.current_project_tasks();
+        if let Some(path) = &self.selected_task_path {
+            if let Some(found) = tasks.iter().find(|t| t.path == *path) {
+                return Some(found.clone());
+            }
+        }
+        self.selected_task_index
+            .and_then(|i| tasks.get(i).cloned())
+    }
+
+    fn selected_global_task(&self) -> Option<GlobalTask> {
+        let tasks = self.filtered_all_tasks();
+        if let Some(path) = &self.selected_task_path {
+            if let Some(found) = tasks.iter().find(|t| t.id == *path) {
+                return Some((*found).clone());
+            }
+        }
+        self.selected_task_index
+            .and_then(|i| tasks.get(i).map(|t| (*t).clone()))
+    }
+
+    pub(super) fn open_task_by_path(
+        &mut self,
+        path: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.project.is_some() {
-            if self.project_section == ProjectSection::Tasks {
-                let tasks = self.current_project_tasks();
-                if let Some(i) = self.selected_task_index {
-                    if let Some(task) = tasks.get(i) {
-                        let global = tables::project_record_to_global_task(task);
-                        self.select_task(&global, window, cx);
-                    }
-                }
+            if let Some(task) = self.current_project_tasks().into_iter().find(|t| t.path == path) {
+                let global = tables::project_record_to_global_task(&task);
+                self.select_task(&global, window, cx);
             }
-        } else {
-            match self.tab {
-                ProjectsTab::Hubs => {
-                    let projects = self.filtered_projects();
-                    if let Some(i) = self.selected_index {
-                        if let Some(p) = projects.get(i) {
-                            self.open_project(p.name.clone(), cx);
-                        }
-                    }
-                }
-                ProjectsTab::AllTasks => {
-                    let tasks = self.filtered_all_tasks();
-                    if let Some(i) = self.selected_task_index {
-                        if let Some(task) = tasks.get(i) {
-                            self.select_task(task, window, cx);
-                        }
-                    }
-                }
-                ProjectsTab::AllNotes => {}
-            }
+        } else if let Some(task) = self.filtered_all_tasks().into_iter().find(|t| t.id == path) {
+            let owned = task.clone();
+            self.select_task(&owned, window, cx);
         }
     }
 
@@ -778,19 +745,13 @@ impl Projects {
     ) {
         if self.project.is_some() {
             if self.project_section == ProjectSection::Tasks {
-                let tasks = self.current_project_tasks();
-                if let Some(i) = self.selected_task_index {
-                    if let Some(task) = tasks.get(i) {
-                        self.toggle_task(task.path.clone(), !task.done, window, cx);
-                    }
+                if let Some(task) = self.selected_project_task() {
+                    self.toggle_task(task.path, !task.done, window, cx);
                 }
             }
         } else if self.tab == ProjectsTab::AllTasks {
-            let tasks = self.filtered_all_tasks();
-            if let Some(i) = self.selected_task_index {
-                if let Some(task) = tasks.get(i) {
-                    self.toggle_global_task(task.id.clone(), !task.done, window, cx);
-                }
+            if let Some(task) = self.selected_global_task() {
+                self.toggle_global_task(task.id, !task.done, window, cx);
             }
         }
     }
@@ -802,11 +763,8 @@ impl Projects {
         cx: &mut Context<Self>,
     ) {
         if self.project.is_some() && self.project_section == ProjectSection::Tasks {
-            let tasks = self.current_project_tasks();
-            if let Some(i) = self.selected_task_index {
-                if let Some(task) = tasks.get(i) {
-                    self.edit_task_title(task.path.clone(), task.title.clone(), window, cx);
-                }
+            if let Some(task) = self.selected_project_task() {
+                self.edit_task_title(task.path, task.title, window, cx);
             }
         }
     }
@@ -818,25 +776,16 @@ impl Projects {
         cx: &mut Context<Self>,
     ) {
         if self.project.is_some() && self.project_section == ProjectSection::Tasks {
-            let tasks = self.current_project_tasks();
-            if let Some(i) = self.selected_task_index {
-                if let Some(task) = tasks.get(i) {
-                    let status = tables::parse_frontmatter_status(&task.content, task.done);
-                    let next = match status.as_str() {
-                        "open" | "" => "doing",
-                        "doing" => "done",
-                        "waiting" | "blocked" => "doing",
-                        "done" | "cancelled" => "open",
-                        _ => "doing",
-                    };
-                    self.set_task_property(
-                        task.path.clone(),
-                        "status",
-                        next.to_string(),
-                        window,
-                        cx,
-                    );
-                }
+            if let Some(task) = self.selected_project_task() {
+                let status = tables::parse_frontmatter_status(&task.content, task.done);
+                let next = match status.as_str() {
+                    "open" | "" => "doing",
+                    "doing" => "done",
+                    "waiting" | "blocked" => "doing",
+                    "done" | "cancelled" => "open",
+                    _ => "doing",
+                };
+                self.set_task_property(task.path, "status", next.to_string(), window, cx);
             }
         }
     }
@@ -848,24 +797,15 @@ impl Projects {
         cx: &mut Context<Self>,
     ) {
         if self.project.is_some() && self.project_section == ProjectSection::Tasks {
-            let tasks = self.current_project_tasks();
-            if let Some(i) = self.selected_task_index {
-                if let Some(task) = tasks.get(i) {
-                    let status = tables::parse_frontmatter_status(&task.content, task.done);
-                    let prev = match status.as_str() {
-                        "done" | "cancelled" => "doing",
-                        "doing" => "open",
-                        "waiting" | "blocked" => "open",
-                        _ => "open",
-                    };
-                    self.set_task_property(
-                        task.path.clone(),
-                        "status",
-                        prev.to_string(),
-                        window,
-                        cx,
-                    );
-                }
+            if let Some(task) = self.selected_project_task() {
+                let status = tables::parse_frontmatter_status(&task.content, task.done);
+                let prev = match status.as_str() {
+                    "done" | "cancelled" => "doing",
+                    "doing" => "open",
+                    "waiting" | "blocked" => "open",
+                    _ => "open",
+                };
+                self.set_task_property(task.path, "status", prev.to_string(), window, cx);
             }
         }
     }
@@ -1156,6 +1096,7 @@ impl Projects {
         self.editor = None;
         self.opening = None;
         self.selected_task_index = None;
+        self.selected_task_path = None;
         self.task_title_edit = None;
         cx.notify();
         let request = name.clone();
@@ -3342,6 +3283,11 @@ impl Projects {
 
 impl Render for Projects {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let in_ely_table = if self.project.is_some() {
+            self.project_section == ProjectSection::Tasks && self.task_view_mode == TaskViewMode::Table
+        } else {
+            matches!(self.tab, ProjectsTab::AllTasks | ProjectsTab::AllNotes)
+        };
         let body = self.render_body(window, cx);
         div()
             .key_context("Projects")
@@ -3356,9 +3302,11 @@ impl Render for Projects {
             .on_action(cx.listener(Self::on_cycle_task_filter))
             .on_action(cx.listener(Self::on_new_item))
             .on_action(cx.listener(Self::on_focus_search))
-            .on_action(cx.listener(Self::on_select_next))
-            .on_action(cx.listener(Self::on_select_prev))
-            .on_action(cx.listener(Self::on_activate_selected))
+            .when(!in_ely_table, |d| {
+                d.on_action(cx.listener(Self::on_select_next))
+                    .on_action(cx.listener(Self::on_select_prev))
+                    .on_action(cx.listener(Self::on_activate_selected))
+            })
             .on_action(cx.listener(Self::on_toggle_selected))
             .on_action(cx.listener(Self::on_edit_task_title_action))
             .on_action(cx.listener(Self::on_move_task_next_stage))
@@ -3400,6 +3348,7 @@ mod tests {
     #[gpui::test]
     fn the_blocked_band_holds_what_the_sync_reported(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let view = cx.new(|cx| {
             let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
             projects.set_blocked(
@@ -3431,6 +3380,7 @@ mod tests {
     #[gpui::test]
     fn project_inventory_review_mounts_at_mobile_density(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let (_, cx) = cx.add_window_view(move |window, cx| {
             let view = cx.new(|cx| {
                 let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
@@ -3478,6 +3428,7 @@ mod tests {
     #[gpui::test]
     fn project_mail_review_mounts_at_mobile_density(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let (_, cx) = cx.add_window_view(move |window, cx| {
             let view = cx.new(|cx| {
                 let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
@@ -3518,6 +3469,7 @@ mod tests {
     #[gpui::test]
     fn a_project_page_draws_its_tasks_as_a_table(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
@@ -3551,6 +3503,7 @@ mod tests {
     #[gpui::test]
     fn all_tasks_tab_filters_by_query(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
@@ -3601,6 +3554,7 @@ mod tests {
     #[gpui::test]
     fn all_tasks_panel_opens_on_a_task_and_draws_beside_the_table(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let task = |id: &str, status: &str| GlobalTask {
             id: format!("P/Tasks/{id}.md"),
             kind: "task".into(),
@@ -3668,6 +3622,7 @@ mod tests {
     #[gpui::test]
     fn all_notes_tab_filters_by_query(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
@@ -3709,6 +3664,7 @@ mod tests {
     #[gpui::test]
     fn project_section_auto_opens_hub_note(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
@@ -3747,6 +3703,7 @@ mod tests {
     #[gpui::test]
     fn projects_hub_renders_table_header_and_sorts_projects(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let p1 = ProjectSummary {
             name: "Hearth".into(),
             archived: false,
@@ -3814,6 +3771,7 @@ mod tests {
     #[gpui::test]
     fn project_tasks_supports_board_mode_and_task_panel_inspector(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let task1 = ProjectRecord {
             project: "P".into(),
             path: "P/Tasks/T1.md".into(),
@@ -3896,6 +3854,7 @@ mod tests {
     #[gpui::test]
     fn keyboard_navigation_and_inline_task_editing_in_projects(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let p1 = ProjectSummary {
             name: "Hearth".into(),
             archived: false,
@@ -3980,28 +3939,17 @@ mod tests {
         });
         cx.run_until_parked();
 
-        // Navigate tasks with j / k
-        cx.update(|window, cx| {
-            projects.update(cx, |view, cx| {
-                view.on_select_next(&actions::SelectNext, window, cx);
-            });
+        // Driving task actions from the current row path
+        projects.update(cx, |view, cx| {
+            view.selected_task_path = Some("Hearth/Tasks/T1.md".into());
+            cx.notify();
         });
-        projects.read_with(cx, |view, _| {
-            assert_eq!(view.selected_task_index, Some(0));
-        });
-        cx.update(|window, cx| {
-            projects.update(cx, |view, cx| {
-                view.on_select_next(&actions::SelectNext, window, cx);
-            });
-        });
-        projects.read_with(cx, |view, _| {
-            assert_eq!(view.selected_task_index, Some(1));
-        });
+        cx.run_until_parked();
 
-        // Inline task title editing
+        // Inline task title editing via `e` action on current row
         cx.update(|window, cx| {
             projects.update(cx, |view, cx| {
-                view.edit_task_title("Hearth/Tasks/T1.md".into(), "T1".into(), window, cx);
+                view.on_edit_task_title_action(&actions::EditTaskTitle, window, cx);
             });
         });
         projects.read_with(cx, |view, _| {
@@ -4021,6 +3969,7 @@ mod tests {
     #[gpui::test]
     fn test_column_specs_and_sort_cycling(cx: &mut gpui::TestAppContext) {
         cx.update(gpui_kit::init);
+        cx.update(crate::ely::init_for_tests);
         let (projects, cx) = cx.add_window_view(|_window, cx| {
             Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
         });

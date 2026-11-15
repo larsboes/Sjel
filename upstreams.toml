@@ -372,7 +372,7 @@ why = "Evaluated 2026-10-21 against the live store (274 MB, 107 tables) as the e
 url = "https://github.com/tursodatabase/libsql"
 verdict = "adopt"
 license = "MIT"
-summary = "sqld, the libSQL database server: the primary a phone or a second machine holds an embedded replica of"
+summary = "sqld, the libSQL database server; runs as an empty primary with no replicas until storage §4 decides"
 why = "The server half of the libsql repository, consumed completely differently: the crate comes from crates.io while sqld ships only as release binaries, installed by tools/install-sqld.sh at one version and one digest, because it is on neither Homebrew nor crates.io. This Mac is the primary and a phone the first replica; the pin is a compatibility fact measured against the libsql 0.10.0 crate, and upstream has been quiet since 2025-02-14, which is recorded as a risk because a primary is on the critical path."
 
 [grafeo]

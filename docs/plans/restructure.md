@@ -42,6 +42,11 @@ The full documentation-link launcher now passes for all 419 documents.
    a copied wire model. Done when each changed client imports its capability contract and its
    serialization and offline tests pass. Remaining travel geocoding acceptance belongs to
    [GPUI work package 31](gpui.md#open).
+   Reviewed 2026-11-15: no app-core type shares a name with an API crate type. Device pairing now
+   sends `devices_api::ClaimRequest` and `JoinRequest` instead of hand-built JSON. Open:
+   `apps/gpui/core/src/shell/projects.rs` decodes reads into `ProjectRecord` while the server
+   answers `RecordRead`, and builds `SetDoneRequest` and `SetPropertyRequest` bodies by hand;
+   the Projects registry work owns that file.
 2. Remove stale live paths and references to retired services, after distinguishing historical
    fixtures and compatibility readers from active configuration. Done when maintenance path
    candidates have been reviewed and every active path resolves. Proposed paths remain open

@@ -24,11 +24,14 @@ pub enum Source {
 
 pub use devices_api::{
     comparison_code, node_base, pairing_qr_payload, parse_join_target, parse_pairing_qr,
-    DeviceRecord, JoinResponse as JoinRequest, PairingQr, PROXY_ROUTE_PAIRING_CLAIMS as CLAIM_PATH,
-    PROXY_ROUTE_PAIRING_REQUESTS as JOIN_PATH, QR_KIND,
+    ClaimRequest, DeviceRecord, JoinRequest, JoinResponse, PairingQr,
+    PROXY_ROUTE_PAIRING_CLAIMS as CLAIM_PATH, PROXY_ROUTE_PAIRING_REQUESTS as JOIN_PATH, QR_KIND,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(15);
+/// What this client registers as: the phone, with an Ed25519 key.
+const PLATFORM: &str = "ios";
+const ALGORITHM: &str = "ed25519";
 
 /// Asks the node to register this device's key. The owner allows or denies it on the Mac.
 pub async fn request_join(
@@ -36,13 +39,13 @@ pub async fn request_join(
     pin: &str,
     label: &str,
     public_key: &str,
-) -> Result<JoinRequest, String> {
-    let body = serde_json::json!({
-        "label": label,
-        "platform": "ios",
-        "algorithm": "ed25519",
-        "public_key": public_key,
-    });
+) -> Result<JoinResponse, String> {
+    let body = JoinRequest {
+        label: label.into(),
+        platform: PLATFORM.into(),
+        algorithm: ALGORITHM.into(),
+        public_key: public_key.into(),
+    };
     // Unsigned: the key is not registered yet (`device_auth::unsigned_pairing_request`).
     let response = pinned_client(pin)?
         .post(format!("{base}{JOIN_PATH}"))
@@ -54,7 +57,7 @@ pub async fn request_join(
 }
 
 /// The current state of one join request.
-pub async fn join_state(base: &str, pin: &str, id: &str) -> Result<JoinRequest, String> {
+pub async fn join_state(base: &str, pin: &str, id: &str) -> Result<JoinResponse, String> {
     if id.is_empty()
         || !id
             .bytes()
@@ -84,20 +87,16 @@ pub struct Node {
 
 /// Claims the QR code's one-time code for this device's public key, and returns the node.
 pub async fn claim(qr: &PairingQr, label: &str, public_key: &str) -> Result<Node, String> {
-    #[derive(Deserialize)]
-    struct Device {
-        id: String,
-    }
     let base = node_base(&qr.host, qr.port);
     let client = pinned_client(&qr.fingerprint)?;
-    let body = serde_json::json!({
-        "challenge_id": qr.challenge_id,
-        "code": qr.code,
-        "label": label,
-        "platform": "ios",
-        "algorithm": "ed25519",
-        "public_key": public_key,
-    });
+    let body = ClaimRequest {
+        challenge_id: qr.challenge_id.clone(),
+        code: qr.code.clone(),
+        label: label.into(),
+        platform: PLATFORM.into(),
+        algorithm: ALGORITHM.into(),
+        public_key: public_key.into(),
+    };
     // One of the three requests a device sends unsigned (`device_auth::unsigned_pairing_request`).
     let response = client
         .post(format!("{base}{CLAIM_PATH}"))
@@ -105,7 +104,7 @@ pub async fn claim(qr: &PairingQr, label: &str, public_key: &str) -> Result<Node
         .send()
         .await
         .map_err(|error| format!("The Mac did not answer: {error}"))?;
-    let device: Device = read(response).await?;
+    let device: DeviceRecord = read(response).await?;
     Ok(Node {
         base,
         pin: qr.fingerprint.clone(),

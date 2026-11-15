@@ -1,19 +1,14 @@
 # sqld — the libSQL primary
 
-The database server other devices hold an [embedded replica](../../crates/sjel-turso/README.md) of.
-This machine is the primary; a phone is the first replica, and a home server takes the primary role
-later without changing anything here except one setting.
+A libSQL primary that holds no data and has no replicas: `crates/sjel-turso` opens local files
+only ([`crates/sjel-turso/README.md`](../../crates/sjel-turso/README.md), "Embedded replicas:
+removed"). It stays until the engine decision in
+[`docs/plans/storage.md`](../../docs/plans/storage.md#4-full-migration) (§4 steps 1 and 2) either
+brings replicas back or removes it.
 
 There is no code in this directory. `sqld` is Turso's published release, adopted as-is and pinned
 in [`tools/install-sqld.sh`](../../tools/install-sqld.sh); this manifest is what makes it a service
 this machine owns rather than something started by hand.
-
-## Why a server at all
-
-An embedded replica reads locally and forwards writes to a primary. With one machine and no primary,
-that is a network round trip to nowhere — so the primary is the part that had to exist first. It is
-also what makes the phone possible: the phone replicates from here, and its reads keep working when
-this machine is asleep.
 
 ## Install
 

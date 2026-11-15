@@ -149,10 +149,16 @@ Pi-specific session file scopes and 60-second permission/decision deferral are i
 (commit pending). The current interfaces and limits live in
 [`Packs/security/README.md`](../../Packs/security/README.md#pi-session-permissions) and
 [`Packs/knowledge/README.md`](../../Packs/knowledge/README.md#extensions).
+Persistent machine-local Markdown roots are implemented in Pi (commit pending), sourced only
+from `<overlay>/config/command-policy.json`. Direct `.md` write/edit calls reuse canonical
+containment and protected-target checks; shell permissions remain unchanged. `/permissions`
+shows persistent roots and `/permissions off` suppresses them until reload or session change.
 No classifier model or account-wide bypass is introduced. The Rust gate remains unchanged.
-Checked: 65 focused permission, question and Pack-extension tests pass, including the installed
-Pi typecheck; one non-applicable fallback test is skipped. Live acceptance remains: reload Pi,
-exercise one scoped backup, one unanswered approval, and one partially answered decision round.
+Checked: `bun test tools/command-policy.test.ts tools/pack-extensions.test.ts` passes 64 tests,
+including persistent config validation, Markdown-only admission, symlink escapes, reload
+persistence, off semantics and the installed Pi typecheck; one non-applicable fallback test
+is skipped. Machine activation has not run. Live acceptance remains: reload Pi, exercise one
+scoped backup, one unanswered approval, and one partially answered decision round.
 RPC asks currently defer immediately because the editor handoff has no cancellation API.
 Live TUI/RPC acceptance and full-workspace checks have not run.
 

@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { classify, classifyWrite, resolvePath, type Scope, type Verdict } from "./classify.ts";
+import { loadMarkdownRoots, scopedMarkdownWrite } from "./config.ts";
 import { powerDeferral } from "./power.ts";
 import { scopedCommand, scopedWrite } from "./scoped.ts";
 
@@ -43,10 +44,12 @@ export default function commandPolicy(pi: ExtensionAPI) {
   const granted = new Set<string>();
   const once = new Set<string>();
   const roots = new Set<string>();
+  let markdownRoots: string[] = [];
+  let persistentOff = false;
   let generation = 0;
   const pending = new Map<string, { tool: string; cwd: string; input: Record<string, unknown>; verdict: Verdict }>();
-  const update = (ctx: ExtensionContext) => ctx.ui.setStatus?.("permissions", roots.size || pending.size
-    ? `permissions: ${roots.size} file scopes · ${pending.size} pending (/permissions pending)` : undefined);
+  const update = (ctx: ExtensionContext) => ctx.ui.setStatus?.("permissions", roots.size || markdownRoots.length || pending.size
+    ? `permissions: ${roots.size} session scopes · ${persistentOff ? "off" : markdownRoots.length} Markdown scopes · ${pending.size} pending (/permissions pending)` : undefined);
 
   pi.on("session_start", (_event, ctx) => {
     generation++;
@@ -54,11 +57,20 @@ export default function commandPolicy(pi: ExtensionAPI) {
     once.clear();
     roots.clear();
     pending.clear();
+    persistentOff = false;
+    markdownRoots = [];
+    try {
+      markdownRoots = loadMarkdownRoots(scopeFor(ctx.cwd));
+    } catch {
+      const warning = "Command-policy machine config is invalid or unreadable; no persistent Markdown grants loaded. Check <overlay>/config/command-policy.json.";
+      if (ctx.hasUI) ctx.ui.notify(warning, "warning");
+      else console.error(warning);
+    }
     update(ctx);
   });
 
   pi.registerCommand("permissions", {
-    description: "Session file scopes: auto <directory>, off, status, pending. Reload clears scopes and pending cards.",
+    description: "File scopes: auto <directory>, off, status, pending. Off suppresses persistent Markdown grants until reload/session change.",
     handler: async (args, ctx) => {
       const epoch = generation;
       if (!ctx.hasUI || ctx.signal?.aborted) return;
@@ -82,10 +94,11 @@ export default function commandPolicy(pi: ExtensionAPI) {
       } else if (text === "off") {
         generation++;
         roots.clear();
+        persistentOff = true;
         granted.clear();
         once.clear();
         update(ctx);
-        ctx.ui.notify("All session permission grants cleared; pending items remain unresolved.", "info");
+        ctx.ui.notify("All session permission grants cleared; persistent Markdown grants suppressed until reload or session change. Pending items remain unresolved.", "info");
       } else if (text === "pending") {
         const entries = [...pending.entries()];
         if (!entries.length) { ctx.ui.notify("No deferred permission decisions.", "info"); return; }
@@ -104,7 +117,7 @@ export default function commandPolicy(pi: ExtensionAPI) {
         } else if (decision === "Dismiss") pending.delete(key);
         update(ctx);
       } else {
-        ctx.ui.notify(`File scopes: ${[...roots].join(", ") || "none"}. ${pending.size} deferred decisions. Use /permissions auto <directory>, off, or pending.`, "info");
+        ctx.ui.notify(`Session file scopes: ${[...roots].join(", ") || "none"}. Persistent Markdown roots (${persistentOff ? "suppressed until reload/session change" : "active"}): ${markdownRoots.join(", ") || "none"}. ${pending.size} deferred decisions. Use /permissions auto <directory>, off, or pending.`, "info");
       }
     },
   });
@@ -138,6 +151,12 @@ export default function commandPolicy(pi: ExtensionAPI) {
     if (pending.has(key)) {
       logDecision({ ...base, decision: "already-deferred" });
       return deferred();
+    }
+    if (v.class === "ask" && v.rule === "A1" && !persistentOff &&
+      (event.toolName === "write" || event.toolName === "edit") &&
+      scopedMarkdownWrite(String(input.path), scope, markdownRoots)) {
+      logDecision({ ...base, decision: "persistent-markdown-scope" });
+      return undefined;
     }
     if (v.class === "ask" && v.rule === "A1" && roots.size) {
       const paths = [...roots];

@@ -26,9 +26,30 @@ Sensitive credential/configuration names and agent extension/hook targets do not
 approval from a file scope. Separate secrets-guard checks remain active. A file scope does
 not authorize publishing, package changes, network writes, process control or destruction.
 
-`/permissions off` clears session grants. `/permissions` lists active scopes and the deferred
-count. Scopes are pinned to canonical paths; symlinks inside them cannot extend the grant.
-The whole home directory and filesystem root cannot be granted as task directories.
+`/permissions off` clears session grants and suppresses persistent Markdown grants until
+reload or session change. `/permissions` lists session scopes, canonical persistent roots,
+their active/suppressed state and the deferred count. Scopes are pinned to canonical paths;
+symlinks inside them cannot extend the grant. The whole home directory and filesystem root
+cannot be granted as task directories.
+
+Machine-local persistent grants live in `<overlay>/config/command-policy.json`, resolved from
+`SJEL_OVERLAY_ROOT` with `SJEL_PERSONAL_ROOT` as fallback, never from merged Pi project settings:
+
+```json
+{
+  "markdown_write_roots": ["/absolute/path/to/knowledge-directory"]
+}
+```
+
+The extension reads this file at session start and reload. Only direct `write` and `edit`
+calls to lowercase `.md` paths qualify; canonical targets must also end in `.md` and remain
+inside an approved root. Existing protected-target checks still apply. Instruction filenames
+such as `AGENTS.md`, `CLAUDE.md` and `SKILL.md`, harness configuration directories, `.obsidian`,
+`config` and `prompts` remain gated, including canonical aliases. This config grants no shell
+operations, non-Markdown writes or account-wide access. Every root must be an existing
+absolute directory other than home or filesystem root. Missing config grants nothing;
+invalid or unreadable config disables all persistent grants and emits a warning. Unknown
+keys are invalid. Changing the file takes effect on reload or session change.
 
 Approval cards defer after 60 seconds without a decision. Explicit **Defer**, dismissal and
 timeout execute nothing and are distinct from **Deny**. `/permissions pending` revisits the
@@ -38,8 +59,9 @@ An unchanged pending call does not open another card. The agent receives instruc
 continue independent work, not bypass the gate, and stop when the remaining work depends on
 an unresolved decision.
 
-Grants and pending cards are held in memory and cleared on reload, restart or session change.
-The original tool calls remain in the session transcript. This policy is not a sandbox.
+Session grants and pending cards are held in memory and cleared on reload, restart or session
+change. Persistent Markdown roots are loaded again from machine config. The original tool
+calls remain in the session transcript. This policy is not a sandbox.
 
 ## The problem
 

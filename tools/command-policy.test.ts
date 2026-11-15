@@ -1,6 +1,6 @@
 // Command policy (docs/plans/agent.md §3) for pi: every case in
 // Packs/security/extensions/command-policy/cases.toml, plus the extension's card behaviour.
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +8,7 @@ import { classify, classifyWrite, resolvePath, type Scope } from "../Packs/secur
 import commandPolicy, { APPROVAL_TIMEOUT_MS } from "../Packs/security/extensions/command-policy/index.ts";
 import { scopedCommand, scopedWrite } from "../Packs/security/extensions/command-policy/scoped.ts";
 import { heavyCommand, powerDeferral } from "../Packs/security/extensions/command-policy/power.ts";
+import { loadMarkdownRoots, scopedMarkdownWrite } from "../Packs/security/extensions/command-policy/config.ts";
 
 const dir = join(import.meta.dir, "../Packs/security/extensions/command-policy");
 const table = Bun.TOML.parse(readFileSync(join(dir, "cases.toml"), "utf8")) as {
@@ -159,6 +160,167 @@ describe("scoped path canonicalisation", () => {
       symlinkSync(outside, task);
       expect(scopedWrite(join(task, "a"), s, roots)).toBe(false);
     } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+});
+
+describe("persistent machine-local Markdown scopes", () => {
+  let root: string;
+  let overlay: string;
+  let previousOverlay: string | undefined;
+  let previousPersonal: string | undefined;
+  const s: Scope = { cwd: join(homedir(), "unrelated-checkout"), home: homedir(), writable: [] };
+  const configure = (value: unknown) => writeFileSync(join(overlay, "config", "command-policy.json"), JSON.stringify(value));
+  beforeEach(() => {
+    previousOverlay = process.env.SJEL_OVERLAY_ROOT;
+    previousPersonal = process.env.SJEL_PERSONAL_ROOT;
+    root = mkdtempSync(join(homedir(), ".policy-markdown-test-"));
+    overlay = mkdtempSync(join(tmpdir(), "policy-config-"));
+    mkdirSync(join(overlay, "config"));
+    process.env.SJEL_OVERLAY_ROOT = overlay;
+    delete process.env.SJEL_PERSONAL_ROOT;
+  });
+  afterEach(() => {
+    if (previousOverlay === undefined) delete process.env.SJEL_OVERLAY_ROOT;
+    else process.env.SJEL_OVERLAY_ROOT = previousOverlay;
+    if (previousPersonal === undefined) delete process.env.SJEL_PERSONAL_ROOT;
+    else process.env.SJEL_PERSONAL_ROOT = previousPersonal;
+    rmSync(root, { recursive: true, force: true });
+    rmSync(overlay, { recursive: true, force: true });
+  });
+  function setup(hasUI = true) {
+    const handlers = new Map<string, (...args: any[]) => any>();
+    let command: any;
+    const notifications: string[] = [];
+    let prompts = 0;
+    commandPolicy({
+      on: (name: string, fn: any) => handlers.set(name, fn),
+      registerCommand: (_name: string, value: any) => { command = value.handler; },
+      getSettings: () => { throw new Error("Merged project settings are not permission authority"); },
+    } as never);
+    const c = { cwd: s.cwd, hasUI, ui: {
+      notify: (text: string) => notifications.push(text), setStatus: () => {},
+      select: async () => { prompts++; return "Deny"; },
+    } };
+    const start = () => handlers.get("session_start")!({}, c);
+    start();
+    return { call: (toolName: string, path: string) => handlers.get("tool_call")!({ toolName, input: { path } }, c),
+      shell: (command: string, toolName = "bash") => handlers.get("tool_call")!({ toolName, input: { command, cmd: command } }, c),
+      command: (args: string) => command(args, c), start, notifications, prompts: () => prompts };
+  }
+  test("missing config grants nothing; overlay alias and canonical roots are supported", () => {
+    expect(loadMarkdownRoots(s)).toEqual([]);
+    configure({ markdown_write_roots: [root, root] });
+    expect(loadMarkdownRoots(s)).toEqual([resolvePath(root, s)]);
+    process.env.SJEL_PERSONAL_ROOT = overlay;
+    delete process.env.SJEL_OVERLAY_ROOT;
+    expect(loadMarkdownRoots(s)).toEqual([resolvePath(root, s)]);
+    delete process.env.SJEL_PERSONAL_ROOT;
+    expect(loadMarkdownRoots(s)).toEqual([]);
+  });
+  test("malformed config, broad roots, missing roots and unknown keys fail closed", async () => {
+    for (const value of [null, [], {}, { markdown_write_roots: "bad" },
+      { markdown_write_roots: [root, 1] }, { markdown_write_roots: ["relative"] },
+      { markdown_write_roots: [root, "/"] }, { markdown_write_roots: [homedir()] },
+      { markdown_write_roots: [join(root, "missing")] },
+      { markdown_write_roots: [root], shell_roots: [root] }]) {
+      configure(value);
+      expect(() => loadMarkdownRoots(s)).toThrow();
+      const h = setup();
+      expect(h.notifications[0]).toContain("no persistent Markdown grants");
+      expect((await h.call("write", join(root, "note.md"))).block).toBe(true);
+    }
+    writeFileSync(join(overlay, "config", "command-policy.json"), "{broken");
+    expect(() => loadMarkdownRoots(s)).toThrow();
+    rmSync(join(overlay, "config", "command-policy.json"));
+    mkdirSync(join(overlay, "config", "command-policy.json"));
+    expect(() => loadMarkdownRoots(s)).toThrow();
+    expect(setup().notifications[0]).toContain("invalid or unreadable");
+    rmSync(join(overlay, "config", "command-policy.json"), { recursive: true });
+    configure({ markdown_write_roots: [] });
+    expect(loadMarkdownRoots(s)).toEqual([]);
+    symlinkSync(homedir(), join(root, "home-alias"));
+    configure({ markdown_write_roots: [join(root, "home-alias")] });
+    expect(() => loadMarkdownRoots(s)).toThrow();
+    writeFileSync(join(root, "file"), "");
+    configure({ markdown_write_roots: [join(root, "file")] });
+    expect(() => loadMarkdownRoots(s)).toThrow();
+  });
+  test("only direct Markdown write/edit gain approval; shell and protected targets still ask", async () => {
+    configure({ markdown_write_roots: [root] });
+    const h = setup();
+    expect(await setup(false).call("write", join(root, "headless.md"))).toBeUndefined();
+    for (const tool of ["write", "edit"]) {
+      expect(await h.call(tool, join(root, "nested", "note.md"))).toBeUndefined();
+      for (const path of ["note.txt", "note.md.ts", "secrets/note.md", "extensions/note.md", "hooks/note.md", "agents/note.md", "command-policy/note.md", ".ssh/note.md", "AGENTS.md", "CLAUDE.md", "SKILL.md", "GEMINI.md", "copilot-instructions.md", ".obsidian/prompts/system.md", ".pi/note.md", "config/policy.md", "prompts/system.md"]) {
+        expect((await h.call(tool, join(root, path))).block).toBe(true);
+      }
+      expect((await h.call(tool, `${root}-sibling/note.md`)).block).toBe(true);
+      expect((await h.call(tool, join(root, "..", "outside.md"))).block).toBe(true);
+    }
+    for (const shell of ["bash", "vault_exec"]) {
+      expect((await h.shell(`touch '${root}/note.md'`, shell)).block).toBe(true);
+      expect((await h.shell(`cp -n source '${root}/note.md'`, shell)).block).toBe(true);
+    }
+  });
+  test("persistent Markdown grants reject canonical policy aliases", async () => {
+    configure({ markdown_write_roots: [root] });
+    mkdirSync(join(root, ".obsidian", "prompts"), { recursive: true });
+    writeFileSync(join(root, "AGENTS.md"), "policy");
+    writeFileSync(join(root, ".obsidian", "prompts", "system.md"), "policy");
+    symlinkSync(join(root, "AGENTS.md"), join(root, "ordinary.md"));
+    symlinkSync(join(root, ".obsidian", "prompts"), join(root, "ordinary-directory"));
+    const h = setup();
+    for (const tool of ["write", "edit"]) {
+      for (const path of ["ordinary.md", "ordinary-directory/system.md"]) {
+        expect((await h.call(tool, join(root, path))).block).toBe(true);
+      }
+    }
+  });
+  test("canonical containment rejects symlink escapes, suffix aliases and dangling links", async () => {
+    const outside = join(homedir(), "policy-outside-does-not-exist");
+    symlinkSync(homedir(), join(root, "escape"));
+    symlinkSync(outside, join(root, "dangling.md"));
+    symlinkSync(outside, join(root, "dangling-directory"));
+    writeFileSync(join(root, "script.ts"), "");
+    symlinkSync(join(root, "script.ts"), join(root, "alias.md"));
+    const roots = [resolvePath(root, s)];
+    for (const path of ["escape/note.md", "dangling.md", "dangling-directory/note.md", "alias.md"]) {
+      expect(scopedMarkdownWrite(join(root, path), s, roots)).toBe(false);
+    }
+    configure({ markdown_write_roots: [root] });
+    const h = setup();
+    expect((await h.call("write", join(root, "escape", "note.md"))).block).toBe(true);
+    const task = join(root, "task");
+    mkdirSync(task);
+    const pinned = [resolvePath(task, s)];
+    renameSync(task, join(root, "old-task"));
+    symlinkSync(homedir(), task);
+    expect(scopedMarkdownWrite(join(task, "note.md"), s, pinned)).toBe(false);
+  });
+  test("grants reload across instances; off suppresses persistent roots without changing config", async () => {
+    configure({ markdown_write_roots: [root] });
+    const h = setup();
+    const note = join(root, "note.md");
+    expect(await h.call("write", note)).toBeUndefined();
+    expect(h.prompts()).toBe(0);
+    await h.command("status");
+    expect(h.notifications.at(-1)).toContain(`Persistent Markdown roots (active): ${resolvePath(root, s)}`);
+    await h.command("off");
+    await h.command("status");
+    expect(h.notifications.at(-1)).toContain("suppressed until reload/session change");
+    expect((await h.call("write", note)).block).toBe(true);
+    await h.command(`auto ${root}`);
+    expect(await h.call("edit", note)).toBeUndefined();
+    await h.command("off");
+    expect((await h.call("edit", note)).block).toBe(true);
+    expect(await setup().call("write", note)).toBeUndefined();
+    h.start();
+    expect(await h.call("write", note)).toBeUndefined();
+    expect(loadMarkdownRoots(s)).toEqual([resolvePath(root, s)]);
+    configure({ markdown_write_roots: [root, "/"] });
+    h.start();
+    expect((await h.call("write", note)).block).toBe(true);
+    expect(h.notifications.at(-1)).toContain("no persistent Markdown grants");
   });
 });
 

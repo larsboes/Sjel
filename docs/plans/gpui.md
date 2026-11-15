@@ -636,13 +636,11 @@ NSH Mail caches its filtered row projection with `computed`; three focused Mail 
 pass, including retained rows, filter changes and removal. Frame-time and device
 checks remain open.
 
-The GPUI pages on the Mac and the NSH screens on the phone are frozen: they get fixes and no
-new pages. New surfaces come from the web catalog in
-[Views from the web catalog](#views-from-the-web-catalog). GPUI Fast draws the Mac app and
-[NSH](https://github.com/longbridge/nsh) draws the phone with UIKit views. The Swift host on the
-phone stays: it owns the device key, the local copy, notifications and RoomPlan. Items 5 and 6
-below wait for the outcome of the catalog. Rejected alternatives, the red-team findings and the
-council:
+GPUI Fast draws the Mac app and [NSH](https://github.com/longbridge/nsh) draws the phone with
+UIKit views. Both take new pages. Sjel has no web surface: the Svelte catalog is parked on the
+branch `dev/svelte-catalog` until a browser or wasm surface is needed. The Swift host on the
+phone stays: it owns the device key, the local copy, notifications and RoomPlan. Rejected
+alternatives, the red-team findings and the council:
 [`research/ui-stack.md`](../../research/ui-stack.md#2026-11-09-the-long-term-stack-and-how-generated-ui-runs).
 
 ### Built
@@ -755,15 +753,30 @@ so it resolves to the Mac app's 0.1.14.
 8. **A smaller `ui/`.** The phone's GPUI shell and phone-only views are removed. GPUI pages
    still used by the Mac remain behind the `gpui` feature until item 7 decides.
 
-### Views from the web catalog
+### Components from Ely
 
-A view is a document that a catalog schema validates. It names catalog components and binds them
-to read routes from `route-manifest`. No model-written TSX, JavaScript or HTML runs
-([product page](../../website/content/product.md#views), Product Rule 6). The catalog is a small
-set of Svelte components, built into one bundle with no network access. The bundle renders in a
-browser, in a web view inside the native shells, and in agent harnesses that support MCP Apps.
-The retired dashboard (`d9c77aae^`) holds reusable parts: `dashboard/src/lib/ui`,
-`dashboard/src/lib/genui`, and the Vega-Lite and MapLibre wiring. Its route pages do not return.
+Mac pages take their controls from [Ely](https://github.com/ZacharyZhang-NY/Ely-GPUI-Components)
+through Sjel's fork, [`larsboes/Ely-GPUI-Components`](https://github.com/larsboes/Ely-GPUI-Components),
+branch `sjel`. The fork depends on `gpui-kit` instead of `gpui-pre`, so it builds on the engine
+that the Mac app selects, and it moves with each Kit upgrade (§6). A component that Ely carries
+replaces the hand-built one in `ui/`, and the old code is deleted in the same change. A component
+that Ely lacks is built in the fork, not in `ui/`. The phone is NSH and does not use Ely.
+
+Open, in order:
+
+1. Pin the fork in `apps/gpui` and load Ely's assets and key bindings beside the Kit's. Done when
+   the Mac app builds with GPUI Fast and the default `gpui-pre`.
+2. A theme bridge: `ui/src/theme/palette.rs` sets Ely's palette (`Theme::set_palette`), so an
+   Ely control matches the Sjel page around it in light and dark.
+3. The first replacement: `ui/src/primitives/data_table.rs` and `tables.rs` (1,066 lines) move to
+   Ely's tables. Done when every page that used them keeps its sort, selection and keyboard
+   behavior and the two files are deleted.
+
+### Derived views
+
+A view is a document that a schema validates. It names Sjel components and binds them to read
+routes from `route-manifest`. No model-written code runs
+([product page](../../website/content/product.md#views), Product Rule 6).
 
 A view never calls a write route. A write reaches the user only as a proposal, which goes through
 the capability's existing write mode. A cloud model gets only the schema and pseudonymized
@@ -771,16 +784,13 @@ examples. Mail or feed text inside a view is rendered as text and never interpre
 
 Open, in order:
 
-1. Derived views. An object list and an object view render from the registry declaration of
-   `projects`, in a browser tab that the node serves, with no model. Done when a schema-invalid
-   document is refused with an error that names the failing node, and a document that names a
-   write route is refused.
-2. The same bundle in a web view inside the phone's Swift host, fed from the local copy.
+1. Derived views. A generic object list and object view render from the registry declaration of
+   `projects` ([`data.md`](data.md#registry-derived-project-views)) in the Mac app, with no page
+   code for that capability. Done when a schema-invalid document is refused with an error that
+   names the failing node, and a document that names a write route is refused.
+2. The same views on the phone as NSH screens, fed from the local copy.
 3. Saved views. A model composes a view once and it reloads without a model after an app
    restart.
-4. Live views inside an agent conversation.
+4. Live views inside the app's agent panel.
 5. The view document format. Candidates: A2UI behind an adapter, and OpenUI Lang
    (`open-intelligent-ui` in `upstreams.toml`). Not chosen. Neither has been read for this item.
-
-By 2026-12-09, measure daily use of item 1 against the frozen pages and mark one of the two for
-removal.

@@ -26,10 +26,10 @@ Finish them before any other framework or surface is introduced.
 2. One folder of Markdown files for prose. The files are the authority for their text, and Sjel
    indexes them
    ([`storage.md`](docs/plans/storage.md#one-vault-for-prose)).
-3. Derived views from a web catalog. The GPUI and NSH pages are frozen. Done when an object list
-   and an object view for `projects` render from the registry in a browser, with no page code for
-   that capability. By 2026-12-09 either the catalog or the native pages are marked for removal
-   ([`gpui.md` §11](docs/plans/gpui.md#views-from-the-web-catalog)).
+3. Derived views in the native app. Done when an object list and an object view for `projects`
+   render from the registry in the Mac app, with no page code for that capability
+   ([`gpui.md` §11](docs/plans/gpui.md#derived-views)). Mac pages take their controls from Sjel's
+   Ely fork ([`gpui.md` §11](docs/plans/gpui.md#components-from-ely)).
 4. Audit every capability against the build rule in the
    [product page](website/content/product.md#what-sjel-builds-ingests-and-links-to): build,
    ingest or link out. A capability that fails the rule shrinks to a connector or a link.
@@ -65,7 +65,7 @@ even when compilation and unit tests pass.
 
 - Agent UI, terminal conveniences, plugins, Pi comparison, retrieval and optimization loops:
   [`agent.md`](docs/plans/agent.md). Saved and live views, which a model composes, follow the
-  derived views of Priority 1 ([`gpui.md` §11](docs/plans/gpui.md#views-from-the-web-catalog)).
+  derived views of Priority 1 ([`gpui.md` §11](docs/plans/gpui.md#derived-views)).
   Existing containment remains;
   additional harness support follows [`containment.md`](docs/plans/containment.md).
 - Pack deployment levels and account synchronization: [`packs.md`](docs/plans/packs.md).

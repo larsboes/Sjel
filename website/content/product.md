@@ -32,7 +32,7 @@ owner adds or removes, and the class of each value decides which model may read 
 | 1 | Facts are spread over tools | One registry of object types, properties, links and actions | A question that needs three sources is answered from one place |
 | 2 | Connections are made by hand | Links and extraction across sources, proposed by a local model and decided by the owner | A mail that concerns a project appears on that project without a manual step |
 | 3 | Privacy needs constant attention | Every value has a data class, and the class decides which provider reads it | `comms egress-log --audit` reports zero violations ([`PLAN.md`](../../PLAN.md#success-measures)) |
-| 4 | Every person needs different views | Views are data, composed from a fixed catalog | A saved view renders on the phone and the Mac without new code |
+| 4 | Every person needs different views | Views are data, composed from a fixed set of components | A saved view renders on the phone and the Mac without new code |
 | 5 | Agents need the same facts | One contract serves the CLI, MCP and the views | A capability is finished only when `sjel` can find it, check it and call it |
 | 6 | External tools change fast | A dated verdict for every external project, re-checked on a stated condition | [`upstreams.toml`](../../upstreams.toml) has no row without a verdict |
 
@@ -70,7 +70,7 @@ capabilities against this rule is open work.
 2. **The class travels with the value.** A derived value takes the highest class of its inputs.
    A class rises by itself, and only a person lowers it, with a written reason.
 3. **Screens come from the typed data** ([Product rule 6](../../CONTRIBUTING.md#product-rules)).
-   A hand-built screen needs a reason that the catalog cannot meet.
+   A hand-built screen needs a reason that a derived view cannot meet.
 4. **One way in.** The CLI, MCP tools and views read the same contract.
 5. **Built for one owner first.** The design keeps a second household possible: a core that runs
    with no capability enabled, and nothing that only the author can set up.
@@ -92,7 +92,7 @@ flowchart TB
     reg["Registry: object types, properties and class, links, actions"]
     store["Stores: SQLite-compatible, one per capability"]
     gate["Policy gate and egress ledger"]
-    views["View documents, validated against the catalog schema"]
+    views["View documents, validated against the view schema"]
     sync["Sync between the owner's devices"]
   end
 
@@ -105,18 +105,16 @@ flowchart TB
 
   subgraph surfaces["Surfaces"]
     agents["CLI and MCP for agent harnesses"]
-    catalog["Web catalog: one offline bundle"]
-    shells["Native shells: the phone host and the Mac app"]
+    apps["Native app: GPUI on the Mac, NSH on the phone"]
   end
 
   tools --> raw
   vault --> raw
   reg --> gate
   gate --> agents
-  views --> catalog
-  catalog --> shells
-  catalog --> agents
-  shells <--> sync
+  views --> apps
+  reg --> apps
+  apps <--> sync
 ```
 
 ### The core
@@ -140,17 +138,16 @@ The core is a library, so it runs inside the phone app as well as inside a servi
 ### The vault
 
 Prose lives in one folder of Markdown files, and the files are the authority for their text.
-Any editor works on them: Obsidian today, and a reader and editor inside Sjel's web catalog. Each top folder has a default data class, and frontmatter can only raise it. Facts about
+Any editor works on them: Obsidian today, and a reader and editor inside the Sjel app. Each top folder has a default data class, and frontmatter can only raise it. Facts about
 other people and secrets stay in Sjel's stores, and a note refers to them by link. An agent reads
 prose from the files and reads facts through Sjel. A Sjel search returns the path of a matching
 note, and the agent opens it when the class allows.
 
 ### Views
 
-A view is a document that names catalog components and binds them to read routes. No
-model-written code runs. The catalog is a small set of Svelte components, built into one bundle
-with no network access. The bundle renders in a browser, in a web view inside the native shells,
-and inside agent harnesses that support MCP Apps.
+A view is a document that names Sjel components and binds them to read routes. No
+model-written code runs. The components are native: GPUI draws them on the Mac and NSH on the
+phone. Agent harnesses read the same data through the CLI and MCP, as text.
 
 Adaptive views arrive in three levels, each built on the one before:
 

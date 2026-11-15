@@ -214,7 +214,7 @@ Then add `web`, `subagents`, `mcp`, `skills` and `rust` to `plugins.rs` `KNOWN`,
 - A notification when a run waits for approval. It carries no tool output and no file contents.
 - Later: the run drives the main column, see [`gpui.md`](gpui.md#5-finder-and-right-edge).
 - Later: a run answers with a view document, not only text, under
-  [`gpui.md` Generated views](gpui.md#views-from-the-web-catalog).
+  [`gpui.md` Derived views](gpui.md#derived-views).
 
 ## 6. Terminal from the phone
 

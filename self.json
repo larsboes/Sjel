@@ -2122,6 +2122,16 @@
       ]
     },
     {
+      "from": "projects-api",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/projects-api/Cargo.toml"
+      ]
+    },
+    {
       "from": "pseudonymize",
       "to": "extraction",
       "kinds": [
@@ -3376,6 +3386,10 @@
     {
       "name": "ecb-data-portal",
       "verdict": "adopt"
+    },
+    {
+      "name": "ely-gpui-component",
+      "verdict": "fork"
     },
     {
       "name": "esphome",

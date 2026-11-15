@@ -153,7 +153,7 @@ about the expanded archive refers to the whole archive, not this filtered intake
 ### One vault for prose
 
 Prose lives in one folder of Markdown files, and the files are the authority for their text.
-Obsidian is one editor for them, and Sjel's web catalog can carry another ([product page](../../website/content/product.md#the-vault)). Typed facts stay in Sjel's
+Obsidian is one editor for them, and the Sjel app can carry another ([product page](../../website/content/product.md#the-vault)). Typed facts stay in Sjel's
 stores. Open, in order:
 
 1. Give each top folder of the vault a default data class. Frontmatter can raise it and cannot

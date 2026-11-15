@@ -1,10 +1,6 @@
 //! Common types, enums, and component states for Calendar views.
-use gpui::{AnyElement, Entity, FontWeight, Subscription};
-use gpui_kit::component::date_picker::DatePickerState;
-use gpui_kit::component::input::InputState;
-use gpui_kit::component::time_field::TimeFieldState;
+use gpui::{AnyElement, FontWeight};
 use gpui_kit::{div, prelude::*, px, rgb, rgba};
-use sjel_gpui_core::calendar::kind_color;
 pub use sjel_gpui_core::calendar::CalendarSyncStatus;
 use sjel_gpui_core::shell::CalendarEntry;
 
@@ -62,62 +58,13 @@ pub enum View {
     Week,
 }
 
-/// The desktop new-entry form's fields.
+/// The application-owned part of an Ely editor session.
 pub(crate) struct Form {
     pub(crate) editing: Option<CalendarEntry>,
-    pub(crate) title: Entity<InputState>,
-    pub(crate) start_date: Entity<DatePickerState>,
-    pub(crate) end_date: Entity<DatePickerState>,
-    pub(crate) start: Entity<TimeFieldState>,
-    pub(crate) end: Entity<TimeFieldState>,
-    pub(crate) all_day: bool,
+    pub(crate) draft: crate::ely::calendar::EventDraft,
     pub(crate) kind: String,
     pub(crate) commitment: String,
-    pub(crate) error: Option<&'static str>,
-    pub(crate) _subscriptions: Vec<Subscription>,
-}
-
-/// One entry as a coloured badge pill and its title.
-pub(crate) fn chip(entry: &CalendarEntry, palette: Palette) -> gpui_kit::Div {
-    let color = kind_color(&entry.kind);
-    let is_possible = entry.commitment == "possible" || entry.commitment == "tentative";
-    div()
-        .flex()
-        .items_center()
-        .gap_1p5()
-        .min_w_0()
-        .px_1p5()
-        .py(px(1.5))
-        .rounded(px(4.))
-        .bg(rgba(tint(color, if is_possible { 0x18 } else { 0x30 })))
-        .border_1()
-        .border_color(if is_possible {
-            rgba(tint(color, 0x40))
-        } else {
-            rgba(tint(color, 0x60))
-        })
-        .hover(|el| el.bg(rgba(tint(color, if is_possible { 0x2c } else { 0x48 }))))
-        .child(
-            div()
-                .w(px(6.))
-                .h(px(6.))
-                .flex_none()
-                .rounded_full()
-                .when(is_possible, |dot| dot.border_1().border_color(rgb(color)))
-                .when(!is_possible, |dot| dot.bg(rgb(color))),
-        )
-        .child(
-            div()
-                .truncate()
-                .text_xs()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(rgb(if is_possible {
-                    palette.muted
-                } else {
-                    palette.text
-                }))
-                .child(entry.title.clone()),
-        )
+    pub(crate) session: u64,
 }
 
 pub(crate) fn muted(text: &str, palette: Palette) -> gpui_kit::Div {

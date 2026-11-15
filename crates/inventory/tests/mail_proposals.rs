@@ -214,3 +214,68 @@ async fn reviewed_mail_is_atomic_idempotent_and_conflict_guarded() {
     );
     let _ = std::fs::remove_file(&path);
 }
+
+#[tokio::test]
+async fn delivery_provenance_survives_storage_and_conflicting_replays() {
+    let path = std::env::temp_dir().join(format!(
+        "inventory-mail-provenance-{}.db",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let router = build_router(Arc::new(AppState {
+        device_store: devices::store::DevicesStore::open(&path).unwrap(),
+        database: path.clone(),
+    }));
+    let proposal = json!({
+        "source_id":"mail:v1:thread:message", "line_id":"line", "event":"delivered",
+        "title":"Blue mug", "evidence":"Blue mug", "data_class":"c1",
+        "claim":"Your parcel was delivered today", "extraction_version":"mail-evidence-v2"
+    });
+    let (status, staged) = send(
+        &router,
+        "POST",
+        "/api/mail-proposals",
+        proposal.clone(),
+        false,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(staged["claim"], proposal["claim"]);
+    assert_eq!(staged["extraction_version"], proposal["extraction_version"]);
+    drop(router);
+    let router = build_router(Arc::new(AppState {
+        device_store: devices::store::DevicesStore::open(&path).unwrap(),
+        database: path.clone(),
+    }));
+    let (_, listed) = send(&router, "GET", "/api/mail-proposals", Value::Null, false).await;
+    assert_eq!(listed["proposals"][0], staged);
+    assert_eq!(
+        send(
+            &router,
+            "POST",
+            "/api/mail-proposals",
+            proposal.clone(),
+            false
+        )
+        .await
+        .1,
+        staged
+    );
+    let mut changed = proposal.clone();
+    changed["claim"] = json!("Delivered to somebody else");
+    assert_eq!(
+        send(&router, "POST", "/api/mail-proposals", changed, false)
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+    let mut order = proposal;
+    order["event"] = json!("order");
+    assert_eq!(
+        send(&router, "POST", "/api/mail-proposals", order, false)
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    let _ = std::fs::remove_file(&path);
+}

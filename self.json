@@ -1063,7 +1063,27 @@
     },
     {
       "from": "comms",
+      "to": "inventory-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/comms/Cargo.toml"
+      ]
+    },
+    {
+      "from": "comms",
       "to": "links",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/comms/Cargo.toml"
+      ]
+    },
+    {
+      "from": "comms",
+      "to": "projects-api",
       "kinds": [
         "cargo-dep"
       ],

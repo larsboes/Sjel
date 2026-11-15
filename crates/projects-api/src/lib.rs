@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod reads;
+pub mod mail_evidence;
 pub mod registry;
 
 // ============================================================================

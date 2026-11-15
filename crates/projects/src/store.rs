@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sjel_turso::{libsql, Store};
 
 use crate::record::{check_attachment, Kind, Record};
@@ -32,18 +32,7 @@ pub struct Projects {
     pub(crate) source_config: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct MailProposalInput {
-    pub source_id: String,
-    pub line_id: String,
-    pub event: String,
-    pub project: String,
-    pub title: String,
-    pub evidence: String,
-    pub data_class: String,
-    pub task_suggestion: Option<String>,
-}
+pub use projects_api::mail_evidence::MailProposalInput;
 
 #[derive(Debug, Serialize)]
 pub struct MailProposal {
@@ -91,36 +80,6 @@ pub fn mail_thread_prefix(prefix: &str) -> bool {
                     .bytes()
                     .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
         })
-}
-
-impl MailProposalInput {
-    pub fn validate(&self) -> Result<(), &'static str> {
-        for (value, max) in [
-            (&self.source_id, 512),
-            (&self.line_id, 512),
-            (&self.project, 255),
-            (&self.title, 255),
-            (&self.evidence, 2000),
-        ] {
-            if value.trim().is_empty() || value.len() > max || value.contains('\0') {
-                return Err("proposal field is empty or exceeds its limit");
-            }
-        }
-        if self.event != "project_evidence"
-            || !["c0", "c1", "c2"].contains(&self.data_class.as_str())
-            || crate::record::is_domain(&self.project)
-        {
-            return Err("invalid event, data class, or project");
-        }
-        if self
-            .task_suggestion
-            .as_ref()
-            .is_some_and(|s| s.trim().is_empty() || s.len() > 1000 || s.contains('\0'))
-        {
-            return Err("invalid task suggestion");
-        }
-        Ok(())
-    }
 }
 
 /// What `attach` did with one file.
@@ -216,6 +175,9 @@ impl Projects {
         input: &MailProposalInput,
     ) -> Fallible<Option<MailProposal>> {
         input.validate()?;
+        if crate::record::is_domain(&input.project) {
+            return Err("mail evidence requires a project, not a domain".into());
+        }
         let tx = self.db.begin().await?;
         let mut rows = tx
             .query(

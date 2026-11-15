@@ -1312,7 +1312,7 @@ mod tests {
             .await
             .unwrap();
         let router = router(Arc::new(projects));
-        let proposal = json!({"source_id":"message", "line_id":"line-1", "event":"project_evidence", "project":"W", "title":"Delivery", "evidence":"Delivered today", "data_class":"c2", "task_suggestion":"Inspect part"});
+        let proposal = json!({"source_id":"message", "line_id":"line-1", "event":"project_evidence", "project":"W", "title":"Delivery", "evidence":"Delivered today", "data_class":"c2", "task_suggestion":"Inspect part", "extraction_version":"mail-evidence-v2"});
         assert_eq!(
             call(&router, post("/api/mail-proposals", proposal.clone()))
                 .await
@@ -1329,6 +1329,7 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         let id = body["proposal"]["id"].as_i64().unwrap();
         assert_eq!(body["proposal"]["version"], 1);
+        assert_eq!(body["proposal"]["extraction_version"], "mail-evidence-v2");
         assert_eq!(
             call(&router, post("/api/mail-proposals", proposal.clone()))
                 .await

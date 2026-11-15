@@ -1,0 +1,86 @@
+[
+  {
+    "id": "order-is-not-ownership",
+    "stage": "inventory",
+    "mail": "Order 123: Blue mug",
+    "response": [{"event":"order","title":"Blue mug","evidence":"Order 123: Blue mug","order_ref":"123"}],
+    "expected": ["order:Blue mug"], "dropped": []
+  },
+  {
+    "id": "shipment-is-not-delivery",
+    "stage": "inventory",
+    "mail": "Blue mug will be delivered tomorrow",
+    "response": [{"event":"delivered","title":"Blue mug","evidence":"Blue mug will be delivered tomorrow"}],
+    "expected": [], "dropped": ["delivery_claim"]
+  },
+  {
+    "id": "negated-delivery",
+    "stage": "inventory",
+    "mail": "Blue mug nicht zugestellt",
+    "response": [{"event":"delivered","title":"Blue mug","evidence":"Blue mug nicht zugestellt"}],
+    "expected": [], "dropped": ["delivery_claim"]
+  },
+  {
+    "id": "separate-delivery-statement",
+    "stage": "inventory",
+    "mail": "Dein Paket wurde zugestellt!\nBlue mug",
+    "response": [{"event":"delivered","title":"Blue mug","evidence":"Blue mug","claim":"Dein Paket wurde zugestellt!"}],
+    "expected": ["delivered:Blue mug"], "dropped": []
+  },
+  {
+    "id": "progress-label-is-not-a-statement",
+    "stage": "inventory",
+    "mail": "Bestellt\nVersendet\nZugestellt\nBlue mug",
+    "response": [{"event":"delivered","title":"Blue mug","evidence":"Blue mug","claim":"Zugestellt"}],
+    "expected": [], "dropped": ["claim"]
+  },
+  {
+    "id": "multiple-order-lines-and-quoted-repeat",
+    "stage": "inventory",
+    "mail": "Order 123: Blue mug\nOrder 123: Red plate",
+    "response": [{"event":"order","title":"Blue mug","evidence":"Order 123: Blue mug"},{"event":"order","title":"Red plate","evidence":"Order 123: Red plate"},{"event":"order","title":"Blue mug","evidence":"Order 123: Blue mug"}],
+    "expected": ["order:Blue mug", "order:Red plate"], "dropped": []
+  },
+  {
+    "id": "distinct-events-share-an-excerpt",
+    "stage": "inventory",
+    "mail": "Order cancellation: Blue mug",
+    "response": [{"event":"order","title":"Blue mug","evidence":"Order cancellation: Blue mug"},{"event":"cancellation","title":"Blue mug","evidence":"Order cancellation: Blue mug"}],
+    "expected": ["order:Blue mug", "cancellation:Blue mug"], "dropped": []
+  },
+  {
+    "id": "return-preserves-its-event",
+    "stage": "inventory",
+    "mail": "Return received: Blue mug",
+    "response": [{"event":"return","title":"Blue mug","evidence":"Return received: Blue mug"}],
+    "expected": ["return:Blue mug"], "dropped": []
+  },
+  {
+    "id": "invented-order-reference",
+    "stage": "inventory",
+    "mail": "Order: Blue mug",
+    "response": [{"event":"order","title":"Blue mug","evidence":"Order: Blue mug","order_ref":"999"}],
+    "expected": [], "dropped": ["order_ref"]
+  },
+  {
+    "id": "unknown-project",
+    "stage": "projects", "projects": ["Kitchen"],
+    "mail": "Kitchen repair: Blue mug",
+    "response": [{"event":"project_evidence","project":"Garage","title":"Blue mug","evidence":"Kitchen repair: Blue mug"}],
+    "expected": [], "dropped": ["unknown_project"]
+  },
+  {
+    "id": "one-excerpt-can-support-two-projects",
+    "stage": "projects", "projects": ["Kitchen", "Move"],
+    "mail": "Kitchen and Move: Blue mug",
+    "response": [{"event":"project_evidence","project":"Kitchen","title":"Blue mug","evidence":"Kitchen and Move: Blue mug"},{"event":"project_evidence","project":"Move","title":"Blue mug","evidence":"Kitchen and Move: Blue mug"}],
+    "expected": ["project_evidence:Blue mug", "project_evidence:Blue mug"], "dropped": []
+  },
+  {
+    "id": "invented-evidence",
+    "stage": "inventory",
+    "mail": "Order: Blue mug",
+    "response": [{"event":"order","title":"Blue mug","evidence":"Delivered: Blue mug"}],
+    "expected": [], "dropped": ["evidence_not_in_mail"]
+  }
+]

@@ -1,10 +1,15 @@
 //! Local-model mail evidence proposals. Validation establishes provenance, not truth:
 //! event labels and task suggestions remain unverified model claims.
 
+use inventory_api::mail_evidence::{MailProposalInput as InventoryProposal, PurchaseEvent};
+use projects_api::mail_evidence::{MailProposalInput as ProjectProposal, ProjectEvidenceEvent};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use thiserror::Error;
+
+/// The prompt and parser contract stamped on accepted proposals.
+pub const EXTRACTION_VERSION: &str = "mail-evidence-v2";
 
 pub const MAX_MAIL_BYTES: usize = 64 * 1024;
 pub const MAX_RESPONSE_BYTES: usize = 32 * 1024;
@@ -30,19 +35,10 @@ pub enum EvidenceError {
 }
 
 #[derive(Serialize)]
-pub struct Proposal {
-    pub source_id: String,
-    pub line_id: String,
-    pub event: String,
-    pub title: String,
-    pub evidence: String,
-    pub data_class: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub order_ref: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub project: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub task_suggestion: Option<String>,
+#[serde(untagged)]
+pub enum Proposal {
+    Inventory(InventoryProposal),
+    Projects(ProjectProposal),
 }
 
 #[derive(Deserialize)]
@@ -133,10 +129,9 @@ fn ungrounded(
 ) -> Option<&'static str> {
     let valid_event = match stage {
         Stage::Inventory => {
-            matches!(
-                row.event.as_str(),
-                "order" | "shipment" | "delivered" | "cancellation" | "return"
-            ) && row.project.is_none()
+            serde_json::from_value::<PurchaseEvent>(serde_json::Value::String(row.event.clone()))
+                .is_ok()
+                && row.project.is_none()
                 && row.task_suggestion.is_none()
         }
         Stage::Projects => row.event == "project_evidence" && row.order_ref.is_none(),
@@ -261,8 +256,6 @@ pub fn parse(
             parsed.dropped.push(rule);
             continue;
         }
-        // A quoted reply repeats earlier text. The line identity is the evidence's words, so a
-        // repeat is the same line and is kept once, however its whitespace was copied.
         let mut hash = Sha256::new();
         hash.update(b"sjel-mail-line-v1\0");
         hash.update(words(&row.evidence).to_lowercase().as_bytes());
@@ -271,20 +264,50 @@ pub fn parse(
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect();
-        if !ids.insert(line_id.clone()) {
-            continue;
+        let identity = (line_id.clone(), row.event.clone(), row.project.clone());
+        let proposal = match stage {
+            Stage::Inventory => {
+                let event = serde_json::from_value(serde_json::Value::String(row.event))
+                    .map_err(|_| EvidenceError::Response)?;
+                let proposal = InventoryProposal {
+                    source_id: source_id.to_owned(),
+                    line_id: line_id.clone(),
+                    event,
+                    title: row.title,
+                    evidence: row.evidence,
+                    data_class: class.to_owned(),
+                    order_ref: row.order_ref,
+                    claim: row.claim,
+                    extraction_version: Some(EXTRACTION_VERSION.into()),
+                };
+                if proposal.validate().is_err() {
+                    parsed.dropped.push("owner_contract");
+                    continue;
+                }
+                Proposal::Inventory(proposal)
+            }
+            Stage::Projects => {
+                let proposal = ProjectProposal {
+                    source_id: source_id.to_owned(),
+                    line_id: line_id.clone(),
+                    event: ProjectEvidenceEvent::Evidence,
+                    project: row.project.unwrap_or_default(),
+                    title: row.title,
+                    evidence: row.evidence,
+                    data_class: class.to_owned(),
+                    task_suggestion: row.task_suggestion,
+                    extraction_version: Some(EXTRACTION_VERSION.into()),
+                };
+                if proposal.validate().is_err() {
+                    parsed.dropped.push("owner_contract");
+                    continue;
+                }
+                Proposal::Projects(proposal)
+            }
+        };
+        if ids.insert(identity) {
+            parsed.proposals.push(proposal);
         }
-        parsed.proposals.push(Proposal {
-            source_id: source_id.to_owned(),
-            line_id,
-            event: row.event,
-            title: row.title,
-            evidence: row.evidence,
-            data_class: class.to_owned(),
-            order_ref: row.order_ref,
-            project: row.project,
-            task_suggestion: row.task_suggestion,
-        });
     }
     Ok(parsed)
 }
@@ -294,6 +317,67 @@ mod tests {
     use super::*;
 
     const MAIL: &str = "Order 123: Blue mug\nOrder 123: Red plate";
+
+    #[test]
+    fn frozen_semantic_corpus_matches_owner_contracts() {
+        #[derive(Deserialize)]
+        struct Case {
+            id: String,
+            stage: String,
+            mail: String,
+            #[serde(default)]
+            projects: Vec<String>,
+            response: serde_json::Value,
+            expected: Vec<String>,
+            dropped: Vec<String>,
+        }
+        let cases: Vec<Case> =
+            serde_json::from_str(include_str!("../eval/mail-evidence.json")).unwrap();
+        assert_eq!(cases.len(), 12);
+        for case in cases {
+            let stage = match case.stage.as_str() {
+                "inventory" => Stage::Inventory,
+                "projects" => Stage::Projects,
+                _ => panic!("unknown corpus stage"),
+            };
+            let parsed = parse(
+                stage,
+                "mail:v1:thread:message",
+                "c1",
+                &case.mail,
+                &case.projects,
+                &case.response.to_string(),
+            )
+            .unwrap();
+            let mut actual = Vec::new();
+            for proposal in &parsed.proposals {
+                let wire = serde_json::to_value(proposal).unwrap();
+                match stage {
+                    Stage::Inventory => {
+                        let owner: InventoryProposal =
+                            serde_json::from_value(wire.clone()).unwrap();
+                        owner.validate().unwrap();
+                    }
+                    Stage::Projects => {
+                        let owner: ProjectProposal = serde_json::from_value(wire.clone()).unwrap();
+                        owner.validate().unwrap();
+                    }
+                }
+                actual.push(format!(
+                    "{}:{}",
+                    wire["event"].as_str().unwrap(),
+                    wire["title"].as_str().unwrap()
+                ));
+                assert_eq!(
+                    wire["extraction_version"], EXTRACTION_VERSION,
+                    "{}",
+                    case.id
+                );
+            }
+            assert_eq!(actual, case.expected, "{}", case.id);
+            assert_eq!(parsed.dropped, case.dropped, "{}", case.id);
+        }
+    }
     fn parse_inventory(response: &str) -> Result<Parsed, EvidenceError> {
         parse(Stage::Inventory, "source", "c2", MAIL, &[], response)
     }
@@ -363,10 +447,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(parsed.proposals.len(), 1);
-        assert!(serde_json::to_value(&parsed.proposals[0])
-            .unwrap()
-            .get("claim")
-            .is_none());
+        let wire = serde_json::to_value(&parsed.proposals[0]).unwrap();
+        assert_eq!(wire["claim"], "Dein Paket wurde zugestellt!");
+        assert_eq!(wire["extraction_version"], EXTRACTION_VERSION);
         let handed = row("Die Sendung wurde einem Hausbewohner übergeben.");
         let parsed = parse(Stage::Inventory, "s", "c1", mail, &[], &handed).unwrap();
         assert_eq!(parsed.proposals.len(), 1);
@@ -416,7 +499,10 @@ mod tests {
         let response = r#"[{"event":"order","title":"Blue mug","evidence":"Order 123: Blue mug"},{"event":"order","title":"Blue Mug","evidence":"Order 123: Red plate"},{"event":"ordered","title":"Red plate","evidence":"Order 123: Red plate"}]"#;
         let parsed = parse_inventory(response).unwrap();
         assert_eq!(parsed.proposals.len(), 1);
-        assert_eq!(parsed.proposals[0].title, "Blue mug");
+        assert_eq!(
+            serde_json::to_value(&parsed.proposals[0]).unwrap()["title"],
+            "Blue mug"
+        );
         assert_eq!(parsed.dropped, ["title_not_in_evidence", "event"]);
     }
 
@@ -426,9 +512,10 @@ mod tests {
         let b = r#"[{"event":"shipment","title":"Red plate","evidence":"Order 123: Red plate"},{"event":"shipment","title":"Blue mug","evidence":"Order 123: Blue mug"}]"#;
         let a = parse_inventory(a).unwrap().proposals;
         let b = parse_inventory(b).unwrap().proposals;
-        assert_eq!(a[0].line_id, b[1].line_id);
-        assert_eq!(a[1].line_id, b[0].line_id);
-        assert_ne!(a[0].line_id, a[1].line_id);
+        let line = |p: &Proposal| serde_json::to_value(p).unwrap()["line_id"].clone();
+        assert_eq!(line(&a[0]), line(&b[1]));
+        assert_eq!(line(&a[1]), line(&b[0]));
+        assert_ne!(line(&a[0]), line(&a[1]));
         let other = parse(
             Stage::Inventory,
             "another-source",
@@ -439,7 +526,7 @@ mod tests {
         )
         .unwrap()
         .proposals;
-        assert_eq!(a[0].line_id, other[0].line_id);
+        assert_eq!(line(&a[0]), line(&other[0]));
     }
 
     #[test]

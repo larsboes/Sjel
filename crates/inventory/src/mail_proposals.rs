@@ -19,17 +19,8 @@ fn conflict(message: &str) -> Error {
     (StatusCode::CONFLICT, message.into())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct Stage {
-    source_id: String,
-    line_id: String,
-    event: String,
-    title: String,
-    evidence: String,
-    data_class: String,
-    order_ref: Option<String>,
-}
+pub use inventory_api::mail_evidence::MailProposalInput as Stage;
+use inventory_api::mail_evidence::PurchaseEvent;
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -61,11 +52,22 @@ fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proposal> {
         stage: Stage {
             source_id: row.get(1)?,
             line_id: row.get(2)?,
-            event: row.get(3)?,
+            event: {
+                let event: String = row.get(3)?;
+                serde_json::from_value(serde_json::Value::String(event)).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        3,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?
+            },
             title: row.get(4)?,
             evidence: row.get(5)?,
             data_class: row.get(6)?,
             order_ref: row.get(7)?,
+            claim: row.get(14)?,
+            extraction_version: row.get(15)?,
         },
         version: row.get(8)?,
         decision: row.get(9)?,
@@ -75,48 +77,27 @@ fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proposal> {
         matched_state_id: row.get(13)?,
     })
 }
-const COLUMNS: &str = "id, source_id, line_id, event, title, evidence, data_class, order_ref, version, decision, item_id, approved_title, matched_item_revision, matched_state_id";
+const COLUMNS: &str = "id, source_id, line_id, event, title, evidence, data_class, order_ref, version, decision, item_id, approved_title, matched_item_revision, matched_state_id, claim, extraction_version";
 
 fn bounded(s: &str, max: usize) -> bool {
     !s.trim().is_empty() && s.len() <= max && !s.contains('\0')
 }
-fn validate(stage: &Stage) -> Result<(), Error> {
-    if !bounded(&stage.source_id, 512)
-        || !bounded(&stage.line_id, 256)
-        || !bounded(&stage.title, 256)
-        || !bounded(&stage.evidence, 1024)
-        || stage.order_ref.as_ref().is_some_and(|s| !bounded(s, 256))
-    {
-        return Err(invalid("missing or oversized proposal field"));
-    }
-    if !matches!(
-        stage.event.as_str(),
-        "order" | "shipment" | "delivered" | "cancellation" | "return"
-    ) {
-        return Err(invalid("invalid event"));
-    }
-    if !matches!(stage.data_class.as_str(), "c0" | "c1" | "c2") {
-        return Err(invalid("data_class must be c0, c1 or c2"));
-    }
-    Ok(())
-}
-
 pub async fn stage(
     State(state): State<Arc<AppState>>,
     Json(body): Json<Stage>,
 ) -> Result<Json<serde_json::Value>, Error> {
-    validate(&body)?;
+    body.validate().map_err(invalid)?;
     let store = Store::open(&state.database).map_err(internal)?;
     let mut conn = store.borrow_connection().map_err(internal)?;
     let tx = sjel_store::write_transaction(&mut conn).map_err(internal)?;
-    let existing = tx.query_row(&format!("SELECT {COLUMNS} FROM inventory_mail_proposal WHERE source_id=?1 AND line_id=?2 AND event=?3"), params![body.source_id, body.line_id, body.event], read_row).optional().map_err(internal)?;
+    let existing = tx.query_row(&format!("SELECT {COLUMNS} FROM inventory_mail_proposal WHERE source_id=?1 AND line_id=?2 AND event=?3"), params![body.source_id, body.line_id, body.event.as_str()], read_row).optional().map_err(internal)?;
     let proposal = if let Some(existing) = existing {
         if existing.stage != body {
             return Err(conflict("proposal identity already has different evidence"));
         }
         existing
     } else {
-        tx.execute("INSERT INTO inventory_mail_proposal (source_id,line_id,event,title,evidence,data_class,order_ref) VALUES (?1,?2,?3,?4,?5,?6,?7)", params![body.source_id, body.line_id, body.event, body.title, body.evidence, body.data_class, body.order_ref]).map_err(internal)?;
+        tx.execute("INSERT INTO inventory_mail_proposal (source_id,line_id,event,title,evidence,data_class,order_ref,claim,extraction_version) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)", params![body.source_id, body.line_id, body.event.as_str(), body.title, body.evidence, body.data_class, body.order_ref, body.claim, body.extraction_version]).map_err(internal)?;
         tx.query_row(
             &format!("SELECT {COLUMNS} FROM inventory_mail_proposal WHERE id=?1"),
             [tx.last_insert_rowid()],
@@ -298,7 +279,7 @@ pub async fn decide(
         if p.stage.data_class == "c2" {
             return Err(conflict("cannot create an inventory item from a c2 proposal: items do not preserve data class"));
         }
-        if p.stage.event != "delivered" {
+        if p.stage.event != PurchaseEvent::Delivered {
             return Err(conflict("only delivery can create an item"));
         }
         let title = body.title.as_deref().unwrap_or_default();

@@ -11,6 +11,8 @@ The Markdown files under the overlay's `data/projects/` tree are the authority f
 - The index refuses a file whose frontmatter `class` is invalid or below its folder floor, and keeps the previous row. Domain records (`Atlas/`, `Journal/`) answer to their own folder floor; project records answer as `Projects/<path>`. The deployment can raise floors in `<overlay>/config/vault-classes.json` (`schemas/vault-classes.json.example`).
 
 Attachments stay as files rather than database rows. Projects also owns reviewed references to Inventory items; those references record what was checked, not a guarantee that the item remains unchanged.
+The shared [mail evidence contract](../../docs/capabilities/mail-evidence.md) defines source
+claims and their separation from record changes.
 
 ## Run
 

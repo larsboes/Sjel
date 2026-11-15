@@ -57,6 +57,9 @@ Structured depth ladders (`crates/summarize`) adapt digest detail to content len
 ## Why this shape: Grounded event and receipt extraction for downstream plans
 
 Downstream integrations with Calendar (`src/mail_events.rs`) and Finance require verbatim textual evidence quotes from the source text before staging proposals.
+Inventory and Projects use shared typed staging contracts; the
+[mail evidence semantics](../../docs/capabilities/mail-evidence.md) define their claims,
+provenance and review boundaries.
 
 Candidate dates without confirmed, valid time ranges default safely to non-blocking all-day calendar entries.
 

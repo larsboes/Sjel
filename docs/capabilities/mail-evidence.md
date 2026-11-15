@@ -1,0 +1,66 @@
+# Mail evidence semantics
+
+Comms extracts source claims. Inventory and Projects own review, identity resolution and changes
+to their records. The shared staging contracts live in
+[`inventory-api::mail_evidence`](../../crates/inventory-api/src/mail_evidence.rs) and
+[`projects-api::mail_evidence`](../../crates/projects-api/src/mail_evidence.rs). The receivers
+derive their request schemas from these types; Comms serializes the same types.
+
+## Vocabulary and ownership
+
+| Concept | Meaning | Authority |
+|---|---|---|
+| Source message | A message within a thread, referenced by `mail:v1:<thread>:<message>` | Comms |
+| Evidence excerpt | Source text supporting a proposed claim | Comms grounds it; the destination retains it |
+| Purchase event | An order, shipment, delivery, cancellation or return reported by a source | Inventory reviews it |
+| Product title | A source label; neither a product identifier nor an owned item identifier | Unresolved until review |
+| Order reference | A source order label, without a global uniqueness guarantee | Evidence attribute |
+| Inventory item | A physical item with a stable identity and separate state history | Inventory |
+| Project evidence | A claim assigned to an existing project; a task suggestion has no mutation authority | Projects |
+| Reviewed link | A project record's reference to an Inventory item at a reviewed revision | Projects verifies with Inventory |
+
+A product model, an order line and a physical item are distinct concepts. The current mail
+pipeline does not create product-model or order-line entities. A title or an order reference must
+not silently become either identity. The existing `inv:` reference identifies an Inventory item.
+
+## Extraction and review
+
+The flow is source message → grounded proposal → owner review → record change or reviewed link.
+An order or shipment cannot create an owned item. Only a reviewed delivery may do so. A
+cancellation or return remains evidence for review; it does not change item state automatically.
+Matching an existing item requires its current item and state revisions. Project evidence must
+target a live project; applying it requires the reviewed destination record revision.
+
+Comms validates excerpts against the in-memory message using whitespace-normalized text.
+Truth and correct attribution still require review. A separate delivery statement
+travels as `claim`, rather than disappearing when the item title occurs in another paragraph.
+Both fields remain sensitive source excerpts. No full mail body is retained by this handoff.
+
+`extraction_version` identifies the prompt/parser contract. It is separate from the proposal's
+review `version`; it does not identify the inference backend or model. Legacy proposals omit
+the extraction revision and separate claim. Inventory migrates its existing table with nullable
+columns; Projects retains the optional field in its existing proposal payload.
+
+Inventory keys proposals by `(source_id, line_id, event)`. Projects adds `project` to that key.
+Comms deduplicates using the same distinction. The line hash normalizes whitespace and case;
+it identifies an excerpt. Physical items and order lines require separate identities. Re-extraction with different
+evidence or provenance at the same key conflicts rather than replacing an existing decision.
+
+The caller supplies classification and source identity. The model cannot select either. `c3`
+is excluded before prompting. `c2` evidence stays local; Inventory refuses item creation from it
+because item records do not retain classification. Projects refuses evidence that would lower
+the destination's classification.
+
+## Verification
+
+```sh
+sjel cargo test --locked -p sjel-comms --lib mail_evidence
+sjel cargo test --locked -p sjel-inventory --test mail_proposals --test mail_match --test mail_privacy
+sjel cargo test --locked -p sjel-projects --bin projects-server mail_proposals
+```
+
+The [frozen synthetic corpus](../../crates/comms/eval/mail-evidence.json) checks event semantics,
+grounding failures, quoted repeats, multiple lines and shared excerpts. Each accepted result
+must deserialize and validate through its receiving contract. It makes no model calls and does
+not measure model accuracy, product matching or real-mail recall. The area
+[data plan](../plans/data.md#mail-evidence-semantics-and-resolution) owns remaining acceptance.

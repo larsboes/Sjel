@@ -9,6 +9,8 @@ An item is separate from its state changes. State transitions are appended, so a
 Wish groups keep alternatives and shared needs together. Their comparison uses explicit numeric specifications and dated price observations rather than product descriptions alone.
 
 Mail-derived evidence is staged as a proposal. It cannot change inventory until reviewed, and C2 proposals cannot create item records.
+The shared [mail evidence contract](../../docs/capabilities/mail-evidence.md) defines purchase
+events, source claims and reviewed identity links.
 
 ## Run
 

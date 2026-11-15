@@ -689,7 +689,12 @@ impl Store {
             ",
             prefix = prefix
         ))?;
-        for column in ["matched_item_revision", "matched_state_id"] {
+        for (column, typ) in [
+            ("matched_item_revision", "INTEGER"),
+            ("matched_state_id", "INTEGER"),
+            ("claim", "TEXT"),
+            ("extraction_version", "TEXT"),
+        ] {
             let present: i64 = conn.query_row(
                 "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = ?2",
                 params![format!("{prefix}_mail_proposal"), column],
@@ -697,7 +702,7 @@ impl Store {
             )?;
             if present == 0 {
                 conn.execute_batch(&format!(
-                    "ALTER TABLE {prefix}_mail_proposal ADD COLUMN {column} INTEGER"
+                    "ALTER TABLE {prefix}_mail_proposal ADD COLUMN {column} {typ}"
                 ))?;
             }
         }

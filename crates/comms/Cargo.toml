@@ -65,6 +65,8 @@ sjel-store = { path = "../sjel-store" }
 sjel-summarize = { path = "../summarize" }
 sjel-pseudonymize = { path = "../pseudonymize" }
 content-item = { path = "../content-item" }
+inventory-api = { path = "../inventory-api" }
+projects-api = { path = "../projects-api" }
 route-manifest = { path = "../route-manifest" }
 # The `/api/links` body every capability answers alike (docs/capabilities/links.md).
 sjel-links = { path = "../links" }

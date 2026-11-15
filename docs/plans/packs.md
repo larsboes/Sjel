@@ -294,3 +294,21 @@ failures: four stale backups, two failed scheduled runs and one host-patch audit
 
 Profile validation does not exercise Anatomy rendering or Obsidian embedding. Those live checks
 remain in [`learning.md`](learning.md). Full-workspace checks did not run.
+
+## GPUI Kit skill references
+
+Release-aware component, recipe and headless-test guidance shipped in `019b6a95` in the existing
+`gpui` skill; Sjel retains design and architecture ownership.
+
+Open: sync `coding` to Claude Code, Codex, OpenCode and Copilot. The adapter's installed-copy
+backup rename fails with `Operation not permitted`, including an elevated retry. Pi and
+Antigravity read the updated source directly. Run `tools/harnesses sync coding` from an
+unrestricted terminal; done when `tools/harnesses status coding` marks all four GPUI copies
+current. No upstream skills are installed.
+
+Verification: six revision-lookup tests, the skill quick validator, metadata checks for all
+33 skills, relative links in all 17 coding Pack documents and publication hygiene pass.
+The live lookup resolves the locked Kit publication; its referenced files exist at that commit.
+Three new behavioral scenarios are defined but not executed. GPUI builds, runtime UI tests and
+full-workspace checks did not run for this skill change. Doctor reports two unrelated failures:
+catalog package trackedness and the host-patch audit.

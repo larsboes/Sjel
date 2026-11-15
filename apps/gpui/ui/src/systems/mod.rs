@@ -220,7 +220,6 @@ impl Render for SystemsPage {
                     self.tab == SystemsTab::Agent,
                 ),
             ],
-            palette,
             move |idx, _, app| {
                 entity.update(app, |page, cx| {
                     let tab = match idx {

@@ -44,7 +44,7 @@ names the rest.
 
 ## 2. Phone priority areas
 
-Priority 1 in [`PLAN.md`](../../PLAN.md): the phone is the daily tool for the agent, other agents,
+Priority 2 in [`PLAN.md`](../../PLAN.md): the phone is the daily tool for the agent, other agents,
 travel, documents, mail and calendar. The agent and the terminal are in [`agent.md`](agent.md).
 
 **Tab bar.** `NshHostScreen` owns the bottom bar: `Today | Mail | Documents | Calendar | Travel |
@@ -851,6 +851,13 @@ keeps the slash menu and dock until their contracts can be preserved. Remaining 
 moves through navigation/layout, then interaction-gated
 `mail/`, `documents::BlockEditor` and `ely::terminal` (after a fork remote-transport API).
 Optional list conversions stay last.
+
+Inventory, Backup and Systems now share an adapter over the pinned Ely `navigation::Tabs`.
+The adapter retains labels, counts, selected values and domain callbacks, adds a horizontal
+scroll boundary and removes the parallel pill renderer. Pointer and arrow-key selection pass
+through the production Inventory page inside Kit Root. All 203 UI tests pass; the repository
+documentation link check passes for 419 documents. Live light/dark and narrow-window acceptance
+remain open. The fork and dependency pin are unchanged.
 
 #### Remaining component parity
 

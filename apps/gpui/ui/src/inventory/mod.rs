@@ -370,7 +370,6 @@ impl InventoryPage {
                         self.tab == InventoryTab::MailReview,
                     ),
                 ],
-                palette,
                 move |idx, _window, cx| {
                     entity.update(cx, |page, cx| {
                         let next = match idx {
@@ -624,6 +623,29 @@ mod tests {
             page.set_tab(InventoryTab::MailReview, cx);
             assert_eq!(page.tab, InventoryTab::MailReview);
         });
+    }
+
+    #[gpui::test]
+    fn ely_tabs_select_the_inventory_page_by_pointer_and_keyboard(cx: &mut gpui::TestAppContext) {
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, cx| {
+            let mut page = InventoryPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.set_tab(InventoryTab::Wishlist, cx);
+            page
+        });
+        let tabs = cx.debug_bounds("inventory-tabs").expect("tabs render");
+        cx.simulate_click(
+            tabs.origin + gpui::point(px(8.), px(8.)),
+            gpui::Modifiers::none(),
+        );
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert_eq!(page.tab, InventoryTab::Owned));
+        cx.update(|window, cx| {
+            window.blur(cx);
+            window.focus_next(cx);
+        });
+        cx.simulate_keystrokes("right");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert_eq!(page.tab, InventoryTab::Wishlist));
     }
 
     fn owned(id: &str, label: &str, cents: Option<i64>) -> InventoryRow {

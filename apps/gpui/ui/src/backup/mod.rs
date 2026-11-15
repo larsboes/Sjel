@@ -285,7 +285,6 @@ impl BackupPage {
                         self.tab == BackupTab::History,
                     ),
                 ],
-                palette,
                 move |idx, _window, cx| {
                     entity.update(cx, |page, cx| {
                         let next = match idx {

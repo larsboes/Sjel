@@ -1,70 +1,48 @@
 //! Sub-tabs, keyboard shortcut bars, tabular numeric cells, and sort/column-width helpers.
 
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, App, FontWeight, MouseButton, Pixels, SharedString,
-    Window,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, App, Pixels, SharedString, Window};
 
-use super::tokens::{RADIUS_MD, RADIUS_SM};
-use crate::theme::{tint, Palette};
+use super::tokens::RADIUS_SM;
+use crate::ely::{forms::Choice, navigation::Tabs};
+use crate::theme::Palette;
 
 /// Standardised sub-tab strip with optional counts.
 pub fn sub_tabs(
     id_prefix: &'static str,
     tabs: Vec<(&'static str, Option<usize>, bool)>,
-    palette: Palette,
     on_select: impl Fn(usize, &mut Window, &mut App) + 'static,
 ) -> AnyElement {
-    let on_select = std::rc::Rc::new(on_select);
-    let mut strip = div().flex().flex_wrap().items_center().gap_1p5();
-    for (idx, (label, count, active)) in tabs.into_iter().enumerate() {
-        let on_select = on_select.clone();
-        let text = match count {
-            Some(c) => format!("{label} ({c})"),
-            None => label.to_owned(),
-        };
-        strip = strip.child(
-            div()
-                .id(SharedString::from(format!("{id_prefix}-tab-{idx}")))
-                .px_3()
-                .py_1()
-                .rounded(RADIUS_MD)
-                .cursor_pointer()
-                .text_xs()
-                .font_weight(if active {
-                    FontWeight::SEMIBOLD
-                } else {
-                    FontWeight::MEDIUM
-                })
-                .bg(if active {
-                    rgba(tint(palette.accent, 0x20))
-                } else {
-                    rgba(palette.raised)
-                })
-                .text_color(if active {
-                    rgb(palette.accent)
-                } else {
-                    rgb(palette.muted)
-                })
-                .hover(move |s| {
-                    s.bg(rgba(if active {
-                        tint(palette.accent, 0x28)
-                    } else {
-                        tint(palette.border, 0x35)
-                    }))
-                    .text_color(rgb(if active {
-                        palette.accent
-                    } else {
-                        palette.text
-                    }))
-                })
-                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                    on_select(idx, window, cx)
-                })
-                .child(text),
-        );
-    }
-    strip.into_any_element()
+    let values: Vec<SharedString> = (0..tabs.len())
+        .map(|idx| format!("{id_prefix}-tab-{idx}").into())
+        .collect();
+    let selected = tabs
+        .iter()
+        .position(|(_, _, active)| *active)
+        .map(|idx| values[idx].clone())
+        .unwrap_or_default();
+    let choices = tabs
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (label, count, _))| {
+            let text = match count {
+                Some(c) => format!("{label} ({c})"),
+                None => label.to_owned(),
+            };
+            Choice::new(values[idx].clone(), text)
+        })
+        .collect::<Vec<_>>();
+    let strip = Tabs::new(id_prefix, choices, selected).on_change(move |value, window, cx| {
+        if let Some(idx) = values.iter().position(|candidate| candidate == value) {
+            on_select(idx, window, cx);
+        }
+    });
+    div()
+        .id(SharedString::from(format!("{id_prefix}-scroll")))
+        .debug_selector(move || format!("{id_prefix}-tabs"))
+        .min_w_0()
+        .overflow_x_scroll()
+        .child(strip)
+        .into_any_element()
 }
 
 /// Active sort direction for a sortable table column.

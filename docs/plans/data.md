@@ -242,6 +242,29 @@ Next work, not undecided design:
    do not apply to attachment blob paths. A general gallery, collection browser and editing of
    terminal metadata decisions are outside this first review slice.
 
+### Social posts from Media
+
+Decided 2026-11-15: Media prepares social-media posts (Instagram first) from originals the
+operator imports. The operator selects in the photo library first; Sjel does not read the
+library. People who must not appear in public are filtered out before import, so Sjel keeps no
+consent model. Editing stays in the operator's editor; Sjel records the post state. Posting is
+manual from the phone; no platform API.
+
+Open work, in order:
+
+1. **Large originals.** `media attach` and `POST /api/attachments` refuse files over 128 MiB and
+   buffer the whole file in memory (`crates/media/src/attachments.rs:21`). Phone video exceeds
+   this. Done when a video over 1 GiB attaches with a streamed SHA-256, the digest verifies,
+   and memory stays bounded.
+2. **Face flag.** `tools/media-content-probe` reports no faces. Add an Apple Vision face count
+   to the evidence and show it in the review queue as a flag. Identities are not detected or
+   stored.
+3. **Post drafts.** A post is an ordered list of attachments with a caption, a planned date
+   and a state: draft, edited, ready, posted. Extend Media's collections; do not add a second
+   owner. Done when the native Media page creates, orders and advances a post.
+4. **Hand-off to the phone.** Open decision: a Photos album per ready post, or a synced folder
+   per post. Either way the caption is copyable on the phone.
+
 ### Web clipping into Sjel
 
 Decided 2026-10-28: preserve the Obsidian Web Clipper workflow and its full functionality while

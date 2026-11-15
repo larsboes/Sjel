@@ -26,6 +26,7 @@ mod tests {
                     marker: "/Users/test/.claude".into(),
                     destination: Some("/Users/test/.claude/skills".into()),
                     cli: "tools/packs-claude".into(),
+                    write_supported: true,
                     units: vec![
                         PackUnitView {
                             pack: "coding".into(),
@@ -66,6 +67,7 @@ mod tests {
                     marker: "/Users/test/.pi".into(),
                     destination: None,
                     cli: "tools/packs-pi".into(),
+                    write_supported: true,
                     units: vec![
                         PackUnitView {
                             pack: "coding".into(),
@@ -90,6 +92,7 @@ mod tests {
                     marker: "/Users/test/.codex".into(),
                     destination: Some("/Users/test/.codex/skills".into()),
                     cli: "tools/packs-codex".into(),
+                    write_supported: true,
                     units: vec![PackUnitView {
                         pack: "deliberation".into(),
                         skill: "council".into(),
@@ -105,6 +108,15 @@ mod tests {
                 why: "No skills adapter yet".into(),
             }],
         }
+    }
+
+    #[test]
+    fn pack_write_support_defaults_to_read_only() {
+        let old: HarnessView = serde_json::from_str(r#"{"id":"pi","label":"Pi"}"#).unwrap();
+        assert!(!old.write_supported);
+        let supported: HarnessView =
+            serde_json::from_str(r#"{"id":"pi","label":"Pi","writeSupported":true}"#).unwrap();
+        assert!(supported.write_supported);
     }
 
     #[test]

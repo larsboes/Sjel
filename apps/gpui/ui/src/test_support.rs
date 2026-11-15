@@ -9,6 +9,7 @@ pub fn init(cx: &mut TestAppContext) {
     cx.update(|cx| {
         gpui_kit::init(cx);
         crate::ely::init_for_tests(cx);
+        crate::feedback::init(cx);
     });
 }
 

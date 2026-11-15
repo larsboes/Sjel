@@ -2,7 +2,7 @@
 //!
 //! Compares the running binary's build commit against the local Sjel repository HEAD,
 //! fetches recent commits, and can execute `apps/gpui/install` in the background to rebuild
-//! and install the updated release bundle into `~/Applications/Sjel Desktop.app`.
+//! and install the updated bundle into `~/Applications/Sjel Desktop.app`.
 
 pub mod diagnostics;
 pub mod git;

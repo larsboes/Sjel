@@ -87,15 +87,17 @@ impl PeoplePage {
                                 )
                                 .size(ControlSize::Sm)
                                 .primary()
-                                .on_click(cx.listener(move |page, _, window, cx| {
-                                    let Some(shell) = page.writer() else { return };
-                                    let work = Work::Merge {
-                                        keep: keep_id.clone(),
-                                        other: other_id.clone(),
-                                        name: name.clone(),
-                                    };
-                                    page.write(shell, work, window, cx);
-                                })),
+                                .on_click(cx.listener(
+                                    move |page, _, window, cx| {
+                                        let Some(shell) = page.writer() else { return };
+                                        let work = Work::Merge {
+                                            keep: keep_id.clone(),
+                                            other: other_id.clone(),
+                                            name: name.clone(),
+                                        };
+                                        page.write(shell, work, window, cx);
+                                    },
+                                )),
                             )
                             .child(
                                 Button::new(
@@ -104,15 +106,17 @@ impl PeoplePage {
                                 )
                                 .size(ControlSize::Sm)
                                 .variant(ButtonVariant::Ghost)
-                                .on_click(cx.listener(move |page, _, window, cx| {
-                                    let Some(shell) = page.writer() else { return };
-                                    page.write(
-                                        shell,
-                                        Work::Distinct(a.clone(), b.clone()),
-                                        window,
-                                        cx,
-                                    );
-                                })),
+                                .on_click(cx.listener(
+                                    move |page, _, window, cx| {
+                                        let Some(shell) = page.writer() else { return };
+                                        page.write(
+                                            shell,
+                                            Work::Distinct(a.clone(), b.clone()),
+                                            window,
+                                            cx,
+                                        );
+                                    },
+                                )),
                             ),
                     ),
             );
@@ -259,9 +263,7 @@ pub(super) fn render_person_detail(
                     )
                     .size(ControlSize::Sm)
                     .variant(ButtonVariant::Ghost)
-                    .on_click(
-                        cx.listener(|page, _, window, cx| page.remove_person(window, cx)),
-                    ),
+                    .on_click(cx.listener(|page, _, window, cx| page.remove_person(window, cx))),
                 )
                 .child(
                     Button::new("person-add-fact", "Add fact")
@@ -333,9 +335,11 @@ pub(super) fn render_person_detail(
                                 )
                                 .size(ControlSize::Sm)
                                 .variant(ButtonVariant::Ghost)
-                                .on_click(cx.listener(move |page, _, window, cx| {
-                                    page.remove_fact(&fact_id, window, cx)
-                                })),
+                                .on_click(cx.listener(
+                                    move |page, _, window, cx| {
+                                        page.remove_fact(&fact_id, window, cx)
+                                    },
+                                )),
                             ),
                     )
                 });

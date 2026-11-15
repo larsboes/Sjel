@@ -590,7 +590,11 @@ impl InventoryPage {
                     .child(
                         ElyButton::new(
                             "wishlist-create-save",
-                            if saving { "Adding…" } else { "Add to wishlist" },
+                            if saving {
+                                "Adding…"
+                            } else {
+                                "Add to wishlist"
+                            },
                         )
                         .size(ControlSize::Sm)
                         .primary()
@@ -724,7 +728,11 @@ impl InventoryPage {
                     .items_center()
                     .justify_between()
                     .gap_4()
-                    .child(div().w(px(280.)).child(KitInput::new(&search_field).small()))
+                    .child(
+                        div()
+                            .w(px(280.))
+                            .child(KitInput::new(&search_field).small()),
+                    )
                     .child(
                         div()
                             .flex()
@@ -991,9 +999,11 @@ impl InventoryPage {
                             ElyButton::new("group-create-save", "Create group")
                                 .size(ControlSize::Sm)
                                 .primary()
-                                .on_click(cx.listener(|page, _, window, cx| {
-                                    page.create_group(window, cx)
-                                })),
+                                .on_click(
+                                    cx.listener(|page, _, window, cx| {
+                                        page.create_group(window, cx)
+                                    }),
+                                ),
                         )
                         .child(
                             ElyButton::new("group-create-cancel", "Cancel")

@@ -22,7 +22,6 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::primitives::key_bar;
 use crate::theme::{Density, Palette, ThemeContext};
 
 use self::cards::{render_day_header, render_filter_action, render_metric_cards};
@@ -34,6 +33,8 @@ pub struct ContextPage {
     density: Density,
     pub day: NaiveDate,
     pub filter_kind: Option<TimelineKind>,
+    pub show_timeline: bool,
+    pub show_spending: bool,
     pub entries: Remote<Vec<CalendarEntry>>,
     pub tasks: Remote<Vec<GlobalTask>>,
     pub finance: Remote<FinanceDashboardProjection>,
@@ -51,11 +52,21 @@ impl ContextPage {
             density: Density::Desktop,
             day: Local::now().date_naive(),
             filter_kind: None,
+            show_timeline: true,
+            show_spending: true,
             entries: Remote::default(),
             tasks: Remote::default(),
             finance: Remote::default(),
             focus: cx.focus_handle(),
             focus_next: true,
+        }
+    }
+
+    pub fn set_sections(&mut self, show_timeline: bool, show_spending: bool) {
+        self.show_timeline = show_timeline;
+        self.show_spending = show_spending;
+        if !show_spending && self.filter_kind == Some(TimelineKind::Spend) {
+            self.filter_kind = None;
         }
     }
 
@@ -234,14 +245,25 @@ impl ContextPage {
         let context = ContextDay::build(self.day, entries, tasks, finance_txs);
 
         let header = render_day_header(self.day, is_today, palette, cx);
-        let cards = render_metric_cards(&context, tasks, is_today, self.filter_kind, palette, cx);
+        let cards = render_metric_cards(
+            &context,
+            tasks,
+            is_today,
+            self.filter_kind,
+            self.show_spending,
+            palette,
+            cx,
+        );
 
         let filtered_timeline: Vec<TimelineItem> = context
             .timeline
             .into_iter()
+            .filter(|item| self.show_spending || item.kind != TimelineKind::Spend)
             .filter(|item| self.filter_kind.is_none_or(|k| item.kind == k))
             .collect();
 
+        let show_timeline =
+            self.show_timeline && (!filtered_timeline.is_empty() || self.filter_kind.is_some());
         let timeline_content =
             render_timeline_content(filtered_timeline, self.filter_kind, self.day, palette, cx);
 
@@ -259,54 +281,48 @@ impl ContextPage {
             .gap_3()
             .child(header)
             .child(cards)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .pt_1()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(rgb(palette.muted))
-                                    .child(match self.filter_kind {
-                                        Some(TimelineKind::Event) => "DAILY TIMELINE · EVENTS",
-                                        Some(TimelineKind::Task) => "DAILY TIMELINE · TASKS",
-                                        Some(TimelineKind::Spend) => "DAILY TIMELINE · SPENDING",
-                                        None => "DAILY TIMELINE",
-                                    }),
-                            )
-                            .when(self.filter_kind.is_some(), |el| {
-                                el.child(
-                                    Button::new("context-clear-filter")
-                                        .xsmall()
-                                        .ghost()
-                                        .label("Show all")
-                                        .on_click(cx.listener(|page, _, _, cx| {
-                                            page.filter_kind = None;
-                                            cx.notify();
-                                        })),
+            .when(show_timeline, |el| {
+                el.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .pt_1()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(rgb(palette.muted))
+                                        .child(match self.filter_kind {
+                                            Some(TimelineKind::Event) => "DAILY TIMELINE · EVENTS",
+                                            Some(TimelineKind::Task) => "DAILY TIMELINE · TASKS",
+                                            Some(TimelineKind::Spend) => {
+                                                "DAILY TIMELINE · SPENDING"
+                                            }
+                                            None => "DAILY TIMELINE",
+                                        }),
                                 )
-                            }),
-                    )
-                    .children(filter_action),
-            )
-            .child(timeline_content)
-            .when(!self.density.is_mobile(), |el| {
-                el.child(div().pt_2().child(key_bar(
-                    &[
-                        ("← / → or [ ]", "step day"),
-                        ("t", "today"),
-                        ("⌘r", "refresh"),
-                    ],
-                    palette,
-                )))
+                                .when(self.filter_kind.is_some(), |el| {
+                                    el.child(
+                                        Button::new("context-clear-filter")
+                                            .xsmall()
+                                            .ghost()
+                                            .label("Show all")
+                                            .on_click(cx.listener(|page, _, _, cx| {
+                                                page.filter_kind = None;
+                                                cx.notify();
+                                            })),
+                                    )
+                                }),
+                        )
+                        .children(filter_action),
+                )
+                .child(timeline_content)
             })
             .into_any_element()
     }

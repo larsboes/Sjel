@@ -109,6 +109,16 @@ impl PacksPage {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.packs.value.as_ref().is_some_and(|view| {
+            view.harnesses
+                .iter()
+                .any(|h| h.id == harness && h.installed && h.write_supported)
+        }) {
+            self.notice = None;
+            self.write_error = Some(format!("Pack actions are unavailable for {harness}. Refresh status or manage the harness through its configuration."));
+            cx.notify();
+            return;
+        }
         let key = format!("{}:{}:{}", action, harness, packs.join(","));
         let action_str = action.to_string();
         let harness_clone = harness.clone();
@@ -123,15 +133,15 @@ impl PacksPage {
             window,
             self,
             &repo,
-            data::Press::once(|s| &mut s.busy, key, "Pack operation executed."),
+            data::Press::once(|s| &mut s.busy, key, ""),
             move |shell| async move {
-                shell
+                Ok(shell
                     .write_pack(&action_str, &harness_clone, &packs_clone)
-                    .await
+                    .await)
             },
             |this, result, cx| {
                 match result {
-                    Some(res) => {
+                    Some(Ok(res)) => {
                         this.notice = Some(format!(
                             "{} {} {} — {}",
                             res.action,
@@ -144,8 +154,12 @@ impl PacksPage {
                             }
                         ));
                     }
+                    Some(Err(error)) => this.write_error = Some(error.to_string()),
                     None => {
-                        // Error already captured by data::write or shell error
+                        this.write_error = Some(
+                            "Pack request could not complete. Refresh status before retrying."
+                                .into(),
+                        )
                     }
                 }
                 this.load(cx);
@@ -293,6 +307,62 @@ impl gpui::Render for PacksPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn unsupported_harnesses_have_no_write_controls(cx: &mut gpui::TestAppContext) {
+        use gpui_kit::test::TestWindowExt;
+        use sjel_gpui_core::packs::{HarnessView, PackUnitView};
+        cx.update(gpui_kit::init);
+        let (page, cx) = cx.add_window_view(|_, _| {
+            let mut page =
+                PacksPage::new(Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)));
+            let harness = |id: &str, write_supported| HarnessView {
+                id: id.into(),
+                label: id.into(),
+                installed: true,
+                write_supported,
+                units: vec![PackUnitView {
+                    pack: "coding".into(),
+                    skill: "gpui".into(),
+                    status: "outdated".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            };
+            page.packs.value = Some(Arc::new(PacksView {
+                harnesses: vec![harness("claude", true), harness("sjel-agent", false)],
+                ..Default::default()
+            }));
+            page
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            window.render_frame(cx);
+            assert!(window.try_find("sync-claude").is_some());
+            for id in [
+                "sync-sjel-agent",
+                "deploy-sjel-agent",
+                "remove-sjel-agent",
+                "cell-sjel-agent-coding-gpui",
+            ] {
+                assert!(
+                    window.try_find(id).is_none(),
+                    "unsupported action {id} is visible"
+                );
+            }
+            page.update(cx, |page, cx| {
+                page.write(
+                    "sync",
+                    "sjel-agent".into(),
+                    vec!["coding".into()],
+                    window,
+                    cx,
+                );
+                assert!(page.write_error.as_ref().unwrap().contains("unavailable"));
+                assert!(page.busy.is_empty());
+            });
+        });
+    }
 
     #[test]
     fn test_pick_pack_defaults_to_first() {

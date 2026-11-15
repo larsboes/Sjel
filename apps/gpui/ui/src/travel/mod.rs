@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use futures::future::AbortHandle;
 use gpui::{
-    point, prelude::*, px, AnyElement, Context, FocusHandle, Point, Render, ScrollHandle, Window,
+    point, prelude::*, px, AnyElement, Context, EventEmitter, FocusHandle, Point, Render,
+    ScrollHandle, Window,
 };
 use gpui_kit::component::button::Button;
 use sjel_gpui_core::{
@@ -33,6 +34,41 @@ mod saved;
 mod vector;
 
 pub use markers::{LocationMarker, PlaceCategory};
+
+/// A pin handed to the native macOS Apple Maps (`MKMapView`) view.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AppleMapPin {
+    pub title: String,
+    pub subtitle: String,
+    pub coordinate: Coordinate,
+}
+
+pub enum InlineAppleMapCommand<'a> {
+    Show {
+        bounds: gpui::Bounds<gpui::Pixels>,
+        center: Coordinate,
+        zoom: f64,
+        pins: &'a [AppleMapPin],
+    },
+    Hide,
+}
+
+#[derive(Clone)]
+pub struct InlineAppleMapHost(
+    pub std::sync::Arc<dyn Fn(&mut Window, InlineAppleMapCommand<'_>) + Send + Sync>,
+);
+
+impl gpui::Global for InlineAppleMapHost {}
+
+#[derive(Debug, Clone)]
+pub enum TravelEvent {
+    OpenAppleMaps {
+        title: String,
+        center: Coordinate,
+        zoom: f64,
+        pins: Vec<AppleMapPin>,
+    },
+}
 
 pub struct Travel {
     pub(super) focus: FocusHandle,
@@ -106,6 +142,8 @@ pub struct Travel {
     presence_loaded: bool,
     presence_again: bool,
     compact_map: bool,
+    home_map_large: bool,
+    apple_maps_inline: bool,
     home_zoom_out: bool,
     home_framed: bool,
     map_expanded: bool,
@@ -118,6 +156,8 @@ pub struct Travel {
     #[cfg(all(feature = "native-maps", target_os = "macos"))]
     vector_enabled: bool,
 }
+
+impl EventEmitter<TravelEvent> for Travel {}
 
 pub(crate) use sjel_gpui_core::travel::urlencode;
 
@@ -177,6 +217,8 @@ impl Travel {
             presence_loaded: false,
             presence_again: false,
             compact_map: false,
+            home_map_large: false,
+            apple_maps_inline: cfg!(target_os = "macos"),
             home_zoom_out: false,
             home_framed: false,
             map_expanded: false,
@@ -472,6 +514,66 @@ impl Travel {
 
     pub fn set_compact_map(&mut self, compact: bool) {
         self.compact_map = compact;
+    }
+
+    pub fn set_home_map_large(&mut self, large: bool) {
+        self.home_map_large = large;
+    }
+
+    pub fn apple_maps_pins(&self) -> Vec<AppleMapPin> {
+        markers::build_location_markers(&self.plans, &self.details, None)
+            .into_iter()
+            .filter_map(|marker| {
+                let coordinate = marker.place.coordinate()?;
+                let subtitle = if marker.from.is_empty() && marker.to.is_empty() {
+                    String::new()
+                } else {
+                    format!("{} – {}", marker.from, marker.to)
+                };
+                Some(AppleMapPin {
+                    title: marker.label,
+                    subtitle,
+                    coordinate,
+                })
+            })
+            .collect()
+    }
+
+    pub fn open_apple_maps(&self, cx: &mut Context<Self>) {
+        let center = self
+            .center
+            .or_else(|| self.current_user_location())
+            .unwrap_or(Coordinate {
+                latitude: 50.7374,
+                longitude: 7.0982,
+            });
+        let title = if let Some(plan) = self.current() {
+            plan.title.clone()
+        } else {
+            "Sjel · Apple Maps".to_string()
+        };
+        let pins = markers::build_location_markers(&self.plans, &self.details, None)
+            .into_iter()
+            .filter_map(|marker| {
+                let coordinate = marker.place.coordinate()?;
+                let subtitle = if marker.from.is_empty() && marker.to.is_empty() {
+                    String::new()
+                } else {
+                    format!("{} – {}", marker.from, marker.to)
+                };
+                Some(AppleMapPin {
+                    title: marker.label,
+                    subtitle,
+                    coordinate,
+                })
+            })
+            .collect();
+        cx.emit(TravelEvent::OpenAppleMaps {
+            title,
+            center,
+            zoom: self.zoom,
+            pins,
+        });
     }
 
     pub fn home_map(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {

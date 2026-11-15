@@ -1,8 +1,8 @@
 //! Sub-tabs, keyboard shortcut bars, tabular numeric cells, and sort/column-width helpers.
 
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, App, FontWeight, MouseButton, Pixels,
-    SharedString, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, App, FontWeight, MouseButton, Pixels, SharedString,
+    Window,
 };
 
 use super::tokens::{RADIUS_MD, RADIUS_SM};

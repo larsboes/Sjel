@@ -808,16 +808,16 @@ boundary. Keep pure logic tests outside GPUI windows.
 1. **Share window setup, not domain fixtures.** Built in `ui/src/test_support.rs` (`init`,
    `mount_root` behind `test-support`): `calendar/tests.rs`, `projects/mod.rs`, `inventory/mod.rs`,
    `finance/{overview,transactions}.rs`, `software/mod.rs`, `systems/storage.rs` and
-   `accounts/mod.rs` share Kit/Ely initialization and `Root` mounting without enabling
-   `allow_parking` globally. `src/workspace/mod.rs` remains separate while `apps/gpui/Cargo.toml`
-   and `workspace/mod.rs` hold concurrent edits.
+   `accounts/mod.rs` and `src/workspace/mod.rs` share Kit/Ely initialization and `Root` mounting
+   without enabling `allow_parking` globally. Workspace tests alone allow parking for real I/O.
 2. **Replace the ledger smoke wrapper.** Done in `f0d20861`:
    `finance/transactions.rs::category_chart_filters_the_production_ledger_and_toggles_off`
    exercises category selection, filtered row count and clearing on the production view.
-3. **Split pure assertions from entity tests.** Done for
-   `projects/mod.rs::column_specs_and_sort_col_ids` (pure Rust test) and
-   `sort_cycling_updates_task_note_and_project_sorts` (entity test). `documents/mod.rs::the_order_follows_the_filters`
-   remains alongside a focused rendered selection/sort check.
+3. **Split pure assertions from entity tests.**
+   `projects/mod.rs::column_specs_and_sort_col_ids` is a pure Rust test. The obsolete helper-only
+   sort-cycle test was removed with its implementation in `a12e4a3f`; Ely's
+   `tables/header.rs::a_press_replaces_the_sort_and_shift_joins_it` owns that cycle.
+   `documents/mod.rs::the_order_follows_the_filters` retains filtered keyboard-order coverage.
 4. **Remove obsolete checks with their implementation.** `primitives/mod.rs::sort_order_and_column_width_cycling`
    drops the trivial `RADIUS_*` constant assertions and retains width-cycling and sort-mapping
    coverage. Preserve editor save/conflict, calendar proposal/undo, remote stream ordering and
@@ -830,15 +830,11 @@ boundary. Keep pure logic tests outside GPUI windows.
 (`MailReviewForm`) use `ely::forms::{Form, FormField, FormError, Input, TextInput}` and
 `ely::buttons::{Button, ButtonVariant}` instead of Kit `InputState` entities. Inventory's
 top-bar search field and list/category pills remain on Kit until search/list bars move;
-workspace-wide notifications (`Toaster`) and menus/overlays remain deferred while `Root` and
-`workspace/mod.rs` hold concurrent edits.
+`ui/src/feedback.rs` registers a GPUI root plugin with one Ely `Toaster` and `ToastViewport`
+per window. Workspace, shared mutation helpers, Projects and Editor report through that path.
+Kit's notification queue stays empty. Menus/overlays retain the audited boundaries below.
 
-Verification after the form and test-support changes: `sjel-gpui-ui` passes 200 library tests (0
-failed), `sjel-gpui-core` passes 386 library tests (6 ignored), `sjel-gpui-ios` passes 3 library
-tests, and `sjel-gpui` passes 45 binary tests with `audio::tests::the_default_device_can_be_opened`
-skipped (CoreAudio `OSStatus 560947818` in this environment). `--no-default-features` and
-`sjel-gpui-ui --no-default-features --features nsh` check cleanly. Live light/dark visual
-acceptance for tables, charts, calendar and the migrated forms remains open.
+Live light/dark visual acceptance for tables, charts, calendar and the migrated forms remains open.
 5. **Verify by boundary.** Run pure adapter tests, then headless input tests on the production
    view, then the workspace and feature checks below. A changed component also runs the fork's
    nearest tests and both supported engines. Live light/dark acceptance remains separate from
@@ -850,8 +846,9 @@ acceptance for tables, charts, calendar and the migrated forms remains open.
 
 Tables, `test_support.rs`, Calendar (`c3d0ed19`), interactive Charts (`f0d20861`) and
 People/Inventory forms (`8171f0c5`, `475c9800`) have landed; live light/dark acceptance remains
-open. Remaining adoption work moves in order: workspace `Toaster`/feedback, menus/overlays
-(`editor/slash_menu.rs`, `src/workspace/panels.rs`), navigation/layout, then interaction-gated
+open. Workspace feedback and shared test setup are implemented. The menus/overlays audit below
+keeps the slash menu and dock until their contracts can be preserved. Remaining adoption work
+moves through navigation/layout, then interaction-gated
 `mail/`, `documents::BlockEditor` and `ely::terminal` (after a fork remote-transport API).
 Optional list conversions stay last.
 
@@ -867,18 +864,13 @@ Source audit against the manifest-pinned Ely `a42025a`:
 | `documents::BlockEditor` | Defer adoption. Ely `documents/blocks/{edit,keys,table}.rs` implements split/merge, slash choices and table editing, and emits `BlockEvent::Changed`. Its importer explicitly flattens nested lists; `BlockData::{from_markdown,to_markdown}` normalizes documents rather than guaranteeing Sjel's byte-preserving round-trip. It exposes no save/conflict protocol. | Compare fixtures with `core::blocks`, including frontmatter, nested lists, tables and unsupported syntax. Preserve lossless refusal, debounce, in-flight revisions and conflict refusal through the existing `Saver`; test read-only behavior before mounting the replacement. PDF rendering/search remains separate. |
 | `ely::terminal` | Blocked on a fork API. `terminal/view.rs::spawn` owns a local PTY; `replay` parses one byte slice with a temporary parser. `write` sends to the PTY and ignores input on replay. The private session constructor and resize path expose no remote byte feed or outbound transport callbacks. Repeated replay would lose parser state across chunks. | Add a transport-fed session with a persistent parser, ordered input and resize callbacks, lifecycle events and shutdown. Verify split escape sequences, offset resume/reconnect, resize coalescing, selection and clipboard against `ui/src/terminal/` and `core::terminal`. Keep `terminal_screen.rs` for NSH. |
 
-The table cleanup removes unused width cycling, group-header state and task-field wrappers.
-Documents builds Ely columns from `DOC_COLUMNS`, including alignment and narrow visibility.
-The removed `sort_cycling_updates_task_note_and_project_sorts` covered only obsolete helpers;
-Ely `tables/header.rs::a_press_replaces_the_sort_and_shift_joins_it` owns the header cycle.
-Sjel retains `column_specs_and_sort_col_ids`, project workflow tests and
-`documents::tests::the_order_follows_the_filters` for its adapter and filtered keyboard order.
+Table cleanup and parity audit: `a12e4a3f`.
 
-Verification: 199 UI library tests pass. The UI check has none of the eight obsolete table
-dead-code warnings. UI all-target Clippy, the app's `--no-default-features` check and the UI's
-NSH-only check pass; unrelated Clippy and manifest warnings remain. Live light/dark acceptance
-and fork interaction tests for the deferred replacements have not run. Workspace test-support
-wiring and notification migration still await the concurrent manifest/workspace edits.
+Verification: workspace tests pass with 45 app tests, 389 core tests, 3 iOS tests, 227 UI tests
+and the phone-host integration test. Six core tests remain ignored; the audio-device test is
+explicitly skipped because it requires the host device. Feedback tests verify window isolation,
+one toast for a failed production mutation and an empty Kit notification queue. Live light/dark
+acceptance and fork interaction tests for the deferred replacements have not run.
 
 #### Table acceptance
 
@@ -934,6 +926,16 @@ Accounts, software inventory, storage classes/package updates and benchmark runs
 `DataTable` (`14be1d2f`); credential connection forms, software decision editors and the benchmark
 case matrix remain separate from the sortable rows. Feed and capability cards remain lists.
 
+#### Desktop acceptance still open
+
+Today has persisted Auto, Focus and Travel modes and section controls in `src/home/prefs.rs`;
+preference write failures appear as Ely toasts. Travel can embed native Apple Maps through
+`src/apple_maps.rs` while retaining the existing map renderer. The detached-map action uses its
+external-map fallback. Packs exposes an effective/missing filter from its enabled selection.
+Headless workspace and UI tests pass. Live acceptance still needs mode persistence across
+restart, customization in narrow windows, native-map clipping and placement, map switching and
+Packs filtering. No app installation or foreground interaction ran for this change.
+
 Verification: 194 UI library tests pass, including account row identity and software size order,
 pointer opening and keyboard opening. The UI Cargo check, Clippy, app no-default-features check
 and UI NSH feature check pass. Clippy retains unrelated warnings. Workspace tests stop at
@@ -954,10 +956,12 @@ examples. Mail or feed text inside a view is rendered as text and never interpre
 
 Open, in order:
 
-1. Derived views. A generic object list and object view render from the registry declaration of
-   `projects` ([`data.md`](data.md#registry-derived-project-views)) in the Mac app, with no page
-   code for that capability. Done when a schema-invalid document is refused with an error that
-   names the failing node, and a document that names a write route is refused.
+1. Derived views. `core/src/record/registry.rs` and `ui/src/record/registry.rs` implement a generic
+   read-only object list and relation navigation from capability discovery. Projects exposes
+   it through Browse objects and `/objects/projects`; the proxy exposes discovery for API-only
+   services. Tests cover invalid registries, node-specific errors and write-route refusal. Open:
+   acceptance against running Projects, including relation navigation
+   ([`data.md`](data.md#registry-derived-project-views)).
 2. The same views on the phone as NSH screens, fed from the local copy.
 3. Saved views. A model composes a view once and it reloads without a model after an app
    restart.

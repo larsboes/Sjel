@@ -7,6 +7,36 @@ use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::travel::{PlanExt, TravelRoute, TripSection};
 
 impl Travel {
+    /// Days until the nearest non-cancelled trip that has not ended (`<= 0` means active today).
+    pub fn home_trip_days_away(&self) -> Option<i64> {
+        let today_naive = chrono::Local::now().date_naive();
+        let today = today_naive.format("%Y-%m-%d").to_string();
+        let plan_days = self
+            .plans
+            .iter()
+            .filter(|plan| plan.date_end >= today && plan.status != "cancelled")
+            .filter_map(|plan| chrono::NaiveDate::parse_from_str(&plan.date_start, "%Y-%m-%d").ok())
+            .map(|start| (start - today_naive).num_days())
+            .min();
+        let draft_days = self
+            .trip_drafts
+            .as_ref()
+            .into_iter()
+            .flat_map(|drafts| drafts.drafts.iter())
+            .filter(|draft| !self.trip_draft_results.contains_key(&trip_draft_key(draft)))
+            .filter_map(|draft| {
+                chrono::NaiveDate::parse_from_str(&draft.starts_on, "%Y-%m-%d").ok()
+            })
+            .map(|start| (start - today_naive).num_days())
+            .min();
+        match (plan_days, draft_days) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        }
+    }
+
     /// The nearest trip that has not ended: a saved plan, or a Calendar draft that is not a
     /// plan yet, with the plan's id so Home can open it. `None` when there is neither, so
     /// Home spends no height on it.
@@ -53,16 +83,25 @@ impl Travel {
         };
         let line = |title: String, detail: String| {
             div()
+                .flex_1()
+                .min_w_0()
                 .flex()
                 .flex_col()
                 .gap_1()
                 .child(
                     div()
+                        .truncate()
                         .text_sm()
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child(title),
                 )
-                .child(div().text_xs().text_color(rgb(palette.muted)).child(detail))
+                .child(
+                    div()
+                        .truncate()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(detail),
+                )
         };
         if show_draft {
             let draft = draft?;

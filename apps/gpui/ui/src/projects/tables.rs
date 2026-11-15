@@ -76,9 +76,10 @@ fn due_cell(due: Option<&str>, done: bool, today: &str) -> Cell {
 
 fn title_cell(title: &str, content: Option<&str>) -> Cell {
     match content.and_then(tasks::parse_subtask_progress) {
-        Some((done, total)) => {
-            Cell::Lines(title.to_owned().into(), format!("{done}/{total} subtasks").into())
-        }
+        Some((done, total)) => Cell::Lines(
+            title.to_owned().into(),
+            format!("{done}/{total} subtasks").into(),
+        ),
         None => Cell::Text(title.to_owned().into()),
     }
 }
@@ -229,13 +230,16 @@ impl Projects {
             Column::new("status", "STATUS")
                 .width(rems(cols.status.unwrap_or(100. / 16.)))
                 .choices(TASK_STATUSES),
-            Column::new("due", "DUE").width(rems(cols.due / 16.)).editable(),
+            Column::new("due", "DUE")
+                .width(rems(cols.due / 16.))
+                .editable(),
             Column::new("priority", "PRIORITY")
                 .width(rems(cols.priority / 16.))
                 .choices(["P1", "P2", "P3"]),
-            Column::new("actions", "")
-                .width(rems(110. / 16.))
-                .actions([RowAction::new("due", "Due"), RowAction::new("delete", "Delete")]),
+            Column::new("actions", "").width(rems(110. / 16.)).actions([
+                RowAction::new("due", "Due"),
+                RowAction::new("delete", "Delete"),
+            ]),
         ];
 
         let mut hidden: Vec<&'static str> = Vec::new();
@@ -543,13 +547,16 @@ impl Projects {
             Column::new("status", "STATUS")
                 .width(rems(cols.status.unwrap_or(100. / 16.)))
                 .choices(TASK_STATUSES),
-            Column::new("due", "DUE").width(rems(cols.due / 16.)).editable(),
+            Column::new("due", "DUE")
+                .width(rems(cols.due / 16.))
+                .editable(),
             Column::new("priority", "PRIO")
                 .width(rems(cols.priority / 16.))
                 .choices(["P1", "P2", "P3"]),
-            Column::new("actions", "")
-                .width(rems(120. / 16.))
-                .actions([RowAction::new("due", "Due"), RowAction::new("project", "Project")]),
+            Column::new("actions", "").width(rems(120. / 16.)).actions([
+                RowAction::new("due", "Due"),
+                RowAction::new("project", "Project"),
+            ]),
         ];
 
         let mut hidden: Vec<&'static str> = Vec::new();
@@ -612,13 +619,23 @@ impl Projects {
             Rc::new(
                 filtered
                     .iter()
-                    .map(|t| (t.id.clone(), (t.read_only(), t.due.clone(), t.project.clone())))
+                    .map(|t| {
+                        (
+                            t.id.clone(),
+                            (t.read_only(), t.due.clone(), t.project.clone()),
+                        )
+                    })
                     .collect(),
             );
         let edit_meta = meta_map.clone();
 
-        let (on_curr, on_open, on_sort, on_edit, on_act) =
-            (cx.entity(), cx.entity(), cx.entity(), cx.entity(), cx.entity());
+        let (on_curr, on_open, on_sort, on_edit, on_act) = (
+            cx.entity(),
+            cx.entity(),
+            cx.entity(),
+            cx.entity(),
+            cx.entity(),
+        );
         let table = DataTable::new("all-tasks", columns)
             .rows(rows)
             .hidden(hidden)
@@ -913,7 +930,8 @@ impl Projects {
                         Cell::Text("0 tasks".into())
                     };
                     let progress_cell = if total_tasks > 0 {
-                        let pct = ((project.done as f32 / total_tasks as f32) * 100.0).round() as u32;
+                        let pct =
+                            ((project.done as f32 / total_tasks as f32) * 100.0).round() as u32;
                         Cell::Figure(format!("{pct}%").into(), pct as f64, Tone::Neutral)
                     } else {
                         Cell::Empty

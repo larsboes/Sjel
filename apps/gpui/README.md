@@ -570,13 +570,33 @@ localhost. `SJEL_INBOUND_TOKEN_FILE` reads the token from a file instead of the 
 ```sh
 cd apps/gpui
 cargo run          # development
-./install          # ~/Applications/Sjel Desktop.app, opened by the menu bar's Open App
+./install          # incremental desktop-dev build into ~/Applications/Sjel Desktop.app
+./install --release # optimized release build
+./install --build-only # populate the selected cache without signing or installing
 ```
 
-Both build into `CARGO_TARGET_DIR`; `./install` falls back to `$HOME/.cargo-target` when that is
-unset, so the in-app Rebuild shares the terminal's warm cache instead of building its own.
+The installer defaults to the `desktop-dev` Cargo profile: incremental compilation with level-one
+optimization for workspace crates and level-two optimization for dependencies. It retains this
+profile's artifacts alongside release output, trading disk space for repeated rebuild reuse.
+The first build of either profile can be expensive. Runtime and rebuild costs require measurement;
+release remains the profile for runtime benchmarks and distribution.
 
-`./install` also registers the `sjel://` scheme. Run it again after a change.
+Both commands use `CARGO_TARGET_DIR`; the installer falls back to an existing `$HOME/.cargo-target`
+when that variable is unset. `CARGO_TARGET_DIR` must name the cache root, not its `desktop-dev`
+profile directory; the installer recognizes profile `.cargo-lock` and `.fingerprint` markers.
+Finder-launched Rebuild keeps the installed profile through
+`SJEL_DESKTOP_BUILD_PROFILE` in the bundle environment. `--dev` selects `desktop-dev` explicitly;
+`SJEL_DESKTOP_BUILD_PROFILE=release` selects release through `sjel app update desktop` as well.
+The installer applies the [battery-aware Rust concurrency defaults](../../tools/local-build.md)
+before compilation, without changing the saved runtime mode.
+
+The installer registers `sjel://` and replaces the bundle only when inputs differ or installed
+signature verification fails. Its signed receipt covers the source executable hash, generated
+Info.plist, packaged resources and signing identity. Unchanged installs do not copy the executable,
+re-sign, replace, re-register or restart the app. `--no-restart` leaves a running copy alone during
+replacement. `--build-only` returns the executable path without accessing signing identities,
+staging a bundle, registering URLs or changing the running app. `SJEL_DESKTOP_PREBUILT` with `SJEL_DESKTOP_PREBUILT_COMMIT` packages an existing
+executable without Cargo; prebuilt packaging defaults to release unless explicitly overridden.
 
 ## Testing without taking focus
 
@@ -602,7 +622,7 @@ These checks run while you keep working in other apps. None of them activates th
 
 `preview` and `bench-scroll` show the window for a few seconds in the bottom-right corner, above
 other apps. GPUI paints nothing while another window covers it, so a hidden window cannot be
-measured. Run `./install` first: both scripts use the installed release build.
+measured. Run `./install --release` for runtime benchmarks; both scripts use the installed app.
 
 | Variable | Effect |
 |---|---|

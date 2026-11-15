@@ -21,26 +21,22 @@ pub fn render_timeline_content(
     if filtered_timeline.is_empty() {
         div()
             .flex()
-            .flex_col()
             .items_center()
-            .justify_center()
-            .py_6()
-            .px_4()
-            .gap_1()
-            .rounded(px(10.))
+            .py_2()
+            .px_3()
+            .rounded(px(8.))
             .border_1()
             .border_color(rgba(palette.border))
             .bg(rgba(palette.surface))
             .child(
                 div()
-                    .text_sm()
-                    .font_weight(FontWeight::MEDIUM)
+                    .text_xs()
                     .text_color(rgb(palette.muted))
                     .child(match filter_kind {
                         Some(TimelineKind::Event) => "No events on this day",
                         Some(TimelineKind::Task) => "No due tasks on this day",
                         Some(TimelineKind::Spend) => "No transactions on this day",
-                        None => "Quiet day",
+                        None => "Quiet day — no scheduled events, due tasks, or spending",
                     }),
             )
             .into_any_element()

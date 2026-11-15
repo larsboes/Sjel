@@ -51,6 +51,7 @@ sjel-gpui-ui = { workspace = true, features = ["gpui"] }
 gpui-kit = { workspace = true, features = ["assets"] }
 chrono.workspace = true
 futures.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time", "net"] }
 # CoreAudio on the Mac, ALSA on Linux, CoreAudio on iOS: the soundscape window synthesizes its
@@ -72,14 +73,13 @@ optional = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "=0.6.5"
-objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSBox", "NSColor", "NSGlassEffectView", "NSGraphics", "NSPasteboard", "NSResponder", "NSView", "objc2-core-foundation"] }
-objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSGeometry"] }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSBox", "NSColor", "NSGlassEffectView", "NSGraphics", "NSPasteboard", "NSResponder", "NSView", "NSWindow", "objc2-core-foundation"] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSGeometry", "NSString"] }
 raw-window-handle = "=0.6.2"
 
 [dev-dependencies]
 gpui-kit = { workspace = true, features = ["test-support"] }
-# `ely::init_for_tests`: window tests build a `Workspace`, which sets Ely's theme.
-ely-gpui-component = { workspace = true, features = ["test-support"] }
+sjel-gpui-ui = { workspace = true, features = ["test-support"] }
 # `cfg(test)` marks only the crate that declares the test, so `core`'s local-database gate has to
 # arrive as a feature: without it these window tests would read this machine's real sjel.db.
 sjel-gpui-core = { workspace = true, features = ["test-support"] }
@@ -93,4 +93,13 @@ workspace = true
 debug = "line-tables-only"
 
 [profile.dev.package."*"]
+debug = false
+
+[profile.desktop-dev]
+inherits = "dev"
+opt-level = 1
+incremental = true
+
+[profile.desktop-dev.package."*"]
+opt-level = 2
 debug = false

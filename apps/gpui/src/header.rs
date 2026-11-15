@@ -139,6 +139,25 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                                 .mr_2()
                                 .child(label)
                         }))
+                        .when(matches!(view.page, Page::Home | Page::Context), |el| {
+                            let mode = view.home_prefs.mode;
+                            let label = if mode == crate::home::HomeMode::Auto {
+                                "Customize".to_string()
+                            } else {
+                                format!("Customize · {}", mode.label())
+                            };
+                            el.child(
+                                Button::new("home-customize-toggle")
+                                    .ghost()
+                                    .small()
+                                    .label(label)
+                                    .tooltip("Choose Today mode and visible sections")
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.home_customize_open = !view.home_customize_open;
+                                        cx.notify();
+                                    })),
+                            )
+                        })
                         .child(
                             Button::new("refresh")
                                 .ghost()

@@ -21,8 +21,8 @@ use crate::data::Remote;
 use crate::ely::buttons::{Button as ElyButton, ButtonVariant};
 use crate::ely::data_display::Tone;
 use crate::ely::forms::{Form as ElyForm, FormError, FormField, Input, InputEvent, TextInput};
-use crate::ely::theme::ControlSize;
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
+use crate::ely::theme::ControlSize;
 use crate::ely::theme::Density;
 use crate::primitives::{stat_card, stat_strip};
 use crate::theme::{tint, Palette};
@@ -573,7 +573,11 @@ impl InventoryPage {
                     .items_center()
                     .justify_between()
                     .gap_4()
-                    .child(div().w(px(280.)).child(KitInput::new(&search_field).small()))
+                    .child(
+                        div()
+                            .w(px(280.))
+                            .child(KitInput::new(&search_field).small()),
+                    )
                     .child(
                         div()
                             .flex()
@@ -890,9 +894,9 @@ impl InventoryPage {
                             .size(ControlSize::Sm)
                             .primary()
                             .disabled(saving)
-                            .on_click(cx.listener(|page, _, window, cx| {
-                                page.save_item_edit(window, cx)
-                            })),
+                            .on_click(
+                                cx.listener(|page, _, window, cx| page.save_item_edit(window, cx)),
+                            ),
                         ),
                 )
                 .into_any_element(),

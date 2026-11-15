@@ -372,18 +372,20 @@ impl PeoplePage {
                 ),
         );
         let page_entity = cx.entity();
-        let mut fields = ElyForm::new("people-form")
-            .on_submit(move |window, cx| {
-                page_entity.update(cx, |page, cx| page.save_form(window, cx));
-            });
+        let mut fields = ElyForm::new("people-form").on_submit(move |window, cx| {
+            page_entity.update(cx, |page, cx| page.save_form(window, cx));
+        });
         let mut form_body = div().flex().flex_col().gap_3().flex_none().w_full();
         if let Some(name) = &form.name {
             form_body = form_body.child(Input::new(name).size(ControlSize::Sm));
         }
         for (key, label, input) in &form.fields {
             form_body = form_body.child(
-                FormField::new(SharedString::from(format!("people-field-{key}")), label.clone())
-                    .child(Input::new(input).size(ControlSize::Sm)),
+                FormField::new(
+                    SharedString::from(format!("people-field-{key}")),
+                    label.clone(),
+                )
+                .child(Input::new(input).size(ControlSize::Sm)),
             );
         }
         let choices: Vec<(&str, &str)> = match &form.kind {
@@ -393,32 +395,28 @@ impl PeoplePage {
         };
         if !choices.is_empty() {
             let current = form.choice.clone();
-            form_body = form_body.child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .gap_2()
-                    .children(choices.iter().map(|(value, label)| {
-                        let choice_value = (*value).to_owned();
-                        let choice_label = (*label).to_owned();
-                        Button::new(
-                            SharedString::from(format!("people-choice-{value}")),
-                            choice_label,
-                        )
-                        .size(ControlSize::Sm)
-                        .variant(if current == *value {
-                            ButtonVariant::Primary
-                        } else {
-                            ButtonVariant::Ghost
-                        })
-                        .on_click(cx.listener(move |page, _, _, cx| {
-                            if let Some(form) = page.form.as_mut() {
-                                form.choice = choice_value.clone();
-                            }
-                            cx.notify();
-                        }))
-                    })),
-            );
+            form_body = form_body.child(div().flex().flex_wrap().gap_2().children(
+                choices.iter().map(|(value, label)| {
+                    let choice_value = (*value).to_owned();
+                    let choice_label = (*label).to_owned();
+                    Button::new(
+                        SharedString::from(format!("people-choice-{value}")),
+                        choice_label,
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(if current == *value {
+                        ButtonVariant::Primary
+                    } else {
+                        ButtonVariant::Ghost
+                    })
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        if let Some(form) = page.form.as_mut() {
+                            form.choice = choice_value.clone();
+                        }
+                        cx.notify();
+                    }))
+                }),
+            ));
         }
         if let Some(error) = &form.error {
             form_body = form_body.child(FormError::new("people-form-error", error.clone()));

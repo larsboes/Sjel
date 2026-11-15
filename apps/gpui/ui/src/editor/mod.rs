@@ -14,9 +14,11 @@ mod types;
 
 use std::sync::Arc;
 
+use crate::ely::feedback::Toast;
+use crate::ely::primitives::Severity;
+use crate::feedback::WindowToastExt;
 use gpui_kit::component::input::{InputEvent, TextareaState};
-use gpui_kit::component::notification::Notification;
-use gpui_kit::component::{ActiveTheme, WindowExt};
+use gpui_kit::component::ActiveTheme;
 use gpui_kit::{
     div, list as block_list, prelude::*, px, rgb, rgba, Context, Entity, EventEmitter, Focusable,
     FontWeight, HighlightStyle, IntoElement, ListAlignment, ListState, Render, SharedString,
@@ -887,8 +889,9 @@ impl Render for NoteEditor {
             }))
             .on_action(cx.listener(|editor, _: &CloseNote, window, cx| {
                 if editor.problem.is_some() && editor.editable {
-                    window.push_notification(
-                        Notification::error("The last save failed; the text is still here."),
+                    window.push_toast(
+                        Toast::new("The last save failed; the text is still here.")
+                            .severity(Severity::Danger),
                         cx,
                     );
                 }
@@ -956,10 +959,8 @@ mod tests {
         record: ProjectRecord,
         preview: bool,
     ) -> (Entity<NoteEditor>, &mut VisualTestContext) {
-        cx.update(|cx| {
-            gpui_kit::init(cx);
-            bind_keys(cx);
-        });
+        crate::test_support::init(cx);
+        cx.update(bind_keys);
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {

@@ -43,6 +43,8 @@ pub mod editor;
 #[cfg(feature = "gpui")]
 pub mod feed;
 #[cfg(feature = "gpui")]
+pub mod feedback;
+#[cfg(feature = "gpui")]
 pub mod finance;
 #[cfg(feature = "gpui")]
 pub mod import;
@@ -124,11 +126,11 @@ pub mod soundscape;
 pub mod systems;
 #[cfg(feature = "gpui")]
 pub mod tasks;
-#[cfg(all(feature = "gpui", any(test, feature = "test-support")))]
-pub mod test_support;
 #[cfg(feature = "gpui")]
 pub mod terminal;
 mod terminal_screen;
+#[cfg(all(feature = "gpui", any(test, feature = "test-support")))]
+pub mod test_support;
 pub mod theme;
 #[cfg(feature = "gpui")]
 pub mod travel;

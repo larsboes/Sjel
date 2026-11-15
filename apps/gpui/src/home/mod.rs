@@ -6,28 +6,39 @@
 pub mod cards;
 pub mod focus_tasks;
 pub mod needs_you;
+pub mod prefs;
 
-use chrono::Local;
 use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::Sizable;
-use gpui_kit::{div, prelude::*, px, rgb, rgba, Context, FontWeight, IntoElement, Window};
+use gpui_kit::{
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, IntoElement, SharedString,
+    Window,
+};
 
 use crate::route::Page;
 use crate::workspace::Workspace;
+use sjel_gpui_ui::ely::{feedback::Toast, primitives::Severity};
+use sjel_gpui_ui::feedback::WindowToastExt;
 use sjel_gpui_ui::sidebar::Seat;
 use sjel_gpui_ui::theme::{tint, Palette};
 
 pub use cards::{prompt_outbox, today, travel_card};
 pub use focus_tasks::focus_tasks;
 pub use needs_you::needs_you;
+pub use prefs::{HomeMode, HomePreferences};
+
+fn save_preferences(view: &Workspace, window: &mut Window, cx: &mut Context<Workspace>) {
+    if let Err(error) = view.home_prefs.save() {
+        window.push_toast(Toast::new(error).severity(Severity::Danger), cx);
+    }
+}
 
 fn home_toolbar(
     view: &Workspace,
     palette: Palette,
     cx: &mut Context<Workspace>,
-) -> impl IntoElement {
-    let now = Local::now();
-    let date_str = now.format("%A, %B %-d").to_string();
+) -> Option<AnyElement> {
     let urgent_count = view.urgent_task_count();
     let approvals_count = view
         .agent
@@ -42,126 +53,250 @@ fn home_toolbar(
         .map(|h| h.down().len())
         .unwrap_or(0);
 
-    div()
-        .flex()
-        .flex_row()
-        .items_center()
-        .justify_between()
-        .gap_4()
-        .py_1()
-        .px_1()
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_3()
-                .child(
+    if urgent_count == 0 && approvals_count == 0 && down_count == 0 {
+        return None;
+    }
+
+    Some(
+        div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap_2()
+            .py_1()
+            .px_1()
+            .when(urgent_count > 0, |el| {
+                el.child(
                     div()
-                        .text_lg()
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(rgb(palette.text))
-                        .child(date_str),
+                        .id("home-toolbar-urgent")
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .px_2()
+                        .py(px(2.))
+                        .rounded_full()
+                        .bg(rgba(tint(palette.accent, 0x22)))
+                        .border_1()
+                        .border_color(rgba(tint(palette.accent, 0x44)))
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(rgb(palette.accent))
+                        .cursor_pointer()
+                        .hover(move |s| s.opacity(0.85))
+                        .on_click(cx.listener(|view, _, _, cx| view.go(Page::Projects, cx)))
+                        .child(format!("{urgent_count} urgent")),
                 )
-                .when(urgent_count > 0, |el| {
-                    el.child(
+            })
+            .when(approvals_count > 0, |el| {
+                el.child(
+                    div()
+                        .id("home-toolbar-approvals")
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .px_2()
+                        .py(px(2.))
+                        .rounded_full()
+                        .bg(rgba(tint(palette.amber, 0x22)))
+                        .border_1()
+                        .border_color(rgba(tint(palette.amber, 0x44)))
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(rgb(palette.amber))
+                        .cursor_pointer()
+                        .hover(move |s| s.opacity(0.85))
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.right_panel.open_on(Seat::Agent);
+                            cx.notify();
+                        }))
+                        .child(format!("{approvals_count} approvals")),
+                )
+            })
+            .when(down_count > 0, |el| {
+                el.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .px_2()
+                        .py(px(2.))
+                        .rounded_full()
+                        .bg(rgba(tint(palette.red, 0x22)))
+                        .border_1()
+                        .border_color(rgba(tint(palette.red, 0x44)))
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(rgb(palette.red))
+                        .child(format!("{down_count} degraded")),
+                )
+            })
+            .into_any_element(),
+    )
+}
+
+fn customize_panel(
+    view: &Workspace,
+    palette: Palette,
+    cx: &mut Context<Workspace>,
+) -> Option<AnyElement> {
+    if !view.home_customize_open {
+        return None;
+    }
+    let prefs = view.home_prefs;
+
+    let mut mode_row = div().flex().flex_wrap().items_center().gap_2();
+    for mode in HomeMode::ALL {
+        let active = prefs.mode == mode;
+        let btn = Button::new(SharedString::from(format!("home-mode-{}", mode.label())))
+            .xsmall()
+            .label(mode.label())
+            .tooltip(mode.description());
+        let btn = if active { btn.primary() } else { btn.ghost() };
+        mode_row = mode_row.child(btn.on_click(cx.listener(move |view, _, window, cx| {
+            view.home_prefs.mode = mode;
+            save_preferences(view, window, cx);
+            cx.notify();
+        })));
+    }
+
+    let toggle = |id: &'static str,
+                  label: &'static str,
+                  checked: bool,
+                  on_change: fn(&mut HomePreferences, bool)| {
+        div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .child(Checkbox::new(id).checked(checked).on_click(cx.listener(
+                move |view, value: &bool, window, cx| {
+                    on_change(&mut view.home_prefs, *value);
+                    save_preferences(view, window, cx);
+                    cx.notify();
+                },
+            )))
+            .child(div().text_xs().text_color(rgb(palette.text)).child(label))
+    };
+
+    Some(
+        div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_3()
+            .rounded(px(12.))
+            .bg(rgba(palette.surface))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_2()
+                    .child(
                         div()
-                            .id("home-toolbar-urgent")
+                            .flex()
+                            .items_center()
+                            .gap_3()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(palette.muted))
+                                    .child("MODE"),
+                            )
+                            .child(mode_row)
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(prefs.mode.description()),
+                            ),
+                    )
+                    .child(
+                        div()
                             .flex()
                             .items_center()
                             .gap_1()
-                            .px_2()
-                            .py(px(2.))
-                            .rounded_full()
-                            .bg(rgba(tint(palette.accent, 0x22)))
-                            .border_1()
-                            .border_color(rgba(tint(palette.accent, 0x44)))
-                            .text_xs()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(rgb(palette.accent))
-                            .cursor_pointer()
-                            .hover(move |s| s.opacity(0.85))
-                            .on_click(cx.listener(|view, _, _, cx| view.go(Page::Projects, cx)))
-                            .child(format!("{urgent_count} urgent")),
-                    )
-                })
-                .when(approvals_count > 0, |el| {
-                    el.child(
+                            .child(
+                                Button::new("home-customize-reset")
+                                    .xsmall()
+                                    .ghost()
+                                    .label("Reset")
+                                    .on_click(cx.listener(|view, _, window, cx| {
+                                        view.home_prefs = HomePreferences::default();
+                                        save_preferences(view, window, cx);
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("home-customize-done")
+                                    .xsmall()
+                                    .ghost()
+                                    .label("Done")
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.home_customize_open = false;
+                                        cx.notify();
+                                    })),
+                            ),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_4()
+                    .child(
                         div()
-                            .id("home-toolbar-approvals")
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .px_2()
-                            .py(px(2.))
-                            .rounded_full()
-                            .bg(rgba(tint(palette.amber, 0x22)))
-                            .border_1()
-                            .border_color(rgba(tint(palette.amber, 0x44)))
                             .text_xs()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(rgb(palette.amber))
-                            .cursor_pointer()
-                            .hover(move |s| s.opacity(0.85))
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.right_panel.open_on(Seat::Agent);
-                                cx.notify();
-                            }))
-                            .child(format!("{approvals_count} approvals")),
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(palette.muted))
+                            .child("SECTIONS"),
                     )
-                })
-                .when(down_count > 0, |el| {
-                    el.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .px_2()
-                            .py(px(2.))
-                            .rounded_full()
-                            .bg(rgba(tint(palette.red, 0x22)))
-                            .border_1()
-                            .border_color(rgba(tint(palette.red, 0x44)))
-                            .text_xs()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(rgb(palette.red))
-                            .child(format!("{down_count} degraded")),
-                    )
-                }),
-        )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(
-                    Button::new("home-nav-calendar")
-                        .xsmall()
-                        .ghost()
-                        .label("Calendar")
-                        .on_click(cx.listener(|view, _, _, cx| view.go(Page::Calendar, cx))),
-                )
-                .child(
-                    Button::new("home-nav-projects")
-                        .xsmall()
-                        .ghost()
-                        .label("Projects")
-                        .on_click(cx.listener(|view, _, _, cx| view.go(Page::Projects, cx))),
-                )
-                .child(
-                    Button::new("home-nav-travel")
-                        .xsmall()
-                        .ghost()
-                        .label("Travel")
-                        .on_click(cx.listener(|view, _, _, cx| view.go(Page::Travel, cx))),
-                )
-                .child(
-                    Button::new("home-nav-feed")
-                        .xsmall()
-                        .ghost()
-                        .label("Feed")
-                        .on_click(cx.listener(|view, _, _, cx| view.go(Page::Feed, cx))),
-                ),
-        )
+                    .child(toggle(
+                        "home-sec-timeline",
+                        "Timeline",
+                        prefs.show_timeline,
+                        |p, v| {
+                            p.show_timeline = v;
+                        },
+                    ))
+                    .child(toggle(
+                        "home-sec-tasks",
+                        "Urgent tasks",
+                        prefs.show_tasks,
+                        |p, v| {
+                            p.show_tasks = v;
+                        },
+                    ))
+                    .child(toggle(
+                        "home-sec-travel",
+                        "Trip & Map",
+                        prefs.show_travel,
+                        |p, v| {
+                            p.show_travel = v;
+                        },
+                    ))
+                    .child(toggle(
+                        "home-sec-prompts",
+                        "Prompts",
+                        prefs.show_prompts,
+                        |p, v| {
+                            p.show_prompts = v;
+                        },
+                    ))
+                    .child(toggle(
+                        "home-sec-spending",
+                        "Spending",
+                        prefs.show_spending,
+                        |p, v| {
+                            p.show_spending = v;
+                        },
+                    )),
+            )
+            .into_any_element(),
+    )
 }
 
 pub fn render(
@@ -172,8 +307,33 @@ pub fn render(
 ) -> impl IntoElement {
     let window_width = f32::from(window.viewport_size().width);
     let is_wide = window_width >= 1080.;
+    let prompts = view
+        .home_prefs
+        .show_prompts
+        .then(|| prompt_outbox(view, palette, cx))
+        .flatten();
+    let tasks = view
+        .home_prefs
+        .show_tasks
+        .then(|| focus_tasks(view, palette, cx))
+        .flatten();
+    let travel = travel_card(view, palette, cx);
+    let travel_imminent = view.home_prefs.effective_show_travel()
+        && (view.home_prefs.force_expanded_map()
+            || view
+                .travel
+                .read(cx)
+                .home_trip_days_away()
+                .is_some_and(|days| days <= 2));
+    let use_right_rail = is_wide && (prompts.is_some() || travel_imminent);
 
-    let content = if is_wide {
+    let rail_width = if travel_imminent && view.home_prefs.large_map {
+        520.
+    } else {
+        400.
+    };
+
+    let content = if use_right_rail {
         div()
             .flex()
             .flex_row()
@@ -188,17 +348,17 @@ pub fn render(
                     .flex_col()
                     .gap_6()
                     .child(today(view, palette, cx))
-                    .children(focus_tasks(view, palette, cx)),
+                    .children(tasks),
             )
             .child(
                 div()
-                    .w(px(400.))
+                    .w(px(rail_width))
                     .flex_none()
                     .flex()
                     .flex_col()
                     .gap_6()
-                    .children(prompt_outbox(view, palette, cx))
-                    .child(travel_card(view, palette, cx)),
+                    .children(prompts)
+                    .children(travel),
             )
             .into_any_element()
     } else {
@@ -208,9 +368,9 @@ pub fn render(
             .gap_6()
             .w_full()
             .child(today(view, palette, cx))
-            .children(focus_tasks(view, palette, cx))
-            .children(prompt_outbox(view, palette, cx))
-            .child(travel_card(view, palette, cx))
+            .children(tasks)
+            .children(prompts)
+            .children(travel)
             .into_any_element()
     };
 
@@ -219,7 +379,8 @@ pub fn render(
         .flex_col()
         .gap_6()
         .w_full()
-        .child(home_toolbar(view, palette, cx))
+        .children(home_toolbar(view, palette, cx))
+        .children(customize_panel(view, palette, cx))
         .children(needs_you(view, palette, cx))
         .child(content)
 }

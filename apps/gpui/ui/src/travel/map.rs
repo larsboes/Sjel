@@ -147,18 +147,41 @@ impl Travel {
             .child(self.category_chips(cx));
         if matches!(self.route, TravelRoute::Map) {
             actions = actions.child(
-                self.button("map-options-toggle")
-                    .ghost()
-                    .small()
-                    .label(if self.map_options_open {
-                        "Hide map options"
-                    } else {
-                        "Map options"
-                    })
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.map_options_open = !view.map_options_open;
-                        cx.notify();
-                    })),
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        self.button("map-apple-native")
+                            .ghost()
+                            .small()
+                            .label(if self.apple_maps_inline {
+                                "Use OpenStreetMap"
+                            } else {
+                                "Use Apple Maps"
+                            })
+                            .tooltip(
+                                "Switch inline map between native Apple Maps and OpenStreetMap",
+                            )
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.apple_maps_inline = !view.apple_maps_inline;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        self.button("map-options-toggle")
+                            .ghost()
+                            .small()
+                            .label(if self.map_options_open {
+                                "Hide map options"
+                            } else {
+                                "Map options"
+                            })
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.map_options_open = !view.map_options_open;
+                                cx.notify();
+                            })),
+                    ),
             );
         }
         page = page.child(actions);
@@ -989,7 +1012,11 @@ impl Travel {
             .current()
             .is_some_and(|plan| plan.places().all(|place| place.coordinate().is_none()));
         let map_height = if self.compact_map {
-            260.
+            if self.home_map_large {
+                400.
+            } else {
+                260.
+            }
         } else if self.map_expanded {
             if self.density.is_mobile() {
                 560.
@@ -1007,6 +1034,20 @@ impl Travel {
         } else {
             500.
         };
+        let inline_apple = self.apple_maps_inline && cx.has_global::<super::InlineAppleMapHost>();
+        let inline_center = center
+            .or_else(|| self.current_user_location())
+            .unwrap_or(Coordinate {
+                latitude: 50.7374,
+                longitude: 7.0982,
+            });
+        let inline_zoom = self.zoom;
+        let inline_pins = if inline_apple {
+            self.apple_maps_pins()
+        } else {
+            Vec::new()
+        };
+
         let mut map = div()
             .id("trip-map")
             .relative()
@@ -1043,8 +1084,25 @@ impl Travel {
                                 }
                             });
                         });
+                        bounds
                     },
-                    |_, _, _, _| {},
+                    move |bounds, _, window, cx| {
+                        if let Some(host) = cx.try_global::<super::InlineAppleMapHost>().cloned() {
+                            if inline_apple {
+                                (host.0)(
+                                    window,
+                                    super::InlineAppleMapCommand::Show {
+                                        bounds,
+                                        center: inline_center,
+                                        zoom: inline_zoom,
+                                        pins: &inline_pins,
+                                    },
+                                );
+                            } else {
+                                (host.0)(window, super::InlineAppleMapCommand::Hide);
+                            }
+                        }
+                    },
                 )
                 .absolute()
                 .size_full(),

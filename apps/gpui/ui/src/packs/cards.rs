@@ -142,12 +142,12 @@ pub(crate) fn render_harness_cards(
             .child(counts)
             .child(path);
 
-        if installed {
+        if installed && harness.write_supported {
             let h_id_for_sync = h_id.clone();
             let held_for_sync = held.clone();
             let sync_button = Button::new(SharedString::from(format!("sync-{}", h_id)))
                 .small()
-                .label("Sync all")
+                .label(format!("Sync {} Packs", held.len()))
                 .disabled(is_busy || held.is_empty())
                 .on_click(cx.listener(move |page, _, window, cx| {
                     page.write(
@@ -234,6 +234,11 @@ pub(crate) fn render_harness_cards(
                 .child(remove_button);
 
             card_content = card_content.child(actions);
+        } else if installed {
+            card_content = card_content
+                .child(div().text_xs().text_color(rgb(palette.muted)).child(
+                "Read-only here: no Pack launcher. Manage this harness through its configuration.",
+            ));
         }
 
         cards.push(

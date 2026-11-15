@@ -10,8 +10,9 @@
 use std::future::Future;
 use std::sync::Arc;
 
-use gpui_kit::component::notification::Notification;
-use gpui_kit::component::WindowExt;
+use crate::ely::feedback::Toast;
+use crate::ely::primitives::Severity;
+use crate::feedback::WindowToastExt;
 use gpui_kit::{Context, Window};
 
 use sjel_gpui_core::shell::{self, Shell, ShellError, ShellResult};
@@ -202,7 +203,7 @@ pub fn write<C, T, F, Fut>(
     let shell = match repo.shell() {
         Ok(shell) => shell,
         Err(error) => {
-            window.push_notification(Notification::error(error.to_string()), cx);
+            window.push_toast(Toast::new(error.to_string()).severity(Severity::Danger), cx);
             return;
         }
     };
@@ -225,12 +226,12 @@ pub fn write<C, T, F, Fut>(
                     // A write that carries no sentence is one the operator is already watching --
                     // a slider, a transport, a preset. Toasting it would be noise on every drag.
                     if !done.is_empty() {
-                        window.push_notification(Notification::success(done), cx);
+                        window.push_toast(Toast::new(done).severity(Severity::Success), cx);
                     }
                     then(this, Some(value), cx);
                 }
                 Err(error) => {
-                    window.push_notification(Notification::error(error.to_string()), cx);
+                    window.push_toast(Toast::new(error.to_string()).severity(Severity::Danger), cx);
                     then(this, None, cx);
                 }
             }
@@ -274,12 +275,12 @@ pub fn write_repo<C, T, F, Fut>(
                     // A write that carries no sentence is one the operator is already watching --
                     // a slider, a transport, a preset. Toasting it would be noise on every drag.
                     if !done.is_empty() {
-                        window.push_notification(Notification::success(done), cx);
+                        window.push_toast(Toast::new(done).severity(Severity::Success), cx);
                     }
                     then(this, Some(value), cx);
                 }
                 Err(error) => {
-                    window.push_notification(Notification::error(error.to_string()), cx);
+                    window.push_toast(Toast::new(error.to_string()).severity(Severity::Danger), cx);
                     then(this, None, cx);
                 }
             }

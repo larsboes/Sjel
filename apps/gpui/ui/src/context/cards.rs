@@ -107,6 +107,7 @@ pub fn render_metric_cards(
     tasks: &[GlobalTask],
     is_today: bool,
     filter_kind: Option<TimelineKind>,
+    show_spending: bool,
     palette: Palette,
     cx: &mut Context<ContextPage>,
 ) -> AnyElement {
@@ -130,7 +131,7 @@ pub fn render_metric_cards(
     let done_task_count = context.tasks.iter().filter(|t| t.done).count();
     let total_spend_str = format_money(context.total_spent_cents, &context.currency);
 
-    stat_strip(vec![
+    let mut cards = vec![
         stat_card_interactive(
             InteractiveStatCard {
                 id: "context-stat-events".into(),
@@ -165,7 +166,10 @@ pub fn render_metric_cards(
             },
             cx.listener(|page, _, _, cx| page.toggle_filter(TimelineKind::Task, cx)),
         ),
-        stat_card_interactive(
+    ];
+
+    if show_spending {
+        cards.push(stat_card_interactive(
             InteractiveStatCard {
                 id: "context-stat-spend".into(),
                 label: "SPENDING".into(),
@@ -180,8 +184,10 @@ pub fn render_metric_cards(
                 palette,
             },
             cx.listener(|page, _, _, cx| page.toggle_filter(TimelineKind::Spend, cx)),
-        ),
-    ])
+        ));
+    }
+
+    stat_strip(cards)
 }
 
 pub fn render_filter_action(

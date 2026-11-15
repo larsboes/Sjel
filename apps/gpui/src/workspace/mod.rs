@@ -9,13 +9,15 @@ use std::time::{Duration, Instant};
 
 use futures::StreamExt;
 use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Theme, WindowExt};
+use gpui_kit::component::Theme;
 use gpui_kit::{
     actions, div, point, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle,
     KeyBinding, MouseButton, MouseMoveEvent, SharedString, Subscription, Window,
 };
+use sjel_gpui_ui::ely::feedback::Toast;
+use sjel_gpui_ui::ely::primitives::Severity;
+use sjel_gpui_ui::feedback::WindowToastExt;
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::finder::{Finder, FinderEvent, Hit, Open};
@@ -385,6 +387,7 @@ pub struct Workspace {
     _calendar_events: Subscription,
     pub context_page: Entity<ContextPage>,
     _context_events: Subscription,
+    _travel_events: Subscription,
     pub finance_page: Option<Entity<FinancePage>>,
     pub people_page: Option<Entity<PeoplePage>>,
     pub backup_page: Option<Entity<BackupPage>>,
@@ -407,6 +410,8 @@ pub struct Workspace {
     /// True once the shell pushes its answers, so the timer stops reading them.
     streaming: bool,
     pub appearance_settings: AppearanceSettings,
+    pub home_prefs: crate::home::HomePreferences,
+    pub home_customize_open: bool,
     /// Pinch or Cmd-scroll travel not yet turned into a zoom step.
     ui_zoom_gesture: f32,
     /// The section Settings shows.
@@ -473,6 +478,43 @@ impl Workspace {
                 cx,
             )
         });
+        #[cfg(target_os = "macos")]
+        cx.set_global(sjel_gpui_ui::travel::InlineAppleMapHost(
+            std::sync::Arc::new(crate::apple_maps::handle_inline_command),
+        ));
+        let travel_events = cx.subscribe_in(
+            &travel,
+            window,
+            |_, _, event: &sjel_gpui_ui::travel::TravelEvent, _, cx| match event {
+                sjel_gpui_ui::travel::TravelEvent::OpenAppleMaps {
+                    title,
+                    center,
+                    zoom,
+                    pins,
+                } => {
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Err(err) =
+                            crate::apple_maps::open_map_window(title, *center, *zoom, pins)
+                        {
+                            eprintln!("apple maps window unavailable: {err}");
+                            cx.open_url(&format!(
+                                "https://maps.apple.com/?ll={:.6},{:.6}",
+                                center.latitude, center.longitude
+                            ));
+                        }
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        let _ = (title, zoom, pins);
+                        cx.open_url(&format!(
+                            "https://maps.apple.com/?ll={:.6},{:.6}",
+                            center.latitude, center.longitude
+                        ));
+                    }
+                }
+            },
+        );
         let inbox = cx.new(|cx| Inbox::new(repo.clone(), cx));
         let inbox_events = cx.subscribe_in(&inbox, window, Self::on_inbox);
         let context_page = cx.new(|cx| ContextPage::new(repo.clone(), cx));
@@ -613,6 +655,7 @@ impl Workspace {
             _calendar_events: calendar_events,
             context_page,
             _context_events: context_events,
+            _travel_events: travel_events,
             finance_page: None,
             people_page: None,
             backup_page: None,
@@ -635,6 +678,8 @@ impl Workspace {
             focus,
             refocus: false,
             appearance_settings,
+            home_prefs: crate::home::HomePreferences::load(),
+            home_customize_open: false,
             ui_zoom_gesture: 0.,
             settings_section: crate::settings::Section::default(),
             settings_feature_view: crate::settings::FeatureView::default(),
@@ -845,8 +890,8 @@ impl Workspace {
 
     pub fn trigger_rebuild(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(repo_root) = crate::update::find_repo_root() else {
-            window.push_notification(
-                Notification::error("Could not locate Sjel repository root."),
+            window.push_toast(
+                Toast::new("Could not locate Sjel repository root.").severity(Severity::Danger),
                 cx,
             );
             return;
@@ -854,8 +899,8 @@ impl Workspace {
         self.rebuild_state = crate::update::RebuildState::Building;
         self.show_rebuild_log = false;
         cx.notify();
-        window.push_notification(
-            Notification::info("Rebuilding Sjel Desktop in background..."),
+        window.push_toast(
+            Toast::new("Rebuilding Sjel Desktop in background...").severity(Severity::Info),
             cx,
         );
 
@@ -1019,8 +1064,9 @@ impl Workspace {
         }
         let Some(root) = crate::update::find_repo_root() else {
             self.busy.finish(BUSY_KEY);
-            window.push_notification(
-                Notification::error("Could not locate the Sjel checkout to restart its shell."),
+            window.push_toast(
+                Toast::new("Could not locate the Sjel checkout to restart its shell.")
+                    .severity(Severity::Danger),
                 cx,
             );
             cx.notify();
@@ -1036,13 +1082,16 @@ impl Workspace {
                 view.busy.finish(BUSY_KEY);
                 match result {
                     Ok(()) => {
-                        window.push_notification(
-                            Notification::success("Sjel shell restarted. Reconnecting…"),
+                        window.push_toast(
+                            Toast::new("Sjel shell restarted. Reconnecting…")
+                                .severity(Severity::Success),
                             cx,
                         );
                         view.refresh(cx);
                     }
-                    Err(error) => window.push_notification(Notification::error(error), cx),
+                    Err(error) => {
+                        window.push_toast(Toast::new(error).severity(Severity::Danger), cx)
+                    }
                 }
                 cx.notify();
             });
@@ -1067,7 +1116,9 @@ impl Workspace {
                 view.busy.finish(BUSY_KEY);
                 match result {
                     Ok(()) => cx.quit(),
-                    Err(error) => window.push_notification(Notification::error(error), cx),
+                    Err(error) => {
+                        window.push_toast(Toast::new(error).severity(Severity::Danger), cx)
+                    }
                 }
                 cx.notify();
             });
@@ -1151,8 +1202,10 @@ impl Workspace {
             Target::Terminal => self.open_terminal(window, cx),
             Target::Unknown(path) => match route::first_page(&path) {
                 Some(page) => self.go(page, cx),
-                None => window
-                    .push_notification(Notification::error(format!("No page answers {path}.")), cx),
+                None => window.push_toast(
+                    Toast::new(format!("No page answers {path}.")).severity(Severity::Danger),
+                    cx,
+                ),
             },
         }
     }
@@ -1437,7 +1490,10 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        window.push_notification(Notification::info("Checking for Sjel updates..."), cx);
+        window.push_toast(
+            Toast::new("Checking for Sjel updates...").severity(Severity::Info),
+            cx,
+        );
         cx.spawn(async move |this, cx| {
             let info = cx
                 .background_executor()
@@ -1772,6 +1828,8 @@ impl Render for Workspace {
         if let Some(frames) = &self.frames {
             frames.render_started();
         }
+        #[cfg(target_os = "macos")]
+        crate::apple_maps::hide_inline();
         let palette = ThemeContext::sync(self.appearance_settings, window, cx);
         let tint = palette.window_tint;
         let sidebar_tint = palette.sidebar_surface;
@@ -2033,11 +2091,8 @@ pub fn opaque_window() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
     use gpui::{Entity, TestAppContext, VisualTestContext};
-    use gpui_kit::component::Root;
+    use gpui_kit::component::WindowExt;
     use sjel_gpui_core::terminal::Host;
     use sjel_gpui_ui::inbox::triage as inbox;
 
@@ -2051,19 +2106,10 @@ mod tests {
     /// a test that mixes GPUI's executor with real I/O.
     fn open(cx: &mut TestAppContext) -> (Entity<Workspace>, &mut VisualTestContext) {
         cx.executor().allow_parking();
-        cx.update(|cx| {
-            gpui_kit::init(cx);
-            sjel_gpui_ui::ely::init_for_tests(cx);
-            bind_keys(cx);
+        cx.update(bind_keys);
+        let (view, cx) = sjel_gpui_ui::test_support::mount_root(cx, None, |window, cx| {
+            Workspace::new("http://example.invalid", window, cx)
         });
-        let slot = Rc::new(RefCell::new(None));
-        let found = slot.clone();
-        let (_, cx) = cx.add_window_view(move |window, cx| {
-            let view = cx.new(|cx| Workspace::new("http://example.invalid", window, cx));
-            found.replace(Some(view.clone()));
-            Root::new(view, window, cx)
-        });
-        let view = slot.take().expect("workspace built");
         view.update(cx, |view, cx| {
             // Through `go`, because that is the only way a page is opened: it hands the frame the
             // focus the page it replaced was holding.
@@ -2104,7 +2150,12 @@ mod tests {
         });
         // The test endpoint is not on loopback, so the start fails at once and says why.
         cx.simulate_keystrokes("enter");
-        assert_eq!(cx.update(|window, cx| window.notifications(cx).len()), 1);
+        let shown = cx.update(|window, cx| {
+            assert!(window.notifications(cx).is_empty());
+            sjel_gpui_ui::feedback::toaster(window, cx).read(cx).shown()
+        });
+        assert_eq!(shown.len(), 1);
+        assert_eq!(shown[0].1, Some(Severity::Danger));
     }
 
     /// The player is a panel over this window now, so the keys and the sidebar row both have to

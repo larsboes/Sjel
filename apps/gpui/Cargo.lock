@@ -8825,7 +8825,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "cpal",
- "ely-gpui-component",
  "futures",
  "gpui-kit",
  "nsh-base",
@@ -8834,6 +8833,7 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
  "raw-window-handle",
+ "serde",
  "serde_json",
  "sjel-gpui-core",
  "sjel-gpui-ui",

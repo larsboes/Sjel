@@ -95,6 +95,9 @@ pub(crate) fn render_matrix_table(
                     .text_color(rgb(palette.muted))
                     .child("·")
                     .into_any_element(),
+                "outdated" | "missing" if !h.write_supported => {
+                    pill(palette.amber, status.to_string())
+                }
                 "outdated" | "missing" => {
                     let is_missing = status == "missing";
                     let verb = if is_missing { "Deploy" } else { "Sync" };

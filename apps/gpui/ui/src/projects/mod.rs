@@ -1,9 +1,11 @@
 //! The Projects page: pick a project, view tasks and notes, edit them in place.
 
+use crate::ely::feedback::Toast;
+use crate::ely::primitives::Severity;
+use crate::feedback::WindowToastExt;
 use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
-use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Sizable, WindowExt};
+use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Div, Entity, FocusHandle, Focusable,
     FontWeight, MouseButton, ScrollHandle, SharedString, Subscription, Window,
@@ -1231,11 +1233,10 @@ impl Projects {
                         if left > 0 {
                             done.push_str(&format!(" · {left} still name the old title"));
                         }
-                        window.push_notification(Notification::success(done), cx);
+                        window.push_toast(Toast::new(done).severity(Severity::Success), cx);
                     }
-                    Err(error) => {
-                        window.push_notification(Notification::error(error.to_string()), cx)
-                    }
+                    Err(error) => window
+                        .push_toast(Toast::new(error.to_string()).severity(Severity::Danger), cx),
                 }
                 cx.notify();
             });
@@ -1263,7 +1264,7 @@ impl Projects {
             if let Err(error) = self.repo.shell() {
                 self.opening = None;
                 self.failed = Some(path);
-                window.push_notification(Notification::error(error.to_string()), cx);
+                window.push_toast(Toast::new(error.to_string()).severity(Severity::Danger), cx);
                 cx.notify();
                 return;
             }
@@ -1285,7 +1286,10 @@ impl Projects {
                     Ok(record) => view.show_note(record, save, window, cx),
                     Err(error) => {
                         view.failed = Some(requested);
-                        window.push_notification(Notification::error(error.to_string()), cx)
+                        window.push_toast(
+                            Toast::new(error.to_string()).severity(Severity::Danger),
+                            cx,
+                        )
                     }
                 }
                 cx.notify();
@@ -1490,8 +1494,9 @@ impl Projects {
                     if tasks::valid_due(&due) {
                         view.set_task_property(path, "due", due, window, cx);
                     } else {
-                        window.push_notification(
-                            Notification::error("A due date is YYYY-MM-DD, or empty for none."),
+                        window.push_toast(
+                            Toast::new("A due date is YYYY-MM-DD, or empty for none.")
+                                .severity(Severity::Danger),
                             cx,
                         );
                     }
@@ -1579,13 +1584,17 @@ impl Projects {
                                 panel.path = renamed.path;
                             }
                         }
-                        window.push_notification(
-                            Notification::success(format!("Renamed task to {}", renamed.title)),
+                        window.push_toast(
+                            Toast::new(format!("Renamed task to {}", renamed.title))
+                                .severity(Severity::Success),
                             cx,
                         );
                     }
                     Err(error) => {
-                        window.push_notification(Notification::error(error.to_string()), cx);
+                        window.push_toast(
+                            Toast::new(error.to_string()).severity(Severity::Danger),
+                            cx,
+                        );
                     }
                 }
                 cx.notify();

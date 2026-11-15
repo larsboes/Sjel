@@ -9,6 +9,8 @@ use gpui_kit::{
     WindowHandle, WindowKind, WindowOptions,
 };
 
+#[cfg(target_os = "macos")]
+mod apple_maps;
 mod audio;
 pub mod clipboard;
 mod data;
@@ -70,6 +72,7 @@ fn main() {
     app.run(move |cx: &mut App| {
         gpui_kit::init(cx);
         sjel_gpui_ui::ely::init(cx).expect("Ely's assets ship in the app's asset source");
+        sjel_gpui_ui::feedback::init(cx);
         // The theme mode saved in Settings, unless SJEL_GPUI_APPEARANCE overrides it for a test.
         let forced = match std::env::var("SJEL_GPUI_APPEARANCE").as_deref() {
             Ok("light") => Some(WindowAppearance::Light),

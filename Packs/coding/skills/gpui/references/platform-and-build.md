@@ -48,10 +48,10 @@ Do not take the user's focus. The user works on the same Mac while you test. In
 | Visual review | `./install`, then `./preview [page] [light\|dark]` | none |
 | Scroll cost per frame | `./install`, then `./bench-scroll [page]` | none |
 
-- Test keyboard interaction with `VisualTestContext::simulate_keystrokes` in `cargo test`. Keys sent to a background window do not reach GPUI.
+- Test keyboard interaction with `VisualTestContext::simulate_keystrokes` or the resolved Kit window helpers in [kit-testing.md](kit-testing.md). Keys sent to a background window do not reach GPUI.
 - `preview` and `bench-scroll` show a corner window above other apps for a few seconds. GPUI stops painting a window that another window covers, so a hidden window gives no frames and no screenshot.
 - Do not run `cargo run`, `open sjel://…` or `interceptor macos keys` against the app unless the user asks for it.
-- The `gpui` dev-dependency must pin the `gpui-pre` version in `Cargo.lock`. A different pin re-resolves the lockfile and breaks the gpui-base and gpui-component pair.
+- Enable `test-support` on the same `gpui-kit` source and version as the normal dependency. Sjel's `gpui` import is the Kit alias, not a separate test dependency. A separate GPUI source can introduce incompatible types and re-resolve the lockfile.
 
 Do not check `apps/gpui` with `cargo check --workspace` from the repository root: its manifest declares its own workspace, so GPUI and its lockfile stay isolated from Sjel's main workspace.
 

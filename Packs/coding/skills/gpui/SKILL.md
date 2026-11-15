@@ -1,6 +1,6 @@
 ---
 name: gpui
-description: Guides native desktop UI development with Zed Industries' GPUI Rust framework, including Sjel's Mac app. Use when creating or changing GPUI views, entities, events, actions, platform setup, or framework dependencies. Do not use for general Rust backend work, browser-only UI, or product design decisions; use ui-craftsmanship for those.
+description: Guides native desktop UI development with GPUI and GPUI Kit, including Sjel's Mac app. Use when creating or changing components, views, entities, events, actions, headless UI tests, platform setup, or framework dependencies. Do not use for general Rust backend work, browser-only UI, or product design decisions; use ui-craftsmanship for those.
 ---
 
 # GPUI
@@ -14,9 +14,9 @@ patterns. GPUI draws only the Mac: the iPhone is drawn by NSH. Read "Native chro
 
 ## Workflow
 
-1. **Locate the app and pin.** Read its `Cargo.toml` and lockfile. For Sjel, the desktop app is `apps/gpui`; it has its own Cargo workspace and lockfile. Run `python3 scripts/show_revision.py <Cargo.toml>` to print the selected Zed source revision and matching GitHub links. The helper requires Python 3.11+; do not assume `main` matches the app's API.
-2. **Load only the relevant reference.** Read `references/views-and-events.md` for UI structure and input; `references/async-and-data.md` for state updates and I/O; or `references/platform-and-build.md` for OS features and verification.
-3. **Follow the local revision.** Prefer examples and API definitions under that revision's `crates/gpui` and `crates/gpui_platform`. Use the upstream `main` links as navigation only. Do not update GPUI pins as part of an unrelated UI change.
+1. **Locate the app and pin.** Read its `Cargo.toml` and lockfile. For Sjel, the desktop app is `apps/gpui`; it has its own Cargo workspace and lockfile. Run `python3 scripts/show_revision.py <Cargo.toml>` from this skill's directory to report direct Zed pins or the locked GPUI Kit release and its cached publication revision. The helper requires Python 3.11+; do not assume `main` matches the app's API.
+2. **Load only the relevant reference.** Read [kit-components.md](references/kit-components.md) for GPUI Kit controls, ownership and recipes; [kit-testing.md](references/kit-testing.md) for headless UI interaction coverage; [views-and-events.md](references/views-and-events.md) for GPUI structure and input; [async-and-data.md](references/async-and-data.md) for state updates and I/O; or [platform-and-build.md](references/platform-and-build.md) for OS features and verification.
+3. **Follow the resolved source.** For GPUI Kit, use the helper's release-specific source and documentation links. Inspect the selected renderer and component re-exports before borrowing lower-level GPUI examples. For direct Zed dependencies, use that revision's `crates/gpui` and `crates/gpui_platform`. Upstream `main` and website docs are navigation only. Do not update dependency pins as part of an unrelated UI change.
 4. **Keep the app boundary clear.** In Sjel, use existing capability APIs or reviewed local interfaces. Do not give the desktop UI direct access to capability databases or copy private overlay values into source.
 5. **Verify the smallest affected target, and do not take the user's focus.** Before building in Sjel, run `tools/toolchain-check --workflow build`. Then run `cargo check --manifest-path ...`. Do not test by launching the app in the foreground, by opening a `sjel://` link, or by sending keys to its window: the user is working on the same Mac. Use the focus-free checks in `references/platform-and-build.md` (Local verification).
 

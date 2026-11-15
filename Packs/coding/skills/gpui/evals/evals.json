@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "Add a refreshable status list to apps/gpui using the existing Sjel capability API. Keep it read-only and use the pinned GPUI version.",
-      "expected_output": "A GPUI implementation grounded in the prototype's pinned Zed revision, with the endpoint auth reviewed before network integration and UI work kept off the render thread.",
+      "expected_output": "A GPUI implementation grounded in the application's resolved GPUI Kit publication and selected renderer, with the endpoint auth reviewed before network integration and UI work kept off the render thread.",
       "assertions": [
         "Reads the dependency pin before using GPUI APIs",
         "Does not send credentials to an endpoint without reviewing its auth contract",
@@ -31,6 +31,41 @@
       "assertions": [
         "Does not use GPUI as the implementation framework for a browser-only UI",
         "Routes to the browser extension's existing framework and conventions"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Add a GPUI Kit settings form with retained text input, a notification toggle and an About dialog. Reuse the existing dependency pin.",
+      "expected_output": "Uses release-matched component conventions and the complete recipe to preserve retained input, subscription lifetime, controlled toggle updates and the existing window root.",
+      "assertions": [
+        "Resolves Cargo.lock and the publication source before using component APIs",
+        "Retains input state and subscriptions outside render",
+        "Checks the toggle callback contract and required extension traits",
+        "Checks open_window and Root before adding overlay layers",
+        "Keeps Sjel architecture and ui-craftsmanship authoritative over upstream policy"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Test that the production GPUI settings save button updates the profile and that disabled save rejects clicks. Do not take foreground focus.",
+      "expected_output": "Uses the installed Kit test-support API in a headless window, dispatches real control events and asserts application outcomes without claiming pixel or OS integration coverage.",
+      "assertions": [
+        "Uses the same gpui-kit source and version for normal and test dependencies",
+        "Imports the production view and explicit test types",
+        "Dispatches through rendered controls instead of invoking handlers directly",
+        "Checks the saved model and the disabled interaction outcome",
+        "Refreshes snapshots after updates and releases window borrows before deferred waits",
+        "Does not foreground the application or claim OS IME and pixel verification"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "The GPUI Kit release is locked but its Cargo source cache is absent. Can the current website recipe be treated as matching the app?",
+      "expected_output": "Uses the versioned package source fallback and treats website and main-branch examples as navigation until signatures are checked against the locked package.",
+      "assertions": [
+        "Does not manufacture a publication commit or silently substitute main",
+        "Does not upgrade the dependency to make an example compile",
+        "Reports missing local source without claiming compatibility"
       ]
     }
   ]

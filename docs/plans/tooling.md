@@ -145,11 +145,13 @@ archive includes the managed path resolver; its extracted-path regression passes
 
 ## Open
 
-- **Read web clips from the CLI and MCP.** Sjel Clip saves into comms over
-  `data/comms/clip.sock` (`crates/comms/src/web_clip_socket.rs`), and `sjel search clip` finds no
-  route to list or read them. Comms `/captures` and `/feed` do not hold clips. A session read one
-  with a hand-written length-prefixed JSON client. Smallest change: a `sjel clips [list|show <key>]`
-  command over the socket's `documents` and `document` requests, plus a read-only MCP route.
+- **Read web clips from the CLI and MCP.** Comms exposes `/clips` and `/clips/document`
+  through the agent privacy gate, with numeric `id` handles and document lookup by `id`
+  because trusted redaction can replace destination keys with `[token]`.
+  The API regression covers redacted-key discovery, ID reads, invalid selectors, missing IDs,
+  and privacy-cap denial. Deployed HTTP verification passed: list the two newest documents and
+  read both by numeric ID. Open: verify MCP discovery in a new session. A top-level `sjel clips`
+  alias remains open.
 - **Stage only this session's hunks.** Other sessions leave uncommitted edits in shared files
   (`upstreams.toml`, this plan). Committing one session's change needed a hand-built reverse
   patch against a snapshot of the file. Smallest change: snapshot a file at a session's first

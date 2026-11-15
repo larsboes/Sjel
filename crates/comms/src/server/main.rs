@@ -148,7 +148,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r("POST", "/ingest", "Ingest one URL into the feed."),
     r("GET", "/captures", "Capture inbox, newest first. Optional status filter."),
     r("GET", "/clips", "Sjel Clipper documents, newest first, without bodies. Optional q: case-insensitive literal substring in saved versions' title, URL or Markdown; limit (default 20, max 100), offset (default 0). Results are c2 under the agent privacy gate."),
-    r("GET", "/clips/document", "Read a Sjel Clipper document's complete current Markdown. Required key: exact document_key from /clips, including note paths. Returns c2 under the agent privacy gate. Reduce large responses before returning text to a model."),
+    r("GET", "/clips/document", "Read a Sjel Clipper document's complete current Markdown. Provide id from /clips, or an exact document_key as key, exclusively. Prefer id because destination keys may be redacted. Returns c2 under the agent privacy gate. Reduce large responses before returning text to a model."),
     r("POST", "/captures", "Store a link or a note; #buy, #look, #go, #learn set the tag."),
     r("PATCH", "/captures/{id}", "Edit a capture's text, tag, status or route."),
     r("GET", "/feed/{id}", "One feed entry."),

@@ -46,17 +46,24 @@ async fn list(State(database): State<PathBuf>, Query(query): Query<ListQuery>) -
 
 #[derive(Deserialize)]
 struct DocumentQuery {
-    key: String,
+    key: Option<String>,
+    id: Option<i64>,
 }
 
 async fn document(
     State(database): State<PathBuf>,
     Query(query): Query<DocumentQuery>,
 ) -> HttpResponse {
+    if query.key.is_some() == query.id.is_some() {
+        return error_response(StatusCode::BAD_REQUEST, "provide exactly one of id or key");
+    }
     match tokio::task::spawn_blocking(move || {
-        Store::open(&database)
-            .map_err(|_| comms::store::ClipError::Storage)?
-            .web_clip_document(&query.key)
+        let store = Store::open(&database).map_err(|_| comms::store::ClipError::Storage)?;
+        match (query.id, query.key) {
+            (Some(id), None) => store.web_clip_document_by_id(id),
+            (None, Some(key)) => store.web_clip_document(&key),
+            _ => Err(comms::store::ClipError::Invalid),
+        }
     })
     .await
     {
@@ -94,11 +101,11 @@ mod tests {
                     request_id: id.into(),
                     url: "https://example.org/thread".into(),
                     payload: json!({"version": 1, "behavior": behavior, "title": "AI Studio",
-                    "markdown": text, "destination": {"path": "Clippings", "name": "Example"}}),
+                    "markdown": text, "destination": {"path": "Clippings", "name": "Example-9da3fba4-0000-4000-8000-000000000000"}}),
                 })
                 .unwrap();
         }
-        let key = "note:Clippings/Example";
+        let key = "note:Clippings/Example-9da3fba4-0000-4000-8000-000000000000";
         let expected = store.web_clip_document(key).unwrap().unwrap().markdown;
         let registry = sjel_pseudonymize::EntityRegistry::builder()
             .add_person("Erika")
@@ -147,7 +154,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(list["documents"].as_array().unwrap().len(), 1);
-        assert_eq!(list["documents"][0]["document_key"], key);
+        assert_ne!(list["documents"][0]["document_key"], key);
         assert_eq!(list["documents"][0]["versions"], 2);
         assert_eq!(list["documents"][0]["data_class"], "c2");
         assert!(list["documents"][0].get("markdown").is_none());
@@ -211,7 +218,7 @@ mod tests {
             .json()
             .await
             .unwrap();
-        assert_eq!(second["documents"][0]["document_key"], key);
+        assert_eq!(second["documents"][0]["id"], list["documents"][0]["id"]);
         assert!(second["next_offset"].is_null());
         let literal: Value = client
             .get(format!("{base}/clips"))
@@ -224,6 +231,56 @@ mod tests {
             .await
             .unwrap();
         assert!(literal["documents"].as_array().unwrap().is_empty());
+        let mut redacted: Value = client
+            .get(format!("{base}/clips"))
+            .bearer_auth("clip-owner-test")
+            .query(&[("q", "new ERIKA"), ("limit", "1")])
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        sjel_pseudonymize::view::trusted_view(&mut redacted);
+        assert_eq!(redacted["documents"][0]["document_key"], "[token]");
+        let id = redacted["documents"][0]["id"].as_i64().unwrap();
+        let by_id: Value = client
+            .get(format!("{base}/clips/document"))
+            .bearer_auth("clip-agent-test")
+            .query(&[("id", id.to_string())])
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(by_id, page);
+        for query in ["", "?id=1&key=missing"] {
+            assert_eq!(
+                client
+                    .get(format!("{base}/clips/document{query}"))
+                    .bearer_auth("clip-agent-test")
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                400
+            );
+        }
+        assert_eq!(
+            client
+                .get(format!("{base}/clips/document?id=-1"))
+                .bearer_auth("clip-agent-test")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            404
+        );
         policy.set_cap("default", Some("c2")).unwrap();
         assert_eq!(
             client
@@ -251,6 +308,16 @@ mod tests {
                 .get(format!("{base}/clips/document"))
                 .bearer_auth("clip-agent-test")
                 .query(&[("key", key)])
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            403
+        );
+        assert_eq!(
+            client
+                .get(format!("{base}/clips/document?id={id}"))
+                .bearer_auth("clip-agent-test")
                 .send()
                 .await
                 .unwrap()

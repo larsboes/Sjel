@@ -47,6 +47,7 @@ pub struct WebClipDocument {
 /// Clip metadata for discovery without returning document bodies.
 #[derive(Debug, Serialize)]
 pub struct WebClipSummary {
+    pub id: i64,
     pub document_key: String,
     pub title: Option<String>,
     pub url: String,
@@ -300,6 +301,30 @@ impl Store {
         }))
     }
 
+    /// Read the current document containing a saved version identified by its row ID.
+    ///
+    /// # Errors
+    /// Returns an error if storage is unavailable or a stored payload is invalid.
+    pub fn web_clip_document_by_id(&self, id: i64) -> Result<Option<WebClipDocument>, ClipError> {
+        let key = self
+            .conn()
+            .map_err(|_| ClipError::Storage)?
+            .query_row(
+                &format!(
+                    "SELECT document_key FROM {}_web_clips WHERE rowid = ?1",
+                    self.prefix
+                ),
+                params![id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|_| ClipError::Storage)?;
+        match key {
+            Some(key) => self.web_clip_document(&key),
+            None => Ok(None),
+        }
+    }
+
     /// Clip documents, most recently saved first.
     ///
     /// # Errors
@@ -341,7 +366,7 @@ impl Store {
         let conn = self.conn().map_err(|_| ClipError::Storage)?;
         let mut statement = conn.prepare(&format!(
             "SELECT latest.document_key, json_extract(latest.payload, '$.title'),
-                    latest.url, grouped.versions, latest.created_at
+                    latest.url, grouped.versions, latest.created_at, grouped.latest_id
              FROM (SELECT document_key, MAX(rowid) AS latest_id, COUNT(*) AS versions
                    FROM {0}_web_clips GROUP BY document_key) grouped
              JOIN {0}_web_clips latest ON latest.rowid = grouped.latest_id
@@ -356,6 +381,7 @@ impl Store {
         let rows = statement
             .query_map(params![query, limit, offset], |row| {
                 Ok(WebClipSummary {
+                    id: row.get(5)?,
                     document_key: row.get(0)?,
                     title: row.get(1)?,
                     url: row.get(2)?,

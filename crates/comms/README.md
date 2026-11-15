@@ -15,6 +15,8 @@ The `comms` capability provides general observation intake across news, media, r
   - `comms clips [--limit N]` — query captured Sjel Clipper documents via local Unix socket.
 - HTTP API: `comms-server` (`src/server/main.rs`), bound to loopback, default port **8083**:
   - `GET /feed` — list feed items with assigned trust classes.
+  - `GET /clips` — list or search clip metadata, newest first, with numeric `id` handles.
+  - `GET /clips/document?id=...` — read a clip document through the agent privacy gate; an exact `key` is also accepted instead of `id`.
   - `GET /feed/:id` — feed item details, relevance matches, and evaluation factors.
   - `POST /feed/:id/status` — update item status (`new`, `keeper`, `dismissed`).
   - `POST /ingest` — ingest URL and extract content.

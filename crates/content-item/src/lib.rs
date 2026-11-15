@@ -286,38 +286,30 @@ impl DataClass {
         )
     }
 
-    /// Classify one vault note from its vault-relative id and whatever its
-    /// frontmatter `class:` key says (PRD Q9a, answered 2026-08-23:
-    /// *folder default, frontmatter override*).
-    ///
-    /// `id` is slash-separated and relative to the vault root, which is the
-    /// identity `vault::note::Note` already carries. The body is deliberately
-    /// not a parameter, for the same reason [`DataClass::classify_mail`] refuses
-    /// one: where a note sits is a fact the filesystem already states, and a
-    /// classifier that has to read a note to place it cannot run on the walk.
-    ///
-    /// Never returns `c0`. Publishing is an act, not a location — §15 decides
-    /// what leaves, and no folder in the vault means "already public".
-    ///
-    /// A declared class that is not one of [`DATA_CLASSES`] is **refused, not
-    /// honoured and not escalated**, and the folder default answers instead. A
-    /// typo is not evidence that a note is more sensitive than its folder, so
-    /// inventing a stricter class from one would be a guess; the rationale names
-    /// the rejected literal so a caller can report it rather than swallow it.
+    /// Classify a vault-relative note. Frontmatter can raise the folder's class.
+    /// Invalid declarations and attempts to lower it retain the folder floor,
+    /// with a rationale that identifies the refusal. Publication is separate.
     pub fn classify_vault_note(id: &str, declared: Option<&str>) -> Self {
+        let mut fallback = Self::vault_folder_default(id);
         if let Some(raw) = declared.map(str::trim).filter(|d| !d.is_empty()) {
-            if valid(raw) {
+            if valid(raw) && class_rank(raw) >= class_rank(&fallback.value) {
                 return Self::set_by_human(raw, "The note's frontmatter declares this class.");
             }
-            let mut fallback = Self::vault_folder_default(id);
-            fallback.rationale = format!(
-                "Frontmatter declares `class: {raw}`, which is not one of {}; \
-                 the folder default answers instead.",
-                DATA_CLASSES.join(", ")
-            );
-            return fallback;
+            fallback.rationale = if valid(raw) {
+                format!(
+                    "Frontmatter declares `class: {raw}`, below the folder floor {}; \
+                     the folder default answers instead.",
+                    fallback.value
+                )
+            } else {
+                format!(
+                    "Frontmatter declares `class: {raw}`, which is not one of {}; \
+                     the folder default answers instead.",
+                    DATA_CLASSES.join(", ")
+                )
+            };
         }
-        Self::vault_folder_default(id)
+        fallback
     }
 
     /// The folder half of Q9a, with no frontmatter in play.
@@ -356,7 +348,7 @@ pub const SOURCE_CLASSIFIER_VERSION: &str = "data-class-source-v1";
 /// Stamped on every folder-derived vault classification. Bump with any change
 /// to [`vault_others_reason`], the same contract [`MAIL_CLASSIFIER_VERSION`]
 /// carries for the mail rules.
-pub const VAULT_CLASSIFIER_VERSION: &str = "data-class-vault-v1";
+pub const VAULT_CLASSIFIER_VERSION: &str = "data-class-vault-v2";
 
 /// Stamped on a row nobody ever classified, including every row that predates
 /// the class existing on its table.
@@ -1824,24 +1816,38 @@ mod tests {
     }
 
     #[test]
-    fn frontmatter_overrides_in_both_directions() {
-        // Down: a People note the operator says is not about anyone.
+    fn frontmatter_cannot_lower_the_folder_floor() {
         let down = DataClass::classify_vault_note("Atlas/People/Method.md", Some("c1"));
-        assert_eq!(down.value, "c1");
-        assert_eq!(down.method, METHOD_HUMAN);
-        // Up: an ordinary note that holds a credential.
+        assert_eq!(down.value, "c2");
+        assert_eq!(down.method, METHOD_DETERMINISTIC);
+        assert!(down.rationale.contains("below the folder floor c2"));
         let up = DataClass::classify_vault_note("Journal/2026-09-07.md", Some("c3"));
         assert_eq!(up.value, "c3");
         assert_eq!(up.method, METHOD_HUMAN);
-        // Whitespace and an empty key are not declarations.
         assert_eq!(
             DataClass::classify_vault_note("Journal/x.md", Some("  ")).method,
             METHOD_DETERMINISTIC
         );
         assert_eq!(
             DataClass::classify_vault_note("Atlas/People/x.md", Some(" c1 ")).value,
-            "c1"
+            "c2"
         );
+    }
+
+    #[test]
+    fn every_valid_declaration_preserves_the_folder_floor() {
+        for id in ["Atlas/People/a.md", "Atlas/Finance/a.md", "Knowledge/a.md"] {
+            let floor = DataClass::classify_vault_note(id, None);
+            for declared in DATA_CLASSES {
+                let class = DataClass::classify_vault_note(id, Some(declared));
+                assert!(class_rank(&class.value) >= class_rank(&floor.value));
+                assert_ne!(class.value, "c0");
+                if class_rank(declared) >= class_rank(&floor.value) {
+                    assert_eq!(class.value, declared);
+                    assert_eq!(class.method, METHOD_HUMAN);
+                }
+            }
+        }
     }
 
     #[test]

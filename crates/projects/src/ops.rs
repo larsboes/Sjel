@@ -48,9 +48,12 @@ pub struct Task {
 
 /// Classify a project record with the same rule as the vault note it came from.
 pub fn classify_record(record: &Record) -> DataClass {
-    let fields = record.fields();
+    classify_fields(&record.path, &record.fields())
+}
+
+fn classify_fields(path: &str, fields: &std::collections::HashMap<String, String>) -> DataClass {
     DataClass::classify_vault_note(
-        &format!("Projects/{}", record.path),
+        &format!("Projects/{path}"),
         fields.get(CLASS_KEY).map(String::as_str),
     )
 }
@@ -58,11 +61,7 @@ pub fn classify_record(record: &Record) -> DataClass {
 impl Task {
     pub fn from_record(record: &Record) -> Self {
         let fields = record.fields();
-        // Classified as the vault note it came from, so an import does not change its class.
-        let class = DataClass::classify_vault_note(
-            &format!("Projects/{}", record.path),
-            fields.get(CLASS_KEY).map(String::as_str),
-        );
+        let class = classify_fields(&record.path, &fields);
         Self {
             id: record.path.clone(),
             kind: record.kind,

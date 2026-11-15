@@ -1,20 +1,4 @@
-//! What class each note is, and why (PRD Q9a, answered 2026-08-23).
-//!
-//! The rule is the PRD's: the folder sets the default, a note's frontmatter
-//! `class:` key overrides it in either direction. Neither half lives here.
-//! `content_item::DataClass::classify_vault_note` holds both, beside the mail
-//! rules and the C0–C3 vocabulary they share, because a second place that
-//! decides what `c2` means is the one outcome §6.1 forbids. This module is the
-//! walk: it hands each note its id and its declared key and counts the answers.
-//!
-//! ## Why the report names the overrides and the refusals separately
-//!
-//! A classifier that only prints totals cannot be audited. Two numbers decide
-//! whether the folder defaults are doing any work: how many notes overrode
-//! them, and how many tried to and misspelled the class. The first is the
-//! escape hatch being used as designed. The second is a note whose author
-//! believed they had set a class and had not — the failure this whole section
-//! exists to make visible rather than silent.
+//! Vault classification reports use the shared classifier and expose refused declarations.
 
 use std::collections::BTreeMap;
 
@@ -41,8 +25,7 @@ pub struct Report {
     pub counts: BTreeMap<String, usize>,
     /// Notes whose frontmatter set the class, whatever it set it to.
     pub overridden: Vec<Classified>,
-    /// Notes that declared a class outside the vocabulary. The folder default
-    /// answered for them; each one is a note nobody has actually classified.
+    /// Invalid declarations and attempts to lower the folder floor.
     pub refused: Vec<Classified>,
     pub notes: Vec<Classified>,
 }
@@ -68,9 +51,6 @@ pub fn report(notes: &[Note]) -> Report {
         let row = classify(note);
         *counts.entry(row.class.clone()).or_insert(0) += 1;
 
-        // A declared key that produced a deterministic answer is a key the
-        // vocabulary refused: `classify_vault_note` only reaches `human` when
-        // the literal was valid.
         let declared = note
             .field(CLASS_KEY)
             .map(str::trim)
@@ -85,9 +65,6 @@ pub fn report(notes: &[Note]) -> Report {
         all.push(row);
     }
 
-    // Every class present in the vocabulary gets a row, including the ones with
-    // no notes. A missing key and a zero read the same to a human and do not
-    // read the same to whoever is checking that `c3` is empty on purpose.
     for class in content_item::DATA_CLASSES {
         counts.entry(class.to_string()).or_insert(0);
     }
@@ -136,19 +113,21 @@ mod tests {
     #[test]
     fn an_override_and_a_refusal_are_counted_apart() {
         let rep = report(&[
-            note("Atlas/People/a.md", None),        // folder default
-            note("Atlas/People/b.md", Some("c1")),  // honoured override
-            note("Atlas/People/c.md", Some("c22")), // refused literal
-            note("Journal/d.md", Some("   ")),      // an empty key is not a declaration
+            note("Atlas/People/a.md", None),
+            note("Atlas/People/b.md", Some("c3")),
+            note("Atlas/People/c.md", Some("c22")),
+            note("Journal/d.md", Some("   ")),
+            note("Atlas/People/e.md", Some("c1")),
         ]);
         assert_eq!(rep.overridden.len(), 1);
         assert_eq!(rep.overridden[0].id, "Atlas/People/b.md");
-        assert_eq!(rep.refused.len(), 1);
+        assert_eq!(rep.refused.len(), 2);
         assert_eq!(rep.refused[0].id, "Atlas/People/c.md");
-        // The refused note is still classified, by its folder, and counted.
-        assert_eq!(rep.counts["c2"], 2);
-        assert_eq!(rep.counts["c1"], 2);
-        assert_eq!(rep.notes.len(), 4);
+        assert_eq!(rep.refused[1].id, "Atlas/People/e.md");
+        assert_eq!(rep.counts["c2"], 3);
+        assert_eq!(rep.counts["c1"], 1);
+        assert_eq!(rep.counts["c3"], 1);
+        assert_eq!(rep.notes.len(), 5);
     }
 
     #[test]

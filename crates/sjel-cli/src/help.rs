@@ -16,6 +16,8 @@ Discover Sjel:
                                  unused, and what is safe to reclaim
   backup policy [<target> <hours>|off]
                                  Show or set the backup timer's interval per target
+  backup status                 Read backup freshness and latest attempt outcomes
+  backup runs [--limit N]        Read recent backup attempts, including failures (max 500)
   update [--json|--offline]      Software installed outside this checkout, and what is stale
   update apply [--only <class>]  Move what Sjel owns, and delegate the rest
   app [update|install|status|open] [desktop|mac|all]

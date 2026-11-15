@@ -1,13 +1,4 @@
-//! Driving the mechanism, and reading back what it produced.
-//!
-//! `tools/backup.sh` owns the bytes: this module passes an argv array, captures the output
-//! into a log, and then reads the immutable receipt the producer wrote so a run row carries
-//! the archive's own digest rather than one this process invented.
-//!
-//! A run that fails is recorded like a run that succeeds. That is the whole reason this
-//! module exists: a failed run leaves no receipt, so before this the only durable trace of
-//! it was a log line — and `tools/doctor` read the last *successful* receipt and called it
-//! fresh.
+//! Run the backup producer and record its new archive receipt or failed attempt.
 
 use std::fs;
 use std::io::Write;
@@ -127,7 +118,7 @@ pub fn run(root: &Path, overlay: &Path, capability: &str, target: &str) -> Outco
     }
 
     let status = command.status();
-    let (exit_code, detail) = match status {
+    let (mut exit_code, mut detail) = match status {
         Ok(status) => {
             let code = status.code().unwrap_or(-1) as i64;
             let detail = if code == 0 {
@@ -156,6 +147,11 @@ pub fn run(root: &Path, overlay: &Path, capability: &str, target: &str) -> Outco
                 Some(archive)
             }
         });
+
+    if exit_code == 0 && archive.is_none() {
+        exit_code = -1;
+        detail = "tools/backup.sh exited successfully without a new archive receipt".into();
+    }
 
     if exit_code == 0 {
         clear_attempt(overlay, capability);

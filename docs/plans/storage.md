@@ -2,8 +2,8 @@
 
 The goal: every capability and the phone on one database engine, one database file per
 capability or agent, a phone that reads and writes on its own and syncs when it finds the Mac, and
-backups that prove they can be restored. Priority 3 in [`PLAN.md`](../../PLAN.md), except the
-storage work Priority 1 needs for the phone.
+backups that prove they can be restored. [`PLAN.md`](../../PLAN.md) owns priority: verified
+restore defects are Priority 0, Markdown authority is Priority 1, and domain sync is Priority 2.
 
 ## Rotation
 
@@ -157,7 +157,10 @@ Obsidian is one editor for them, and the Sjel app can carry another ([product pa
 stores. Open, in order:
 
 1. Give each top folder of the vault a default data class. Frontmatter can raise it and cannot
-   lower it. Done when the index refuses a note whose frontmatter lowers its folder's class.
+   lower it. The shared classifier now preserves the existing folder floors and reports
+   rejected downgrades; Vault and Projects use that owner. The 66 classifier/vault tests and
+   Projects tests pass. Configurable top-folder defaults and index rejection remain open.
+   Done when the index refuses a note whose frontmatter lowers its folder's class.
 2. Move the Markdown tree under `<overlay>/data/projects/` into the vault and make
    `crates/projects` read the files as the authority. Today the store is the authority and the
    tree is a rendered copy (`crates/projects/README.md`). Done when an edit in any editor appears in
@@ -350,9 +353,13 @@ Open:
    2026-10-22 15:12Z, so finance, store, knowledge-base, packs, devices and projects only get
    manual runs. `tools/doctor` now names an off timer, and the timer is back on at 24h
    (2026-11-03). Open: why it was turned off.
-2. **A CLI for the runs.** `sjel backup policy` shows and sets the timer. Open:
-   `sjel backup status|runs` over `GET /api/sjel-status/backups` and `/backup/runs` (see
-   [`tooling.md`](tooling.md)).
+2. **Run inspection and receipt integrity.** `sjel backup status|runs [--limit N]` now uses
+   the existing authenticated capability caller; policy management keeps its existing path.
+   The runner records a failed attempt when a zero exit produces no new archive receipt,
+   including when only an older receipt exists. Focused CLI and backup regressions pass.
+   Live run inspection on 2026-11-15 returned `invalid or missing authentication token`.
+   Scheduled firing, mounted-target failure recording and isolated live restores remain
+   unverified; no timer or credential was changed.
 3. **Per-kind proof.** A target kind counts as verified only when its own restore passes. Only
    the local kind is rehearsed. iCloud and ssh are unproven.
 4. **Documents on the external SSD.** Originals are local. Done when a restore from the selected

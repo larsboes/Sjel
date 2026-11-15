@@ -570,10 +570,11 @@ archive includes the managed path resolver; its extracted-path regression passes
      result reuse beyond local formatting. Set resource defaults only from measurements.
   Done when local and CI share the same planner, live full verification passes, and measurements
   establish the cost and savings.
-- **Backup runs from the CLI.** To find why six backups were overdue, the agent read receipt
-  files in `<overlay>/backup/receipts/` and grepped `sjel-status`'s stderr for `[backup]` lines.
-  `GET /api/sjel-status/backup/runs` has the answer, but no `sjel` verb reads it. Smallest change:
-  `sjel backup status|runs [--limit N]` over the existing routes.
+- **Backup CLI live acceptance.** `sjel backup status|runs [--limit N]` delegates to the existing
+  capability caller and bounds run history to 1–500 rows. Focused argument tests pass.
+  Live inspection returns an authentication refusal in this session. Verify authenticated
+  status and run-history reads after CLI installation; timer and restore acceptance stays in
+  [storage](storage.md#5-backups).
 - **`tools/doctor` in a worktree reports the repository as its own undeclared connection.** The
   undeclared-connections sweep derives the repos that count as "self" from the *basename* of the
   checkout (`crates/sjel-cli/src/doctor/checks.rs`, `undeclared_connections`: `self_roots` is

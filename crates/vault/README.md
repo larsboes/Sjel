@@ -28,43 +28,17 @@ The excluded destination-note count makes the comparison's coverage explicit.
 
 ## `class` — which notes hold whose facts
 
-PRD **Q9a** (2026-08-23): the folder sets the default, a note's frontmatter
-`class:` key overrides it in either direction. `Atlas/People/`,
-`Atlas/Documents/` and `Atlas/Finance/` are **C2 Others**; a health folder is
-C2 wherever it sits; everything else is **C1 Mine**.
+The folder sets a minimum class; frontmatter can raise it. `Atlas/People/`,
+`Atlas/Documents/`, `Atlas/Finance/` and health folders default to C2 Others;
+other notes default to C1 Mine. Publication requires its separate review path.
 
-The rule is not here. `content_item::DataClass::classify_vault_note` holds it,
-beside the mail rules and the C0–C3 vocabulary they share, because PRD §6.1
-forbids a second definition of what `c2` means by name. This verb is the walk
-and the report. `vault classify` calls that same function for one vault-relative
-path without loading the vault. Governed clients use this narrow command instead
-of maintaining their own copy of the folder rules.
+`content_item::DataClass::classify_vault_note` owns this rule. `vault classify`
+calls it for one relative path without loading the vault. Invalid declarations and
+attempts to lower the folder floor retain that floor and carry a refusal rationale.
 
-**Measured against this vault, 2026-09-07** — the acceptance figures, in the
-same spirit as the link counts below:
-
-| Class | Notes | From |
-|---|---|---|
-| C0 Public | 0 | Unreachable from a location. Publishing is an act (§15), not a folder |
-| C1 Mine | 2,587 | Everything Q9a's table does not name |
-| C2 Others | 170 | `Atlas/People` 89 · `Atlas/Documents` 74 · `Atlas/Finance` 7 |
-| C3 Secret | 0 | Only reachable by declaring it |
-
-Two things the measurement says that the ruling could not. **No note in this
-vault carries a `class:` key**, so every one of the 2,757 rows above is a folder
-default and the override path has no production evidence yet — it is tested, not
-exercised. And **the health rule fires on nothing**: the only health folder here
-is `Atlas/Documents/Gesundheit/`, which the `Atlas/Documents` rule already claims
-one line earlier. It stays because Q9a names health as a rule rather than a
-folder, and the day that folder moves out of `Atlas/Documents/` is the day it
-starts earning its place.
-
-Three lists, not one total: `--list` prints every note with its class,
-`--only c2` prints one class with the reason each note landed there, and the
-default report names the **refused declarations** — notes whose frontmatter set
-a class outside the vocabulary. A refusal is the interesting row. The folder
-default answers for it, so nothing fails; what it means is that somebody
-believes that note is classified and it is not.
+`class --list` reports each note, `--only c2` selects one class, and the default
+report separates accepted declarations from refusals. Configurable folder defaults
+and index admission remain in the [storage plan](../../docs/plans/storage.md#one-vault-for-prose).
 
 ## `bases` — the Bases, checked against the vault they query
 

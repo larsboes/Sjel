@@ -142,3 +142,65 @@ impl SeatbeltProfile {
         out
     }
 }
+
+/// Credentials under the home directory that no trusted-ring harness uses for itself. Each
+/// harness's own sign-in (`~/.claude`, `~/.codex`, `~/.pi/agent`) stays readable, and git signs in
+/// through the Keychain, so none of these is needed inside the run.
+const TRUSTED_HOME_DENY: &[&str] = &[
+    ".ssh",
+    ".gnupg",
+    ".aws",
+    ".kube",
+    ".netrc",
+    ".git-credentials",
+    ".config/git/credentials",
+    ".config/gcloud",
+];
+
+/// The trusted ring's profile: everything is allowed except the listed paths, which are neither
+/// read nor written. The overlay's `data/` and `secrets/` are among them, so personal data
+/// reaches the run only through the Sjel gate (`docs/plans/containment.md`, C1).
+#[derive(Debug, Clone, Default)]
+pub struct TrustedProfile {
+    pub denied: Vec<PathBuf>,
+}
+
+impl TrustedProfile {
+    /// The home credentials, plus `<overlay>/data` and `<overlay>/secrets` when an overlay is set.
+    pub fn new(home: Option<&Path>, overlay: Option<&Path>) -> Self {
+        let mut denied: Vec<PathBuf> = Vec::new();
+        if let Some(home) = home {
+            denied.extend(TRUSTED_HOME_DENY.iter().map(|rel| home.join(rel)));
+        }
+        if let Some(overlay) = overlay {
+            denied.push(overlay.join("data"));
+            denied.push(overlay.join("secrets"));
+        }
+        Self::default().with_denied_paths(denied)
+    }
+
+    /// Deny one more path, by its resolved location as well when it is a link.
+    pub fn with_denied_paths(mut self, paths: impl IntoIterator<Item = PathBuf>) -> Self {
+        for path in paths {
+            let resolved = canonical(&path);
+            if resolved != path && !self.denied.contains(&resolved) {
+                self.denied.push(resolved);
+            }
+            if !self.denied.contains(&path) {
+                self.denied.push(path);
+            }
+        }
+        self
+    }
+
+    pub fn render(&self) -> String {
+        let mut out = String::from("(version 1)\n(allow default)\n");
+        for path in &self.denied {
+            out.push_str(&format!(
+                "(deny file-read* file-write* (subpath {}))\n",
+                quoted(path)
+            ));
+        }
+        out
+    }
+}

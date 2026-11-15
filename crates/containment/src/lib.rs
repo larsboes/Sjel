@@ -10,4 +10,4 @@ pub use provider_key::{env_name as credential_env_name, resolve as resolve_crede
 pub use proxy::{EgressPolicy, EgressProxy, ProxyAudit};
 pub use ring::{classify_ring, provider_hosts, Ring};
 pub use roots::{bundle_from, export_roots, write_bundle, CA_VARIABLES};
-pub use seatbelt::SeatbeltProfile;
+pub use seatbelt::{SeatbeltProfile, TrustedProfile};

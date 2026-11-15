@@ -496,3 +496,87 @@ fn the_claude_code_sandbox_admits_the_standard_registries() {
         );
     }
 }
+
+/// A trusted-ring run keeps the filesystem and the network, but the overlay's `data/` and
+/// `secrets/` and the home credentials stay closed, and Sjel's tools inside present the agent
+/// token (`SJEL_AGENT=1`). Every trusted harness (Claude Code, Codex, pi on OpenAI) starts here.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_trusted_run_keeps_the_machine_but_not_personal_data_or_credentials() {
+    let base = std::env::temp_dir().join(format!("sjel-contain-trusted-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (home, overlay, project, other) = (
+        base.join("home"),
+        base.join("overlay"),
+        base.join("project"),
+        base.join("elsewhere"),
+    );
+    for dir in [
+        home.join(".ssh"),
+        home.join(".claude"),
+        overlay.join("data/sjel"),
+        overlay.join("secrets"),
+        overlay.join("config"),
+        project.clone(),
+        other.clone(),
+    ] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    for (path, body) in [
+        (home.join(".ssh/id_ed25519"), "key-secret"),
+        (home.join(".claude/settings.json"), "{}"),
+        (overlay.join("data/sjel/sjel.db"), "db-secret"),
+        (overlay.join("secrets/token"), "token-secret"),
+        (overlay.join("config/machine.toml"), "cfg"),
+        (other.join("notes.txt"), "elsewhere-ok"),
+    ] {
+        std::fs::write(path, body).unwrap();
+    }
+    let providers = base.join("providers.toml");
+    std::fs::write(
+        &providers,
+        "[anthropic]\nhighest_data_class = \"c1\"\nreviewed_at = \"2026-11-04\"\nwhy = \"test\"\nhosts = [\"api.anthropic.com\"]\nring = \"trusted\"\n",
+    )
+    .unwrap();
+    let script = format!(
+        "cat '{o}/data/sjel/sjel.db' 2>/dev/null || echo data-denied; \
+         cat '{o}/secrets/token' 2>/dev/null || echo secrets-denied; \
+         cat '{h}/.ssh/id_ed25519' 2>/dev/null || echo ssh-denied; \
+         echo x > '{o}/data/sjel/new' 2>/dev/null || echo data-write-denied; \
+         cat '{o}/config/machine.toml'; echo; cat '{h}/.claude/settings.json'; echo; \
+         cat '{e}/notes.txt'; echo; echo w > '{e}/written' && echo write-ok; \
+         echo agent=$SJEL_AGENT",
+        o = overlay.display(),
+        h = home.display(),
+        e = other.display()
+    );
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_sjel-contain"))
+        .args(["/bin/sh", "--provider", "anthropic", "--project"])
+        .arg(&project)
+        .args(["--", "-c", &script])
+        .env("HOME", &home)
+        .env("SJEL_OVERLAY_ROOT", &overlay)
+        .env("SJEL_PROVIDERS_PATH", &providers)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("ring=Trusted"), "{stdout}");
+    for expected in [
+        "data-denied",
+        "secrets-denied",
+        "ssh-denied",
+        "data-write-denied",
+        "cfg",
+        "{}",
+        "elsewhere-ok",
+        "write-ok",
+        "agent=1",
+    ] {
+        assert!(stdout.contains(expected), "{expected}: {stdout}");
+    }
+    for body in ["key-secret", "db-secret", "token-secret"] {
+        assert!(!stdout.contains(body), "{body}: {stdout}");
+    }
+    assert!(!overlay.join("data/sjel/new").exists());
+    let _ = std::fs::remove_dir_all(&base);
+}

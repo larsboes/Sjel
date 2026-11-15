@@ -1,5 +1,5 @@
 use sjel_containment::{
-    classify_ring, provider_hosts, EgressPolicy, EgressProxy, Ring, SeatbeltProfile,
+    classify_ring, provider_hosts, EgressPolicy, EgressProxy, Ring, SeatbeltProfile, TrustedProfile,
 };
 use sjel_inference::ReviewedProvidersList;
 use std::path::PathBuf;
@@ -16,6 +16,41 @@ fn demo_token() -> Option<String> {
     let root = PathBuf::from(std::env::var_os("SJEL_ROOT")?);
     let token = std::fs::read_to_string(root.join("demo/state/comms-api-secret")).ok()?;
     Some(token.trim().to_owned()).filter(|t| !t.is_empty())
+}
+
+/// A trusted-ring run: the harness keeps the network and the filesystem, except the overlay's
+/// `data/` and `secrets/` and the home credentials no harness signs in with. `SJEL_AGENT=1`
+/// makes Sjel's own tools inside the run present the agent token, which the gate pseudonymizes.
+fn run_trusted(
+    harness_bin: &str,
+    harness_args: &[String],
+    project_dir: &std::path::Path,
+    env_pairs: Vec<(String, String)>,
+) -> ExitCode {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let overlay = std::env::var_os("SJEL_OVERLAY_ROOT")
+        .or_else(|| std::env::var_os("SJEL_PERSONAL_ROOT"))
+        .map(PathBuf::from);
+    if overlay.is_none() {
+        eprintln!("[containment] no overlay is set: only the home credentials are closed");
+    }
+    let profile = TrustedProfile::new(home.as_deref(), overlay.as_deref());
+    let mut cmd = std::process::Command::new("/usr/bin/sandbox-exec");
+    cmd.arg("-p")
+        .arg(profile.render())
+        .arg(harness_bin)
+        .args(harness_args);
+    cmd.current_dir(project_dir).env("SJEL_AGENT", "1");
+    for (name, value) in env_pairs {
+        cmd.env(name, value);
+    }
+    match cmd.status() {
+        Ok(s) => ExitCode::from(s.code().unwrap_or(1) as u8),
+        Err(e) => {
+            eprintln!("Failed to start the harness under sandbox-exec: {e}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 #[tokio::main]
@@ -109,18 +144,7 @@ async fn main() -> ExitCode {
     println!("[containment] harness={harness_bin} provider={provider} ring={ring:?}");
 
     if ring == Ring::Trusted {
-        // Run harness directly
-        let mut cmd = std::process::Command::new(&harness_bin);
-        cmd.args(&harness_args);
-        cmd.current_dir(&project_dir);
-        let status = cmd.status();
-        return match status {
-            Ok(s) => ExitCode::from(s.code().unwrap_or(0) as u8),
-            Err(e) => {
-                eprintln!("Failed to execute harness: {e}");
-                ExitCode::from(1)
-            }
-        };
+        return run_trusted(&harness_bin, &harness_args, &project_dir, env_pairs);
     }
 
     // Contained run: resolve the named provider keys first, so a missing one stops the run.

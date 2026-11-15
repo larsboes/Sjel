@@ -6,6 +6,8 @@ import { LearnView, VIEW_TYPE } from './view';
 import { LearningHub } from './hub';
 import type { Kind } from './path';
 import type { TFile } from 'obsidian';
+import { loadLayout } from './layout';
+import { OrganizationReview } from './organization';
 
 export interface PiLearnSettings {
   piCommand: string;
@@ -15,10 +17,12 @@ export interface PiLearnSettings {
   teachModel: string;
   /** `provider/model` for practice sittings; empty keeps pi's default model. */
   practiceModel: string;
+  curateModel: string;
   /** Thinking level for teach sittings; empty keeps pi's default. */
   teachThinking: string;
   /** Thinking level for practice sittings; empty keeps pi's default. */
   practiceThinking: string;
+  curateThinking: string;
   /** Open the note pi writes in the main pane. */
   followEdits: boolean;
 }
@@ -29,8 +33,10 @@ const DEFAULTS: PiLearnSettings = {
   wslDistro: '',
   teachModel: '',
   practiceModel: '',
+  curateModel: '',
   teachThinking: '',
   practiceThinking: '',
+  curateThinking: '',
   followEdits: true,
 };
 
@@ -39,9 +45,16 @@ export default class PiLearnPlugin extends Plugin {
 
   async onload() {
     this.settings = { ...DEFAULTS, ...(await this.loadData()) };
+    await loadLayout(this.app);
     this.registerView(VIEW_TYPE, (leaf) => new LearnView(leaf, this));
     this.addRibbonIcon('graduation-cap', 'Open Learn', () => void this.open());
     this.addCommand({ id: 'open', name: 'Open Learn', callback: () => void this.open() });
+    this.addCommand({ id: 'review-organization', name: 'Check vault structure', callback: () => {
+      void loadLayout(this.app).then(() => new OrganizationReview(this.app).open()).catch((error) => {
+        console.error('Could not load vault layout', error);
+        new OrganizationReview(this.app, `Could not load vault layout: ${error.message}`).open();
+      });
+    } });
     this.registerMarkdownCodeBlockProcessor('learning-hub', (_source, el, ctx) => {
       ctx.addChild(new LearningHub(el, this, ctx.sourcePath));
     });
@@ -145,6 +158,7 @@ class PiLearnSettingTab extends PluginSettingTab {
     const kinds = [
       { label: 'Teach', model: 'teachModel', thinking: 'teachThinking' },
       { label: 'Practice', model: 'practiceModel', thinking: 'practiceThinking' },
+      { label: 'Curate', model: 'curateModel', thinking: 'curateThinking' },
     ] as const;
     for (const k of kinds) {
       new Setting(el)

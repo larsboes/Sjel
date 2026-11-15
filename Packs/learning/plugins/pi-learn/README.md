@@ -1,12 +1,12 @@
 # Learn: pi in the Obsidian sidebar
 
-A desktop Obsidian plugin that runs teach and practice sittings with pi, beside the notes they
+A desktop Obsidian plugin that runs teach, practice and curate sittings with pi, beside the notes they
 write. It runs on macOS, Linux and Windows.
 
 ## What it does
 
 - Starts `pi --mode rpc` in the vault (`docs/rpc.md` in the pi package). Pi's own settings
-  supply the skills and extensions, so `teach`, `practice` and the `questions` extension load as
+  supply the skills and extensions, so `teach`, `practice`, `curate` and the `questions` extension load as
   they do in the terminal.
 - Renders replies with Obsidian's Markdown renderer. `interactive` figures, mermaid, LaTeX and
   `[[links]]` render inside the chat through the plugins that already handle them in notes.
@@ -14,7 +14,7 @@ write. It runs on macOS, Linux and Windows.
   `Packs/knowledge/extensions/questions.ts` (`fromHost`) hands each widget to the plugin as JSON
   instead of falling back to plain text. A card returns the same result object as the terminal
   widget: answer, thinking, confidence, note and contest.
-- Holds Teach and Practice as persistent controls. Enter in an empty view starts the chosen kind
+- Holds Teach, Practice and Curate as persistent controls. Enter in an empty view starts the chosen kind
   from the open note, path or typed topic. Starting over an unfinished sitting asks first.
 - Closes a sitting on request. **Finish sitting** stops any outstanding question and asks the
   active skill to run its closing procedure; the sitting closes only after a complete reply with
@@ -33,7 +33,26 @@ write. It runs on macOS, Linux and Windows.
 
 ## Sittings
 
-Teach and Practice each start a fresh pi session: the vault is the memory, and a sitting resumes
+Permission and other plain dialogs collapse into a result receipt after an answer. Requests
+with a timeout expire locally as well as in Pi, disable their controls and never accept a late
+click as approval. Routine Markdown writes use machine-configured vault permissions; Curate
+uses direct note tools rather than introducing compound shell backup commands.
+
+Curate starts from the open concept, source, exercise or learning path. Its scope contains the
+anchor and directly linked active notes, including backlinks; it excludes vault rules, logs and
+hidden archives. The opening prompt includes the scoped structure check. The curate skill
+slims repetition, adds explanatory links and proposes consolidation without changing mastery,
+source qualifications or learning-path states. Merges, deletions, moves, splits and substantial
+rewrites receive a concrete preview before approval. Routine wording and metadata fixes apply
+directly within scope. Necessary approvals use plain chat questions; RPC `ask` currently defers
+to a terminal-only decision queue and is not used for Curate approvals. A visible fixed-target
+notice explains when the currently browsed note differs from the sitting's anchor.
+These semantic rules are agent instructions;
+the plugin does not enforce them as a filesystem policy. Finish verifies saved edits and
+summarizes pending proposals without creating a teaching/practice log entry. Each mode remembers
+its own model and thinking level. Open a note and choose Curate, or select Curate in the planner.
+
+Teach, Practice and Curate each start a fresh pi session: the vault is the memory, and a learning sitting resumes
 from the path graph's `current` node. Decided 2026-11-05 (`docs/plans/learning.md`, stage 3).
 The session planner accepts a path or new topic, desired outcome, available minutes and mode.
 Leaving minutes blank asks the tutor to establish the budget once. Planning starts no model
@@ -68,11 +87,24 @@ sitting. Required record-write failures still prevent the closed acknowledgement
 
 ## Settings
 
+`Resources/Vault Layout.json` supplies the vault-relative `learning`, `knowledge`, `resources`
+and `log` paths for the plugin and skills. Without it, the defaults are `Learning`, `Knowledge`,
+`Resources` and `Learning/Learning Log.md`. Roots must be distinct and non-overlapping; the log
+must be inside the learning folder. The plugin reads the layout at startup and before review.
+
+**Learn (Sjel): Check vault structure** previews misplaced typed notes, missing required metadata and
+unresolved wikilinks. Each Apply move action uses Obsidian's file manager, respects its link-update
+setting and refuses existing destinations. Ambiguous notes require inspection; the command
+does not infer semantic duplicates, merge notes, move figures or change learning evidence.
+New concepts may use `type: concept`; existing `type: note` concepts remain eligible in Knowledge.
+Exercise, log, reference and system types make placement explicit. Learning paths remain
+discoverable by their heading. The hub lists reusable knowledge and supporting resources separately.
+
 | Setting | Meaning |
 |---|---|
 | pi command | The pi executable. macOS and Linux start it through the login shell, so a name on the shell's `PATH` works. |
 | Run pi in | Windows only: Windows, or WSL with the vault path translated by `wslpath`. |
-| Teach model, Practice model | Picked with a fuzzy search over the models pi lists (`get_available_models`), with a thinking level each. Pi's default applies when unset. The footer's model chip and thinking menu change the running sitting and remember the choice for its kind. |
+| Teach model, Practice model, Curate model | Picked with a fuzzy search over the models pi lists (`get_available_models`), with a thinking level each. Pi's default applies when unset. The footer's model chip and thinking menu change the running sitting and remember the choice for its kind. |
 | Follow edits | Open the note pi writes. |
 
 ## Build and install

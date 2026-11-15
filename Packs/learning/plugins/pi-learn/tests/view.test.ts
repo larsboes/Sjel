@@ -21,7 +21,7 @@ class ItemView {
 class Modal {
   titleEl = root();
   contentEl = root();
-  constructor(_app: unknown) {}
+  constructor(public app: any) {}
   open() {}
   close() { this.titleEl.remove(); this.contentEl.remove(); this.onClose(); }
   onClose() {}
@@ -35,12 +35,13 @@ mock.module('obsidian', () => ({
 }));
 const { LearnView } = await import('../src/view');
 const { LearningHub } = await import('../src/hub');
+const { OrganizationReview, organizationIssues } = await import('../src/organization');
 const views: any[] = [];
 
 async function fixture() {
   const events: Array<{ target: any; event: string; callback: Function }> = [];
   const app = {
-    metadataCache: { on(event: string, callback: Function) { events.push({ target: this, event, callback }); }, getFileCache: (_file: TFile): any => ({}), resolvedLinks: {} as Record<string, Record<string, number>> },
+    metadataCache: { on(event: string, callback: Function) { events.push({ target: this, event, callback }); }, getFileCache: (_file: TFile): any => ({}), resolvedLinks: {} as Record<string, Record<string, number>>, unresolvedLinks: {} as Record<string, Record<string, number>> },
     workspace: { on(event: string, callback: Function) { events.push({ target: this, event, callback }); }, getActiveFile: () => null },
     vault: { getMarkdownFiles: (): TFile[] => [], getAbstractFileByPath: (_path: string): TFile | null => null, cachedRead: async (_file: TFile) => '', on(event: string, callback: Function) { events.push({ target: this, event, callback }); }, adapter: { getBasePath: () => '/vault' } },
   };
@@ -225,6 +226,36 @@ describe('sitting controls', () => {
 });
 
 describe('pending dialog lifecycle', () => {
+  test('expired permission cards cannot send late approval', async () => {
+    const f = await fixture();
+    await f.view.uiRequest({ type: 'extension_ui_request', id: 'expired-permission', method: 'select', title: 'Approve bash?', options: ['Allow once', 'Deny'], timeout: 1 });
+    const card = f.view.streamEl.querySelector('details.pi-learn-card');
+    const allow = button(card, 'Allow once');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(card.open).toBe(false);
+    expect(card.querySelector('summary').textContent).toBe('Request expired · nothing approved');
+    expect(allow.disabled).toBe(true);
+    allow.click();
+    expect(f.replies).toEqual([{ id: 'expired-permission', cancelled: true }]);
+    expect(f.view.dialogs.size).toBe(0);
+  });
+
+  test('permission selection sends one reply and collapses into an answered receipt', async () => {
+    const f = await fixture();
+    await f.view.uiRequest({ type: 'extension_ui_request', id: 'permission-1', method: 'select', title: 'Approve bash?\n\ncp example', options: ['Allow once', 'Defer', 'Deny'] });
+    const card = f.view.streamEl.querySelector('details.pi-learn-card');
+    expect(card.open).toBe(true);
+    const allow = button(card, 'Allow once');
+    allow.click();
+    expect(f.replies).toEqual([{ id: 'permission-1', value: 'Allow once' }]);
+    expect(card.open).toBe(false);
+    expect(card.querySelector('summary').textContent).toBe('Answered: Allow once · sent to pi');
+    expect(allow.disabled).toBe(true);
+    allow.click();
+    expect(f.replies).toHaveLength(1);
+    expect(f.view.dialogs.size).toBe(0);
+  });
+
   test('Stop cancels a pending quiz once, clears the queue and rejects stale submission', async () => {
     const f = await fixture();
     await start(f);
@@ -324,7 +355,7 @@ describe('reading position', () => {
 });
 
 function addPath(f: Awaited<ReturnType<typeof fixture>>, graph = 'a["Foundation"] --> b["Apply"]') {
-  const file = new TFile('Resources/Learning/P.md', 'P');
+  const file = new TFile('Learning/P.md', 'P');
   const home = new TFile('Knowledge.md', 'Knowledge');
   f.view.app.vault.getMarkdownFiles = () => [file, home];
   f.view.app.vault.getAbstractFileByPath = (p: string) => p === file.path ? file : p === home.path ? home : null;
@@ -333,7 +364,103 @@ function addPath(f: Awaited<ReturnType<typeof fixture>>, graph = 'a["Foundation"
   return { file, home };
 }
 
+describe('organization review', () => {
+  test('previews a misplaced path and uses the link-aware file manager only on Apply', async () => {
+    const f = await fixture();
+    const { file } = addPath(f);
+    file.path = 'Resources/P.md';
+    (file as any).name = 'P.md';
+    const app = f.view.app;
+    app.metadataCache.unresolvedLinks = {};
+    const moves: string[] = [];
+    app.vault.createFolder = async () => {};
+    app.fileManager = { renameFile: async (file: TFile, path: string) => { moves.push(path); file.path = path; } };
+    const review = new OrganizationReview(app);
+    review.onOpen();
+    expect(moves).toEqual([]);
+    expect(review.contentEl.textContent).toContain('Learning/P.md');
+    button(review.contentEl, 'Apply move').click();
+    await flush();
+    expect(moves).toEqual(['Learning/P.md']);
+    expect(organizationIssues(app).some((issue) => issue.destination)).toBe(false);
+  });
+
+  test('existing destinations are never overwritten', async () => {
+    const f = await fixture();
+    const { file } = addPath(f);
+    file.path = 'Resources/P.md';
+    (file as any).name = 'P.md';
+    f.view.app.metadataCache.unresolvedLinks = {};
+    f.view.app.vault.getAbstractFileByPath = () => file;
+    let moved = false;
+    f.view.app.fileManager = { renameFile: async () => { moved = true; } };
+    const review = new OrganizationReview(f.view.app);
+    review.onOpen();
+    button(review.contentEl, 'Apply move').click();
+    await flush();
+    expect(moved).toBe(false);
+    expect(notices.at(-1)).toContain('Destination exists');
+  });
+});
+
 describe('planning and context', () => {
+  test('Curate accepts source notes, includes one-hop neighbors and scoped structural findings', async () => {
+    const f = await fixture();
+    const source = new TFile('Resources/Workshop.md', 'Workshop');
+    const concept = new TFile('Knowledge/Discovery.md', 'Discovery');
+    const distant = new TFile('Knowledge/Other.md', 'Other');
+    const app = f.view.app;
+    app.vault.getMarkdownFiles = () => [source, concept, distant];
+    app.metadataCache.getFileCache = (file: TFile) => ({ frontmatter: { type: file === source ? 'reference' : 'concept' } });
+    app.metadataCache.resolvedLinks = { [source.path]: { [concept.path]: 1 }, [concept.path]: { [distant.path]: 1 } };
+    app.workspace.getActiveFile = () => source;
+    await f.view.trackPath(source);
+    expect(f.view.focusFile).toBeNull();
+    button(f.view.contentEl, 'Curate').click();
+    await flush();
+    const prompt = f.calls.find((c) => c.type === 'prompt').message;
+    expect(prompt).toStartWith('/skill:curate Curate [[Resources/Workshop]]');
+    expect(prompt).toContain('[[Knowledge/Discovery]]');
+    expect(prompt).not.toContain(distant.path);
+    expect(prompt).toContain('Missing metadata');
+    expect(prompt).toContain('Apply routine wording fixes');
+    expect(prompt).toContain('Do not use the ask tool or /decisions');
+    expect(f.view.pathTitleEl.textContent).toContain('Workshop');
+    expect(button(f.view.contentEl, 'Curate').getAttribute('aria-pressed')).toBe('true');
+    await f.view.trackPath(distant);
+    expect(f.view.curateFile).toBe(source);
+    expect(f.view.scopeEl.textContent).toContain(`Fixed curation target: ${source.path}`);
+    expect(f.view.scopeEl.textContent).toContain('Viewing Other does not change this target');
+  });
+
+  test('Curate can inspect a blocked path and closes without teaching records', async () => {
+    const f = await fixture();
+    const { file } = addPath(f, 'a --> b --> a');
+    await f.view.prepare(file, 'curate');
+    await f.view.sitting('curate');
+    expect(f.calls.find((c) => c.type === 'prompt').message).toStartWith('/skill:curate');
+    f.view.onEvent({ type: 'agent_settled' });
+    await f.view.finishSitting();
+    const finish = f.calls.filter((c) => c.type === 'prompt').at(-1).message;
+    expect(finish).toContain('Do not change learning-path states');
+    expect(finish).toContain('Do not apply unapproved merges');
+    message(f.view, 'Checked; no changes. <!-- pi-learn:sitting-closed -->');
+    f.view.onEvent({ type: 'agent_settled' });
+    expect(f.view.sittingActive).toBe(false);
+    expect(f.view.scopeEl.textContent).not.toContain('Fixed curation target');
+  });
+
+  test('Curate remembers its own model and thinking settings', async () => {
+    const f = await fixture();
+    f.view.kind = 'curate';
+    await f.view.pickModel('provider/curator');
+    await f.view.pickThinking('high');
+    expect((f.plugin.settings as any).curateModel).toBe('provider/curator');
+    expect((f.plugin.settings as any).curateThinking).toBe('high');
+    expect(f.plugin.settings.teachModel).toBe('');
+    expect(f.plugin.settings.practiceModel).toBe('');
+  });
+
   test('the dashboard and reference notes never become lesson focus', async () => {
     const f = await fixture();
     const { file, home } = addPath(f);

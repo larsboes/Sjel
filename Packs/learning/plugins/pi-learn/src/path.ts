@@ -112,13 +112,18 @@ export function resumePoint(path: LearningPath): ResumePoint {
   return node ? { node, reason: 'ready' } : { node: null, reason: 'blocked' };
 }
 
-export type Kind = 'teach' | 'practice';
-export interface SittingBrief { outcome?: string; minutes?: number; next?: string }
+export type Kind = 'teach' | 'practice' | 'curate';
+export interface SittingBrief { outcome?: string; minutes?: number; next?: string; structure?: string[]; related?: string[] }
 
 /** The opening prompt, including a learner-supplied goal, budget and graph-derived next step. */
 export function sittingPrompt(kind: Kind, path: string | null, focus: string | null, topic: string, brief: SittingBrief = {}): string {
   let prompt: string;
-  if (kind === 'practice') {
+  if (kind === 'curate') {
+    prompt = `/skill:curate Curate ${focus ?? path ?? topic}. Start with this note and its directly related active notes; do not expand to the whole vault. Apply routine wording fixes, slimming, metadata repairs and explanatory links directly; starting Curate authorizes those edits. Preserve distinct ideas, caveats, sources and learning progress. Preview merges, deletions and substantial restructuring before applying them. Ask any necessary approval question as plain text in this chat and wait for the answer. Do not use the ask tool or /decisions in this sidebar; do not stop at a proposal when routine authorized edits remain. The selected anchor stays fixed for this sitting even when another note is opened.`;
+    prompt += '\nUse direct read/edit/write tools for routine note changes. Do not add temporary shell backups or mandatory prose-linter commands. Respect any permission refusal; do not retry denied or deferred actions through another tool.';
+    if (brief.related?.length) prompt += `\nDirectly related notes: ${brief.related.join(', ')}`;
+    if (brief.structure) prompt += `\nStructure check for this scope:\n${brief.structure.length ? brief.structure.map((issue) => `- ${issue}`).join('\n') : 'No placement, metadata or unresolved-link issues found.'}`;
+  } else if (kind === 'practice') {
     if (focus) prompt = `/skill:practice Practice the claims of ${focus}${path ? `, on the learning path ${path}` : ''}.`;
     else if (path) prompt = `/skill:practice Practice the held nodes of the learning path ${path}.`;
     else prompt = `/skill:practice ${topic}`;

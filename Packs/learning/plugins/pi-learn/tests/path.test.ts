@@ -29,7 +29,7 @@ describe('prerequisite-aware resume', () => {
   });
 
   test('the planner supplies the exact resume point, budget and outcome', () => {
-    const prompt = sittingPrompt('teach', '[[Resources/Learning/P]]', null, '', { next: 'B: Next', minutes: 25, outcome: 'Predict the bottleneck' });
+    const prompt = sittingPrompt('teach', '[[Learning/P]]', null, '', { next: 'B: Next', minutes: 25, outcome: 'Predict the bottleneck' });
     expect(prompt).toContain('Start at B: Next');
     expect(prompt).toContain('Time budget: 25 minutes');
     expect(prompt).toContain('Desired outcome: Predict the bottleneck');

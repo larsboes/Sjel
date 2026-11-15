@@ -31,7 +31,7 @@ Anatomy is installed globally in `~/.agents/skills/anatomy`, which Pi scans, wit
 Open:
 
 1. Run five real `teach` sessions, each followed by `practice`. Done when
-   `Resources/Learning Log.md` has five teach lines and five practice lines.
+   the configured Learning Log has five teach lines and five practice lines.
 
 Not checked: no figure built by `figures.md` has rendered in Obsidian yet, and no Anatomy
 page has been checked inside `html-embed`. Also not checked: the `🧩 Claims` view renders only in Obsidian, and no one has looked at it yet. Also not checked: no session has run on the new skill text yet.
@@ -41,10 +41,10 @@ Shipped 2026-11-04:
   defines agent access, `status: verified` (facts checked against `sources:`), note anatomy,
   interactive material and teaching records. Interactive figures are full parts of their notes,
   with no static fallback.
-- Vault layout, decided 2026-11-04: `Knowledge/` holds only what is learned (concept notes enter
-  as seedlings while taught). `Resources/` holds the Bases, the contract, the Learning Log,
-  learning paths in `Resources/Learning/` and verified reference notes. `Knowledge.md` at the
-  vault root is the home note.
+- Vault layout lives in the vault contract and `Resources/Vault Layout.json`: Learning holds
+  plans and handoffs, Knowledge holds reusable concepts independently of mastery, and Resources
+  holds sources and vault support. The plugin's organization review previews structural repairs;
+  the skills search all three active folders and check touched notes on close.
 - `teach/references/explanations.md` sets the shape of one explanation step.
 - `figures.md` adds the teaching-figure anatomy, the loop around a figure and the defects of
   imported figures.
@@ -70,6 +70,18 @@ Obsidian plugin, and the Sjel agent on the phone ([`agent.md`](agent.md)). Done 
 practice session runs on the iPhone against vault claims.
 
 ## 3. Stage 3: the learning surface is Obsidian
+
+Curate is the third sidebar mode, backed by `Packs/learning/skills/curate`. It starts from one
+active note and its direct links, receives scoped structural findings, and preserves source
+qualifications and learning evidence. Merges, deletions and substantial restructuring require
+concrete previews. Check vault structure remains a mechanical checker. Type and DOM checks
+cover direct-edit and inline-approval prompts plus the fixed-target notice when browsing away.
+The shared RPC ask deferral remains unchanged; Curate asks necessary questions in chat text.
+Permission cards collapse after an answer and expire with their RPC timeout; tests reject late
+approval clicks. Routine curation uses direct note tools under the existing Markdown grant.
+Type and DOM checks also cover scope, mode-specific settings and closing behavior. Live
+inspection and the three-mode layout have been exercised by the owner. Model-backed routine
+editing and approvals under the corrected instructions remain to be checked after reload.
 
 Decided 2026-11-05, replacing "a Sjel surface only after friction": the surface is the Learn
 Obsidian plugin, [`Packs/learning/plugins/pi-learn/`](../../Packs/learning/plugins/pi-learn/README.md),

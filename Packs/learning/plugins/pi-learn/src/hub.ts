@@ -1,6 +1,7 @@
 import { Component, MarkdownRenderChild, MarkdownRenderer, TFile } from 'obsidian';
 import type PiLearnPlugin from './main';
 import { learningPaths } from './catalog';
+import { vaultLayout } from './layout';
 import { parsePath, progress, resumePoint, type Kind } from './path';
 
 /** Live vault projection; no progress or planning state is copied into the home note. */
@@ -54,9 +55,10 @@ export class LearningHub extends MarkdownRenderChild {
         try { return { file, path: parsePath(await app.vault.cachedRead(file)), error: '' }; }
         catch (error) { return { file, path: null, error: (error as Error).message }; }
       }));
-      const notes = app.vault.getMarkdownFiles().filter((f) => f.path.startsWith('Knowledge/'));
+      const layout = vaultLayout(app);
+      const notes = app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(`${layout.knowledge}/`));
       const claims = notes.filter((f) => app.metadataCache.getFileCache(f)?.frontmatter?.type === 'claim').sort((a, b) => a.path.localeCompare(b.path));
-      const log = app.vault.getAbstractFileByPath('Resources/Learning Log.md');
+      const log = app.vault.getAbstractFileByPath(layout.log);
       const history = log instanceof TFile ? (await app.vault.cachedRead(log)).split('\n').filter((line) => /^- \d{4}-\d{2}-\d{2} ·/.test(line)).slice(-5).reverse().join('\n') : '';
       if (this.disposed || revision !== this.revision) return;
       if (this.history) { this.removeChild(this.history); this.history = null; }
@@ -64,7 +66,7 @@ export class LearningHub extends MarkdownRenderChild {
       el.empty();
       el.addClass('learn-hub');
       const toolbar = el.createDiv({ cls: 'learn-hub-toolbar' });
-      toolbar.createEl('p', { text: `${paths.length} paths · ${notes.filter((f) => app.metadataCache.getFileCache(f)?.frontmatter?.type === 'note').length} concepts · ${claims.length} claims` });
+      toolbar.createEl('p', { text: `${paths.length} paths · ${notes.filter((f) => ['note', 'concept'].includes(app.metadataCache.getFileCache(f)?.frontmatter?.type)).length} concepts · ${claims.length} claims` });
       this.action(toolbar, 'Plan a new topic', null, 'teach');
       el.createEl('h2', { text: 'Choose a learning path' });
       if (!paths.length) el.createEl('p', { text: 'No learning paths yet. Plan a new topic to probe the foundations and build a path.' });
@@ -98,6 +100,15 @@ export class LearningHub extends MarkdownRenderChild {
         this.action(item, 'Plan practice', file, 'practice');
       }
       if (claims.length > 10) practice.createEl('p', { text: 'Open a concept or claim in the vault to practice beyond this preview.' });
+      for (const [label, files] of [
+        ['Reusable knowledge', notes.filter((f) => app.metadataCache.getFileCache(f)?.frontmatter?.type !== 'claim')],
+        ['Supporting resources', app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(`${layout.resources}/`))],
+      ] as const) {
+        const section = el.createEl('details');
+        section.createEl('summary', { text: `${label} · ${files.length}` });
+        const links = section.createEl('ul');
+        for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) this.link(links.createEl('li'), file);
+      }
       el.createEl('h2', { text: 'Recent sittings' });
       if (history) {
         this.history = this.addChild(new Component());

@@ -1,6 +1,6 @@
 # learning
 
-Teaching and practice that grow the Obsidian vault. The skills hold the method. The vault holds
+Teaching, practice and curation that grow the Obsidian vault. The skills hold the method. The vault holds
 the result as concept notes and claim notes. Open work and decisions live in
 [`docs/plans/learning.md`](../../docs/plans/learning.md).
 
@@ -20,6 +20,10 @@ The Learn plugin renders `quiz` and `ask` as cards in Obsidian.
 - **`practice`**: practice on claims already taught: interleaved problems that never name
   their target, one hint at a time, and a retest of every miss or an explicit pending retest when the sitting stops. Reads claim notes, writes only
   the Learning Log line.
+- **`curate`**: maintain one note and its directly related notes by slimming repetition,
+  adding explanatory links, extracting reusable concepts and consolidating overlap. Preserve
+  sources, qualifications and learning progress. Preview merges, deletions and substantial
+  restructuring before applying them; curation creates no teaching/practice log entry.
 
 ## Figures
 
@@ -37,12 +41,14 @@ npx skills add wheresryan22/anatomy -g -a pi claude-code
 
 ## Obsidian plugin
 
-[`plugins/pi-learn/`](plugins/pi-learn/README.md) runs teach and practice sittings with pi in
+[`plugins/pi-learn/`](plugins/pi-learn/README.md) runs teach, practice and curate sittings with pi in
 Obsidian's sidebar, beside the notes they write. It holds the sitting controls, keeps answered
 cards readable, and runs the skill's closing procedure on request. Its `learning-hub` Markdown block projects
 paths, prerequisite-aware next steps, claims and recent handoffs from the vault. The session
 planner supplies a target, desired outcome and time budget; browsing notes leaves an active
-sitting's context fixed. Build and install it with
+sitting's context fixed. The shared vault layout separates Learning, Knowledge and Resources;
+the plugin checks mechanical issues through **Check vault structure**. Curate uses scoped
+structural findings as context for an agent-led improvement pass. Build and install it with
 `tools/obsidian-plugin pi-learn install`; `bun run check` in the plugin directory typechecks it
 and runs its DOM tests.
 

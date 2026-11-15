@@ -1,8 +1,7 @@
 # See schemas/pack.toml.example for the field reference.
-# Pedagogy only. Vault access, the vault contract and the `quiz` pi extension stay in the
-# knowledge Pack; the skills here name `obsidian` and `quiz` and degrade without them.
+# Vault access, the contract and quiz tools stay in the knowledge Pack.
 name        = "learning"
-description = "Teaching and practice that grow the Obsidian vault — probe the edge of understanding, teach one step at a time with interactive figures, and practice on claims already taught with budgeted sittings and resumable handoffs."
-skills      = ["teach", "practice"]
+description = "Teaching, practice and agent-led curation for an organized Obsidian vault — dependency paths, reusable concepts, linked notes and resumable handoffs."
+skills      = ["teach", "practice", "curate"]
 license     = "MIT"
 links       = ["knowledge-base"]

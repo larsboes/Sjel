@@ -13,6 +13,8 @@ Read the vault through the `obsidian` skill. Resolve the vault with `scripts/vau
 have `type: claim` and the format that `teach` writes: `summary:` holds the statement, and each
 `## Because` bullet is one argument whose premises together imply the claim. A claim sits beside
 its concept note or in the domain's `Claims/` folder, so find claims by `type`, not by folder.
+Read `Resources/Vault Layout.json` when present; its `log` path owns the handoff location.
+Keep existing progress and note quality separate from evidence of learner understanding.
 
 ## Rules
 
@@ -52,10 +54,10 @@ its concept note or in the domain's `Claims/` folder, so find claims by `type`, 
    hints, and every problem the student gave up. Use a new surface, never the original one.
    If the student stops or the budget ends, carry the outstanding retests into Close instead
    of extending the sitting.
-5. **Close.** Append one line to `Resources/Learning Log.md`:
+5. **Close.** Append one line to the configured log (default `Learning/Learning Log.md`):
    `- YYYY-MM-DD · practice · <topic> · claims: [[A]], [[B]] · weak: [[C]] · next: <specific problem or changed-surface retest>`.
    Add `pending: <claim links and unfinished problem, retest or contest>` when relevant.
-   A closed sitting means this handoff was saved, not that all claims passed. Write no other note.
+   Check the handoff's links and placement. A closed sitting means this handoff was saved, not that all claims passed. Write no other note.
 
 An outside problem from the student enters at step 3. Solve it, map the claims every correct
 solution uses, then run it with the same hints and retest.

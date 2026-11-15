@@ -3,7 +3,8 @@ import type PiLearnPlugin from './main';
 import { askCard, quizCard, reviewCard } from './cards';
 import { QUESTIONS_PROTOCOL, THINKING_LEVELS, buildLaunch, splitModel } from './launch';
 import { parsePath, pathGraph, progress, resumePoint, sittingPrompt, type Kind, type SittingBrief } from './path';
-import { isLearningNote, isLearningPath, learningPaths } from './catalog';
+import { curationNeighbors, isCuratableNote, isLearningNote, isLearningPath, learningPaths } from './catalog';
+import { organizationIssues } from './organization';
 import { ModelPicker } from './picker';
 import { PiRpc, modelKey, type PiEvent, type PiModel } from './rpc';
 
@@ -35,6 +36,8 @@ export class LearnView extends ItemView {
   private pathFile: TFile | null = null;
   /** The open note when it is not a path note: the concept a sitting starts from. */
   private focusFile: TFile | null = null;
+  private curateFile: TFile | null = null;
+  private browsingFile: TFile | null = null;
   private plannedFocus: TFile | null = null;
   private planOpen = false;
   private paintSeq = 0;
@@ -58,6 +61,7 @@ export class LearnView extends ItemView {
   private badgeEl!: HTMLElement;
   private dotsEl!: HTMLElement;
   private planEl!: HTMLElement;
+  private scopeEl!: HTMLElement;
   private planBtn!: HTMLElement;
   private statusEl!: HTMLElement;
   private streamEl!: HTMLElement;
@@ -68,6 +72,7 @@ export class LearnView extends ItemView {
   private sendBtn!: HTMLButtonElement;
   private teachBtn!: HTMLButtonElement;
   private practiceBtn!: HTMLButtonElement;
+  private curateBtn!: HTMLButtonElement;
   private finishBtn!: HTMLButtonElement;
   private planner!: HTMLDetailsElement;
   private targetSel!: HTMLSelectElement;
@@ -116,8 +121,12 @@ export class LearnView extends ItemView {
     this.teachBtn.onclick = () => void this.sitting('teach');
     this.practiceBtn = controls.createEl('button', { cls: 'pi-learn-chip', text: 'Practice' });
     this.practiceBtn.onclick = () => void this.sitting('practice');
+    this.curateBtn = controls.createEl('button', { cls: 'pi-learn-chip', text: 'Curate' });
+    this.curateBtn.onclick = () => void this.sitting('curate');
     this.finishBtn = controls.createEl('button', { cls: 'pi-learn-chip', text: 'Finish sitting' });
     this.finishBtn.onclick = () => void this.finishSitting();
+    this.scopeEl = head.createDiv({ cls: 'pi-learn-title-sub' });
+    this.scopeEl.hide();
     this.planner = head.createEl('details', { cls: 'pi-learn-planner' });
     this.planner.createEl('summary', { text: 'Session planner' });
     const field = (label: string) => {
@@ -125,7 +134,7 @@ export class LearnView extends ItemView {
       wrapper.createSpan({ text: label });
       return wrapper;
     };
-    this.targetSel = field('Path or topic').createEl('select', { attr: { 'aria-label': 'Path or topic' } });
+    this.targetSel = field('Note, path or topic').createEl('select', { attr: { 'aria-label': 'Note, path or topic' } });
     this.refreshTargets();
     this.targetSel.onchange = () => void this.trackPath(this.app.workspace.getActiveFile());
     this.outcomeInput = field('Desired outcome').createEl('input', { attr: { type: 'text', placeholder: 'What should become possible?', 'aria-label': 'Desired outcome' } });
@@ -133,7 +142,8 @@ export class LearnView extends ItemView {
     this.modeSel = field('Mode').createEl('select', { attr: { 'aria-label': 'Sitting mode' } });
     this.modeSel.createEl('option', { text: 'Teach', attr: { value: 'teach' } });
     this.modeSel.createEl('option', { text: 'Practice', attr: { value: 'practice' } });
-    this.modeSel.onchange = () => { this.kind = this.modeSel.value as Kind; this.paintControls(); };
+    this.modeSel.createEl('option', { text: 'Curate', attr: { value: 'curate' } });
+    this.modeSel.onchange = () => { this.kind = this.modeSel.value as Kind; void this.trackPath(this.app.workspace.getActiveFile()); this.paintControls(); };
     this.startBtn = this.planner.createEl('button', { text: 'Start planned sitting', cls: 'mod-cta' });
     this.startBtn.onclick = () => void this.sitting(this.modeSel.value as Kind);
     this.statusEl = root.createDiv({ cls: 'pi-learn-status', attr: { role: 'status' } });
@@ -219,7 +229,7 @@ export class LearnView extends ItemView {
   private refreshTargets() {
     const selected = this.targetSel.value;
     this.targetSel.empty();
-    this.targetSel.createEl('option', { text: 'Follow the open concept or path', attr: { value: '' } });
+    this.targetSel.createEl('option', { text: 'Follow the open note or path', attr: { value: '' } });
     this.targetSel.createEl('option', { text: 'New topic', attr: { value: '__new__' } });
     for (const file of learningPaths(this.app)) this.targetSel.createEl('option', { text: file.basename, attr: { value: file.path } });
     if (this.plannedFocus) this.targetSel.createEl('option', { text: this.plannedFocus.basename, attr: { value: this.plannedFocus.path } });
@@ -232,7 +242,7 @@ export class LearnView extends ItemView {
       this.notice('Finish the current sitting before planning another.');
       return;
     }
-    this.plannedFocus = file && isLearningNote(this.app, file) ? file : null;
+    this.plannedFocus = file && (kind === 'curate' ? isCuratableNote(this.app, file) : isLearningNote(this.app, file)) ? file : null;
     this.refreshTargets();
     this.targetSel.value = file ? file.path : '__new__';
     this.lastTopic = '';
@@ -246,7 +256,8 @@ export class LearnView extends ItemView {
   }
 
   private async trackPath(file: TFile | null) {
-    if (this.sittingActive || this.transitioning) return;
+    this.browsingFile = file;
+    if (this.sittingActive || this.transitioning) { this.paintScope(); return; }
     if (this.targetSel.value === '__new__') file = null;
     else if (this.targetSel.value) {
       const target = this.app.vault.getAbstractFileByPath(this.targetSel.value);
@@ -254,6 +265,7 @@ export class LearnView extends ItemView {
     }
     this.pathFile = null;
     this.focusFile = null;
+    this.curateFile = file && isCuratableNote(this.app, file) ? file : null;
     if (file?.extension === 'md' && isLearningPath(this.app, file)) this.pathFile = file;
     else if (file?.extension === 'md' && isLearningNote(this.app, file)) {
       const links = this.app.metadataCache.resolvedLinks;
@@ -263,11 +275,29 @@ export class LearnView extends ItemView {
     await this.paintPath();
   }
 
+  private paintScope() {
+    if (!this.scopeEl) return;
+    const curation = this.kind === 'curate';
+    this.scopeEl.toggle(curation);
+    if (!curation) return;
+    const anchor = this.curateFile;
+    this.scopeEl.setText(anchor
+      ? `${this.sittingActive ? 'Fixed curation target' : 'Curation target'}: ${anchor.path}${this.sittingActive && this.browsingFile && this.browsingFile.path !== anchor.path ? ` · Viewing ${this.browsingFile.basename} does not change this target. Finish this sitting before curating another note.` : ''}`
+      : 'Select an existing note to curate; a typed topic must resolve to one anchor.');
+  }
+
   private async paintPath() {
+    this.paintScope();
     const seq = ++this.paintSeq;
     this.pathTitleEl.empty();
     this.dotsEl.empty();
-    this.planBtn.toggle(this.pathFile !== null);
+    this.planBtn.toggle(this.kind !== 'curate' && this.pathFile !== null);
+    this.planEl.toggle(this.kind !== 'curate' && this.planOpen);
+    if (this.kind === 'curate') {
+      this.pathTitleEl.createDiv({ cls: 'pi-learn-title-name', text: this.curateFile?.basename ?? 'Choose a note to curate' });
+      this.pathTitleEl.createDiv({ cls: 'pi-learn-title-sub', text: 'Slim, connect and organize · one note and its direct links' });
+      return;
+    }
     const focus = this.focusFile;
     if (!this.pathFile) {
       const name = this.pathTitleEl.createDiv({
@@ -363,8 +393,8 @@ export class LearnView extends ItemView {
   private async applyKind() {
     const pi = this.ensurePi();
     const s = this.plugin.settings;
-    const model = splitModel(this.kind === 'teach' ? s.teachModel : s.practiceModel);
-    const level = this.kind === 'teach' ? s.teachThinking : s.practiceThinking;
+    const model = splitModel(s[`${this.kind}Model`] ?? '');
+    const level = s[`${this.kind}Thinking`];
     if (model) await pi.command({ type: 'set_model', ...model }).catch((e) => this.notice(e.message, true));
     if (level) await pi.command({ type: 'set_thinking_level', level }).catch(() => undefined);
     await this.paintModel();
@@ -386,8 +416,7 @@ export class LearnView extends ItemView {
     const model = splitModel(key);
     if (!model) return;
     await this.ensurePi().command({ type: 'set_model', ...model }).catch((e) => this.notice(e.message, true));
-    if (this.kind === 'teach') this.plugin.settings.teachModel = key;
-    else this.plugin.settings.practiceModel = key;
+    this.plugin.settings[`${this.kind}Model`] = key;
     await this.plugin.save();
     await this.paintModel();
   }
@@ -398,8 +427,7 @@ export class LearnView extends ItemView {
 
   private async pickThinking(level: string) {
     await this.ensurePi().command({ type: 'set_thinking_level', level }).catch((e) => this.notice(e.message, true));
-    if (this.kind === 'teach') this.plugin.settings.teachThinking = level;
-    else this.plugin.settings.practiceThinking = level;
+    this.plugin.settings[`${this.kind}Thinking`] = level;
     await this.plugin.save();
   }
 
@@ -419,8 +447,9 @@ export class LearnView extends ItemView {
   private async sitting(kind: Kind) {
     if (this.transitioning || this.disposed || this.stopping) return;
     const topic = this.input.value.trim() || (!this.pathFile && !this.focusFile ? this.lastTopic : '');
-    const path = this.pathFile ? `[[${this.pathFile.path.replace(/\.md$/, '')}]]` : null;
-    const focus = this.focusFile ? `[[${this.focusFile.path.replace(/\.md$/, '')}]]` : null;
+    const path = kind !== 'curate' && this.pathFile ? `[[${this.pathFile.path.replace(/\.md$/, '')}]]` : null;
+    const focusFile = kind === 'curate' ? this.curateFile : this.focusFile;
+    const focus = focusFile ? `[[${focusFile.path.replace(/\.md$/, '')}]]` : null;
     if (!path && !focus && !topic) {
       this.input.focus();
       this.notice('Open a note or a learning path, or type a topic first.');
@@ -436,6 +465,12 @@ export class LearnView extends ItemView {
     this.transitioning = true;
     this.paintControls();
     try {
+      if (kind === 'curate' && focusFile) {
+        const neighbors = curationNeighbors(this.app, focusFile);
+        const scope = new Set([focusFile.path, ...neighbors.map((file) => file.path)]);
+        brief.related = neighbors.map((file) => `[[${file.path.replace(/\.md$/, '')}]]`);
+        brief.structure = organizationIssues(this.app).filter((issue) => scope.has(issue.file.path)).map((issue) => `${issue.file.path}: ${issue.message}`);
+      }
       if (kind === 'teach' && this.pathFile && !this.focusFile) {
         const graph = parsePath(await this.app.vault.cachedRead(this.pathFile));
         const next = graph && resumePoint(graph);
@@ -458,6 +493,7 @@ export class LearnView extends ItemView {
       this.kind = kind;
       this.modeSel.value = kind;
       await this.applyKind();
+      await this.paintPath();
     } catch (err) {
       this.notice(`Could not start the sitting: ${(err as Error).message}`, true);
       return;
@@ -468,13 +504,14 @@ export class LearnView extends ItemView {
     if (this.disposed) return;
     this.clearTranscript();
     this.sittingActive = true;
+    this.paintScope();
     this.planner.open = false;
     this.lastTopic = topic;
     this.closing = false;
     this.paintBadge();
     this.paintControls();
-    const label = this.focusFile?.basename ?? this.pathFile?.basename.replace(/\s+—\s+Learning Path$/, '') ?? topic;
-    this.divider(`${kind === 'teach' ? 'Teaching' : 'Practice'} · ${label}`);
+    const label = focusFile?.basename ?? this.pathFile?.basename.replace(/\s+—\s+Learning Path$/, '') ?? topic;
+    this.divider(`${kind === 'teach' ? 'Teaching' : kind === 'curate' ? 'Curation' : 'Practice'} · ${label}`);
     this.input.value = '';
     this.grow();
     await this.prompt(sittingPrompt(kind, path, focus, topic, brief), null);
@@ -547,7 +584,9 @@ export class LearnView extends ItemView {
       this.closeFailed = false;
       this.paintControls();
       await this.prompt(
-        `Finish this ${this.kind} sitting using the active skill's Close procedure. Treat Finish as a request to stop teaching or posing problems now. Save an honest partial handoff when a gate, contest, problem or retest remains; list each unresolved item rather than requiring another question. Complete the required claim review, note and learning-path updates, and Learning Log entry that apply to this sitting. Do not invent mastery or record a completed session when the closing checks or writes fail. Summarize what was saved and the next step. Only after the closing procedure and required writes succeed, end the final reply with ${CLOSED_MARKER}. Unfinished learning may be recorded as pending and still close the sitting. A failed required write or a claim saved without required review is a closing failure: report it and do not emit that marker. Save already reviewed material and defer unreviewed claims when stopping.`,
+        this.kind === 'curate'
+          ? `Finish this curation sitting using the curate skill's Close procedure. Stop editing now, verify changes already made, and summarize changed files, preserved sources and unresolved proposals. Do not apply unapproved merges, deletions or restructuring. Do not change learning-path states, invent claims or append a teaching/practice session to the Learning Log. End with ${CLOSED_MARKER} only after the required checks and writes succeed; report failures without the marker.`
+          : `Finish this ${this.kind} sitting using the active skill's Close procedure. Treat Finish as a request to stop teaching or posing problems now. Save an honest partial handoff when a gate, contest, problem or retest remains; list each unresolved item rather than requiring another question. Complete the required claim review, note and learning-path updates, and Learning Log entry that apply to this sitting. Do not invent mastery or record a completed session when the closing checks or writes fail. Summarize what was saved and the next step. Only after the closing procedure and required writes succeed, end the final reply with ${CLOSED_MARKER}. Unfinished learning may be recorded as pending and still close the sitting. A failed required write or a claim saved without required review is a closing failure: report it and do not emit that marker. Save already reviewed material and defer unreviewed claims when stopping.`,
         null,
       );
     } catch (err) {
@@ -845,26 +884,42 @@ export class LearnView extends ItemView {
 
   /** A plain inline dialog for every other extension request. */
   private genericDialog(e: PiEvent, dialog: PendingDialog) {
-    const card = this.streamEl.createDiv({ cls: 'pi-learn-card' });
+    const card = this.streamEl.createEl('details', { cls: 'pi-learn-card' });
+    card.open = true;
     this.revealPending(card);
-    card.createDiv({ cls: 'pi-learn-card-label', text: e.title ?? '' });
-    if (e.message) card.createDiv({ cls: 'pi-learn-context', text: e.message });
+    const summary = card.createEl('summary', { cls: 'pi-learn-card-label', text: e.title?.split('\n')[0] ?? 'Question' });
     const body = card.createDiv({ cls: 'pi-learn-card-body' });
+    if (e.title?.includes('\n')) body.createEl('pre', { cls: 'pi-learn-context', text: e.title });
+    if (e.message) body.createDiv({ cls: 'pi-learn-context', text: e.message });
+    let expiry: number | null = null;
+    const clearExpiry = () => { if (expiry !== null) window.clearTimeout(expiry); expiry = null; };
     const disable = () => {
       card.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLTextAreaElement>('button,input,textarea').forEach((el) => { el.disabled = true; });
     };
     const cancel = () => {
+      clearExpiry();
       disable();
-      card.createDiv({ cls: 'pi-learn-card-summary', text: 'Cancelled' });
+      summary.setText('Request cancelled · nothing approved');
+      card.open = false;
     };
     dialog.controller.signal.addEventListener('abort', cancel, { once: true });
     const done = (answer: DialogAnswer, label: string) => {
       if (this.dialogs.get(e.id) !== dialog) return;
+      clearExpiry();
       dialog.controller.signal.removeEventListener('abort', cancel);
       disable();
       this.replyDialog(e.id, dialog, answer);
-      card.createDiv({ cls: 'pi-learn-card-summary', text: label });
+      summary.setText(`Answered: ${label} · sent to pi`);
+      card.open = false;
     };
+    if (typeof e.timeout === 'number' && Number.isFinite(e.timeout) && e.timeout > 0) {
+      expiry = window.setTimeout(() => {
+        if (this.dialogs.get(e.id) !== dialog) return;
+        dialog.controller.abort();
+        this.replyDialog(e.id, dialog, { cancelled: true });
+        summary.setText('Request expired · nothing approved');
+      }, e.timeout);
+    }
     if (e.method === 'select') {
       const list = body.createDiv({ cls: 'pi-learn-options' });
       for (const option of e.options ?? []) {
@@ -889,9 +944,9 @@ export class LearnView extends ItemView {
 
   private emptyState() {
     const empty = this.streamEl.createDiv({ cls: 'pi-learn-empty' });
-    empty.createDiv({ cls: 'pi-learn-empty-title', text: 'Teach or practice' });
+    empty.createDiv({ cls: 'pi-learn-empty-title', text: 'Teach, practice or curate' });
     empty.createDiv({ cls: 'pi-learn-empty-note', text: 'Choose above, or type a topic and press Enter.' });
-    empty.createDiv({ cls: 'pi-learn-empty-note', text: 'Each sitting starts fresh. The notes carry what you learned.' });
+    empty.createDiv({ cls: 'pi-learn-empty-note', text: 'Each sitting starts fresh. Notes carry knowledge, progress and curation.' });
   }
 
   private paintBadge() {
@@ -935,6 +990,7 @@ export class LearnView extends ItemView {
   }
 
   private paintControls() {
+    this.paintScope();
     if (!this.sendBtn) return;
     const locked = this.transitioning || this.stopping || this.disposed;
     const planningLocked = locked || this.sittingActive;
@@ -944,14 +1000,16 @@ export class LearnView extends ItemView {
     }
     this.teachBtn.disabled = locked || this.closing;
     this.practiceBtn.disabled = locked || this.closing;
+    this.curateBtn.disabled = locked || this.closing;
     this.teachBtn.setAttr('aria-pressed', String(this.sittingActive && this.kind === 'teach'));
     this.practiceBtn.setAttr('aria-pressed', String(this.sittingActive && this.kind === 'practice'));
+    this.curateBtn.setAttr('aria-pressed', String(this.sittingActive && this.kind === 'curate'));
     this.finishBtn.disabled = locked || !this.sittingActive || this.closing;
     this.finishBtn.setAttr('title', !this.sittingActive ? 'Start a sitting first' : this.closing ? 'Saving learning records and the next step' : 'Complete the skill’s closing procedure and save its learning records');
     this.finishBtn.setText(this.closing ? 'Finishing…' : 'Finish sitting');
     this.sendBtn.disabled = locked;
     const stop = this.streaming && !this.input.value.trim();
-    const label = stop ? 'Stop generating' : this.streaming ? 'Send steering message (Enter)' : this.sittingActive ? 'Send message (Enter)' : `Start ${this.kind === 'teach' ? 'teaching' : 'practice'} (Enter)`;
+    const label = stop ? 'Stop generating' : this.streaming ? 'Send steering message (Enter)' : this.sittingActive ? 'Send message (Enter)' : `Start ${this.kind === 'teach' ? 'teaching' : this.kind === 'curate' ? 'curation' : 'practice'} (Enter)`;
     setIcon(this.sendBtn, stop ? 'square' : 'arrow-up');
     this.sendBtn.setAttr('aria-label', label);
     this.sendBtn.setAttr('title', label);

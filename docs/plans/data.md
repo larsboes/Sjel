@@ -32,6 +32,7 @@ Shared typed staging, retained delivery provenance and owner-aligned deduplicati
 `f1e0f3ef` ([mail evidence contract](../capabilities/mail-evidence.md)).
 The body-free reviewed-label evaluator shipped in `2d88fe76`
 ([evaluation contract](../capabilities/mail-evidence.md#reviewed-local-evaluation)).
+AFM-only mail dispatch and evaluation shipped in `7f21c12b`.
 
 Remaining work, in order:
 
@@ -40,10 +41,10 @@ Remaining work, in order:
    order, shipment, cancellation, delivery, shipment preparation and a feedback request. Labels
    were frozen before model output; they are not human ground truth. The source representation
    is pseudonymized `c1` thread bodies, supplied on stdin and never stored. Corpus and report
-   files stay in the private overlay with mode `0600`. The configured Qwen role scored zero
-   cases because `On the go` excluded `other-local-models`; the permitted Apple role also
-   deferred all cases. No model accuracy result exists. Owner runtime controls reject agent
-   tokens. Resume the bounded run after an owner admits the configured role. Add human review,
+   files stay in the private overlay with mode `0600`. Generation is AFM-only; other local and
+   hosted generators are excluded. AFM passes the profile and context checks on all seven cases
+   but fails shared model admission (`model_admission`). No accuracy result exists. Diagnose
+   that gate through the owning capability without bypassing it. Add human review,
    project assignments, English cases and actual returns before broader acceptance. A native
    per-message source adapter remains necessary for production classification/chunking coverage
    and repeatability across pseudonymization sessions. Done when a repeatable local run reports
@@ -71,12 +72,12 @@ Remaining work, in order:
    automated reasoning remain deferred until an interoperability or inference requirement
    cannot be met by these contracts.
 
-Verification: all 519 Comms tests and all-target Clippy passed for the evaluator, including nine
-scoring, privacy and source-fingerprint checks. The earlier shared-contract slice passed 625
+Verification: all 521 Comms tests and all-target Clippy passed, including non-AFM refusal,
+context failure classification and nine evaluator checks. The earlier shared-contract slice passed 625
 tests across Comms, Inventory and Projects. Route-schema, store-transaction, relative-document-link,
 publication-hygiene and self-model checks passed. The existing architecture freshness failure is
-an unrelated stale `sqld` description; doctor reports an overdue backup. Both real-mail model
-attempts produced only deferrals. Production replay, service installation, UI acceptance and
+an unrelated stale `sqld` description; doctor reports an overdue backup. The AFM pilot passed
+profile/context admission but failed the shared model gate. Production replay, service installation, UI acceptance and
 workspace-wide checks have not run. Scanning remains disabled.
 
 ## Mail evidence for projects and inventory
@@ -149,8 +150,8 @@ and 2 project proposals staged. 9 first failed at the body read while a backfill
 Gmail quota and passed on a rerun; a body read is now retried twice, and a limit failure names
 its stage (`mail_body_too_long`, `mail_body_unreadable`, `mail_thread_too_long`).
 
-**Open:** scanning and replay are disabled. A scan uses the `mail_evidence` role when the
-overlay defines one, else `summarization_light`. Decided 2026-11-05: the operator's own name
+**Open:** scanning and replay are disabled. A scan defaults to `summarization_light`; every
+selected role must resolve to AFM. The operator's own name
 does not raise a mail to `c2` (`self_tokens` in the people registry, read by
 `people_registry::is_known_other_person`). The operator's entity became `self` through
 `POST /api/entities/{id}/self`. A sweep with the registry loaded lowers a row that only this
@@ -158,16 +159,11 @@ rule raised; a blind sweep and every other `c2` reason never lower. Inventory it
 data class, so a `c2`
 delivery can be reviewed or matched but cannot create an item. Projects refuses `c2` evidence on
 a `c1` record. An approved proposal is not withdrawn when its thread later becomes `c3`; its
-evidence is already in the reviewed record. No project proposal has staged from real mail.
+evidence is already in the reviewed record.
 
-**Idea, not scheduled:** align extracted evidence with a cloud model without sending mail. Local
-extraction keeps the mail; a cloud role receives only the extracted product title and candidate
-names (inventory items, `c0` or `c1` projects) and answers which candidate it belongs to. Sjel
-applies the rest locally. Measure local alignment on real mail that matches an existing item or
-project first; build this only if local matching fails. It needs two decisions: whether the
-owner's own name as recipient keeps a mail `c1` instead of `c2`, and whether an automatic
-title-only derivative may skip the per-document preview approval of
-`crates/comms/src/cloud_derivative.rs`. Class gate: `content_item::cloud_admission`.
+Cloud-assisted evidence alignment is rejected. Sjel resolves source-scoped identifiers and
+reviewed aliases first; lexical similarity retrieves candidates and never establishes identity.
+Unresolved mentions remain explicitly unknown or ambiguous.
 
 ## 1. Import
 
@@ -514,29 +510,33 @@ the GPUI Settings tab. No new client, page or CLI verb set.
   It fails if a tracked artifact names a model or key file that the surface does not report, or if
   its verdict for a backend disagrees with `tools/model-check`.
 
-### oMLX on AC only
+### AFM and Sjel-owned data processing
 
-Decided 2026-11-06: oMLX stays, and it runs on AC power only. On battery, every role that it
-serves waits. A stopped loopback server defers its work and uses no retry budget (`9ca4426b`).
-AFM serves the roles it has passed a measurement for: `assistant`, `summarization_light` and
-`document_classification`.
+Data extraction and mapping use AFM as their sole generative backend. Sjel owns the algorithms
+that establish structure and identity. A model proposal never replaces a validated identifier,
+a source excerpt or a reviewed decision. Unsupported input remains unresolved.
 
-No other oMLX role moves without a measurement on its own job, per the 2026-10-24 rule in
-[`research/local-decision-models.md`](../../research/local-decision-models.md#small-local-models-specific-jobs-only-decided-2026-10-24):
+Implement and measure in this order:
 
-- `embedding`, `reranking`: AFM has no equivalent. Apple NLEmbedding scored 3/6 and 4/6 useful
-  top-1 on the frozen comms corpus (`systems.toml`, `[apple-natural-language]`). A different model
-  also means re-embedding every stored vector.
-- `mail_evidence`: AFM staged nothing on the first real-mail run, because its rows broke the
-  grounding rules (see "Mail evidence for projects and inventory").
-- `summarization`: the long-item rung behind `summarization_light`. Its items wait for AC.
-- `coding`: the agent capability calls Sjel tools on this role. A cloud backend would send
-  personal tool results off the machine, so it stays local.
-- `assistant_strong`: open. Candidate: AFM phrases the answer, and a rule table selects and
-  calls the read-only tool, because AFM failed tool calls on 3 prompts of 3. Not designed yet.
+1. Parse source-provided structure and stable identifiers before interpreting prose. Normalize
+   dates, units and labels within owner contracts, retaining provenance and original values.
+2. Resolve exact source-scoped keys and reviewed aliases. Use lexical similarity to retrieve
+   candidates; return exact, ambiguous or unknown rather than guessing a link.
+3. Evaluate small statistical models only where reviewed labels show a failure that rules do
+   not address. Reuse the training/evaluation pattern in `crates/comms/src/feedback.rs`, which
+   already implements logistic regression with class-balance and held-out quality gates. Its
+   feed decisions are not labels for purchase events. Seven pilot messages do not justify a
+   new classifier.
+4. Use AFM for bounded unstructured extraction, then apply deterministic grounding and owner
+   validation. Measure context coverage and refusal behavior separately from extraction errors.
+5. Inventory remaining generator, embedding and reranking roles before wider deployment changes.
+   Evaluate existing lexical scoring and the Apple Natural Language adapter against each task's
+   labelled corpus. Retain vector provenance and reindex deliberately if its producer changes.
 
-**Operator step, not run:** `sjel runtime allow other-local-models off`. Until it runs, the
-battery profile still admits oMLX.
+Open acceptance: the AFM pilot must score through the normal admission path; wider assistant,
+summary, OCR and retrieval roles need
+an explicit consumer-by-consumer migration. No model server is stopped or removed by the mail
+pipeline change. Server-backed embedding/reranking replacements need their own measured plan.
 
 ## 4. Adaptive data
 

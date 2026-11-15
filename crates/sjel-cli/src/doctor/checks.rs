@@ -819,46 +819,20 @@ fn harness_sandboxes(ctx: &mut Ctx) {
         return;
     }
     let home = PathBuf::from(home());
-    let data = Path::new(&ctx.overlay_path)
-        .join("data")
-        .display()
-        .to_string();
-    let read = |path: PathBuf| std::fs::read_to_string(path).ok();
     let claude_dir = std::env::var("CLAUDE_CONFIG_DIR")
         .ok()
         .filter(|v| !v.is_empty())
         .map_or_else(|| home.join(".claude"), |d| PathBuf::from(expand_home(&d)));
-    let enrolled: BTreeSet<String> =
-        std::fs::read_dir(Path::new(&ctx.overlay_path).join("config/agent-tokens"))
-            .map(|dir| {
-                dir.flatten()
-                    .filter_map(|e| {
-                        e.file_name()
-                            .to_str()?
-                            .strip_suffix(".sha256")
-                            .map(str::to_owned)
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-    let codex = read(home.join(".codex/config.toml"));
-    let claude = read(claude_dir.join("settings.json"));
-    let walls = super::pure::harness_walls(&super::pure::HarnessWalls {
-        data: &data,
-        codex: codex.as_deref(),
-        claude: claude.as_deref(),
-        pi: home.join(".pi/agent/bin/pi").exists(),
-        antigravity: home.join(".local/bin/agy").exists(),
-        enrolled: &enrolled,
-    });
+    let walls =
+        sjel_server::harness::on_this_machine(&home, Path::new(&ctx.overlay_path), &claude_dir);
     if walls.is_empty() {
         ctx.ok("no agent harness installed");
     }
     for (level, message) in walls {
         match level {
-            super::pure::Level::Ok => ctx.ok(message),
-            super::pure::Level::Warn => ctx.warn(message),
-            super::pure::Level::Bad => ctx.bad(message),
+            sjel_server::harness::Level::Ok => ctx.ok(message),
+            sjel_server::harness::Level::Warn => ctx.warn(message),
+            sjel_server::harness::Level::Bad => ctx.bad(message),
         }
     }
 }

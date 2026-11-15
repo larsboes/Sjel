@@ -23,10 +23,11 @@
 
 use std::net::SocketAddr;
 
-/// The agent identity: reads pseudonymized, writes under the owner's mode.
 pub mod agent;
 pub mod agent_policy;
 mod auth;
+/// The agent identity: reads pseudonymized, writes under the owner's mode.
+pub mod harness;
 /// The TLS listener for paired devices on the local network (PRD Q119).
 pub mod lan;
 /// The browser-origin refusal two capabilities apply to C2 surfaces.

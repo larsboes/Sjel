@@ -19,6 +19,8 @@ reqwest = { workspace = true, features = ["blocking"] }
 # capability's errors that way. No new build cost: axum's default features
 # already resolve serde_json for `axum::Json`.
 serde_json.workspace = true
+serde = { workspace = true, features = ["derive"] }
+toml.workspace = true
 # Approval ids (src/agent_policy.rs).
 getrandom.workspace = true
 tokio = { workspace = true, features = ["net"] }

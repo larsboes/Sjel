@@ -5445,12 +5445,14 @@ dependencies = [
  "reqwest",
  "rustix 1.1.6",
  "rustls",
+ "serde",
  "serde_json",
  "sha2 0.11.1",
  "sjel-config",
  "sjel-pseudonymize",
  "tokio",
  "tokio-rustls",
+ "toml",
 ]
 
 [[package]]

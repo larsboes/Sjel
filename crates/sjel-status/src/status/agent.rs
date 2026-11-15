@@ -116,3 +116,35 @@ pub(crate) async fn agent_decision_handler(
         .map(Json)
         .map_err(|e| (StatusCode::CONFLICT, Json(json!({ "error": e }))))
 }
+
+/// `GET /api/sjel-status/agent/harnesses`: each installed harness's wall around the overlay's
+/// `data/`, and each agent name with its own token, tier and data-class cap. Read-only; the agent
+/// token cannot reach it (`AGENT_ROUTES` in `main.rs`).
+pub(crate) async fn harnesses_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let files = files()?;
+    let overlay = sjel_config::overlay_root().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({ "error": "no overlay is configured" })),
+        )
+    })?;
+    let home = std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+    let claude_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
+        .filter(|d| !d.is_empty())
+        .map_or_else(|| home.join(".claude"), std::path::PathBuf::from);
+    let walls: Vec<Value> = sjel_server::harness::on_this_machine(&home, &overlay, &claude_dir)
+        .into_iter()
+        .map(|(level, message)| json!({ "level": level, "message": message }))
+        .collect();
+    let agents: Vec<Value> = sjel_server::harness::enrolled_names(&overlay)
+        .into_iter()
+        .map(|name| {
+            json!({
+                "name": name,
+                "tier": files.tier_for(&name).as_str(),
+                "cap": files.cap_for(&name),
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "walls": walls, "agents": agents })))
+}

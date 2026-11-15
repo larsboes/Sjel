@@ -250,6 +250,11 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/sjel-status/agent/harnesses",
+        "Each installed agent harness's wall around the overlay's data/, and each agent name with its own token, tier and data-class cap. Owner only.",
+    ),
+    r(
+        "GET",
         "/api/sjel-status/events",
         "The health and agent answers as server-sent events: one `snapshot` frame per change, carrying both. Read instead of polling the two above.",
     ),
@@ -563,6 +568,7 @@ fn build_router(shell: proxy::Proxy) -> Router {
         )
         .route("/api/sjel-status/agent", get(agent_handler))
         .route("/api/sjel-status/events", get(events_handler))
+        .route("/api/sjel-status/agent/harnesses", get(harnesses_handler))
         .route("/api/sjel-status/agent/mode", post(agent_mode_handler))
         .route(
             "/api/sjel-status/agent/approvals/{id}",
@@ -1246,6 +1252,7 @@ mod agent_route_tests {
             ("GET", "/api/sjel-status/credentials"),
             ("GET", "/api/sjel-status/mirror"),
             ("GET", "/api/sjel-status/agent"),
+            ("GET", "/api/sjel-status/agent/harnesses"),
             ("POST", "/api/sjel-status/agent/mode"),
             ("GET", "/api/sjel-status/capabilities"),
             ("GET", "/api/finance/accounts"),

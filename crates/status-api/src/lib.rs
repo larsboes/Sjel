@@ -126,6 +126,39 @@ pub struct AgentView {
     pub calls: Vec<AgentCall>,
 }
 
+/// `GET /api/sjel-status/agent/harnesses`: each installed harness's wall around the overlay's
+/// `data/`, and each agent name with its own token.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct HarnessesView {
+    #[serde(default)]
+    pub walls: Vec<HarnessWall>,
+    #[serde(default)]
+    pub agents: Vec<AgentToken>,
+}
+
+/// One finding about one harness's wall.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct HarnessWall {
+    /// `ok` · `warn` · `bad`.
+    pub level: String,
+    pub message: String,
+}
+
+/// One agent name with its own token.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct AgentToken {
+    pub name: String,
+    /// The tier is logged only; every tier reads the pseudonymized view.
+    #[serde(default)]
+    pub tier: String,
+    /// The highest data class the token reads, or none for no cap.
+    #[serde(default)]
+    pub cap: Option<String>,
+}
+
+/// The caps `POST /api/sjel-status/agent/harnesses/{name}/cap` accepts; none removes the cap.
+pub const AGENT_CAPS: [&str; 3] = ["c0", "c1", "c2"];
+
 /// One capability's agent gate: the mode it runs at, and the routes that always ask.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AgentGate {

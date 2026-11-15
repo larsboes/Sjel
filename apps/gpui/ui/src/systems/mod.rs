@@ -33,7 +33,7 @@ use gpui_kit::{
 use crate::data::{Busy, Remote, Repo};
 use crate::primitives::sub_tabs;
 use crate::theme::{Palette, ThemeContext};
-use sjel_gpui_core::shell::AgentView;
+use sjel_gpui_core::shell::{AgentView, HarnessesView};
 use sjel_gpui_core::systems::{
     Finding, MacmonSample, RuntimeStatus, StorageHistory, StorageReport, UpdatesReport,
 };
@@ -51,6 +51,7 @@ pub struct SystemsPage {
     pub(super) updates: Remote<UpdatesReport>,
     pub(super) findings: Remote<Vec<Finding>>,
     pub(super) agent: Remote<AgentView>,
+    pub(super) harnesses: Remote<HarnessesView>,
     pub(super) runtime: Remote<RuntimeStatus>,
     derived: SystemsDerived,
     pub(super) busy: Busy,
@@ -71,6 +72,7 @@ impl SystemsPage {
             updates: Remote::default(),
             findings: Remote::default(),
             agent: Remote::default(),
+            harnesses: Remote::default(),
             runtime: Remote::default(),
             derived: SystemsDerived::default(),
             busy: Busy::default(),
@@ -247,7 +249,8 @@ impl Render for SystemsPage {
             }
             SystemsTab::Agent => {
                 let agent = self.agent_panel(palette, cx);
-                root = root.child(agent);
+                let harnesses = self.harnesses_panel(palette, cx);
+                root = root.child(agent).child(harnesses);
             }
         }
         root.into_any_element()

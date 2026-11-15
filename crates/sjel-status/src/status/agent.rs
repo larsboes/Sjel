@@ -132,19 +132,62 @@ pub(crate) async fn harnesses_handler() -> Result<Json<Value>, (StatusCode, Json
     let claude_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
         .filter(|d| !d.is_empty())
         .map_or_else(|| home.join(".claude"), std::path::PathBuf::from);
-    let walls: Vec<Value> = sjel_server::harness::on_this_machine(&home, &overlay, &claude_dir)
+    let walls = sjel_server::harness::on_this_machine(&home, &overlay, &claude_dir)
         .into_iter()
-        .map(|(level, message)| json!({ "level": level, "message": message }))
-        .collect();
-    let agents: Vec<Value> = sjel_server::harness::enrolled_names(&overlay)
-        .into_iter()
-        .map(|name| {
-            json!({
-                "name": name,
-                "tier": files.tier_for(&name).as_str(),
-                "cap": files.cap_for(&name),
-            })
+        .map(|(level, message)| status_api::HarnessWall {
+            level: serde_json::to_value(level)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .unwrap_or_default(),
+            message,
         })
         .collect();
-    Ok(Json(json!({ "walls": walls, "agents": agents })))
+    let agents = sjel_server::harness::enrolled_names(&overlay)
+        .into_iter()
+        .map(|name| status_api::AgentToken {
+            tier: files.tier_for(&name).as_str().to_owned(),
+            cap: files.cap_for(&name),
+            name,
+        })
+        .collect();
+    Ok(Json(json!(status_api::HarnessesView { walls, agents })))
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub(crate) struct CapBody {
+    /// `c0`, `c1` or `c2`; absent or null removes the cap.
+    #[serde(default)]
+    cap: Option<String>,
+}
+
+/// `POST /api/sjel-status/agent/harnesses/{name}/cap`: the highest data class one enrolled agent
+/// name reads. Owner only: the agent token cannot reach this route, so no agent raises its own.
+pub(crate) async fn agent_cap_handler(
+    axum::extract::Path(name): axum::extract::Path<String>,
+    Json(body): Json<CapBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let files = files()?;
+    let overlay =
+        sjel_config::overlay_root().ok_or_else(|| bad_request("no overlay is configured"))?;
+    if !sjel_server::harness::enrolled_names(&overlay).contains(&name) {
+        return Err(bad_request(format!(
+            "{name} has no token of its own; enroll it in your shell: sjel agent enroll {name}"
+        )));
+    }
+    let cap = body.cap.as_deref().filter(|c| !c.is_empty());
+    if let Some(cap) = cap {
+        if !status_api::AGENT_CAPS.contains(&cap) {
+            return Err(bad_request(format!(
+                "cap must be one of: {}, or null",
+                status_api::AGENT_CAPS.join(", ")
+            )));
+        }
+    }
+    files.set_cap(&name, cap).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e })),
+        )
+    })?;
+    Ok(Json(json!({ "name": name, "cap": cap })))
 }

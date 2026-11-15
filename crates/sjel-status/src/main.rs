@@ -253,6 +253,12 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/sjel-status/agent/harnesses",
         "Each installed agent harness's wall around the overlay's data/, and each agent name with its own token, tier and data-class cap. Owner only.",
     ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/agent/harnesses/{name}/cap",
+        summary: "Set the highest data class one enrolled agent name reads. Body: { cap } where cap is c0, c1, c2 or null for none. Owner only.",
+        request_schema: Some(route_manifest::schema_of::<status::CapBody>),
+    },
     r(
         "GET",
         "/api/sjel-status/events",
@@ -569,6 +575,10 @@ fn build_router(shell: proxy::Proxy) -> Router {
         .route("/api/sjel-status/agent", get(agent_handler))
         .route("/api/sjel-status/events", get(events_handler))
         .route("/api/sjel-status/agent/harnesses", get(harnesses_handler))
+        .route(
+            "/api/sjel-status/agent/harnesses/{name}/cap",
+            post(agent_cap_handler),
+        )
         .route("/api/sjel-status/agent/mode", post(agent_mode_handler))
         .route(
             "/api/sjel-status/agent/approvals/{id}",
@@ -1253,6 +1263,7 @@ mod agent_route_tests {
             ("GET", "/api/sjel-status/mirror"),
             ("GET", "/api/sjel-status/agent"),
             ("GET", "/api/sjel-status/agent/harnesses"),
+            ("POST", "/api/sjel-status/agent/harnesses/codex/cap"),
             ("POST", "/api/sjel-status/agent/mode"),
             ("GET", "/api/sjel-status/capabilities"),
             ("GET", "/api/finance/accounts"),

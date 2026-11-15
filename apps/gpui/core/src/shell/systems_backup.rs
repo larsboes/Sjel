@@ -26,6 +26,32 @@ impl Shell {
             .map(drop)
     }
 
+    /// Each installed harness's wall around the overlay's `data/`, and each agent name with its
+    /// own token, tier and cap. Owner only: the agent token is refused here.
+    pub async fn harnesses(&self) -> ShellResult<HarnessesView> {
+        self.json(Method::GET, "/api/sjel-status/agent/harnesses", None, 5)
+            .await
+    }
+
+    /// Sets the highest data class one enrolled agent name reads; `None` removes the cap. The
+    /// shell refuses a name without its own token and a cap outside `AGENT_CAPS`, both as a 400.
+    pub async fn set_agent_cap(&self, name: &str, cap: Option<&str>) -> ShellResult<()> {
+        let valid = !name.is_empty()
+            && name.len() <= 40
+            && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-');
+        if !valid || cap.is_some_and(|cap| !AGENT_CAPS.contains(&cap)) {
+            return Err(ShellError::Refused(
+                400,
+                Some("Not an agent name or cap.".into()),
+            ));
+        }
+        let body = serde_json::json!({ "cap": cap });
+        let path = format!("/api/sjel-status/agent/harnesses/{name}/cap");
+        self.send(Method::POST, &path, Some(body), 5)
+            .await
+            .map(drop)
+    }
+
     /// The live hardware sample. macmon is a capability, so the shell proxies `/macmon` to it;
     /// a stopped macmon is a refused request, which the page reports as "not running" rather
     /// than as a fault.

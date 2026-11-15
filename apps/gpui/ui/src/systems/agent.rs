@@ -7,7 +7,7 @@ use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, Share
 use crate::data::{self, Busy};
 use crate::primitives::{dot, note, placeholder, row, section};
 use crate::theme::Palette;
-use sjel_gpui_core::shell::{AgentGate, AgentView, Approval};
+use sjel_gpui_core::shell::{AgentGate, AgentToken, AgentView, Approval, AGENT_CAPS};
 
 use super::{heading, SystemsPage};
 
@@ -21,6 +21,91 @@ impl SystemsPage {
             &repo,
             |shell| async move { shell.agent().await },
         );
+        let repo = self.repo.clone();
+        data::read_quiet(
+            cx,
+            self,
+            |s| &mut s.harnesses,
+            &repo,
+            |shell| async move { shell.harnesses().await },
+        );
+    }
+
+    pub(super) fn set_agent_cap(
+        &mut self,
+        name: String,
+        cap: Option<&'static str>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let repo = self.repo.clone();
+        let key = format!("cap:{name}");
+        data::write(
+            cx,
+            window,
+            self,
+            &repo,
+            data::Press::once(|s| &mut s.busy, key, "Cap saved."),
+            move |shell| async move { shell.set_agent_cap(&name, cap).await },
+            |this, saved, cx| {
+                if saved.is_some() {
+                    this.read_agent(cx);
+                }
+            },
+        );
+    }
+
+    /// Each harness's wall around the overlay's `data/`, and each agent token's cap. Enrolling a
+    /// token stays a shell command the owner runs, so the page names it instead of offering it.
+    pub(super) fn harnesses_panel(
+        &mut self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let body = match self.harnesses.value.clone() {
+            None => match &self.harnesses.error {
+                Some(error) => note(error.to_string(), palette.red),
+                None => placeholder(120.),
+            },
+            Some(view) => {
+                let mut rows: Vec<AnyElement> = Vec::new();
+                rows.push(heading("Walls around your data", palette));
+                if view.walls.is_empty() {
+                    rows.push(muted_line("No agent harness is installed.", palette));
+                }
+                for wall in &view.walls {
+                    let tone = match wall.level.as_str() {
+                        "ok" => palette.green,
+                        "bad" => palette.red,
+                        _ => palette.amber,
+                    };
+                    rows.push(
+                        row()
+                            .text_xs()
+                            .child(dot(tone))
+                            .child(div().flex_1().min_w_0().child(wall.message.clone()))
+                            .into_any_element(),
+                    );
+                }
+                rows.push(heading("Agent tokens", palette));
+                if view.agents.is_empty() {
+                    rows.push(muted_line(
+                        "No agent has a token of its own. Enroll one in your shell: sjel agent enroll <name>",
+                        palette,
+                    ));
+                }
+                for agent in &view.agents {
+                    rows.push(token_row(agent, palette, &self.busy, cx));
+                }
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .children(rows)
+                    .into_any_element()
+            }
+        };
+        section("Harnesses", body, palette).into_any_element()
     }
 
     pub(super) fn set_agent_mode(
@@ -300,5 +385,67 @@ fn approval_row(
                     })),
                 ),
         )
+        .into_any_element()
+}
+
+fn muted_line(text: &'static str, palette: Palette) -> AnyElement {
+    div()
+        .px_3()
+        .py_2()
+        .text_xs()
+        .text_color(rgb(palette.muted))
+        .child(text)
+        .into_any_element()
+}
+
+/// One agent token with its cap as a segmented choice: each class, then none.
+fn token_row(
+    agent: &AgentToken,
+    palette: Palette,
+    busy: &Busy,
+    cx: &mut Context<SystemsPage>,
+) -> AnyElement {
+    let in_flight = busy.contains(&format!("cap:{}", agent.name));
+    let choices: Vec<(Option<&'static str>, &'static str)> = AGENT_CAPS
+        .iter()
+        .map(|cap| (Some(*cap), *cap))
+        .chain(std::iter::once((None, "none")))
+        .collect();
+    let buttons: Vec<Button> = choices
+        .into_iter()
+        .map(|(cap, label)| {
+            let chosen = agent.cap.as_deref() == cap;
+            let name = agent.name.clone();
+            Button::new(
+                SharedString::from(format!("cap-{}-{label}", agent.name)),
+                label,
+            )
+            .size(ControlSize::Sm)
+            .when(!chosen, |button| button.variant(ButtonVariant::Ghost))
+            .loading(in_flight && chosen)
+            .on_click(cx.listener(move |page, _, window, cx| {
+                if !chosen {
+                    page.set_agent_cap(name.clone(), cap, window, cx);
+                }
+            }))
+        })
+        .collect();
+    row()
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(div().truncate().text_sm().child(agent.name.clone()))
+                .child(
+                    div()
+                        .truncate()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child("highest data class it reads"),
+                ),
+        )
+        .child(div().flex().flex_none().gap_1().children(buttons))
         .into_any_element()
 }

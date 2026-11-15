@@ -855,6 +855,31 @@ open. Remaining adoption work moves in order: workspace `Toaster`/feedback, menu
 `mail/`, `documents::BlockEditor` and `ely::terminal` (after a fork remote-transport API).
 Optional list conversions stay last.
 
+#### Remaining component parity
+
+Source audit against the manifest-pinned Ely `a42025a`:
+
+| Boundary | Finding and disposition | Required acceptance before adoption |
+|---|---|---|
+| `ui/src/editor/slash_menu.rs` | Retain the current renderer. Sjel filters choices from the active block input and applies them on mouse-down before focus moves. Ely `menus/hosts.rs` opens from triggers, while `menus/menu.rs::hang` takes focus; its searchable host uses a separate `TextInput`. `overlays/popover.rs` also owns trigger state and traps focus. Neither exposes an externally controlled, caret-anchored menu that leaves typing in the block. | Add that presentation API in the fork. Run `editor::tests::slash_opens_the_menu_and_enter_applies_the_filtered_choice`, then cover Escape, outside dismissal, focus return and pointer application inside the production root. Keep choices and filtering in `block_menu.rs`. |
+| `src/workspace/panels.rs` | Retain the dock. It keeps a terminal entity alive, chooses a seat and resizes beside the page. Ely `layout/sheet.rs::{Sheet, Drawer}` places content over a scrim through `Backdrop`; `overlays::Popover` is a trigger-owned transient panel. These have different layout and dismissal contracts. | A dock replacement must preserve seat identity, terminal focus, existing sessions, stored width and the resize hit target without making page interaction modal. No overlay substitution is planned for this dock. |
+| `ui/src/mail/` and `inbox/triage.rs` | Defer adoption. Sjel renders proposal state, model rationale, authenticity, held writes and sync failures, and snapshots IDs before archive/trash confirmation. Ely `mail/list.rs::MailList` supports selection/star callbacks, but its row model has no proposal fields. `mail/reader.rs` accepts caller-rendered bodies; `mail/thread.rs` takes messages in caller order. `mail/compose.rs` invokes send callbacks without Sjel confirmation. | First prove proposal IDs, selected/opened state and metadata survive a read-only adapter. Preserve preview-only rendering until a safe body renderer is verified. Keep capture routing in triage. Composer adoption additionally needs a reviewed draft adapter and explicit confirmation through the existing capability write mode; no direct send callback. |
+| `documents::BlockEditor` | Defer adoption. Ely `documents/blocks/{edit,keys,table}.rs` implements split/merge, slash choices and table editing, and emits `BlockEvent::Changed`. Its importer explicitly flattens nested lists; `BlockData::{from_markdown,to_markdown}` normalizes documents rather than guaranteeing Sjel's byte-preserving round-trip. It exposes no save/conflict protocol. | Compare fixtures with `core::blocks`, including frontmatter, nested lists, tables and unsupported syntax. Preserve lossless refusal, debounce, in-flight revisions and conflict refusal through the existing `Saver`; test read-only behavior before mounting the replacement. PDF rendering/search remains separate. |
+| `ely::terminal` | Blocked on a fork API. `terminal/view.rs::spawn` owns a local PTY; `replay` parses one byte slice with a temporary parser. `write` sends to the PTY and ignores input on replay. The private session constructor and resize path expose no remote byte feed or outbound transport callbacks. Repeated replay would lose parser state across chunks. | Add a transport-fed session with a persistent parser, ordered input and resize callbacks, lifecycle events and shutdown. Verify split escape sequences, offset resume/reconnect, resize coalescing, selection and clipboard against `ui/src/terminal/` and `core::terminal`. Keep `terminal_screen.rs` for NSH. |
+
+The table cleanup removes unused width cycling, group-header state and task-field wrappers.
+Documents builds Ely columns from `DOC_COLUMNS`, including alignment and narrow visibility.
+The removed `sort_cycling_updates_task_note_and_project_sorts` covered only obsolete helpers;
+Ely `tables/header.rs::a_press_replaces_the_sort_and_shift_joins_it` owns the header cycle.
+Sjel retains `column_specs_and_sort_col_ids`, project workflow tests and
+`documents::tests::the_order_follows_the_filters` for its adapter and filtered keyboard order.
+
+Verification: 199 UI library tests pass. The UI check has none of the eight obsolete table
+dead-code warnings. UI all-target Clippy, the app's `--no-default-features` check and the UI's
+NSH-only check pass; unrelated Clippy and manifest warnings remain. Live light/dark acceptance
+and fork interaction tests for the deferred replacements have not run. Workspace test-support
+wiring and notification migration still await the concurrent manifest/workspace edits.
+
 #### Table acceptance
 
 Table migration shipped in `831d1fb2`, `4a2f4490` and `08cc5f14`: Finance transactions/import,

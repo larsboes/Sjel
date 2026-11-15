@@ -11,10 +11,7 @@ use gpui_kit::{
 
 use crate::data::{self, Remote, Repo};
 use crate::editor::{self, EditorEvent, NoteEditor};
-use crate::primitives::{
-    back_button, column_width, cycle_column_width, list, note, placeholder, row_for_density,
-    section,
-};
+use crate::primitives::{back_button, list, note, placeholder, row_for_density, section};
 use crate::tasks::{self, NoteSort, StatusFilter, TaskFilter, TaskSort};
 use crate::theme::{tint, Density, Palette, ThemeContext};
 use sjel_gpui_core::data::Blocked;
@@ -129,45 +126,6 @@ impl Columns {
             },
         }
     }
-
-    pub(super) fn get(&self, id: &str) -> Option<f32> {
-        match id {
-            "due" => Some(self.due),
-            "priority" => Some(self.priority),
-            "project" => self.project,
-            "status" => self.status,
-            "kind" => self.kind,
-            "search" => self.search,
-            "project_tasks" => Some(self.project_tasks),
-            "project_progress" => (self.project_progress > 0.).then_some(self.project_progress),
-            "project_notes" => Some(self.project_notes),
-            _ => None,
-        }
-    }
-
-    pub(super) fn with_widths(
-        density: Density,
-        widths: &std::collections::HashMap<&'static str, f32>,
-    ) -> Self {
-        let mut base = Self::for_density(density);
-        base.due = column_width(widths, "due", base.due);
-        base.priority = column_width(widths, "priority", base.priority);
-        base.project = base.project.map(|w| column_width(widths, "project", w));
-        base.status = base.status.map(|w| column_width(widths, "status", w));
-        base.kind = base.kind.map(|w| column_width(widths, "kind", w));
-        base.project_tasks = column_width(widths, "project_tasks", base.project_tasks);
-        base.project_progress = column_width(widths, "project_progress", base.project_progress);
-        base.project_notes = column_width(widths, "project_notes", base.project_notes);
-        base
-    }
-}
-
-/// A table cell of `width`, or nothing when the density drops the column.
-pub(super) fn column(width: Option<f32>) -> Div {
-    match width {
-        Some(width) => div().w(px(width)),
-        None => div().hidden(),
-    }
 }
 
 /// The search field's box: a fixed width on the Mac, the rest of the row on a phone.
@@ -238,11 +196,7 @@ pub struct Projects {
     pub note_sort: (NoteSort, bool),
     /// The projects hub table's sort column, and whether it ascends.
     pub project_sort: (ProjectSort, bool),
-    /// Per-column width overrides for resizable table headers.
-    pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     pub group_by_project: bool,
-    /// The projects whose group the cross-project table folds away.
-    pub(super) collapsed_groups: std::collections::HashSet<String>,
     /// The task the side panel shows, with its text fields.
     pub(super) task_panel: Option<TaskPanel>,
     /// The task whose status chips stand open in its row.
@@ -318,9 +272,7 @@ impl Projects {
             task_sort: (TaskSort::Default, true),
             note_sort: (NoteSort::Default, true),
             project_sort: (ProjectSort::Name, true),
-            col_widths: Default::default(),
             group_by_project: false,
-            collapsed_groups: Default::default(),
             task_panel: None,
             status_edit: None,
             note_kind_filter: NoteKindFilter::All,
@@ -705,8 +657,7 @@ impl Projects {
                 return Some(found.clone());
             }
         }
-        self.selected_task_index
-            .and_then(|i| tasks.get(i).cloned())
+        self.selected_task_index.and_then(|i| tasks.get(i).cloned())
     }
 
     fn selected_global_task(&self) -> Option<GlobalTask> {
@@ -727,7 +678,11 @@ impl Projects {
         cx: &mut Context<Self>,
     ) {
         if self.project.is_some() {
-            if let Some(task) = self.current_project_tasks().into_iter().find(|t| t.path == path) {
+            if let Some(task) = self
+                .current_project_tasks()
+                .into_iter()
+                .find(|t| t.path == path)
+            {
                 let global = tables::project_record_to_global_task(&task);
                 self.select_task(&global, window, cx);
             }
@@ -974,41 +929,7 @@ impl Projects {
     }
 
     pub(super) fn columns(&self) -> Columns {
-        Columns::with_widths(self.density, &self.col_widths)
-    }
-
-    pub(super) fn resize_column(&mut self, id: &'static str, cx: &mut Context<Self>) {
-        if let Some(default) = Columns::for_density(self.density).get(id) {
-            cycle_column_width(&mut self.col_widths, id, default);
-            cx.notify();
-        }
-    }
-
-    pub(super) fn cycle_project_sort(&mut self, column: ProjectSort, cx: &mut Context<Self>) {
-        self.project_sort = match self.project_sort {
-            (current, true) if current == column => (column, false),
-            (current, false) if current == column => (ProjectSort::Name, true),
-            _ => (column, true),
-        };
-        cx.notify();
-    }
-
-    pub(super) fn cycle_task_sort(&mut self, column: TaskSort, cx: &mut Context<Self>) {
-        self.task_sort = match self.task_sort {
-            (current, true) if current == column => (column, false),
-            (current, false) if current == column => (TaskSort::Default, true),
-            _ => (column, true),
-        };
-        cx.notify();
-    }
-
-    pub(super) fn cycle_note_sort(&mut self, column: NoteSort, cx: &mut Context<Self>) {
-        self.note_sort = match self.note_sort {
-            (current, true) if current == column => (column, false),
-            (current, false) if current == column => (NoteSort::Default, true),
-            _ => (column, true),
-        };
-        cx.notify();
+        Columns::for_density(self.density)
     }
 
     /// Reads everything the page shows again, after something outside it changed the records:
@@ -1516,19 +1437,6 @@ impl Projects {
                 this.load_projects(cx);
             },
         );
-    }
-
-    /// Writes one frontmatter field of a task through the capability, which owns the edit and
-    /// answers with the record's new frontmatter.
-    pub(super) fn set_task_field(
-        &mut self,
-        record: &ProjectRecord,
-        key: &'static str,
-        value: String,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.set_task_property(record.path.clone(), key, value, window, cx);
     }
 
     /// Writes one frontmatter field of the task at `path`. An empty value clears the field.
@@ -3040,7 +2948,8 @@ impl Projects {
 impl Render for Projects {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let in_ely_table = if self.project.is_some() {
-            self.project_section == ProjectSection::Tasks && self.task_view_mode == TaskViewMode::Table
+            self.project_section == ProjectSection::Tasks
+                && self.task_view_mode == TaskViewMode::Table
         } else {
             matches!(self.tab, ProjectsTab::AllTasks | ProjectsTab::AllNotes)
         };
@@ -3713,21 +3622,6 @@ mod tests {
 
     #[test]
     fn column_specs_and_sort_col_ids() {
-        let desk = Columns::for_density(Density::Desktop);
-        assert_eq!(desk.get("due"), Some(120.));
-        assert_eq!(desk.get("priority"), Some(84.));
-        assert_eq!(desk.get("project"), Some(140.));
-        assert_eq!(desk.get("status"), Some(100.));
-        assert_eq!(desk.get("kind"), Some(80.));
-        assert_eq!(desk.get("project_tasks"), Some(110.));
-        assert_eq!(desk.get("project_progress"), Some(140.));
-        assert_eq!(desk.get("project_notes"), Some(85.));
-
-        let mob = Columns::for_density(Density::Mobile);
-        assert_eq!(mob.get("project"), None);
-        assert_eq!(mob.get("status"), None);
-        assert_eq!(mob.get("project_progress"), None);
-
         assert_eq!(ProjectSort::from_col_id("name"), Some(ProjectSort::Name));
         assert_eq!(
             ProjectSort::from_col_id("project_tasks"),
@@ -3735,39 +3629,5 @@ mod tests {
         );
         assert_eq!(TaskSort::from_col_id("due"), Some(TaskSort::Due));
         assert_eq!(NoteSort::from_col_id("kind"), Some(NoteSort::Kind));
-    }
-
-    #[gpui::test]
-    fn sort_cycling_updates_task_note_and_project_sorts(cx: &mut gpui::TestAppContext) {
-        crate::test_support::init(cx);
-        let (projects, cx) = cx.add_window_view(|_window, cx| {
-            Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
-        });
-
-        projects.update(cx, |view, cx| {
-            // Task sort cycle
-            view.cycle_task_sort(TaskSort::Title, cx);
-            assert_eq!(view.task_sort, (TaskSort::Title, true));
-            view.cycle_task_sort(TaskSort::Title, cx);
-            assert_eq!(view.task_sort, (TaskSort::Title, false));
-            view.cycle_task_sort(TaskSort::Title, cx);
-            assert_eq!(view.task_sort, (TaskSort::Default, true));
-
-            // Note sort cycle
-            view.cycle_note_sort(NoteSort::Project, cx);
-            assert_eq!(view.note_sort, (NoteSort::Project, true));
-            view.cycle_note_sort(NoteSort::Project, cx);
-            assert_eq!(view.note_sort, (NoteSort::Project, false));
-            view.cycle_note_sort(NoteSort::Project, cx);
-            assert_eq!(view.note_sort, (NoteSort::Default, true));
-
-            // Project sort cycle
-            view.cycle_project_sort(ProjectSort::Tasks, cx);
-            assert_eq!(view.project_sort, (ProjectSort::Tasks, true));
-            view.cycle_project_sort(ProjectSort::Tasks, cx);
-            assert_eq!(view.project_sort, (ProjectSort::Tasks, false));
-            view.cycle_project_sort(ProjectSort::Tasks, cx);
-            assert_eq!(view.project_sort, (ProjectSort::Name, true));
-        });
     }
 }

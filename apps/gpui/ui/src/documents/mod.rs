@@ -25,7 +25,7 @@ use crate::data::{Remote, Repo};
 use crate::ely::data_display::Tone;
 use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
 use crate::ely::theme::Density as ElyDensity;
-use crate::primitives::{column_width, cycle_column_width, filter_pill, SortOrder};
+use crate::primitives::{filter_pill, SortOrder};
 use crate::theme::{tint, Density, Palette};
 
 mod duplicates;
@@ -55,13 +55,6 @@ pub enum DocSort {
 }
 
 impl DocSort {
-    fn default_order(self) -> SortOrder {
-        match self {
-            Self::Added | Self::Pages => SortOrder::Descending,
-            Self::Name | Self::Category | Self::Status => SortOrder::Ascending,
-        }
-    }
-
     fn button_label(self, order: SortOrder) -> String {
         match (self, order) {
             (Self::Added, SortOrder::Descending) => "Newest".to_owned(),
@@ -131,10 +124,6 @@ pub(crate) const DOC_COLUMNS: &[DocColDef] = &[
 impl DocColDef {
     pub fn find(id: &str) -> Option<&'static DocColDef> {
         DOC_COLUMNS.iter().find(|c| c.id == id)
-    }
-
-    pub fn default_width_for(id: &str) -> Option<f32> {
-        Self::find(id).and_then(|c| c.default_width)
     }
 }
 
@@ -248,12 +237,10 @@ fn grouping_key(row: &DocumentSummary, grouping: Grouping) -> String {
     }
 }
 
-/// One row of the list: where it comes from, and the group header it opens when it is first in one.
+/// A visible document row indexed into the loaded records.
 pub(crate) struct DocRow {
     /// Index into `rows.value`.
     index: usize,
-    /// The group label and its size, when a header belongs above this row.
-    group: Option<(String, usize)>,
 }
 
 /// Whether one record answers the search box. The caller owns `search_applied`, which skips it.
@@ -300,7 +287,6 @@ pub struct Documents {
     pub(super) search_applied: bool,
     pub(super) search_input: Option<(Entity<InputState>, Subscription)>,
     pub(super) sort: (DocSort, SortOrder),
-    pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     pub(super) selected: Option<String>,
     pub(super) current: Option<String>,
     /// The list's own scroller: it draws only the rows the window shows.
@@ -373,7 +359,6 @@ impl Documents {
             search_applied: false,
             search_input: None,
             sort: (DocSort::Added, SortOrder::Descending),
-            col_widths: Default::default(),
             selected: None,
             current: None,
             list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
@@ -891,9 +876,6 @@ impl Documents {
     }
 
     /// The list's order, rebuilt only when the records, a filter, the grouping or the sort move.
-    ///
-    /// Group headers and their sizes are computed here, once per rebuild, rather than compared
-    /// row by row on every frame.
     fn sync_order(&mut self) {
         let key = (
             self.order_rev,
@@ -963,42 +945,10 @@ impl Documents {
             &picked[..]
         };
 
-        let mut counts: Vec<(String, usize)> = Vec::new();
-        if let Some(rows) = self
-            .rows
-            .value
-            .as_ref()
-            .filter(|_| self.grouping != Grouping::None)
-        {
-            for index in visible_picked {
-                let label = grouping_key(&rows[*index], self.grouping);
-                match counts.iter_mut().find(|(seen, _)| *seen == label) {
-                    Some((_, size)) => *size += 1,
-                    None => counts.push((label, 1)),
-                }
-            }
-        }
-        let mut order: Vec<DocRow> = Vec::with_capacity(visible_picked.len());
-        let mut previous: Option<String> = None;
-        for index in visible_picked {
-            let index = *index;
-            let group = self
-                .rows
-                .value
-                .as_ref()
-                .filter(|_| self.grouping != Grouping::None)
-                .map(|rows| grouping_key(&rows[index], self.grouping))
-                .filter(|label| previous.as_deref() != Some(label.as_str()))
-                .map(|label| {
-                    let size = counts
-                        .iter()
-                        .find(|(seen, _)| *seen == label)
-                        .map_or(0, |(_, size)| *size);
-                    previous = Some(label.clone());
-                    (label, size)
-                });
-            order.push(DocRow { index, group });
-        }
+        let order: Vec<DocRow> = visible_picked
+            .iter()
+            .map(|index| DocRow { index: *index })
+            .collect();
         self.order_key = Some(key);
         self.list.reset(order.len());
         self.order = order;
@@ -1070,55 +1020,32 @@ impl Documents {
         self.file_document_as(primary_id, compare_cat, cx);
     }
 
-    fn col_w(&self, id: &'static str) -> f32 {
-        let default = DocColDef::default_width_for(id).unwrap_or(100.);
-        self.col_width(id, default)
-    }
-
-    fn col_width(&self, id: &'static str, default: f32) -> f32 {
-        column_width(&self.col_widths, id, default)
-    }
-
-    fn resize_column(&mut self, id: &'static str, cx: &mut Context<Self>) {
-        if let Some(default) = DocColDef::default_width_for(id) {
-            cycle_column_width(&mut self.col_widths, id, default);
-            cx.notify();
-        }
-    }
-
-    fn set_sort(&mut self, column: DocSort, cx: &mut Context<Self>) {
-        self.sort = match self.sort {
-            (current, order) if current == column => (column, order.flip()),
-            _ => (column, column.default_order()),
-        };
-        self.page_offset = 0;
-        self.order_rev = self.order_rev.wrapping_add(1);
-        cx.notify();
-    }
-
-    fn documents_table(
-        &self,
-        narrow: bool,
-        total: usize,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    fn documents_table(&self, narrow: bool, total: usize, cx: &mut Context<Self>) -> AnyElement {
         let (sort_col, sort_order) = self.sort;
-        let columns = vec![
-            Column::new("name", "DOCUMENT"),
-            Column::new("category", "CATEGORY").width(rems(self.col_w("category") / 16.)),
-            Column::new("pages", "PAGES")
-                .width(rems(self.col_w("pages") / 16.))
-                .end(),
-            Column::new("status", "STATUS").width(rems(self.col_w("status") / 16.)),
-            Column::new("added", "ADDED")
-                .width(rems(self.col_w("added") / 16.))
-                .end(),
-            Column::new("group", ""),
-        ];
-
-        let mut hidden: Vec<&'static str> = vec!["group"];
+        let mut columns: Vec<Column> = DOC_COLUMNS
+            .iter()
+            .map(|spec| {
+                let column = Column::new(spec.id, spec.label);
+                let column = match spec.default_width {
+                    Some(width) => column.width(rems(width / 16.)),
+                    None => column,
+                };
+                if spec.right_align {
+                    column.end()
+                } else {
+                    column
+                }
+            })
+            .collect();
+        columns.push(Column::new("group", ""));
+        let mut hidden = vec!["group"];
         if narrow {
-            hidden.extend(["category", "pages", "added"]);
+            hidden.extend(
+                DOC_COLUMNS
+                    .iter()
+                    .filter(|spec| spec.hide_on_narrow)
+                    .map(|spec| spec.id),
+            );
         }
 
         let rows_slice = self.rows.value.as_deref().unwrap_or_default();
@@ -2460,7 +2387,8 @@ mod tests {
             assert_eq!(page.order.len(), 3);
             assert_eq!(page.list.item_count(), 3);
 
-            page.set_sort(DocSort::Name, cx);
+            page.sort = (DocSort::Name, SortOrder::Ascending);
+            page.order_rev = page.order_rev.wrapping_add(1);
             page.sync_order();
             let ids: Vec<&str> = page
                 .order
@@ -2469,7 +2397,8 @@ mod tests {
                 .collect();
             assert_eq!(ids, ["b", "a", "c"]);
 
-            page.set_sort(DocSort::Pages, cx);
+            page.sort = (DocSort::Pages, SortOrder::Descending);
+            page.order_rev = page.order_rev.wrapping_add(1);
             page.sync_order();
             let ids: Vec<&str> = page
                 .order
@@ -2478,9 +2407,6 @@ mod tests {
                 .collect();
             assert_eq!(ids, ["b", "a", "c"]);
             assert_eq!(page.sort, (DocSort::Pages, SortOrder::Descending));
-
-            page.resize_column("category", cx);
-            assert_eq!(page.col_width("category", 110.), 149.);
 
             page.category_filter = Some("Tax".to_owned());
             page.order_rev = page.order_rev.wrapping_add(1);

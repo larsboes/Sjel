@@ -956,13 +956,16 @@ examples. Mail or feed text inside a view is rendered as text and never interpre
 
 Open, in order:
 
-1. Derived views. `core/src/record/registry.rs` and `ui/src/record/registry.rs` implement a generic
-   read-only object list and relation navigation from capability discovery. Projects exposes
-   it through Browse objects and `/objects/projects`; the proxy exposes discovery for API-only
-   services. Tests cover invalid registries, node-specific errors and write-route refusal. Open:
-   acceptance against running Projects, including relation navigation
+1. Generic Mac object lists, properties and read-only relation navigation shipped in `2029238f`.
+   Projects opens through Browse objects and `sjel://objects/projects`; the proxy exposes
+   discovery for API-only services. Three registry tests, two headless pointer/loading tests,
+   deep-link tests and 15 proxy tests pass. The Mac build and focused Clippy pass with unrelated
+   warnings. Live Projects discovery publishes both projections; installed-app and end-to-end
+   relation acceptance through the updated proxy have not run
    ([`data.md`](data.md#registry-derived-project-views)).
-2. The same views on the phone as NSH screens, fed from the local copy.
+2. The same views on the phone as NSH screens, fed from the local copy. The existing replica
+   readers omit classification metadata; extend their read contract before supplying registry
+   projections, preserving object identity and class rather than inventing defaults.
 3. Saved views. A model composes a view once and it reloads without a model after an app
    restart.
 4. Live views inside the app's agent panel.

@@ -23,6 +23,7 @@ futures.workspace = true
 # rustls: the pinned client for the LAN listener (device.rs) needs a TLS backend. http2: that
 # client offers h2 by ALPN (`device_auth::pinned_tls`), and the listener accepts it.
 reqwest = { workspace = true, features = ["blocking", "rustls", "http2", "stream"] }
+route-manifest = { path = "../../../crates/route-manifest" }
 serde.workspace = true
 serde_json.workspace = true
 # The digest the Mac's mirror manifest names, checked before a fetched copy replaces the one on

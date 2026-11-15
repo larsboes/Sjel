@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use projects_api::route_manifest::registry::Registry;
+use route_manifest::registry::Registry;
 use reqwest::Method;
 use serde_json::Value;
 
@@ -108,7 +108,7 @@ pub async fn load(shell: &Shell, capability: &str) -> ShellResult<View> {
 
 impl View {
     /// The current validated object projection.
-    pub fn object(&self) -> &projects_api::route_manifest::registry::Object {
+    pub fn object(&self) -> &route_manifest::registry::Object {
         self.registry
             .objects
             .iter()

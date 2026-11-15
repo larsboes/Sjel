@@ -852,12 +852,13 @@ moves through navigation/layout, then interaction-gated
 `mail/`, `documents::BlockEditor` and `ely::terminal` (after a fork remote-transport API).
 Optional list conversions stay last.
 
-Inventory, Backup and Systems now share an adapter over the pinned Ely `navigation::Tabs`.
-The adapter retains labels, counts, selected values and domain callbacks, adds a horizontal
-scroll boundary and removes the parallel pill renderer. Pointer and arrow-key selection pass
-through the production Inventory page inside Kit Root. All 203 UI tests pass; the repository
-documentation link check passes for 419 documents. Live light/dark and narrow-window acceptance
-remain open. The fork and dependency pin are unchanged.
+Shared Ely tabs for Inventory, Backup and Systems shipped in `f2324efe`.
+
+Verification: all 203 UI tests pass, including production Inventory pointer and arrow-key
+selection inside Kit Root. UI Clippy passes with three warnings in untouched Projects, Travel
+and People code. The documentation link check passes for 419 documents. Live light/dark and
+narrow-window acceptance, app installation and phone feature checks remain open. The fork and
+dependency pin are unchanged.
 
 #### Remaining component parity
 

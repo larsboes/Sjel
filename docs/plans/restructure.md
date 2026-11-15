@@ -29,8 +29,8 @@ The repository advisory scan and both Git-history secret scans pass under the ex
 exceptions. Installed-tool advisories remain outside repository lockfile coverage. Unused
 analysis remains unavailable without the reviewed cargo-machete executable. Live Linux,
 native UI and restore acceptance have not run in this maintenance pass. The full architecture
-freshness gate detects concurrent Learning manifest edits; the full documentation-link launcher
-exits 1 without diagnostics. Scoped link checking covers all area plans and passes.
+freshness gate detected concurrent Learning manifest edits in that pass and has not been rerun.
+The full documentation-link launcher now passes for all 419 documents.
 
 <a id="3-layout"></a>
 

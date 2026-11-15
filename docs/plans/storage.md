@@ -157,9 +157,9 @@ Obsidian is one editor for them, and the Sjel app can carry another ([product pa
 stores. Open, in order:
 
 1. Give each top folder of the vault a default data class. Frontmatter can raise it and cannot
-   lower it. The shared classifier now preserves the existing folder floors and reports
-   rejected downgrades; Vault and Projects use that owner. The 66 classifier/vault tests and
-   Projects tests pass. Configurable top-folder defaults and index rejection remain open.
+   lower it. Existing folder-floor enforcement and shared Projects classification shipped
+   in `4fa41461`; 66 classifier/vault tests and 50 Projects tests pass.
+   Configurable top-folder defaults and index rejection remain open.
    Done when the index refuses a note whose frontmatter lowers its folder's class.
 2. Move the Markdown tree under `<overlay>/data/projects/` into the vault and make
    `crates/projects` read the files as the authority. Today the store is the authority and the
@@ -353,11 +353,10 @@ Open:
    2026-10-22 15:12Z, so finance, store, knowledge-base, packs, devices and projects only get
    manual runs. `tools/doctor` now names an off timer, and the timer is back on at 24h
    (2026-11-03). Open: why it was turned off.
-2. **Run inspection and receipt integrity.** `sjel backup status|runs [--limit N]` now uses
-   the existing authenticated capability caller; policy management keeps its existing path.
-   The runner records a failed attempt when a zero exit produces no new archive receipt,
-   including when only an older receipt exists. Focused CLI and backup regressions pass.
-   Live run inspection on 2026-11-15 returned `invalid or missing authentication token`.
+2. **Live run inspection.** Backup status/history commands and new-receipt enforcement shipped
+   in `4fa41461`; all 16 backup tests, 452 CLI tests and scoped Clippy pass.
+   Live run inspection on 2026-11-15 returned `invalid or missing authentication token`,
+   including with `SJEL_AGENT=1` and the enrolled agent helper.
    Scheduled firing, mounted-target failure recording and isolated live restores remain
    unverified; no timer or credential was changed.
 3. **Per-kind proof.** A target kind counts as verified only when its own restore passes. Only

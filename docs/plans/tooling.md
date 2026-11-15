@@ -570,10 +570,8 @@ archive includes the managed path resolver; its extracted-path regression passes
      result reuse beyond local formatting. Set resource defaults only from measurements.
   Done when local and CI share the same planner, live full verification passes, and measurements
   establish the cost and savings.
-- **Backup CLI live acceptance.** `sjel backup status|runs [--limit N]` delegates to the existing
-  capability caller and bounds run history to 1–500 rows. Focused argument tests pass.
-  Live inspection returns an authentication refusal in this session. Verify authenticated
-  status and run-history reads after CLI installation; timer and restore acceptance stays in
+- **Backup CLI live acceptance.** Status/history commands shipped in `4fa41461`.
+  Installation, authentication, timer and restore acceptance stays in
   [storage](storage.md#5-backups).
 - **`tools/doctor` in a worktree reports the repository as its own undeclared connection.** The
   undeclared-connections sweep derives the repos that count as "self" from the *basename* of the

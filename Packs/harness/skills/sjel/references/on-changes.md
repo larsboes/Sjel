@@ -53,7 +53,9 @@ That branch is its work branch: the session opens a draft PR from it rather than
 
 ## Hand off unfinished work
 
-Do these steps when a session stops with work open, or when the user asks for a handoff:
+Keep the area plan current as work progresses and before stopping: built work, open work,
+decisions and checks that did not run belong there. Do not automatically queue handoff prompts.
+When the user requests a handoff:
 
 1. Write the durable part into the area plan first: decisions, work that is built, work that is
    open, and checks that did not run. The prompt points at the plan. It does not repeat it.

@@ -65,7 +65,7 @@ Always:
 3. In the same change, update the area plan: shrink shipped work to one line with its commit,
    record what is still open, and state each check that did not run.
 4. A tooling gap you hit goes to [`docs/plans/tooling.md`](docs/plans/tooling.md) (see Always).
-5. If you stop with work open, queue a handoff prompt for the next session. Rules:
-   `Packs/harness/skills/sjel/references/on-changes.md` (Hand off unfinished work).
+5. Keep unfinished work and verification gaps current in the area plan. Queue a handoff prompt
+   only when requested. Rules: `Packs/harness/skills/sjel/references/on-changes.md`.
 
 A rule the Mac and the phone share goes into a capability or `apps/gpui/core`.

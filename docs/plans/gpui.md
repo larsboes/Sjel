@@ -827,15 +827,7 @@ Open:
 
 Finance's grouped bars and storage history use Ely in `9f5fe4d1`; 195 UI tests, Cargo check and Clippy pass.
 
-Interactive chart expansion adds storage brushing and the current capacity reference, a disk
-bullet chart, directory allocation treemap, spending average, holdings allocation, subscription
-categories by currency, and transaction category bars that toggle the ledger filter. Category
-buttons provide the same filter without a pointer. Ely's `on_select` reports original input
-indices for bars, pie slices and treemap tiles. Signed expenses retain their sign and currencies
-remain separate. Storage policy classes overlap, so only the directory allocation snapshot
-uses a treemap. Projects shows current completion and single-day due-date milestones; Feed
-shows entries by source date over 91 days. Neither view claims historical completion velocity
-or reading activity, since those timestamps are absent from the loaded contracts.
+Interactive charts and ledger category selection shipped in `f0d20861` (Ely `a42025a`).
 
 Open: verify the expanded charts in both appearances and narrow windows; test storage brush
 and reset, category selection and clearing, negative expenses, mixed currencies, partial
@@ -845,7 +837,8 @@ and reading cadence require capability event timestamps before charting.
 Verification: Ely `a42025a` passes 54 chart tests on each renderer; the published dependency
 passes 199 Sjel UI tests, desktop checks without default features, and the NSH feature check.
 The Finance production-view test replaces the table smoke wrapper and checks category
-selection, filtered row count and clearing. Formatting and focused whitespace checks pass.
+selection, filtered row count and clearing. Clippy, formatting and focused whitespace checks
+pass; Clippy retains unrelated warnings.
 The documentation link check exits 1 without diagnostics. Light/dark visual acceptance has
 not run for this expansion.
 

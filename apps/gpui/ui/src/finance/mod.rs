@@ -68,7 +68,6 @@ mod transactions;
 use import::{default_csv_mapping, CandidateTable, CsvMappingField, ImportDerived};
 use overview::BalanceDraft;
 use subscriptions::SubsDerived;
-use transactions::TxTable;
 
 pub struct FinancePage {
     pub(super) repo: Repo,
@@ -116,7 +115,8 @@ pub struct FinancePage {
     pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     pub(super) filter_rev: u64,
     pub(super) review_rev: u64,
-    pub(super) tx_table: Option<Entity<TableState<TxTable>>>,
+    pub(super) tx_rows: std::rc::Rc<Vec<crate::ely::tables::Row>>,
+    pub(super) tx_scroll: gpui_kit::UniformListScrollHandle,
     pub(super) tx_rows_key: Option<(Option<std::time::Instant>, u64)>,
     pub(super) subs_derived: SubsDerived,
     pub(super) import_derived: ImportDerived,
@@ -185,7 +185,8 @@ impl FinancePage {
             col_widths: Default::default(),
             filter_rev: 0,
             review_rev: 0,
-            tx_table: None,
+            tx_rows: Default::default(),
+            tx_scroll: gpui_kit::UniformListScrollHandle::new(),
             tx_rows_key: None,
             subs_derived: SubsDerived::default(),
             import_derived: ImportDerived::default(),
@@ -219,13 +220,11 @@ impl FinancePage {
 
     pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
         if self.view == View::Transactions {
-            if let Some(table) = &self.tx_table {
-                table.update(cx, |state, cx| {
-                    let rows = state.delegate().rows().len();
-                    let row_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
-                    state.scroll_to_row(row_ix, cx);
-                });
-            }
+            let rows = self.tx_rows.len();
+            let row_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
+            self.tx_scroll
+                .scroll_to_item(row_ix, gpui_kit::ScrollStrategy::Top);
+            cx.notify();
         } else if let Some(scroll) = self.active_scroll() {
             let max = scroll.max_offset().y;
             scroll.set_offset(gpui_kit::point(px(0.), -max * fraction));

@@ -762,7 +762,7 @@ that the Mac app selects, and it moves with each Kit upgrade (§6). A component 
 replaces the hand-built one in `ui/`, and the old code is deleted in the same change. A component
 that Ely lacks is built in the fork, not in `ui/`. The phone is NSH and does not use Ely.
 
-Built: the fork is pinned at `435226f` in `apps/gpui/Cargo.toml` and re-exported as
+Built: the fork is pinned at `12199a5` in `apps/gpui/Cargo.toml` and re-exported as
 `sjel_gpui_ui::ely` under the `gpui` feature, so the phone build carries no Ely. `src/main.rs`
 serves Ely's files before GPUI Kit's and calls `ely::init`. The two share 290 Lucide icon paths;
 289 draw the same, and `icons/credit-card.svg` now draws Ely's version. Ely's tab bindings
@@ -778,9 +778,36 @@ Open:
 1. Tables. `ui/src/primitives/data_table.rs` and `tables.rs` (1,066 lines) are replaced, not
    ported one to one. The owner's goal: rethink the tables on Ely's, so the six pages that use
    them carry much less code and are simpler to maintain. Done when each page keeps the sort,
-   selection and keyboard behavior it needs, and the two files are deleted. Ely's `active` and
-   `*_subtle` fills are warm greys on Sjel's blue-tinted surfaces. Judge them on the first
-   moved page.
+   selection and keyboard behavior it needs, and the two files are deleted.
+
+   Decided by the owner: cells are data only, with no render closures. A cell edits in place
+   through `Column::editable` and `on_edit`. Ely's table owns the current row and its keys, and
+   it reports its sort out. Ely gets each addition below, with a test:
+
+   | Addition | Needed by | State |
+   |---|---|---|
+   | `Cell::Figure(text, value, Tone)`: app-formatted money that sorts by value | transactions, import, inventory | built |
+   | `Column::muted()` | transactions, import, inventory | built |
+   | `DataTable::empty(text)` | transactions, import, inventory | built |
+   | `DataTable::track_scroll(handle)`: the frame probe scrolls the rows | transactions | built |
+   | `Cell::Lines(title, meta)` | inventory | open |
+   | `Column::actions([..])` and `on_action(row, action)` | import, inventory | open |
+   | `Cell::Check(bool)` through `on_edit` | projects | open |
+   | `Column::choices([..])` editor | projects | open |
+   | One current row, up/down/j/k, Enter calls `on_open` | projects, documents | open |
+   | `on_sort` | projects, documents | open |
+
+   Moved: `finance/transactions.rs`. Its money keeps `format_money`, so EUR still reads
+   `12,34 €`. The page gives its rows newest first, and Ely's stable sort keeps that order on
+   ties. Not checked: how the page looks, because nobody has opened Finance → Transactions on
+   Ely's table yet. Ely's `active` and `*_subtle` fills are warm greys on Sjel's blue-tinted
+   surfaces. Judge them there.
+
+   Next: `inventory/owned.rs` and `finance/import.rs`, which need `Lines` and `actions`. Then
+   `projects` and `documents`, which need the current row, `on_sort`, `Check` and `choices`.
+   When `tables.rs` goes, `sub_tabs`, `key_bar`, `tabular_cell` and `mono_num` move to their
+   own file. `sortable_table_header`, `data_row`, `page_scroll` and `remote_state` have no
+   caller and are deleted.
 
 #### Resume checklist (Ely)
 
@@ -792,9 +819,12 @@ order:
    primary checkout. Stage only the files of this task.
 2. **Tables (item 1).** Six pages use Sjel's tables: `documents/mod.rs`, `finance/import.rs`,
    `finance/transactions.rs`, `inventory/owned.rs`, `projects/mod.rs` and `projects/tables.rs`
-   (all in `ui/src`). Ely's tables are in the fork at `src/tables/`. List what each page needs
-   from a table, then put a design to the owner before you move a page. Move one page, check
-   sort, selection and keys with a headless test, then move the other five. Delete
+   (all in `ui/src`). `finance/transactions.rs` is moved. Build the open additions in item 1's
+   table in the fork, then move the next page. Check each page's sort, selection and keys with
+   a headless test. To build Sjel against an unpushed fork commit, pass
+   `--config 'patch."https://github.com/larsboes/Ely-GPUI-Components".ely-gpui-component.path="<fork>"'`
+   to cargo. That leaves `Cargo.toml` alone, but it rewrites `Cargo.lock`, so move the `rev`
+   before you commit. Delete
    `ui/src/primitives/data_table.rs` and `tables.rs` in the change that moves the last page.
 3. **Change the fork.** When an Ely component lacks a behavior that Sjel needs, add
    it on the fork's `sjel` branch with a test. Do not open a PR upstream yet. Push the fork,
@@ -817,10 +847,10 @@ cargo test --lib --features test-support
 cargo test --lib --features test-support,gpui-fast
 ```
 
-At the last check, 649 app tests passed with 6 ignored. Window tests call
-`ely::init_for_tests`, which needs Ely's `test-support` feature as a dev-dependency. In the
-fork, 1728 tests passed on `gpui-pre` and 1727 on GPUI Fast, where the leak test does not run.
-The theme bridge did not change the fork, so the fork's tests did not run again. Update this checklist with
+At the last check, 651 app tests passed with 6 ignored. Window tests call
+`ely::init_for_tests`, which needs Ely's `test-support` feature as a dev-dependency of both the
+app and `ui`. In the fork, 1732 tests passed on `gpui-pre` and 1731 on GPUI Fast, where the
+leak test does not run. Update this checklist with
 what is still open, and state each check that did not run.
 
 ### Derived views

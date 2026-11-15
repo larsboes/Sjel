@@ -56,6 +56,8 @@ optional = true
 
 [dev-dependencies]
 gpui-kit = { workspace = true, features = ["test-support"] }
+# `ely::init_for_tests`, for window tests that draw Ely components.
+ely-gpui-component = { workspace = true, features = ["test-support"] }
 nsh-engine = { git = "https://github.com/longbridge/nsh", rev = "1894697155", default-features = false }
 nsh-testing = { git = "https://github.com/longbridge/nsh", rev = "1894697155", default-features = false }
 # Keeps `Repo` off this machine's real sjel.db in the Projects window tests (core's Cargo.toml).

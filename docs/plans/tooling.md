@@ -173,6 +173,11 @@ archive includes the managed path resolver; its extracted-path regression passes
   but nothing records a hold. On 2026-11-09 one session migrated the phone's remaining screens
   while another decided the phone's renderer. Smallest change: a hold record per area plan that
   `sjel` lists and `tools/doctor` reports when it is stale.
+- **Build the Mac app against a local fork.** Testing an unpushed Ely commit needs a hand-typed
+  `cargo --config 'patch."<fork url>".<crate>.path="<fork>"'`, and it rewrites
+  `apps/gpui/Cargo.lock` until the `rev` moves ([`gpui.md`](gpui.md#resume-checklist-ely)).
+  Smallest change: a `tools/` wrapper that takes the fork path, runs the checks with the patch,
+  and restores the lockfile.
 
 - **Overlay ignore-policy compatibility — deferred.** The shared floor excludes the machine
   manifest and all runtime-data paths, while existing private overlays deliberately version

@@ -1,10 +1,13 @@
 //! Expense ledger, transactions table, category reclassification, and split allocations.
 
+use std::rc::Rc;
+
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString, Window,
+    div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString,
+    Window,
 };
 use sjel_gpui_core::context::format_money;
 use sjel_gpui_core::finance::{
@@ -12,24 +15,15 @@ use sjel_gpui_core::finance::{
 };
 use sjel_gpui_core::shell::{self, FinanceTransaction, ShellError};
 
-use gpui_kit::component::table::TableState;
-
-use crate::primitives::{
-    data_table, mono_num, new_table_state, set_table_rows, tabular_cell, RowTable, SortOrder,
-    TableColumn,
-};
-use crate::theme::{Density, Palette};
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
+use crate::primitives::{mono_num, tabular_cell};
+use crate::theme::Palette;
 
 use super::FinancePage;
 
 /// How many category suggestions the picker shows.
 const RECLASS_SUGGESTIONS: usize = 6;
-
-pub(crate) type TxTable = RowTable<FinanceTransaction>;
-
-fn by_text(left: &str, right: &str) -> std::cmp::Ordering {
-    left.to_lowercase().cmp(&right.to_lowercase())
-}
 
 fn amount_color(tx: &FinanceTransaction, palette: Palette) -> u32 {
     if tx.kind == "expense" || tx.amount_cents < 0 {
@@ -41,93 +35,40 @@ fn amount_color(tx: &FinanceTransaction, palette: Palette) -> u32 {
     }
 }
 
-/// The transactions table, newest first.
-pub(crate) fn tx_table() -> TxTable {
-    RowTable::new(vec![
-        TableColumn::new(
-            "date",
-            "DATE",
-            96.,
-            |tx: &FinanceTransaction, palette, _, _| {
-                mono_num(tx.date.clone(), palette.muted)
-                    .text_xs()
-                    .into_any_element()
-            },
-        )
-        .label_text(|tx| tx.date.clone())
-        .sort_by(|a, b| a.date.cmp(&b.date)),
-        TableColumn::new(
-            "description",
-            "DESCRIPTION",
-            320.,
-            |tx: &FinanceTransaction, palette, _, _| {
-                div()
-                    .truncate()
-                    .text_sm()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(rgb(palette.text))
-                    .child(tx.description.clone())
-                    .into_any_element()
-            },
-        )
-        .label_text(|tx| tx.description.clone())
-        .sort_by(|a, b| by_text(&a.description, &b.description)),
-        TableColumn::new(
-            "category",
-            "CATEGORY",
-            130.,
-            |tx: &FinanceTransaction, palette, _, _| {
-                div()
-                    .max_w_full()
-                    .truncate()
-                    .px_1p5()
-                    .py(px(1.))
-                    .rounded(px(3.))
-                    .bg(rgba(palette.raised))
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(tx.category.clone())
-                    .into_any_element()
-            },
-        )
-        .label_text(|tx| tx.category.clone())
-        .sort_by(|a, b| by_text(&a.category, &b.category)),
-        TableColumn::new(
-            "account",
-            "ACCOUNT",
-            160.,
-            |tx: &FinanceTransaction, palette, _, _| {
-                div()
-                    .truncate()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(tx.account.clone())
-                    .into_any_element()
-            },
-        )
-        .label_text(|tx| tx.account.clone())
-        .sort_by(|a, b| by_text(&a.account, &b.account)),
-        TableColumn::new(
-            "amount",
-            "AMOUNT",
-            110.,
-            |tx: &FinanceTransaction, palette, _, _| {
-                mono_num(
-                    format_money(tx.amount_cents, &tx.currency),
-                    amount_color(tx, palette),
-                )
-                .text_xs()
-                .truncate()
-                .into_any_element()
-            },
-        )
-        .right()
-        .label_text(|tx| format_money(tx.amount_cents, &tx.currency))
-        .sort_by(|a, b| a.amount_cents.cmp(&b.amount_cents)),
-    ])
-    .sorted("date", SortOrder::Descending)
-    .tie_break(|a, b| b.date.cmp(&a.date).then_with(|| a.id.cmp(&b.id)))
-    .empty_text("No transactions match the current filter.")
+/// The transactions table's columns. Widths in rems follow the app's text size.
+fn tx_columns() -> [Column; 5] {
+    [
+        Column::new("date", "DATE").width(rems(6.)).muted(),
+        Column::new("description", "DESCRIPTION"),
+        Column::new("category", "CATEGORY").width(rems(8.)),
+        Column::new("account", "ACCOUNT").width(rems(10.)).muted(),
+        Column::new("amount", "AMOUNT").width(rems(7.)).end(),
+    ]
+}
+
+/// One table row for `tx`. The amount keeps Sjel's money format and sorts by cents.
+fn tx_row(tx: &FinanceTransaction) -> Row {
+    let tone = if tx.kind == "expense" || tx.amount_cents < 0 {
+        Tone::Danger
+    } else if tx.kind == "income" {
+        Tone::Success
+    } else {
+        Tone::Neutral
+    };
+    Row::new(
+        tx.id.clone(),
+        [
+            Cell::Text(tx.date.clone().into()),
+            Cell::Text(tx.description.clone().into()),
+            Cell::Tag(tx.category.clone().into(), Tone::Neutral),
+            Cell::Text(tx.account.clone().into()),
+            Cell::Figure(
+                format_money(tx.amount_cents, &tx.currency).into(),
+                tx.amount_cents as f64,
+                tone,
+            ),
+        ],
+    )
 }
 
 pub(crate) fn render_tx_row(
@@ -197,21 +138,12 @@ pub(crate) fn render_tx_row(
 }
 
 impl FinancePage {
-    /// The transactions table, with the rows the search and category filter keep.
-    pub(super) fn sync_tx_table(
-        &mut self,
-        window: &mut Window,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> Entity<TableState<TxTable>> {
-        let table = self
-            .tx_table
-            .get_or_insert_with(|| new_table_state(tx_table(), window, cx))
-            .clone();
+    /// The rows the search and category filter keep, newest first, built once per change.
+    pub(super) fn tx_rows(&mut self) -> Rc<Vec<Row>> {
         let key = (self.dashboard.loaded_at, self.filter_rev);
         if self.tx_rows_key != Some(key) {
             self.tx_rows_key = Some(key);
-            let rows = self
+            let mut kept: Vec<&FinanceTransaction> = self
                 .dashboard
                 .value
                 .as_ref()
@@ -221,18 +153,12 @@ impl FinancePage {
                         category: self.selected_category.clone(),
                     };
                     filter_transactions(&projection.transactions, &filter)
-                        .into_iter()
-                        .cloned()
-                        .collect()
                 })
                 .unwrap_or_default();
-            set_table_rows(&table, rows, cx);
+            kept.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| a.id.cmp(&b.id)));
+            self.tx_rows = Rc::new(kept.into_iter().map(tx_row).collect());
         }
-        let palette = self.palette.unwrap_or(palette);
-        table.update(cx, |state, _| {
-            state.delegate_mut().set_palette(Some(palette))
-        });
-        table
+        self.tx_rows.clone()
     }
 
     pub(super) fn reclass_field(
@@ -573,7 +499,7 @@ impl FinancePage {
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let table = self.sync_tx_table(window, palette, cx);
+        let rows = self.tx_rows();
 
         let search_box = div()
             .w(px(280.))
@@ -626,11 +552,79 @@ impl FinancePage {
             .gap_2()
             .size_full()
             .child(filter_bar)
-            .child(div().flex_1().min_h_0().pb_6().child(data_table(
-                &table,
-                "Transactions",
-                Density::Desktop,
-            )))
+            .child(
+                div().flex_1().min_h_0().pb_6().child(
+                    DataTable::new("finance-transactions", tx_columns())
+                        .rows(rows)
+                        .sorts([SortKey {
+                            column: "date".into(),
+                            rising: false,
+                        }])
+                        .virtualized()
+                        .track_scroll(&self.tx_scroll)
+                        .empty("No transactions match the current filter.")
+                        .size_full(),
+                ),
+            )
             .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui_kit::{TestAppContext, VisualTestContext};
+
+    fn tx(id: &str, kind: &str, cents: i64) -> FinanceTransaction {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "date": "2026-11-14", "description": "Coffee", "kind": kind,
+            "account": "Giro", "category": "Food", "amount_cents": cents, "currency": "EUR",
+        }))
+        .expect("a transaction reads")
+    }
+
+    #[test]
+    fn a_row_keeps_sjels_money_format_sorts_by_cents_and_tones_by_kind() {
+        for (kind, cents, tone) in [
+            ("expense", 1234, Tone::Danger),
+            ("income", 1234, Tone::Success),
+            ("transfer", 1234, Tone::Neutral),
+            ("transfer", -1234, Tone::Danger),
+        ] {
+            let expected = Row::new(
+                "t1",
+                [
+                    Cell::Text("2026-11-14".into()),
+                    Cell::Text("Coffee".into()),
+                    Cell::Tag("Food".into(), Tone::Neutral),
+                    Cell::Text("Giro".into()),
+                    Cell::Figure(format_money(cents, "EUR").into(), cents as f64, tone),
+                ],
+            );
+            assert_eq!(tx_row(&tx("t1", kind, cents)), expected, "{kind} {cents}");
+        }
+    }
+
+    struct Ledger(Rc<Vec<Row>>);
+
+    impl gpui_kit::Render for Ledger {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            DataTable::new("finance-transactions", tx_columns())
+                .rows(self.0.clone())
+                .virtualized()
+                .empty("No transactions match the current filter.")
+                .size_full()
+        }
+    }
+
+    #[gpui_kit::test]
+    fn the_ledger_draws_on_elys_table(cx: &mut TestAppContext) {
+        cx.update(crate::ely::init_for_tests);
+        let rows = Rc::new(vec![
+            tx_row(&tx("a", "expense", -500)),
+            tx_row(&tx("b", "income", 900)),
+        ]);
+        let (_, cx): (_, &mut VisualTestContext) = cx.add_window_view(|_, _| Ledger(rows));
+        cx.run_until_parked();
     }
 }

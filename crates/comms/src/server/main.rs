@@ -56,6 +56,7 @@ mod contracts;
 mod error;
 mod feed;
 mod markdown_links;
+mod mail_evidence_eval;
 mod source_handlers;
 mod triage;
 
@@ -75,6 +76,16 @@ use triage::*;
 /// a caller what it must send, and learning that from a 400 is the thing this
 /// endpoint exists to avoid.
 const ROUTES: &[route_manifest::Route] = &[
+    route_manifest::Route {
+        method: "POST", path: "/triage/mail-evidence/evaluation/freeze",
+        summary: "Owner-only: freeze reviewed labels against fresh native messages; returns no message bodies and stages no changes.",
+        request_schema: Some(route_manifest::schema_of::<comms::mail_evidence_source::NativeReview>),
+    },
+    route_manifest::Route {
+        method: "POST", path: "/triage/mail-evidence/evaluation/run",
+        summary: "Owner-only: fetch and classify native message references, validate frozen inputs and return evaluation counts; rules by default.",
+        request_schema: Some(route_manifest::schema_of::<comms::mail_evidence_source::NativeRun>),
+    },
     r("GET", "/health", "Liveness."),
     r(
         "GET",
@@ -453,6 +464,8 @@ fn build_router(dashboard_origin: &str) -> Router {
     // sets differ in what they cost when they run, not because they differ in
     // what admits a caller — one gate covers both.
     let write_routes = Router::new()
+        .route("/triage/mail-evidence/evaluation/freeze", post(mail_evidence_eval::freeze))
+        .route("/triage/mail-evidence/evaluation/run", post(mail_evidence_eval::run))
         .route("/content/{source}/{id}/digest", post(digest_handler))
         .route("/content/{source}/{id}/diagram", post(diagram_handler))
         .route("/content/{source}/{id}/chart", post(chart_handler))
@@ -572,7 +585,11 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
             ("POST", "/feed/{id}/data-class"),
         ],
         get_writes: &[],
-        closed: &[("POST", "/triage/mail-evidence/replay")],
+        closed: &[
+            ("POST", "/triage/mail-evidence/replay"),
+            ("POST", "/triage/mail-evidence/evaluation/freeze"),
+            ("POST", "/triage/mail-evidence/evaluation/run"),
+        ],
         only: &[],
     };
 
@@ -1166,5 +1183,7 @@ mod route_manifest_tests {
         ));
         assert!(missing.is_empty(), "served but undocumented: {missing:?}");
         assert!(super::AGENT_ROUTES.closes("POST", "/triage/mail-evidence/replay"));
+        assert!(super::AGENT_ROUTES.closes("POST", "/triage/mail-evidence/evaluation/freeze"));
+        assert!(super::AGENT_ROUTES.closes("POST", "/triage/mail-evidence/evaluation/run"));
     }
 }

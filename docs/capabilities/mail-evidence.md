@@ -187,3 +187,41 @@ absent regardless of the predicted event. Duplicate predictions and parser rejec
 separately. A request failure leaves that case unscored, with a failure code. Empty or unscored
 runs cannot be reported as an accuracy result. No acceptance threshold is inferred from a first
 small baseline.
+
+### Native message evaluation
+
+Comms owns two authenticated owner-only endpoints:
+
+- `POST /triage/mail-evidence/evaluation/freeze` takes `reviewed_by`, `reviewed_at` and
+  `cases`. Each case contains `id`, `source_id`, `stage` and `expected` labels in the format
+  above. The response is a frozen corpus with representation `native-mail-message-v1`.
+- `POST /triage/mail-evidence/evaluation/run` takes `corpus` and an optional `role`, defaulting
+  to `rules`. The response is the same count-only evaluation report. Other roles must resolve
+  to AFM with a configured context budget.
+
+A source reference must be `mail:v1:<thread-id>:<message-id>`. Both provider IDs are checked;
+the adapter selects the exact message, never the latest message or a concatenated thread.
+Requests admit at most 50 unique source/stage pairs and use the server's 2 MiB JSON limit.
+Each selected message is limited to 64 KiB. A thread is fetched once per request, including when
+multiple cases select it. Project candidates are loaded only for project cases.
+
+Before fetching bodies, the adapter requires an indexed thread class of `c0`, `c1` or `c2`.
+It reuses the scanner's whole-body and metadata classification and takes the stricter thread
+class. Missing metadata, an unknown class or any `c3` message refuses the entire thread,
+including when the restricted message was not selected. Thread class and stream are rechecked
+after loading, before each extraction and before returning. Project candidates are also
+rechecked for project cases. Drift refuses the request without a partial report.
+
+Freeze validates grounded labels against freshly fetched text. Run fetches again and validates
+all input fingerprints before extraction. A changed body, effective class or project candidate
+set requires fresh review. Session-pseudonymized corpora cannot be converted by changing the
+representation field; native sources need independent review and fingerprints. Evaluation uses
+the whole selected message. Production chunking and live AFM admission still need separate
+acceptance; this adapter does not establish either result.
+
+The existing `sjel capability call comms post PATH @REQUEST.json` can submit metadata-only
+request files from an owner terminal. Agent tokens are refused on both endpoints. No source
+bodies are returned to the caller, staged as proposals or written to an evaluation store; Gmail
+is read without mutation. Retained responses include private references and reviewed excerpts,
+so callers must save them as new mode `0600` files in the private overlay. The stdin evaluator's
+file safeguards do not apply to arbitrary HTTP clients.

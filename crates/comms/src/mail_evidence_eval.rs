@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use crate::mail_evidence::{self, Parsed, Stage};
 
 /// An independently reviewed claim, with equivalent source spellings of its item mention.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Label {
     pub event: String,
@@ -49,7 +49,7 @@ pub struct ReviewedCase {
 }
 
 /// Frozen labels and input fingerprints, without message bodies.
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Corpus {
     pub schema_version: String,
@@ -59,7 +59,7 @@ pub struct Corpus {
     pub cases: Vec<Case>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 /// A retained source reference, fingerprint and reviewed labels.
 pub struct Case {
@@ -293,6 +293,17 @@ pub fn run(
     runtime: &sjel_runtime::Status,
     role_name: &str,
 ) -> Result<Report, &'static str> {
+    run_with_guard(corpus, sources, cfg, runtime, role_name, |_| Ok(()))
+}
+
+pub(crate) fn run_with_guard(
+    corpus: &Corpus,
+    sources: &[Source],
+    cfg: &crate::config::Config,
+    runtime: &sjel_runtime::Status,
+    role_name: &str,
+    mut guard: impl FnMut(&Source) -> Result<(), &'static str>,
+) -> Result<Report, &'static str> {
     if corpus.schema_version != "mail-evidence-corpus-v1"
         || corpus.reviewed_by.trim().is_empty()
         || corpus.cases.is_empty()
@@ -387,6 +398,7 @@ pub fn run(
             .iter()
             .find(|s| s.id == case.id)
             .ok_or("missing source")?;
+        guard(source)?;
         let extraction = crate::mail_evidence_scan::Extraction {
             stage: source.stage,
             class: &source.data_class,

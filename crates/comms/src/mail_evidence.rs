@@ -18,7 +18,7 @@ pub const MAX_FIELD_BYTES: usize = 256;
 pub const MAX_EVIDENCE_BYTES: usize = 1024;
 pub const MAX_PROJECTS: usize = 128;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
     Inventory,

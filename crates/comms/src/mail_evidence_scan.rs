@@ -49,7 +49,7 @@ impl ScanReport {
 }
 
 // Only literal loopback addresses are accepted; no DNS, credentials, query or path.
-fn local_base(base: &str) -> Option<String> {
+pub(crate) fn local_base(base: &str) -> Option<String> {
     let url = reqwest::Url::parse(base).ok()?;
     let host = url.host_str()?;
     let ip: std::net::IpAddr = host.trim_matches(['[', ']']).parse().ok()?;
@@ -66,7 +66,7 @@ fn local_base(base: &str) -> Option<String> {
     Some(url.as_str().trim_end_matches('/').to_owned())
 }
 
-fn client(timeout_ms: u64) -> Result<reqwest::blocking::Client, ()> {
+pub(crate) fn client(timeout_ms: u64) -> Result<reqwest::blocking::Client, ()> {
     sjel_http::builder(
         sjel_http::Purpose::new("comms-mail-evidence"),
         Duration::from_millis(timeout_ms.clamp(1000, 30000)),
@@ -88,7 +88,10 @@ struct ProjectName {
     data_class: String,
 }
 
-fn project_names(client: &reqwest::blocking::Client, base: &str) -> Result<Vec<String>, ()> {
+pub(crate) fn project_names(
+    client: &reqwest::blocking::Client,
+    base: &str,
+) -> Result<Vec<String>, ()> {
     let url = format!("{base}/api/projects");
     let response = sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
         .send()
@@ -136,7 +139,7 @@ fn rank(class: &str) -> Option<u8> {
     }
 }
 
-fn message_class(
+pub(crate) fn message_class(
     thread_class: &str,
     stream: &str,
     message: &google::ThreadMessageBody,
@@ -186,7 +189,7 @@ pub fn valid_batch(ids: &[String]) -> bool {
         && ids.iter().collect::<HashSet<_>>().len() == ids.len()
 }
 
-fn valid_message_ids(messages: &[google::ThreadMessageBody]) -> bool {
+pub(crate) fn valid_message_ids(messages: &[google::ThreadMessageBody]) -> bool {
     messages.iter().all(|m| valid_provider_id(&m.id))
         && messages.iter().map(|m| &m.id).collect::<HashSet<_>>().len() == messages.len()
 }

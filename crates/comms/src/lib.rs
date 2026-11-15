@@ -34,6 +34,7 @@ pub mod mail_authenticity;
 pub mod mail_evaluation;
 pub mod mail_events;
 pub mod mail_evidence;
+pub mod mail_evidence_eval;
 pub mod mail_evidence_scan;
 pub mod mail_model;
 pub mod mail_model_eval;

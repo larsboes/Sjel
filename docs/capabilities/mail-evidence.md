@@ -64,3 +64,40 @@ grounding failures, quoted repeats, multiple lines and shared excerpts. Each acc
 must deserialize and validate through its receiving contract. It makes no model calls and does
 not measure model accuracy, product matching or real-mail recall. The area
 [data plan](../plans/data.md#mail-evidence-semantics-and-resolution) owns remaining acceptance.
+
+## Reviewed local evaluation
+
+`comms-mail-evidence-eval` freezes independent labels and compares model predictions through
+the production prompt, local inference admission and parser. It never stages proposals or changes
+Inventory, Projects or Gmail. Build with `sjel cargo build --locked -p sjel-comms --bin
+comms-mail-evidence-eval`, then run the emitted executable against the active deployment.
+`sjel cargo run` uses hermetic test configuration and cannot select the deployed roles.
+
+The `freeze CORPUS` command reads a review object from stdin. It contains `reviewed_by`,
+`reviewed_at`, `representation` and `cases`. Each case contains a transient `source` and
+`expected` labels. A source contains `id`, `source_id`, `data_class`, `stage`, `projects` and
+`mail`. A label contains `event`, equivalent `titles`, an optional `project` and a short supporting
+`evidence` excerpt. Empty labels explicitly identify a negative case. Labels must be reviewed
+before any prediction is inspected. Agent review must be identified separately from human review.
+
+The frozen corpus retains source references, labels, excerpts and input hashes. Full message
+bodies travel on stdin and stay in memory. Outputs must be new files under the active private
+overlay and are created with mode `0600`. Labels and private fixtures never belong in this
+repository. Supply source text from an admitted source adapter without a temporary body file.
+
+`run CORPUS REPORT ROLE` reads an array of the same sources on stdin. It validates every
+fingerprint before inference and refuses changed sources, classifications or project candidates.
+A pseudonymized source representation must be supplied identically on repeat runs; token changes
+require a fresh review and corpus. Pseudonymized thread bodies measure that representation,
+separately from production's raw per-message classification and chunking.
+
+Reports contain counts, safe failure codes, the resolved backend/model, inference-convention
+fingerprint, corpus hash, role, extraction contract revision and run time. They contain no predicted excerpts.
+`false_claims` and `missed_claims` compare accepted event/item/project assignments. Item titles
+match only the reviewer-declared aliases after case and whitespace normalization; this is a
+scoring rule, never a runtime identity matcher. `incorrect_targets` counts wrong assignments and
+rejected unknown projects. `missed_item_mentions` counts expected claims whose item mention was
+absent regardless of the predicted event. Duplicate predictions and parser rejections are reported
+separately. A request failure leaves that case unscored, with a failure code. Empty or unscored
+runs cannot be reported as an accuracy result. No acceptance threshold is inferred from a first
+small baseline.

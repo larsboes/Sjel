@@ -196,16 +196,16 @@ fn source_id(thread: &str, message: &str) -> Option<String> {
     Some(format!("mail:v1:{thread}:{message}"))
 }
 
-struct Extraction<'a> {
-    stage: Stage,
-    class: &'a str,
-    text: &'a str,
-    source: &'a str,
+pub(crate) struct Extraction<'a> {
+    pub(crate) stage: Stage,
+    pub(crate) class: &'a str,
+    pub(crate) text: &'a str,
+    pub(crate) source: &'a str,
     /// Print the mail text and the raw reply to stderr. Operator inspection only.
-    show: bool,
+    pub(crate) show: bool,
 }
 
-fn model(
+pub(crate) fn model(
     runtime: &sjel_runtime::Status,
     cfg: &Config,
     role: &sjel_inference::ResolvedRole,

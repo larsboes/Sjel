@@ -8,6 +8,16 @@ then move it to Done here.
 Entry format: what was needed, what the agent did instead, and the smallest tooling change that
 covers it.
 
+## Diagnostic binaries against the active deployment
+
+- **Run a newly built read-only evaluator against the active overlay.** `sjel cargo run`
+  correctly substitutes hermetic test state, so it cannot freeze private labels into the active
+  overlay or resolve the deployed inference roles. The mail-evidence evaluation built through
+  `sjel cargo build`, then invoked Cargo's emitted debug executable directly. Add a diagnostic
+  execution command that resolves that executable from Cargo metadata and runs it with the
+  active deployment after an explicit selection. Done when build/test isolation stays intact
+  and the selected diagnostic runs against the intended overlay without a copied cache path.
+
 ## Private repository consolidation
 
 - **Import a private source workspace with history.** Consolidating a sibling application

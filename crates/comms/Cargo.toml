@@ -33,6 +33,10 @@ name = "comms-extraction-eval"
 path = "src/extraction_eval_main.rs"
 
 [[bin]]
+name = "comms-mail-evidence-eval"
+path = "src/mail_evidence_eval_main.rs"
+
+[[bin]]
 name = "comms-redaction-eval"
 path = "src/redaction_eval_main.rs"
 

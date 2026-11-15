@@ -1,5 +1,12 @@
 # Comms quality evaluation
 
+## Mail evidence claims
+
+`mail-evidence.json` is the public synthetic parser regression corpus. The
+[reviewed local evaluator](../../../docs/capabilities/mail-evidence.md#reviewed-local-evaluation)
+freezes private labels and measures local model predictions without storing message bodies or
+staging owner changes. It evaluates purchase claims separately from the triage categories below.
+
 ## Not here: the OCR engine gate
 
 `libs/extraction/eval/` holds the frozen DE/EN corpus that decides which OCR engine may join the

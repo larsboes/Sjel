@@ -18,7 +18,8 @@ pub const MAX_FIELD_BYTES: usize = 256;
 pub const MAX_EVIDENCE_BYTES: usize = 1024;
 pub const MAX_PROJECTS: usize = 128;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Stage {
     Inventory,
     Projects,
@@ -112,6 +113,7 @@ pub fn prompt(
 pub struct Parsed {
     pub proposals: Vec<Proposal>,
     pub dropped: Vec<&'static str>,
+    pub duplicates: usize,
 }
 
 /// Every whitespace run as one space. A quote is grounded by its words, not by the layout a
@@ -246,6 +248,7 @@ pub fn parse(
     let mut parsed = Parsed {
         proposals: Vec::with_capacity(rows.len()),
         dropped: Vec::new(),
+        duplicates: 0,
     };
     for row in rows {
         let Ok(row) = serde_json::from_value::<ModelProposal>(row) else {
@@ -307,6 +310,8 @@ pub fn parse(
         };
         if ids.insert(identity) {
             parsed.proposals.push(proposal);
+        } else {
+            parsed.duplicates += 1;
         }
     }
     Ok(parsed)

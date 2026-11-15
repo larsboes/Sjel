@@ -1,7 +1,7 @@
 //! Keyboard actions, key bindings, and entity mutation workflows for People.
 use std::sync::Arc;
 
-use gpui_kit::{actions, App, Context, KeyBinding, Window};
+use gpui_kit::{actions, App, Context, Focusable, KeyBinding, Window};
 use sjel_gpui_core::shell::{self, Shell, ShellError};
 
 use crate::data::Remote;
@@ -198,7 +198,7 @@ impl PeoplePage {
 
     pub fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let field = self.search_field(window, cx);
-        field.update(cx, |input, cx| input.focus(window, cx));
+        field.update(cx, |input, cx| input.focus_handle(cx).focus(window, cx));
     }
 
     pub(super) fn on_focus_search(

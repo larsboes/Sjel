@@ -5,11 +5,12 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use gpui::{
-    div, prelude::*, px, rems, rgb, rgba, AnyElement, App, Context, Entity, Subscription, Window,
+    div, prelude::*, px, rems, rgb, rgba, AnyElement, App, Context, Entity, Focusable,
+    Subscription, Window,
 };
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::{Disableable, Sizable};
+use gpui_kit::component::button::{Button as KitButton, ButtonVariants};
+use gpui_kit::component::input::Input as KitInput;
+use gpui_kit::component::Sizable;
 use sjel_gpui_core::inventory::{
     filter_inventory, format_cents, format_dimensions, group_of, InteriorItemImpact, InventoryItem,
     InventoryRow, InventoryState, InventoryStateHistoryEntry,
@@ -17,7 +18,10 @@ use sjel_gpui_core::inventory::{
 use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::data::Remote;
+use crate::ely::buttons::{Button as ElyButton, ButtonVariant};
 use crate::ely::data_display::Tone;
+use crate::ely::forms::{Form as ElyForm, FormError, FormField, Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
 use crate::ely::theme::Density;
 use crate::primitives::{stat_card, stat_strip};
@@ -93,7 +97,7 @@ pub(super) fn owned_row(row: &InventoryRow) -> Row {
 
 pub(crate) struct InventoryEditForm {
     pub(super) item: InventoryItem,
-    pub(super) fields: Vec<(String, String, Entity<InputState>)>,
+    pub(super) fields: Vec<(String, String, Entity<TextInput>)>,
     pub(super) state_history: Remote<Vec<InventoryStateHistoryEntry>>,
     pub(super) impact: Remote<InteriorItemImpact>,
     pub(super) impact_busy: bool,
@@ -107,7 +111,7 @@ impl InventoryEditForm {
         self.fields
             .iter()
             .find(|(field, _, _)| field == key)
-            .map(|(_, _, input)| input.read(cx).value().to_string())
+            .map(|(_, _, input)| input.read(cx).text().to_owned())
             .unwrap_or_default()
     }
 }
@@ -254,13 +258,13 @@ impl InventoryPage {
         let mut subscriptions = Vec::new();
         for (key, label, value, placeholder) in definitions {
             let input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder(placeholder);
-                input.set_value(value, window, cx);
+                let mut input = TextInput::new(window, cx).placeholder(placeholder);
+                input.set_text(value, cx);
                 input
             });
             subscriptions.push(
                 cx.subscribe_in(&input, window, |page, _, event, window, cx| {
-                    if matches!(event, InputEvent::PressEnter { .. }) {
+                    if matches!(event, InputEvent::Submit) {
                         page.save_item_edit(window, cx);
                     }
                 }),
@@ -268,7 +272,7 @@ impl InventoryPage {
             fields.push((key.to_owned(), label.to_owned(), input));
         }
         if let Some((_, _, input)) = fields.first() {
-            input.update(cx, |input, cx| input.focus(window, cx));
+            input.update(cx, |input, cx| input.focus_handle(cx).focus(window, cx));
         }
         let item_id = item.id.clone();
         self.edit_form = Some(InventoryEditForm {
@@ -569,14 +573,14 @@ impl InventoryPage {
                     .items_center()
                     .justify_between()
                     .gap_4()
-                    .child(div().w(px(280.)).child(Input::new(&search_field).small()))
+                    .child(div().w(px(280.)).child(KitInput::new(&search_field).small()))
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .gap_1()
                             .child(
-                                Button::new("cat-all")
+                                KitButton::new("cat-all")
                                     .small()
                                     .label("All")
                                     .when(self.selected_category.is_none(), |b| b.primary())
@@ -590,7 +594,7 @@ impl InventoryPage {
                             .children(categories.into_iter().map(|cat| {
                                 let active = self.selected_category.as_deref() == Some(&cat);
                                 let cat_name = cat.clone();
-                                Button::new(format!("cat-{}", cat))
+                                KitButton::new(format!("cat-{}", cat))
                                     .small()
                                     .label(cat.clone())
                                     .when(active, |b| b.primary())
@@ -652,25 +656,22 @@ impl InventoryPage {
                 div()
                     .flex()
                     .flex_col()
-                    .gap_1()
                     .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(label.clone()),
+                        FormField::new(format!("inventory-edit-{key}"), label.clone())
+                            .child(Input::new(input).size(ControlSize::Sm)),
                     )
-                    .child(Input::new(input).small())
-                    .id(format!("inventory-edit-{key}")),
+                    .id(format!("inventory-edit-{key}-row")),
             );
         }
         if let Some(error) = &form.error {
-            fields = fields.child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.red))
-                    .child(error.clone()),
-            );
+            fields = fields.child(FormError::new("inventory-edit-error", error.clone()));
         }
+        let page_entity = cx.entity();
+        let fields = ElyForm::new("inventory-edit-form")
+            .on_submit(move |window, cx| {
+                page_entity.update(cx, |page, cx| page.save_item_edit(window, cx));
+            })
+            .child(fields);
         let saving = form.saving;
         let impact_busy = form.impact_busy;
         let state_busy = self.wish_busy.is_some();
@@ -691,11 +692,13 @@ impl InventoryPage {
             .into_iter()
             .map(|(state, label)| {
                 let active = current_state == state.as_str();
-                Button::new(format!("inventory-edit-state-{}", state.as_str()))
-                    .small()
-                    .label(label)
-                    .when(active, |b| b.primary())
-                    .when(!active, |b| b.ghost())
+                ElyButton::new(format!("inventory-edit-state-{}", state.as_str()), label)
+                    .size(ControlSize::Sm)
+                    .variant(if active {
+                        ButtonVariant::Primary
+                    } else {
+                        ButtonVariant::Ghost
+                    })
                     .disabled(saving || state_busy)
                     .on_click(cx.listener(move |page, _, _, cx| {
                         page.record_edit_state(state, cx);
@@ -845,10 +848,9 @@ impl InventoryPage {
                                 .child(format!("Edit {}", form.item.label)),
                         )
                         .child(
-                            Button::new("inventory-edit-cancel")
-                                .small()
-                                .ghost()
-                                .label("Cancel")
+                            ElyButton::new("inventory-edit-cancel", "Cancel")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .disabled(saving)
                                 .on_click(cx.listener(|page, _, _, cx| {
                                     page.edit_form = None;
@@ -865,28 +867,32 @@ impl InventoryPage {
                         .justify_end()
                         .gap_2()
                         .child(
-                            Button::new("inventory-edit-impact")
-                                .small()
-                                .ghost()
-                                .label(if impact_busy {
+                            ElyButton::new(
+                                "inventory-edit-impact",
+                                if impact_busy {
                                     "Checking layouts…"
                                 } else {
                                     "Preview layout impact"
-                                })
-                                .disabled(saving || impact_busy)
-                                .on_click(cx.listener(|page, _, _, cx| {
-                                    page.preview_item_impact(cx);
-                                })),
+                                },
+                            )
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
+                            .disabled(saving || impact_busy)
+                            .on_click(cx.listener(|page, _, _, cx| {
+                                page.preview_item_impact(cx);
+                            })),
                         )
                         .child(
-                            Button::new("inventory-edit-save")
-                                .small()
-                                .primary()
-                                .label(if saving { "Saving…" } else { "Save changes" })
-                                .disabled(saving)
-                                .on_click(cx.listener(|page, _, window, cx| {
-                                    page.save_item_edit(window, cx)
-                                })),
+                            ElyButton::new(
+                                "inventory-edit-save",
+                                if saving { "Saving…" } else { "Save changes" },
+                            )
+                            .size(ControlSize::Sm)
+                            .primary()
+                            .disabled(saving)
+                            .on_click(cx.listener(|page, _, window, cx| {
+                                page.save_item_edit(window, cx)
+                            })),
                         ),
                 )
                 .into_any_element(),

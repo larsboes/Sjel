@@ -1,20 +1,20 @@
 //! Inventory mail review and match decision workflow.
 
 use gpui::{div, prelude::*, rgb, rgba, AnyElement, Context, Entity, Subscription, Window};
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::inventory::{MailMatchSnapshot, MailProposal};
 use sjel_gpui_core::shell::{self, ShellError};
 
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{FormField, Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use crate::theme::{tint, Palette};
 
 use super::InventoryPage;
 
 pub(crate) struct MailReviewForm {
     pub(super) proposal: MailProposal,
-    pub(super) title: Entity<InputState>,
-    pub(super) item_id: Entity<InputState>,
+    pub(super) title: Entity<TextInput>,
+    pub(super) item_id: Entity<TextInput>,
     pub(super) snapshot: Option<MailMatchSnapshot>,
     pub(super) _subscriptions: Vec<Subscription>,
 }
@@ -52,13 +52,13 @@ impl InventoryPage {
         cx: &mut Context<Self>,
     ) {
         let title = cx.new(|cx| {
-            let mut input = InputState::new(window, cx).placeholder("Item title");
-            input.set_value(&proposal.title, window, cx);
+            let mut input = TextInput::new(window, cx).placeholder("Item title");
+            input.set_text(&proposal.title, cx);
             input
         });
-        let item_id = cx.new(|cx| InputState::new(window, cx).placeholder("Inventory item ID"));
+        let item_id = cx.new(|cx| TextInput::new(window, cx).placeholder("Inventory item ID"));
         let subscription = cx.subscribe_in(&item_id, window, |page, _, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
+            if matches!(event, InputEvent::Changed) {
                 if let Some(form) = page.mail_form.as_mut() {
                     form.snapshot = None;
                 }
@@ -83,7 +83,7 @@ impl InventoryPage {
         let Some(form) = &self.mail_form else {
             return;
         };
-        let id = form.item_id.read(cx).value().trim().to_owned();
+        let id = form.item_id.read(cx).text().trim().to_owned();
         if id.is_empty() {
             self.mail_message = Some("Enter an owned item ID first.".into());
             cx.notify();
@@ -112,7 +112,7 @@ impl InventoryPage {
                     {
                         if let Some(form) = page.mail_form.as_mut() {
                             if form.proposal.id == proposal_id
-                                && form.item_id.read(cx).value().trim() == snapshot.item_id
+                                && form.item_id.read(cx).text().trim() == snapshot.item_id
                             {
                                 form.snapshot = Some(snapshot);
                             }
@@ -149,8 +149,8 @@ impl InventoryPage {
         };
         let id = form.proposal.id;
         let version = form.proposal.version;
-        let target = form.item_id.read(cx).value().trim().to_owned();
-        let title = form.title.read(cx).value().trim().to_owned();
+        let target = form.item_id.read(cx).text().trim().to_owned();
+        let title = form.title.read(cx).text().trim().to_owned();
         let body = match action {
             "reject" => serde_json::json!({"version": version, "action": "reject"}),
             "approve"
@@ -239,9 +239,8 @@ impl InventoryPage {
                         .child(format!("Could not load mail proposals: {error}")),
                 )
                 .child(
-                    Button::new("mail-retry")
-                        .small()
-                        .label("Retry")
+                    Button::new("mail-retry", "Retry")
+                        .size(ControlSize::Sm)
                         .on_click(cx.listener(|page, _, _, cx| page.load_mail(cx))),
                 );
         }
@@ -278,15 +277,18 @@ impl InventoryPage {
                 ))
                 .child("Evidence (exact)")
                 .child(p.evidence.clone())
-                .child("Title for new item")
-                .child(Input::new(&form.title).small())
-                .child("New item ID or owned target ID")
-                .child(Input::new(&form.item_id).small());
+                .child(
+                    FormField::new("mail-title-field", "Title for new item")
+                        .child(Input::new(&form.title).size(ControlSize::Sm)),
+                )
+                .child(
+                    FormField::new("mail-id-field", "New item ID or owned target ID")
+                        .child(Input::new(&form.item_id).size(ControlSize::Sm)),
+                );
             if let Some(url) = p.gmail_url() {
                 detail = detail.child(
-                    Button::new("mail-open-source")
-                        .small()
-                        .label("Open source in Gmail")
+                    Button::new("mail-open-source", "Open source in Gmail")
+                        .size(ControlSize::Sm)
                         .on_click(move |_, _, cx| cx.open_url(&url)),
                 );
             }
@@ -312,10 +314,9 @@ impl InventoryPage {
                     .flex()
                     .gap_2()
                     .child(
-                        Button::new("mail-create")
-                            .small()
+                        Button::new("mail-create", "Approve and create")
+                            .size(ControlSize::Sm)
                             .primary()
-                            .label("Approve and create")
                             .disabled(
                                 self.mail_busy || p.event != "delivered" || p.data_class == "c2",
                             )
@@ -324,31 +325,27 @@ impl InventoryPage {
                             ),
                     )
                     .child(
-                        Button::new("mail-load-target")
-                            .small()
-                            .label("Review target")
+                        Button::new("mail-load-target", "Review target")
+                            .size(ControlSize::Sm)
                             .disabled(self.mail_busy)
                             .on_click(cx.listener(|page, _, _, cx| page.mail_snapshot(cx))),
                     )
                     .child(
-                        Button::new("mail-match")
-                            .small()
-                            .label("Approve match")
+                        Button::new("mail-match", "Approve match")
+                            .size(ControlSize::Sm)
                             .disabled(self.mail_busy || form.snapshot.is_none())
                             .on_click(cx.listener(|page, _, _, cx| page.decide_mail("match", cx))),
                     )
                     .child(
-                        Button::new("mail-reject")
-                            .small()
-                            .label("Reject")
+                        Button::new("mail-reject", "Reject")
+                            .size(ControlSize::Sm)
                             .disabled(self.mail_busy)
                             .on_click(cx.listener(|page, _, _, cx| page.decide_mail("reject", cx))),
                     )
                     .child(
-                        Button::new("mail-close")
-                            .small()
-                            .ghost()
-                            .label("Close")
+                        Button::new("mail-close", "Close")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .disabled(self.mail_busy)
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.mail_form = None;
@@ -373,9 +370,8 @@ impl InventoryPage {
                         .gap_3()
                         .child(format!("{} · {} · {}", p.title, p.event, p.data_class))
                         .child(
-                            Button::new(format!("mail-open-{}", p.id))
-                                .small()
-                                .label("Review")
+                            Button::new(format!("mail-open-{}", p.id), "Review")
+                                .size(ControlSize::Sm)
                                 .disabled(self.mail_busy)
                                 .on_click(cx.listener(move |page, _, window, cx| {
                                     page.open_mail(proposal.clone(), window, cx)

@@ -825,10 +825,13 @@ boundary. Keep pure logic tests outside GPUI windows.
 
 #### Forms, menus and remaining acceptance
 
-`people/forms.rs` and `inventory/wishlist.rs` (`WishForm`, `GroupForm`) use
-`ely::forms::{Form, FormField, FormError, Input, TextInput}` and `ely::buttons::{Button, ButtonVariant}`
-instead of Kit `InputState` entities; search fields and non-form list buttons remain on Kit until
-those bars move.
+`people/{forms,mod,detail,actions}.rs` (including contact search), `inventory/wishlist.rs`
+(`WishForm`, `GroupForm`), `inventory/owned.rs` (`InventoryEditForm`) and `inventory/mail_review.rs`
+(`MailReviewForm`) use `ely::forms::{Form, FormField, FormError, Input, TextInput}` and
+`ely::buttons::{Button, ButtonVariant}` instead of Kit `InputState` entities. Inventory's
+top-bar search field and list/category pills remain on Kit until search/list bars move;
+workspace-wide notifications (`Toaster`) and menus/overlays remain deferred while `Root` and
+`workspace/mod.rs` hold concurrent edits.
 
 Verification after the form and test-support changes: `sjel-gpui-ui` passes 200 library tests (0
 failed), `sjel-gpui-core` passes 386 library tests (6 ignored), `sjel-gpui-ios` passes 3 library

@@ -11,9 +11,9 @@ mod forms;
 use std::sync::Arc;
 use std::time::Instant;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{
     div, point, prelude::*, px, rgb, rgba, Context, Entity, FocusHandle, FontWeight, IntoElement,
     Render, ScrollHandle, SharedString, Subscription, Window,
@@ -63,7 +63,7 @@ pub struct PeoplePage {
     filter_rev: u64,
     pub(super) derived: PeopleDerived,
     pub(super) people_list: gpui::ListState,
-    search_input: Option<(Entity<InputState>, Subscription)>,
+    search_input: Option<(Entity<TextInput>, Subscription)>,
     pub(super) form_scroll: ScrollHandle,
     pub(super) detail_scroll: ScrollHandle,
     focus: FocusHandle,
@@ -241,14 +241,14 @@ impl PeoplePage {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.search_input {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search people…"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Search people…"));
         let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
-                view.search_query = input.read(cx).value().trim().to_lowercase();
+            if matches!(event, InputEvent::Changed) {
+                view.search_query = input.read(cx).text().trim().to_lowercase();
                 view.filter_rev = view.filter_rev.wrapping_add(1);
                 cx.notify();
             }
@@ -306,46 +306,45 @@ impl Render for PeoplePage {
                     .flex()
                     .gap_2()
                     .child(
-                        Button::new("people-new")
-                            .small()
+                        Button::new("people-new", "New person")
+                            .size(ControlSize::Sm)
                             .primary()
-                            .label("New person")
                             .on_click(cx.listener(|page, _, window, cx| {
                                 page.open_form(FormKind::New, window, cx)
                             })),
                     )
                     .child(
-                        Button::new("people-declare-field")
-                            .small()
-                            .ghost()
-                            .label("Declare field")
+                        Button::new("people-declare-field", "Declare field")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|page, _, window, cx| {
                                 page.open_form(FormKind::Field, window, cx)
                             })),
                     )
                     .child(
-                        Button::new("people-duplicates")
-                            .small()
-                            .ghost()
-                            .label(if self.show_duplicates {
+                        Button::new(
+                            "people-duplicates",
+                            if self.show_duplicates {
                                 "Close duplicates"
                             } else {
                                 "Duplicates"
-                            })
-                            .on_click(cx.listener(|page, _, _, cx| {
-                                page.show_duplicates = !page.show_duplicates;
-                                page.form = None;
-                                if page.show_duplicates {
-                                    page.load_duplicates(cx);
-                                }
-                                cx.notify();
-                            })),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(cx.listener(|page, _, _, cx| {
+                            page.show_duplicates = !page.show_duplicates;
+                            page.form = None;
+                            if page.show_duplicates {
+                                page.load_duplicates(cx);
+                            }
+                            cx.notify();
+                        })),
                     )
                     .child(
-                        Button::new("people-refresh")
-                            .small()
-                            .ghost()
-                            .label("↻ Refresh")
+                        Button::new("people-refresh", "↻ Refresh")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|page, _, _, cx| page.refresh(cx))),
                     ),
             );
@@ -354,7 +353,7 @@ impl Render for PeoplePage {
 
         let search_box = div()
             .w_full()
-            .child(Input::new(&self.search_field(window, cx)).small());
+            .child(Input::new(&self.search_field(window, cx)).size(ControlSize::Sm));
 
         // Left List Pane
         let mut list_pane = div()

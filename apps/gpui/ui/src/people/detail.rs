@@ -1,12 +1,12 @@
 //! Person detail view, contact properties, place facts timeline, and duplicate merger.
-use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, ScrollHandle, SharedString,
 };
 use sjel_gpui_core::people::Person;
 
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use crate::theme::{tint, Palette};
 
 use super::forms::{FormKind, Work};
@@ -81,34 +81,38 @@ impl PeoplePage {
                             .flex()
                             .gap_2()
                             .child(
-                                Button::new(SharedString::from(format!("dup-merge-{i}")))
-                                    .xsmall()
-                                    .primary()
-                                    .label(format!("Merge into \"{}\"", pair.merged_name))
-                                    .on_click(cx.listener(move |page, _, window, cx| {
-                                        let Some(shell) = page.writer() else { return };
-                                        let work = Work::Merge {
-                                            keep: keep_id.clone(),
-                                            other: other_id.clone(),
-                                            name: name.clone(),
-                                        };
-                                        page.write(shell, work, window, cx);
-                                    })),
+                                Button::new(
+                                    SharedString::from(format!("dup-merge-{i}")),
+                                    format!("Merge into \"{}\"", pair.merged_name),
+                                )
+                                .size(ControlSize::Sm)
+                                .primary()
+                                .on_click(cx.listener(move |page, _, window, cx| {
+                                    let Some(shell) = page.writer() else { return };
+                                    let work = Work::Merge {
+                                        keep: keep_id.clone(),
+                                        other: other_id.clone(),
+                                        name: name.clone(),
+                                    };
+                                    page.write(shell, work, window, cx);
+                                })),
                             )
                             .child(
-                                Button::new(SharedString::from(format!("dup-distinct-{i}")))
-                                    .xsmall()
-                                    .ghost()
-                                    .label("Different people")
-                                    .on_click(cx.listener(move |page, _, window, cx| {
-                                        let Some(shell) = page.writer() else { return };
-                                        page.write(
-                                            shell,
-                                            Work::Distinct(a.clone(), b.clone()),
-                                            window,
-                                            cx,
-                                        );
-                                    })),
+                                Button::new(
+                                    SharedString::from(format!("dup-distinct-{i}")),
+                                    "Different people",
+                                )
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(move |page, _, window, cx| {
+                                    let Some(shell) = page.writer() else { return };
+                                    page.write(
+                                        shell,
+                                        Work::Distinct(a.clone(), b.clone()),
+                                        window,
+                                        cx,
+                                    );
+                                })),
                             ),
                     ),
             );
@@ -235,10 +239,9 @@ pub(super) fn render_person_detail(
                 .flex()
                 .gap_2()
                 .child(
-                    Button::new("person-edit")
-                        .small()
-                        .ghost()
-                        .label("Edit")
+                    Button::new("person-edit", "Edit")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|page, _, window, cx| {
                             if let Some(id) = page.selected_id.clone() {
                                 page.open_form(FormKind::Edit(id), window, cx);
@@ -246,23 +249,24 @@ pub(super) fn render_person_detail(
                         })),
                 )
                 .child(
-                    Button::new("person-delete")
-                        .small()
-                        .ghost()
-                        .label(if confirming {
+                    Button::new(
+                        "person-delete",
+                        if confirming {
                             "Confirm delete"
                         } else {
                             "Delete"
-                        })
-                        .on_click(
-                            cx.listener(|page, _, window, cx| page.remove_person(window, cx)),
-                        ),
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
+                    .on_click(
+                        cx.listener(|page, _, window, cx| page.remove_person(window, cx)),
+                    ),
                 )
                 .child(
-                    Button::new("person-add-fact")
-                        .small()
-                        .ghost()
-                        .label("Add fact")
+                    Button::new("person-add-fact", "Add fact")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|page, _, window, cx| {
                             if let Some(id) = page.selected_id.clone() {
                                 page.open_form(FormKind::Fact(id), window, cx);
@@ -323,13 +327,15 @@ pub(super) fn render_person_detail(
                                     .child(summary),
                             )
                             .child(
-                                Button::new(SharedString::from(format!("remove-fact-{}", fact.id)))
-                                    .small()
-                                    .ghost()
-                                    .label("Remove")
-                                    .on_click(cx.listener(move |page, _, window, cx| {
-                                        page.remove_fact(&fact_id, window, cx)
-                                    })),
+                                Button::new(
+                                    SharedString::from(format!("remove-fact-{}", fact.id)),
+                                    "Remove",
+                                )
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(move |page, _, window, cx| {
+                                    page.remove_fact(&fact_id, window, cx)
+                                })),
                             ),
                     )
                 });

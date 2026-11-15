@@ -1,14 +1,14 @@
 //! Owned inventory view, item details, editing, and state history.
 
 use std::collections::BTreeSet;
+use std::rc::Rc;
 use std::time::Instant;
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, Subscription, Window,
+    div, prelude::*, px, rems, rgb, rgba, AnyElement, App, Context, Entity, Subscription, Window,
 };
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::table::TableState;
 use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::inventory::{
     filter_inventory, format_cents, format_dimensions, group_of, InteriorItemImpact, InventoryItem,
@@ -17,15 +17,13 @@ use sjel_gpui_core::inventory::{
 use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::data::Remote;
-use crate::primitives::{
-    data_table, new_table_state, set_table_rows, stat_card, stat_strip, tabular_cell, RowTable,
-    SortOrder, TableColumn,
-};
-use crate::theme::{tint, Density, Palette};
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
+use crate::ely::theme::Density;
+use crate::primitives::{stat_card, stat_strip};
+use crate::theme::{tint, Palette};
 
 use super::{nonempty, InventoryPage};
-
-pub(crate) type OwnedTable = RowTable<InventoryRow>;
 
 fn volume(item: &InventoryItem) -> i64 {
     i64::from(item.width.unwrap_or(0))
@@ -33,179 +31,64 @@ fn volume(item: &InventoryItem) -> i64 {
         .saturating_mul(i64::from(item.height.unwrap_or(0)))
 }
 
-pub(crate) fn owned_table(page_entity: Entity<InventoryPage>) -> OwnedTable {
-    RowTable::new(vec![
-        TableColumn::new("name", "ITEM", 280., |row: &InventoryRow, palette, _, _| {
-            div()
-                .flex()
-                .flex_col()
-                .justify_center()
-                .gap_0p5()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(
-                            div()
-                                .truncate()
-                                .text_sm()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(rgb(palette.text))
-                                .child(row.item.label.clone()),
-                        )
-                        .children(if !row.item.kind.is_empty() && row.item.kind != "piece" {
-                            Some(
-                                div()
-                                    .px_2()
-                                    .py_0p5()
-                                    .rounded_full()
-                                    .text_xs()
-                                    .bg(rgba(tint(palette.border, 0x25)))
-                                    .text_color(rgb(palette.muted))
-                                    .child(row.item.kind.clone()),
-                            )
-                        } else {
-                            None
-                        }),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_3()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .children(row.item.size.as_ref().map(|s| format!("Size: {s}")))
-                        .children(row.item.color.as_ref().map(|c| format!("Color: {c}")))
-                        .children(row.item.notes.as_ref().map(|n| format!("Note: {n}"))),
-                )
-                .into_any_element()
-        })
-        .min_width(180.)
-        .label_text(|r| r.item.label.clone())
-        .sort_by(|a, b| {
-            a.item
-                .label
-                .to_lowercase()
-                .cmp(&b.item.label.to_lowercase())
-        }),
-        TableColumn::new(
-            "category",
-            "CATEGORY",
-            130.,
-            |row: &InventoryRow, palette, _, _| {
-                div()
-                    .flex()
-                    .items_center()
-                    .child(
-                        div()
-                            .max_w_full()
-                            .truncate()
-                            .px_2()
-                            .py_0p5()
-                            .rounded_full()
-                            .text_xs()
-                            .bg(rgba(tint(palette.accent, 0x20)))
-                            .text_color(rgb(palette.accent))
-                            .child(group_of(&row.item)),
-                    )
-                    .into_any_element()
+pub(super) fn owned_columns() -> [Column; 5] {
+    [
+        Column::new("name", "ITEM"),
+        Column::new("category", "CATEGORY").width(rems(8.)),
+        Column::new("dimensions", "DIMENSIONS").width(rems(10.)),
+        Column::new("price", "VALUE").width(rems(7.)).end(),
+        Column::new("actions", "")
+            .width(rems(5.))
+            .actions([RowAction::new("edit", "Edit")]),
+    ]
+}
+
+/// The item's kind, size, color, quantity and note, as one line under its name.
+fn item_meta(item: &InventoryItem) -> String {
+    let kind = (!item.kind.is_empty() && item.kind != "piece").then(|| item.kind.clone());
+    let qty = item
+        .count
+        .filter(|count| *count > 1)
+        .map(|count| format!("Qty {count}"));
+    kind.into_iter()
+        .chain(item.size.as_ref().map(|s| format!("Size: {s}")))
+        .chain(item.color.as_ref().map(|c| format!("Color: {c}")))
+        .chain(qty)
+        .chain(item.notes.as_ref().map(|n| format!("Note: {n}")))
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+pub(super) fn owned_row(row: &InventoryRow) -> Row {
+    let item = &row.item;
+    let meta = item_meta(item);
+    let name = if meta.is_empty() {
+        Cell::Text(item.label.clone().into())
+    } else {
+        Cell::Lines(item.label.clone().into(), meta.into())
+    };
+    let dimensions = format_dimensions(item.width, item.depth, item.height);
+    let price = match item.price_cents {
+        Some(cents) => Cell::Figure(
+            format_cents(Some(cents)).into(),
+            cents as f64,
+            Tone::Neutral,
+        ),
+        None => Cell::Empty,
+    };
+    Row::new(
+        item.id.clone(),
+        [
+            name,
+            Cell::Tag(group_of(item).into(), Tone::Accent),
+            match volume(item) {
+                0 => Cell::Text(dimensions.into()),
+                cm3 => Cell::Figure(dimensions.into(), cm3 as f64, Tone::Neutral),
             },
-        )
-        .min_width(90.)
-        .label_text(|r| group_of(&r.item))
-        .sort_by(|a, b| {
-            group_of(&a.item)
-                .to_lowercase()
-                .cmp(&group_of(&b.item).to_lowercase())
-        }),
-        TableColumn::new(
-            "dimensions",
-            "DIMENSIONS",
-            160.,
-            |row: &InventoryRow, palette, _, _| {
-                tabular_cell(
-                    format_dimensions(row.item.width, row.item.depth, row.item.height),
-                    px(160.),
-                    palette.muted,
-                )
-            },
-        )
-        .min_width(110.)
-        .label_text(|r| format_dimensions(r.item.width, r.item.depth, r.item.height))
-        .sort_by(|a, b| volume(&a.item).cmp(&volume(&b.item))),
-        TableColumn::new(
-            "price",
-            "VALUE",
-            110.,
-            |row: &InventoryRow, palette, _, _| {
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_end()
-                    .justify_center()
-                    .child(tabular_cell(
-                        format_cents(row.item.price_cents),
-                        px(110.),
-                        palette.text,
-                    ))
-                    .children(if let Some(count) = row.item.count {
-                        if count > 1 {
-                            Some(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(format!("qty: {count}")),
-                            )
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    })
-                    .into_any_element()
-            },
-        )
-        .min_width(80.)
-        .right()
-        .label_text(|r| format_cents(r.item.price_cents))
-        .sort_by(|a, b| {
-            a.item
-                .price_cents
-                .unwrap_or(-1)
-                .cmp(&b.item.price_cents.unwrap_or(-1))
-        }),
-        TableColumn::new("actions", "", 64., move |row: &InventoryRow, _, _, _cx| {
-            let page = page_entity.clone();
-            let item = row.item.clone();
-            div()
-                .flex()
-                .items_center()
-                .justify_end()
-                .child(
-                    Button::new(format!("inventory-edit-{}", item.id))
-                        .small()
-                        .ghost()
-                        .label("Edit")
-                        .on_click(move |_, window, cx| {
-                            page.update(cx, |page, cx| {
-                                page.open_item_edit(item.clone(), window, cx);
-                            });
-                        }),
-                )
-                .into_any_element()
-        })
-        .min_width(60.),
-    ])
-    .sorted("name", SortOrder::Ascending)
-    .tie_break(|a, b| {
-        a.item
-            .label
-            .to_lowercase()
-            .cmp(&b.item.label.to_lowercase())
-    })
-    .empty_text("No inventory items match the current filters.")
+            price,
+            Cell::Empty,
+        ],
+    )
 }
 
 pub(crate) struct InventoryEditForm {
@@ -236,6 +119,7 @@ pub(crate) struct OwnedDerived {
     pub(super) total_cents: i64,
     pub(super) categories: Vec<String>,
     pub(super) filtered: Vec<InventoryRow>,
+    pub(super) rows: Rc<Vec<Row>>,
 }
 
 impl InventoryPage {
@@ -273,32 +157,19 @@ impl InventoryPage {
             owned_count,
             total_cents,
             categories: categories.into_iter().collect(),
+            rows: Rc::new(filtered.iter().map(owned_row).collect()),
             filtered,
         };
     }
 
-    pub(super) fn sync_owned_table(
-        &mut self,
-        window: &mut Window,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> Entity<TableState<OwnedTable>> {
-        let entity = cx.entity();
-        let table = self
-            .owned_table
-            .get_or_insert_with(|| new_table_state(owned_table(entity), window, cx))
-            .clone();
-        let key = (self.rows.loaded_at, self.filter_rev);
-        if self.owned_rows_key != Some(key) {
-            self.owned_rows_key = Some(key);
-            self.sync_owned_derived();
-            set_table_rows(&table, self.owned_derived.filtered.clone(), cx);
+    /// Opens the edit form for the owned item with id `key`, when the filter still shows it.
+    fn edit_owned(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let item = (self.owned_derived.filtered.iter())
+            .find(|row| row.item.id == key)
+            .map(|row| row.item.clone());
+        if let Some(item) = item {
+            self.open_item_edit(item, window, cx);
         }
-        let palette = self.palette.unwrap_or(palette);
-        table.update(cx, |state, _| {
-            state.delegate_mut().set_palette(Some(palette))
-        });
-        table
     }
 
     pub(super) fn open_item_edit(
@@ -653,8 +524,9 @@ impl InventoryPage {
                 .child("Loading inventory…")
                 .into_any_element();
         }
-        let table = self.sync_owned_table(window, palette, cx);
         self.sync_owned_derived();
+        let rows = self.owned_derived.rows.clone();
+        let page = cx.entity();
         let owned_count = self.owned_derived.owned_count;
         let total_cents = self.owned_derived.total_cents;
         let categories = self.owned_derived.categories.clone();
@@ -747,11 +619,24 @@ impl InventoryPage {
             );
         }
         content
-            .child(div().flex_1().min_h_0().child(data_table(
-                &table,
-                "Owned Items",
-                Density::Desktop,
-            )))
+            .child(
+                div().flex_1().min_h_0().child(
+                    DataTable::new("inventory-owned", owned_columns())
+                        .rows(rows)
+                        .sorts([SortKey {
+                            column: "name".into(),
+                            rising: true,
+                        }])
+                        .density(Density::Comfortable)
+                        .virtualized()
+                        .track_scroll(&self.owned_scroll)
+                        .on_action(move |key, _, window, cx| {
+                            page.update(cx, |page, cx| page.edit_owned(key, window, cx))
+                        })
+                        .empty("No inventory items match the current filters.")
+                        .size_full(),
+                ),
+            )
             .into_any_element()
     }
 

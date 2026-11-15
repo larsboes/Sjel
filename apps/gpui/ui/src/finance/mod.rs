@@ -3,7 +3,6 @@
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::component::table::TableState;
 use gpui_kit::component::Sizable;
 use gpui_kit::{
     actions, div, prelude::*, px, App, Context, Entity, FocusHandle, KeyBinding, ScrollHandle,
@@ -65,7 +64,7 @@ mod overview;
 mod subscriptions;
 mod transactions;
 
-use import::{default_csv_mapping, CandidateTable, CsvMappingField, ImportDerived};
+use import::{default_csv_mapping, CsvMappingField, ImportDerived};
 use overview::BalanceDraft;
 use subscriptions::SubsDerived;
 
@@ -110,8 +109,8 @@ pub struct FinancePage {
     pub(super) balance_fields: Vec<BalanceDraft>,
     pub search_query: String,
     pub selected_category: Option<String>,
-    pub(super) import_table: Option<Entity<TableState<CandidateTable>>>,
-    pub(super) import_rows_key: Option<(Option<std::time::Instant>, u64, usize)>,
+    pub(super) import_rows: std::rc::Rc<Vec<crate::ely::tables::Row>>,
+    pub(super) import_rows_key: Option<(Option<std::time::Instant>, u64, usize, bool)>,
     pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     pub(super) filter_rev: u64,
     pub(super) review_rev: u64,
@@ -180,7 +179,7 @@ impl FinancePage {
             balance_fields: Vec::new(),
             search_query: String::new(),
             selected_category: None,
-            import_table: None,
+            import_rows: Default::default(),
             import_rows_key: None,
             col_widths: Default::default(),
             filter_rev: 0,
@@ -452,7 +451,7 @@ impl Render for FinancePage {
         // Body per Tab
         let content = match self.view {
             View::Overview => self.render_overview(palette, cx),
-            View::Transactions => self.render_transactions(window, palette, cx),
+            View::Transactions => self.render_transactions(window, cx),
             View::Subscriptions => self.render_subscriptions(palette),
             View::ImportReview => self.render_import_review(palette, window, cx),
             View::Ideas => self.render_ideas(window, palette, cx),

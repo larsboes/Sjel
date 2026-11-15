@@ -1,5 +1,6 @@
 //! CSV bank import, column mapping, staging, candidate matching, and reconciliation.
 
+use std::rc::Rc;
 use std::time::Instant;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -7,7 +8,7 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, ClickEvent, Context, Entity, FontWeight,
+    div, prelude::*, px, rems, rgb, rgba, AnyElement, ClickEvent, Context, Entity, FontWeight,
     PathPromptOptions, SharedString, Subscription, Window,
 };
 use sjel_gpui_core::context::format_money;
@@ -17,198 +18,84 @@ use sjel_gpui_core::finance::{
 };
 use sjel_gpui_core::shell::{self, FinanceCandidate, ShellError};
 
-use gpui_kit::component::table::TableState;
-
-use crate::primitives::{
-    data_table, mono_num, new_table_state, set_table_rows, tabular_cell, RowTable, SortOrder,
-    TableColumn,
-};
-use crate::theme::{Density, Palette};
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
+use crate::primitives::tabular_cell;
+use crate::theme::Palette;
 
 use super::FinancePage;
 
-pub(crate) type CandidateTable = RowTable<FinanceCandidate>;
+/// The actions a candidate row can offer; a confirm from the mail source names that account.
+fn candidate_columns(mail_source: Option<&str>) -> [Column; 5] {
+    let mut actions = vec![
+        RowAction::new("transfer", "Reconcile transfer"),
+        RowAction::new("confirm", "Confirm proposed account").primary(),
+    ];
+    if let Some(account) = mail_source {
+        actions.push(RowAction::new("confirm-mail", format!("Confirm from {account}")).primary());
+    }
+    actions.push(RowAction::new("reject", "Reject"));
+    [
+        Column::new("cand_date", "DATE").width(rems(6.)).muted(),
+        Column::new("cand_description", "DESCRIPTION"),
+        Column::new("cand_account", "PROPOSED ACCOUNT")
+            .width(rems(11.))
+            .muted(),
+        Column::new("cand_amount", "AMOUNT").width(rems(7.)).end(),
+        Column::new("cand_actions", "")
+            .width(rems(14.))
+            .actions(actions),
+    ]
+}
 
-pub(crate) fn candidate_table(page_entity: Entity<FinancePage>) -> CandidateTable {
-    RowTable::new(vec![
-        TableColumn::new(
-            "cand_date",
-            "DATE",
-            96.,
-            |c: &FinanceCandidate, palette, _, _| {
-                mono_num(c.booked_at.clone(), palette.muted)
-                    .text_xs()
-                    .into_any_element()
-            },
-        )
-        .min_width(80.)
-        .label_text(|c| c.booked_at.clone())
-        .sort_by(|a, b| a.booked_at.cmp(&b.booked_at)),
-        TableColumn::new(
-            "cand_description",
-            "DESCRIPTION",
-            280.,
-            |c: &FinanceCandidate, palette, _, _| {
-                div()
-                    .truncate()
-                    .text_sm()
-                    .text_color(rgb(palette.text))
-                    .child(c.description.clone())
-                    .into_any_element()
-            },
-        )
-        .min_width(180.)
-        .label_text(|c| c.description.clone())
-        .sort_by(|a, b| {
-            a.description
-                .to_lowercase()
-                .cmp(&b.description.to_lowercase())
-        }),
-        TableColumn::new(
-            "cand_account",
-            "PROPOSED ACCOUNT",
-            180.,
-            |c: &FinanceCandidate, palette, _, _| {
-                div()
-                    .truncate()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(c.proposed_account.clone())
-                    .into_any_element()
-            },
-        )
-        .min_width(120.)
-        .label_text(|c| c.proposed_account.clone())
-        .sort_by(|a, b| {
-            a.proposed_account
-                .to_lowercase()
-                .cmp(&b.proposed_account.to_lowercase())
-        }),
-        TableColumn::new(
-            "cand_amount",
-            "AMOUNT",
-            110.,
-            |c: &FinanceCandidate, palette, _, _| {
-                let amount_color = if c.amount_cents < 0 {
-                    palette.red
-                } else {
-                    palette.green
-                };
-                mono_num(format_money(c.amount_cents, &c.currency), amount_color)
-                    .text_xs()
-                    .truncate()
-                    .into_any_element()
-            },
-        )
-        .min_width(80.)
-        .right()
-        .label_text(|c| format_money(c.amount_cents, &c.currency))
-        .sort_by(|a, b| a.amount_cents.cmp(&b.amount_cents)),
-        TableColumn::new(
-            "cand_actions",
-            "",
-            220.,
-            move |c: &FinanceCandidate, _, _, cx| {
-                let id = c.id.clone();
-                let reject_id = id.clone();
-                let exact_transfer = c.transfer_match_ids.len() == 1;
-                let transfer = exact_transfer.then(|| c.transfer_match_ids[0].clone());
-                let is_mail = c
-                    .source_reference
-                    .as_deref()
-                    .is_some_and(|reference| reference.starts_with("gmail:"));
-                let mail_source = page_entity
-                    .read(cx)
-                    .csv_mappings
-                    .value
-                    .as_ref()
-                    .and_then(|profiles| profiles.get(page_entity.read(cx).selected_mapping))
-                    .and_then(|profile| profile.mapping.get("source_account"))
-                    .and_then(serde_json::Value::as_str)
-                    .filter(|account| {
-                        account.starts_with("assets:") || account.starts_with("liabilities:")
-                    })
-                    .map(str::to_owned);
+/// The one transfer a candidate matches exactly, if it matches one.
+fn exact_transfer(c: &FinanceCandidate) -> Option<&String> {
+    match c.transfer_match_ids.as_slice() {
+        [counterpart] => Some(counterpart),
+        _ => None,
+    }
+}
 
-                let mut actions = div().w(px(220.)).flex_none().flex().justify_end().gap_1();
-                if let Some(counterpart) = transfer {
-                    let reconcile_id = id.clone();
-                    let page = page_entity.clone();
-                    actions = actions.child(
-                        Button::new(SharedString::from(format!("finance-transfer-{}", c.id)))
-                            .small()
-                            .ghost()
-                            .label("Reconcile transfer")
-                            .on_click(move |_, _, cx| {
-                                page.update(cx, |page, cx| {
-                                    page.reconcile_candidate(
-                                        reconcile_id.clone(),
-                                        counterpart.clone(),
-                                        cx,
-                                    );
-                                });
-                            }),
-                    );
-                }
-                if !exact_transfer && !is_mail {
-                    let confirm_id = id.clone();
-                    let page = page_entity.clone();
-                    actions = actions.child(
-                        Button::new(SharedString::from(format!("finance-confirm-{}", c.id)))
-                            .small()
-                            .primary()
-                            .label("Confirm proposed account")
-                            .on_click(move |_, _, cx| {
-                                page.update(cx, |page, cx| {
-                                    page.review_candidate(confirm_id.clone(), "confirm", None, cx);
-                                });
-                            }),
-                    );
-                } else if !exact_transfer && is_mail {
-                    if let Some(source_account) = mail_source {
-                        let confirm_id = id.clone();
-                        let page = page_entity.clone();
-                        actions = actions.child(
-                            Button::new(SharedString::from(format!(
-                                "finance-confirm-mail-{}",
-                                c.id
-                            )))
-                            .small()
-                            .primary()
-                            .label(format!("Confirm from {source_account}"))
-                            .on_click(move |_, _, cx| {
-                                page.update(cx, |page, cx| {
-                                    page.review_candidate(
-                                        confirm_id.clone(),
-                                        "confirm",
-                                        Some(source_account.clone()),
-                                        cx,
-                                    );
-                                });
-                            }),
-                        );
-                    }
-                }
-                let page = page_entity.clone();
-                actions = actions.child(
-                    Button::new(SharedString::from(format!("finance-reject-{}", c.id)))
-                        .small()
-                        .ghost()
-                        .label("Reject")
-                        .on_click(move |_, _, cx| {
-                            page.update(cx, |page, cx| {
-                                page.review_candidate(reject_id.clone(), "reject", None, cx);
-                            });
-                        }),
-                );
-                actions.into_any_element()
-            },
-        )
-        .min_width(180.),
-    ])
-    .sorted("cand_date", SortOrder::Descending)
-    .tie_break(|a, b| b.booked_at.cmp(&a.booked_at).then_with(|| a.id.cmp(&b.id)))
-    .empty_text("No pending import candidates to review.")
+fn is_mail(c: &FinanceCandidate) -> bool {
+    c.source_reference
+        .as_deref()
+        .is_some_and(|reference| reference.starts_with("gmail:"))
+}
+
+/// The actions a candidate offers: an exact transfer reconciles, a bank row confirms its proposal, and a mail row confirms only from a known source account.
+fn offered(c: &FinanceCandidate, has_mail_source: bool) -> &'static [&'static str] {
+    match (exact_transfer(c).is_some(), is_mail(c)) {
+        (true, _) => &["transfer", "reject"],
+        (false, false) => &["confirm", "reject"],
+        (false, true) if has_mail_source => &["confirm-mail", "reject"],
+        (false, true) => &["reject"],
+    }
+}
+
+fn candidate_row(c: &FinanceCandidate, has_mail_source: bool) -> Row {
+    let offered = offered(c, has_mail_source)
+        .iter()
+        .copied()
+        .map(SharedString::from);
+    let tone = if c.amount_cents < 0 {
+        Tone::Danger
+    } else {
+        Tone::Success
+    };
+    Row::new(
+        c.id.clone(),
+        [
+            Cell::Text(c.booked_at.clone().into()),
+            Cell::Text(c.description.clone().into()),
+            Cell::Text(c.proposed_account.clone().into()),
+            Cell::Figure(
+                format_money(c.amount_cents, &c.currency).into(),
+                c.amount_cents as f64,
+                tone,
+            ),
+            Cell::Actions(offered.collect()),
+        ],
+    )
 }
 
 pub(crate) struct CsvMappingField {
@@ -259,40 +146,66 @@ pub(crate) fn default_csv_mapping() -> serde_json::Value {
 }
 
 impl FinancePage {
-    pub(super) fn sync_import_table(
-        &mut self,
-        window: &mut Window,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> Entity<TableState<CandidateTable>> {
-        let entity = cx.entity();
-        let table = self
-            .import_table
-            .get_or_insert_with(|| new_table_state(candidate_table(entity), window, cx))
-            .clone();
+    /// The account a mail candidate is confirmed from: the selected CSV mapping's source account, when it is an asset or liability.
+    fn mail_source_account(&self) -> Option<String> {
+        self.csv_mappings
+            .value
+            .as_ref()
+            .and_then(|profiles| profiles.get(self.selected_mapping))
+            .and_then(|profile| profile.mapping.get("source_account"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|account| account.starts_with("assets:") || account.starts_with("liabilities:"))
+            .map(str::to_owned)
+    }
+
+    /// The pending candidates shown, newest first, built once per change.
+    pub(super) fn import_rows(&mut self) -> Rc<Vec<Row>> {
+        let has_mail_source = self.mail_source_account().is_some();
         let key = (
             self.candidates.loaded_at,
             self.review_rev,
             self.pending_limit,
+            has_mail_source,
         );
         if self.import_rows_key != Some(key) {
             self.import_rows_key = Some(key);
             self.sync_import_derived();
             let candidates = self.candidates.value.as_deref().unwrap_or_default();
-            let pending: Vec<FinanceCandidate> = self
+            let mut pending: Vec<&FinanceCandidate> = self
                 .import_derived
                 .pending_indices
                 .iter()
                 .take(self.pending_limit)
-                .filter_map(|&ix| candidates.get(ix).cloned())
+                .filter_map(|&ix| candidates.get(ix))
                 .collect();
-            set_table_rows(&table, pending, cx);
+            pending.sort_by(|a, b| b.booked_at.cmp(&a.booked_at).then_with(|| a.id.cmp(&b.id)));
+            self.import_rows = Rc::new(
+                pending
+                    .into_iter()
+                    .map(|c| candidate_row(c, has_mail_source))
+                    .collect(),
+            );
         }
-        let palette = self.palette.unwrap_or(palette);
-        table.update(cx, |state, _| {
-            state.delegate_mut().set_palette(Some(palette))
-        });
-        table
+        self.import_rows.clone()
+    }
+
+    /// Runs row action `action` on the candidate with id `id`.
+    fn candidate_action(&mut self, id: &str, action: &str, cx: &mut Context<Self>) {
+        let Some(candidate) = (self.candidates.value.iter().flatten()).find(|c| c.id == id) else {
+            return;
+        };
+        let (id, counterpart) = (candidate.id.clone(), exact_transfer(candidate).cloned());
+        match (action, counterpart) {
+            ("transfer", Some(counterpart)) => self.reconcile_candidate(id, counterpart, cx),
+            ("confirm", _) => self.review_candidate(id, "confirm", None, cx),
+            ("confirm-mail", _) => {
+                if let Some(account) = self.mail_source_account() {
+                    self.review_candidate(id, "confirm", Some(account), cx);
+                }
+            }
+            ("reject", _) => self.review_candidate(id, "reject", None, cx),
+            _ => {}
+        }
     }
 
     pub(super) fn sync_import_derived(&mut self) {
@@ -613,13 +526,29 @@ impl FinancePage {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let table = self.sync_import_table(window, palette, cx);
+        let rows = self.import_rows();
+        let mail_source = self.mail_source_account();
+        let page = cx.entity();
         let pending_count = self.import_derived.pending_indices.len();
         let queue = div()
             .flex()
             .flex_col()
             .gap_1p5()
-            .child(data_table(&table, "Pending Candidates", Density::Desktop))
+            .child(
+                DataTable::new(
+                    "finance-candidates",
+                    candidate_columns(mail_source.as_deref()),
+                )
+                .rows(rows)
+                .sorts([SortKey {
+                    column: "cand_date".into(),
+                    rising: false,
+                }])
+                .on_action(move |id, action, _, cx| {
+                    page.update(cx, |page, cx| page.candidate_action(id, action, cx))
+                })
+                .empty("No pending import candidates to review."),
+            )
             .children((pending_count > self.pending_limit).then(|| {
                 Button::new("finance-pending-more")
                     .small()
@@ -1488,5 +1417,61 @@ impl FinancePage {
             );
         }
         view.into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn candidate(reference: Option<&str>, transfers: &[&str], cents: i64) -> FinanceCandidate {
+        FinanceCandidate {
+            id: "c1".into(),
+            fingerprint: "f".into(),
+            booked_at: "2026-11-14".into(),
+            description: "Coffee".into(),
+            amount_cents: cents,
+            currency: "EUR".into(),
+            source_account: "assets:bank:checking".into(),
+            source_reference: reference.map(Into::into),
+            proposed_account: "expenses:food".into(),
+            confidence_basis_points: 9000,
+            state: "pending".into(),
+            transfer_match_ids: transfers.iter().map(|id| id.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn a_candidate_offers_the_actions_its_source_allows() {
+        let bank = candidate(None, &[], -450);
+        assert_eq!(offered(&bank, true), ["confirm", "reject"]);
+        assert_eq!(
+            offered(&candidate(None, &["c2"], -450), false),
+            ["transfer", "reject"]
+        );
+        assert_eq!(
+            offered(&candidate(None, &["c2", "c3"], -450), false),
+            ["confirm", "reject"],
+            "two matches are not an exact transfer"
+        );
+        let mail = candidate(Some("gmail:abc"), &[], -450);
+        assert_eq!(offered(&mail, true), ["confirm-mail", "reject"]);
+        assert_eq!(offered(&mail, false), ["reject"]);
+    }
+
+    #[test]
+    fn income_reads_green_and_spending_red() {
+        let row = candidate_row(&candidate(None, &[], 900), false);
+        let income = Row::new(
+            "c1",
+            [
+                Cell::Text("2026-11-14".into()),
+                Cell::Text("Coffee".into()),
+                Cell::Text("expenses:food".into()),
+                Cell::Figure(format_money(900, "EUR").into(), 900.0, Tone::Success),
+                Cell::Actions(vec!["confirm".into(), "reject".into()]),
+            ],
+        );
+        assert_eq!(row, income);
     }
 }

@@ -3,7 +3,6 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::table::TableState;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
@@ -26,7 +25,7 @@ mod wish_compare;
 mod wishlist;
 
 use mail_review::MailReviewForm;
-use owned::{InventoryEditForm, OwnedDerived, OwnedTable};
+use owned::{InventoryEditForm, OwnedDerived};
 use wishlist::{GroupForm, WishForm, WishlistDerived};
 
 actions!(
@@ -85,8 +84,7 @@ pub struct InventoryPage {
     pub(super) roomplan_history: Entity<RoomPlanHistory>,
     pub search_query: String,
     pub selected_category: Option<String>,
-    pub(super) owned_table: Option<Entity<TableState<OwnedTable>>>,
-    pub(super) owned_rows_key: Option<(Option<std::time::Instant>, u64)>,
+    pub(super) owned_scroll: gpui_kit::UniformListScrollHandle,
     /// The wish group the wishlist is narrowed to, by id. None shows every open wish.
     pub selected_group: Option<String>,
     pub(super) filter_rev: u64,
@@ -142,8 +140,7 @@ impl InventoryPage {
             roomplan_history,
             search_query: String::new(),
             selected_category: None,
-            owned_table: None,
-            owned_rows_key: None,
+            owned_scroll: gpui_kit::UniformListScrollHandle::new(),
             selected_group: None,
             filter_rev: 0,
             owned_derived: OwnedDerived::default(),
@@ -170,13 +167,10 @@ impl InventoryPage {
 
     pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
         if self.tab == InventoryTab::Owned {
-            if let Some(table) = &self.owned_table {
-                table.update(cx, |state, cx| {
-                    let rows = state.delegate().rows().len();
-                    let row_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
-                    state.scroll_to_row(row_ix, cx);
-                });
-            }
+            let rows = self.owned_derived.rows.len();
+            let row_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
+            self.owned_scroll
+                .scroll_to_item(row_ix, gpui_kit::ScrollStrategy::Top);
         } else {
             let max = self.scroll.max_offset().y;
             self.scroll
@@ -632,49 +626,72 @@ mod tests {
         });
     }
 
+    fn owned(id: &str, label: &str, cents: Option<i64>) -> InventoryRow {
+        InventoryRow {
+            item: sjel_gpui_core::inventory::InventoryItem {
+                id: id.into(),
+                label: label.into(),
+                price_cents: cents,
+                ..Default::default()
+            },
+            state: Some("owned".into()),
+        }
+    }
+
+    #[test]
+    fn an_owned_row_shows_its_detail_under_its_name_and_sorts_value_by_cents() {
+        use crate::ely::data_display::Tone;
+        use crate::ely::tables::{Cell, Row};
+        use sjel_gpui_core::inventory::{format_dimensions, group_of};
+        let expected = |row: &InventoryRow, name: Cell| {
+            Row::new(
+                "1",
+                [
+                    name,
+                    Cell::Tag(group_of(&row.item).into(), Tone::Accent),
+                    Cell::Text(format_dimensions(None, None, None).into()),
+                    Cell::Figure("50.00 €".into(), 5000.0, Tone::Neutral),
+                    Cell::Empty,
+                ],
+            )
+        };
+        let mut row = owned("1", "Chair", Some(5000));
+        assert_eq!(
+            owned::owned_row(&row),
+            expected(&row, Cell::Text("Chair".into()))
+        );
+        row.item.color = Some("Oak".into());
+        row.item.count = Some(2);
+        assert_eq!(
+            owned::owned_row(&row),
+            expected(
+                &row,
+                Cell::Lines("Chair".into(), "Color: Oak · Qty 2".into())
+            )
+        );
+    }
+
     #[gpui::test]
-    fn test_owned_table_sorting(cx: &mut gpui::TestAppContext) {
-        let page = cx.new(|cx| {
-            let repo = Repo::new(Err(ShellError::NotSetUp));
-            InventoryPage::new(repo, cx)
+    fn edit_on_an_owned_row_opens_that_items_form(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::ely::init_for_tests);
+        cx.update(gpui_kit::init);
+        let (page, cx) = cx.add_window_view(|_, cx| {
+            let mut page = InventoryPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.rows.value = Some(vec![
+                owned("1", "Beta", Some(5000)),
+                owned("2", "Alpha", None),
+            ]);
+            page
         });
-
-        let mut table = page.update(cx, |_, cx| owned::owned_table(cx.entity()));
-        let item1 = sjel_gpui_core::inventory::InventoryItem {
-            id: "1".into(),
-            label: "Beta".into(),
-            price_cents: Some(5000),
-            ..Default::default()
-        };
-
-        let item2 = sjel_gpui_core::inventory::InventoryItem {
-            id: "2".into(),
-            label: "Alpha".into(),
-            price_cents: Some(10000),
-            ..Default::default()
-        };
-
-        table.set_rows(vec![
-            InventoryRow {
-                item: item1,
-                state: Some("owned".into()),
-            },
-            InventoryRow {
-                item: item2,
-                state: Some("owned".into()),
-            },
-        ]);
-
-        // Default sort is Name Ascending -> Alpha then Beta
-        assert_eq!(table.row(0).unwrap().item.label, "Alpha");
-        assert_eq!(table.row(1).unwrap().item.label, "Beta");
-
-        // Sort by price descending -> Beta (5000) vs Alpha (10000) -> Alpha (10000) then Beta
-        table.set_sort(Some(("price", crate::primitives::SortOrder::Descending)));
-        assert_eq!(table.row(0).unwrap().item.label, "Alpha");
-
-        // Sort by price ascending -> Beta (5000) then Alpha (10000)
-        table.set_sort(Some(("price", crate::primitives::SortOrder::Ascending)));
-        assert_eq!(table.row(0).unwrap().item.label, "Beta");
+        cx.run_until_parked();
+        let edit = cx
+            .debug_bounds("table-action 2 edit")
+            .expect("the Alpha row draws Edit");
+        cx.simulate_click(edit.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            let form = page.edit_form.as_ref().expect("Edit opens the form");
+            assert_eq!(form.item.id, "2");
+        });
     }
 }

@@ -496,7 +496,6 @@ impl FinancePage {
     pub(super) fn render_transactions(
         &mut self,
         window: &mut Window,
-        palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let rows = self.tx_rows();

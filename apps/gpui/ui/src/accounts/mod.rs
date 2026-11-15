@@ -194,8 +194,7 @@ mod tests {
 
     #[gpui::test]
     fn opening_a_credential_keeps_its_connection_state(cx: &mut gpui::TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let (page, cx) = cx.add_window_view(|_, _| {
             let mut page =
                 Accounts::new(Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)));

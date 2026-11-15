@@ -124,6 +124,8 @@ pub mod soundscape;
 pub mod systems;
 #[cfg(feature = "gpui")]
 pub mod tasks;
+#[cfg(all(feature = "gpui", any(test, feature = "test-support")))]
+pub mod test_support;
 #[cfg(feature = "gpui")]
 pub mod terminal;
 mod terminal_screen;

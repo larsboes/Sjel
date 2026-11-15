@@ -58,10 +58,7 @@ fn changing_keyboard_selection_or_open_day_cannot_reuse_stale_details(cx: &mut T
 
 #[gpui::test]
 fn month_has_a_bounded_scroll_viewport_for_dense_weeks(cx: &mut TestAppContext) {
-    cx.update(|cx| {
-        gpui_kit::init(cx);
-        crate::ely::init_for_tests(cx);
-    });
+    crate::test_support::init(cx);
     let page = cx.new(|cx| {
         let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
         page.day = day("2026-11-05");
@@ -106,10 +103,7 @@ fn month_has_a_bounded_scroll_viewport_for_dense_weeks(cx: &mut TestAppContext) 
 
 #[gpui::test]
 fn calendar_header_displays_sync_status_mark(cx: &mut TestAppContext) {
-    cx.update(|cx| {
-        gpui_kit::init(cx);
-        crate::ely::init_for_tests(cx);
-    });
+    crate::test_support::init(cx);
     let page = cx.new(|cx| {
         let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
         page.sync_status = Some(crate::calendar::types::CalendarSyncStatus {
@@ -135,10 +129,7 @@ fn calendar_header_displays_sync_status_mark(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn day_timeline_sizes_a_ninety_minute_event_and_edits_it_by_keyboard(cx: &mut TestAppContext) {
-    cx.update(|cx| {
-        gpui_kit::init(cx);
-        crate::ely::init_for_tests(cx);
-    });
+    crate::test_support::init(cx);
     cx.update(bind_keys);
     let page = cx.new(|cx| {
         let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
@@ -262,10 +253,7 @@ fn undo_time_action_reverts_time_change(cx: &mut gpui::TestAppContext) {
 fn week_timeline_renders_seven_day_columns_duration_blocks_overlaps_and_now_line(
     cx: &mut TestAppContext,
 ) {
-    cx.update(|cx| {
-        gpui_kit::init(cx);
-        crate::ely::init_for_tests(cx);
-    });
+    crate::test_support::init(cx);
     cx.update(bind_keys);
     let today = chrono::Local::now().date_naive();
     let page = cx.new(|cx| {
@@ -361,10 +349,7 @@ fn week_timeline_renders_seven_day_columns_duration_blocks_overlaps_and_now_line
 
 #[gpui::test]
 fn desktop_quick_reschedule_shifts(cx: &mut TestAppContext) {
-    cx.update(|cx| {
-        gpui_kit::init(cx);
-        crate::ely::init_for_tests(cx);
-    });
+    crate::test_support::init(cx);
     let page = cx.new(|cx| {
         let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
         page.day = day("2026-11-05");

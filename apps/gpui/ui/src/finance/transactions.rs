@@ -632,7 +632,7 @@ impl FinancePage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui_kit::{TestAppContext, VisualTestContext};
+    use gpui_kit::TestAppContext;
 
     fn tx(id: &str, kind: &str, cents: i64) -> FinanceTransaction {
         serde_json::from_value(serde_json::json!({
@@ -666,29 +666,19 @@ mod tests {
 
     #[gpui_kit::test]
     fn category_chart_filters_the_production_ledger_and_toggles_off(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
-        let slot = Rc::new(std::cell::RefCell::new(None));
-        let found = slot.clone();
-        let (_, cx): (_, &mut VisualTestContext) = cx.add_window_view(move |window, cx| {
-            let page = cx.new(|cx| {
-                let mut page =
-                    FinancePage::new(crate::data::Repo::new(Err(ShellError::NotSetUp)), cx);
-                page.view = super::super::View::Transactions;
-                let mut transport = tx("b", "expense", 900);
-                transport.category = "Transport".into();
-                page.dashboard.value = Some(
-                    serde_json::from_value(serde_json::json!({
-                        "transactions": [tx("a", "expense", 500), transport],
-                    }))
-                    .expect("dashboard fixture reads"),
-                );
-                page
-            });
-            found.replace(Some(page.clone()));
-            gpui_kit::component::Root::new(page, window, cx)
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, cx| {
+            let mut page = FinancePage::new(crate::data::Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.view = super::super::View::Transactions;
+            let mut transport = tx("b", "expense", 900);
+            transport.category = "Transport".into();
+            page.dashboard.value = Some(
+                serde_json::from_value(serde_json::json!({
+                    "transactions": [tx("a", "expense", 500), transport],
+                }))
+                .expect("dashboard fixture reads"),
+            );
+            page
         });
-        let page = slot.take().unwrap();
         for _ in 0..3 {
             cx.run_until_parked();
             cx.update(|window, _| window.refresh());

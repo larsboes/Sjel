@@ -762,7 +762,7 @@ that the Mac app selects, and it moves with each Kit upgrade (§6). A component 
 replaces the hand-built one in `ui/`, and the old code is deleted in the same change. A component
 that Ely lacks is built in the fork, not in `ui/`. The phone is NSH and does not use Ely.
 
-Built: the fork is pinned at `941fcf4` in `apps/gpui/Cargo.toml` and re-exported as
+Built in `941fcf4`: the fork is re-exported as
 `sjel_gpui_ui::ely` under the `gpui` feature, so the phone build carries no Ely. `src/main.rs`
 serves Ely's files before GPUI Kit's and calls `ely::init`. The two share 290 Lucide icon paths;
 289 draw the same, and `icons/credit-card.svg` now draws Ely's version. Ely's tab bindings
@@ -773,55 +773,95 @@ owner's accent. The other 23 keep Ely's own value for the mode. `Workspace::sync
 calls it at launch, on an appearance change and on a Settings change, and switches Ely's mode at
 once, with no fade.
 
-Open:
+### Ely adoption and test rethink
 
-1. Tables. `ui/src/primitives/data_table.rs` and `tables.rs` (1,066 lines) are replaced, not
-   ported one to one. The owner's goal: rethink the tables on Ely's, so the six pages that use
-   them carry much less code and are simpler to maintain. Done when each page keeps the sort,
-   selection and keyboard behavior it needs, and the two files are deleted.
+The dependency declaration in `apps/gpui/Cargo.toml` owns the current fork revision. The map
+below uses the cached source of revision `c9f6c1a`, including each module's public exports.
+An exported component is a reuse candidate, not proof of interaction parity. Sjel retains
+capability calls, proposals, persistence and routing. Reusable presentation and interaction
+belong in the fork; Mac adapters translate the shared `core` models. NSH remains independent.
 
-   Decided by the owner: cells are data only, with no render closures. A cell edits in place
-   through `Column::editable` and `on_edit`. Ely's table owns the current row and its keys, and
-   it reports its sort out. Ely gets each addition below, with a test:
+#### Adoption map
 
-   | Addition | Needed by | State |
-   |---|---|---|
-   | `Cell::Figure(text, value, Tone)`: app-formatted money that sorts by value | transactions, import, inventory | built |
-   | `Column::muted()` | transactions, import, inventory | built |
-   | `DataTable::empty(text)` | transactions, import, inventory | built |
-   | `DataTable::track_scroll(handle)`: the frame probe scrolls the rows | transactions | built |
-   | `Cell::Lines(title, meta)`: needs `Density::Comfortable` | inventory | built |
-   | `Column::actions([..])` and `on_action(row, action)`; a row's `Cell::Actions(keys)` names its subset | import, inventory | built |
-   | `Cell::Check(bool)` through `on_edit` | projects | built |
-   | `Column::choices([..])` editor; opens from a pointer press only | projects | built |
-   | One current row (`current`, `on_current`), up/down/j/k, Enter calls `on_open` | projects, documents | built |
-   | `on_sort` | projects, documents | built |
+Paths in this table are relative to `apps/gpui/`; Ely paths are relative to its `src/`.
 
-   Moved: `finance/transactions.rs`, checked by the owner in light and dark. Its money keeps
-   `format_money`, so EUR still reads `12,34 €`. The page gives its rows newest first, and Ely's
-   stable sort keeps that order on ties.
+| Area | Ely candidates | Sjel boundary and acceptance |
+|---|---|---|
+| Forms and buttons | `forms::{Form, FormField, FormError, TextInput, Select, Combobox, DateTimePicker, DirtyIndicator}`, `buttons::{Button, ConfirmButton, SegmentedControl}` | Start with `ui/src/people/forms.rs` and `inventory/wishlist.rs`, which retain Kit `InputState` entities and subscriptions. Preserve drafts across rerenders, validation, Enter submission, Escape cancellation and focus return. Replace the state and subscriptions together; avoid two input models per field. Capability validation stays authoritative. |
+| Menus and overlays | `menus::{ContextMenu, DropdownMenu, OverflowMenu, Menu}`, `overlays::{Popover, Dialog, ConfirmDialog}`, `layout::{Sheet, Drawer}` | Audit `ui/src/editor/slash_menu.rs`, `inventory/owned.rs`, `calendar/page.rs` and `src/workspace/panels.rs`. Preserve keyboard dismissal, focus restoration, disabled actions and pointer hit targets. `block_menu.rs` retains domain choices and filtering. Test an overlay inside the production root before replacing its owner. |
+| Navigation and layout | `navigation::{Tabs, Breadcrumb, BackForwardNavigation, CommandPalette, QuickOpen}`, `layout::{Sidebar, SplitPane, MasterDetail}` | Compare `ui/src/nav.rs`, `sidebar/`, `primitives/chrome.rs`, `src/finder/` and `src/workspace/`. Keep route identity, history and command execution in Sjel. Preserve deep links, active selection, shortcuts and persisted pane widths. Reuse controls without replacing the workspace architecture. |
+| Feedback | `feedback::{EmptyState, ErrorView, AsyncView, ToastViewport, Toaster, SaveState, SyncStatus}` | Compare `ui/src/data.rs`, `primitives/tokens.rs` and `editor/mod.rs`. Retain loading, empty, error and stale-data distinctions, retry actions, and mutation success/failure reporting. Replace Kit notifications and their viewport together so each result appears once. |
+| Mail | `mail::{MailList, MailThreadView, MailReader, MailComposer, QuotedText, LabelPicker, SnoozePicker}` | Compare `ui/src/mail/` and `inbox/triage.rs`. Preserve proposal review, selected message, thread order, safe body rendering and explicit send confirmation. Read-only list/reader adoption comes before composer adoption. UI callbacks must use existing capability write modes. |
+| Editor and documents | `documents::{BlockEditor, BlockEvent, MarkdownEditor, RichTextEditor, MarkdownRenderer}`, `editor::{CodeEditor, FindWidget, CompletionMenu}` | The block note editor in `ui/src/editor/` is not a code editor. Compare `documents::BlockEditor` against split/merge, slash menu, table editing, markdown round-trip, debounce and conflict refusal. Retain `core::blocks` and the `Saver` boundary. Adopt `CodeEditor` only for an existing code-editing use. Preserve PDF rendering/search in `ui/src/documents/` and `pdf_kit/` unless separately verified. |
+| Terminal | `terminal::{Terminal, TerminalEvent, TerminalToolbar, ShellSelector, LogViewer}` | `ui/src/terminal/` consumes remote shell bytes and sends input/resize through `core`; Ely `terminal/view.rs` exposes local `spawn` and static `replay`. Add a transport-fed session API in the fork before replacing the remote grid. Preserve ordered writes, resize coalescing, reconnect, selection, clipboard and shutdown. Keep `terminal_screen.rs` while NSH depends on it. Never substitute a local shell for a remote session. |
+| Calendar | `calendar::{CalendarDayView, CalendarWeekView, CalendarMonthView, AgendaView, EventEditor, EventPopover, AvailabilityPicker}` | First compare `ui/src/calendar/{grid,page,actions}.rs` with the fork's callbacks. Record gaps for proposals, keyboard selection, time-blocking, availability and undo before moving rendering. Preserve event IDs, all-day/timezone behavior and the capability confirmation path. No new calendar views are required merely because Ely exports them. |
+| Charts and remaining lists | `charts::{BarChart, LineChart, AreaChart, ProgressChart, ChartLegend, ChartTooltip}`, `tables::DataTable`, `lists::{List, VirtualList}` | Replace page bars/trends in `ui/src/finance/overview.rs`, `systems/` and `media/`; preserve units, missing values, signed amounts and empty states. Leave the soundscape field visualizer `viz/` alone. Consider tables only for `accounts/`, `systems/storage.rs`, `software/` and `research/benchmarks.rs` when sorting/filtering serves a concrete use. Feed cards and capability key-value lists do not need tables. |
 
-   Moved: `inventory/owned.rs` and `finance/import.rs`. Inventory puts kind, size, color,
-   quantity and note on one line under the name. Its value is a muted figure. A missing price
-   or size now sorts last. Import offers each candidate only the actions its source allows
-   (`offered` in `finance/import.rs`). The buttons read Confirm, Reconcile and Reject, so they
-   fit a 12rem column. A mail row names the account it confirms from under its proposed
-   account. Headless tests cover the rows and the Edit press. Not checked: how either page
-   looks. Nobody has opened them on Ely's table yet.
+#### Test ownership and cleanup
 
-   Moved: `projects/tables.rs`, `projects/mod.rs` (Hubs), and `documents/mod.rs`. Projects keeps
-   its inline due-date preset bar and new-task input row beside the `DataTable`, uses
-   `Cell::Lines` for subtask progress, and delegates up/down/j/k/Enter to `DataTable` while
-   driving `Space`, `e`, and stage-move keys from `on_current`. Documents uses `DataTable`
-   virtualization, `group_by`, `hidden` on narrow windows, and `on_sort`.
-   `ui/src/primitives/data_table.rs` and `tables.rs` are deleted; `sub_tabs`, `key_bar`,
-   `tabular_cell`, `SortOrder`, `column_width`, and `cycle_column_width` live in
-   `ui/src/primitives/chrome.rs` (`mono_num` in `badges.rs`).
+Ely tests own generic sorting, virtualization, editor mechanics, focus and control dispatch.
+Sjel tests own model-to-component conversion, row/action identity, routing, proposal semantics
+and persistence. A component test and a workflow test are not duplicates merely because both
+press Enter. Remove a test only when a named retained test covers its failure at the same
+boundary. Keep pure logic tests outside GPUI windows.
 
-   Not checked: nobody has opened Inventory, Import, Projects, or Documents on Ely's table in the
-   running Mac app yet. The `Column::choices` menu opens from a pointer press only.
+1. **Share window setup, not domain fixtures.** Built in `ui/src/test_support.rs` (`init`,
+   `mount_root` behind `test-support`): `calendar/tests.rs`, `projects/mod.rs`, `inventory/mod.rs`,
+   `finance/{overview,transactions}.rs`, `software/mod.rs`, `systems/storage.rs` and
+   `accounts/mod.rs` share Kit/Ely initialization and `Root` mounting without enabling
+   `allow_parking` globally. `src/workspace/mod.rs` remains separate while `apps/gpui/Cargo.toml`
+   and `workspace/mod.rs` hold concurrent edits.
+2. **Replace the ledger smoke wrapper.** Done in `f0d20861`:
+   `finance/transactions.rs::category_chart_filters_the_production_ledger_and_toggles_off`
+   exercises category selection, filtered row count and clearing on the production view.
+3. **Split pure assertions from entity tests.** Done for
+   `projects/mod.rs::column_specs_and_sort_col_ids` (pure Rust test) and
+   `sort_cycling_updates_task_note_and_project_sorts` (entity test). `documents/mod.rs::the_order_follows_the_filters`
+   remains alongside a focused rendered selection/sort check.
+4. **Remove obsolete checks with their implementation.** `primitives/mod.rs::sort_order_and_column_width_cycling`
+   drops the trivial `RADIUS_*` constant assertions and retains width-cycling and sort-mapping
+   coverage. Preserve editor save/conflict, calendar proposal/undo, remote stream ordering and
+   NSH tests.
 
-   Gaps against the old table: Ely's table has no accessibility label and no outer border.
+#### Forms, menus and remaining acceptance
+
+`people/forms.rs` and `inventory/wishlist.rs` (`WishForm`, `GroupForm`) use
+`ely::forms::{Form, FormField, FormError, Input, TextInput}` and `ely::buttons::{Button, ButtonVariant}`
+instead of Kit `InputState` entities; search fields and non-form list buttons remain on Kit until
+those bars move.
+
+Verification after the form and test-support changes: `sjel-gpui-ui` passes 200 library tests (0
+failed), `sjel-gpui-core` passes 386 library tests (6 ignored), `sjel-gpui-ios` passes 3 library
+tests, and `sjel-gpui` passes 45 binary tests with `audio::tests::the_default_device_can_be_opened`
+skipped (CoreAudio `OSStatus 560947818` in this environment). `--no-default-features` and
+`sjel-gpui-ui --no-default-features --features nsh` check cleanly. Live light/dark visual
+acceptance for tables, charts, calendar and the migrated forms remains open.
+5. **Verify by boundary.** Run pure adapter tests, then headless input tests on the production
+   view, then the workspace and feature checks below. A changed component also runs the fork's
+   nearest tests and both supported engines. Live light/dark acceptance remains separate from
+   headless results. Done when migrated pages have no parallel control implementation, each
+   removed test names its retained coverage in the change description, shared setup has at least
+   two callers, and skipped checks remain explicit.
+
+#### Execution order
+
+Complete table acceptance first. Then consolidate test setup while replacing the ledger smoke
+test, audit calendar interaction gaps, and migrate calendar rendering after the fork covers
+them. Charts follow; forms, menus, feedback and navigation move in bounded page changes.
+Mail, block editing and remote terminal adoption follow their interaction comparisons rather
+than a bulk import of matching component names. Optional list conversions stay last.
+
+#### Table acceptance
+
+Table migration shipped in `831d1fb2`, `4a2f4490` and `08cc5f14`: Finance transactions/import,
+Inventory, Projects/Hubs and Documents use Ely; the old table primitives are removed.
+
+Open: verify Inventory, Import, Projects and Documents in the running Mac app in light and
+dark appearances. Check sorting, filtering, row selection, keyboard open, inline edits,
+per-row actions, narrow windows and scroll position. Transactions already has light/dark
+acceptance. Ely still lacks the old table's accessibility label and outer border; resolve
+accessibility in the fork and decide whether the border is needed during visual acceptance.
+`Column::choices` currently opens only from a pointer press; keyboard editing remains open.
 
 #### Chart acceptance
 
@@ -848,47 +888,31 @@ workspace, GPUI Fast and NSH checks did not run for this chart change.
 
 #### Resume checklist (Ely)
 
-The fork is pinned, the app launches with Ely, and the theme bridge is built. Continue in this
-order:
+When a component lacks required behavior, add it on the fork's `sjel` branch with a focused
+test. Push the fork before updating the dependency revision and lockfile. Upstream PRs remain
+deferred. On GPUI Kit upgrades, update the fork's `gpui-kit` and `gpui-pre-leaks` together and
+merge upstream changes after checking both engines. The dependency manifest owns versions.
+The local-fork build tooling gap is tracked in [`tooling.md`](tooling.md).
 
-1. **Orient.** Read `AGENTS.md`, load the `sjel` and `gpui` skills, and run
-   `git status --short --branch` and `tools/doctor`. Other sessions edit `apps/gpui` in the
-   primary checkout. Stage only the files of this task.
-2. **Tables (item 1).** Six pages use Sjel's tables: `documents/mod.rs`, `finance/import.rs`,
-   `finance/transactions.rs`, `inventory/owned.rs`, `projects/mod.rs` and `projects/tables.rs`
-   (all in `ui/src`). `finance/transactions.rs`, `finance/import.rs` and `inventory/owned.rs`
-   are moved. Build the open additions in item 1's table in the fork, then move the next page.
-   Check each page's sort, selection and keys with a headless test. To build Sjel against an unpushed fork commit, pass
-   `--config 'patch."https://github.com/larsboes/Ely-GPUI-Components".ely-gpui-component.path="<fork>"'`
-   to cargo. That leaves `Cargo.toml` alone, but it rewrites `Cargo.lock`, so move the `rev`
-   before you commit. Delete
-   `ui/src/primitives/data_table.rs` and `tables.rs` in the change that moves the last page.
-3. **Change the fork.** When an Ely component lacks a behavior that Sjel needs, add
-   it on the fork's `sjel` branch with a test. Do not open a PR upstream yet. Push the fork,
-   then move the `rev` in `apps/gpui/Cargo.toml` to the new commit.
-4. **Keep the fork current.** On a GPUI Kit upgrade (§6), change `gpui-kit` and
-   `gpui-pre-leaks` in the fork's `Cargo.toml` to the new versions. Fetch `upstream` and merge
-   its `main` into `sjel`. The 0.3.8 to 0.3.12 port is a guide to the API breaks to expect:
-   key bindings, `unparse`, scroll events and the animation clock. The fork commit `435226f`
-   describes that port.
-
-Checks for each change, with the shared target:
+Use Sjel's shared verification cache; do not export a separate target directory for each run:
 
 ```sh
-export CARGO_TARGET_DIR="$HOME/.cargo-target"
-cargo test --manifest-path apps/gpui/Cargo.toml --workspace
-cargo check --manifest-path apps/gpui/Cargo.toml --no-default-features
-cargo check --manifest-path apps/gpui/Cargo.toml -p sjel-gpui-ui --no-default-features --features nsh
-# in the fork:
+sjel cargo test --manifest-path apps/gpui/Cargo.toml --workspace --locked
+sjel cargo check --manifest-path apps/gpui/Cargo.toml --locked --no-default-features
+sjel cargo check --manifest-path apps/gpui/Cargo.toml --locked -p sjel-gpui-ui --no-default-features --features nsh
+# In the fork, when its code changes:
 cargo test --lib --features test-support
 cargo test --lib --features test-support,gpui-fast
 ```
 
-At the last check, 658 app tests passed with 6 ignored. Window tests call
-`ely::init_for_tests`, which needs Ely's `test-support` feature as a dev-dependency of both the
-app and `ui`. In the fork, 1735 tests passed on `gpui-pre` and 1734 on GPUI Fast, where the
-leak test does not run. Update this checklist with
-what is still open, and state each check that did not run.
+Verification on 2026-11-15: `sjel cargo test --manifest-path apps/gpui/Cargo.toml --locked
+-p sjel-gpui-core --lib` passes (386 passed, 6 ignored). The workspace command above stops
+during UI compilation: concurrent edits in `ui/src/finance/overview.rs` reference an undefined
+`TREND_BAR_HEIGHT` at lines 774, 791 and 805. No workspace tests run to completion in that
+attempt. The documentation link check passes (417 documents), the self-reference check passes
+(3,103 documents), and the focused `git diff --check` passes. `tools/doctor` reports two failed
+checks outside this plan change. This review changes only the plan. Feature checks, fork tests
+and live visual acceptance have not run for this review.
 
 #### Remaining sortable lists
 

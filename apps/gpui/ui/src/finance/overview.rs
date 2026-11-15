@@ -995,8 +995,7 @@ mod overview_tests {
 
     #[gpui_kit::test]
     fn the_finance_trend_draws_with_gaps_zero_values_and_negative_net(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let (view, cx) = cx.add_window_view(|_, _| {
             TrendPreview(vec![
                 point("2026-01"),

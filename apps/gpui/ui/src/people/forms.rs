@@ -1,17 +1,17 @@
 //! Contact editing, creation, fact attachment, and field declaration forms.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    div, point, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString,
-    Subscription, Window,
+    div, point, prelude::*, px, rgba, AnyElement, Context, Entity, Focusable, FontWeight,
+    SharedString, Subscription, Window,
 };
 use serde_json::Value;
 use sjel_gpui_core::people::edit::{
     edit_fields, FactDraft, FieldDecl, NewPerson as NewPersonDraft, PersonEdit, FACT_PREDICATES,
 };
 
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Form as ElyForm, FormError, FormField, Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use crate::theme::Palette;
 
 use super::PeoplePage;
@@ -33,9 +33,9 @@ pub(super) enum FormKind {
 pub(crate) struct Form {
     pub(super) kind: FormKind,
     /// (key, label, input). A fact form keys its inputs by what they mean: `place`, `from`, …
-    pub(super) fields: Vec<(String, String, Entity<InputState>)>,
+    pub(super) fields: Vec<(String, String, Entity<TextInput>)>,
     /// The name input, for the two person forms.
-    pub(super) name: Option<Entity<InputState>>,
+    pub(super) name: Option<Entity<TextInput>>,
     /// The chosen predicate for a fact, and the chosen type for a field.
     pub(super) choice: String,
     pub(super) error: Option<SharedString>,
@@ -48,7 +48,7 @@ impl Form {
         self.fields
             .iter()
             .find(|(field, _, _)| field == key)
-            .map(|(_, _, input)| input.read(cx).value().to_string())
+            .map(|(_, _, input)| input.read(cx).text().to_owned())
             .unwrap_or_default()
     }
 }
@@ -109,13 +109,13 @@ impl PeoplePage {
                          window: &mut Window,
                          cx: &mut Context<Self>| {
             let field = cx.new(|cx| {
-                let mut state = InputState::new(window, cx).placeholder(placeholder.to_owned());
-                state.set_value(value, window, cx);
+                let mut state = TextInput::new(window, cx).placeholder(placeholder.to_owned());
+                state.set_text(value, cx);
                 state
             });
             subscriptions.push(
                 cx.subscribe_in(&field, window, |view, _, event, window, cx| {
-                    if let InputEvent::PressEnter { .. } = event {
+                    if let InputEvent::Submit = event {
                         view.save_form(window, cx);
                     }
                 }),
@@ -210,7 +210,7 @@ impl PeoplePage {
             .clone()
             .or_else(|| fields.first().map(|(_, _, i)| i.clone()))
         {
-            first.update(cx, |input, cx| input.focus(window, cx));
+            first.update(cx, |input, cx| input.focus_handle(cx).focus(window, cx));
         }
         self.form = Some(Form {
             kind,
@@ -253,12 +253,12 @@ impl PeoplePage {
         let name = form
             .name
             .as_ref()
-            .map(|input| input.read(cx).value().to_string())
+            .map(|input| input.read(cx).text().to_owned())
             .unwrap_or_default();
         let field_values: Vec<(String, String)> = form
             .fields
             .iter()
-            .map(|(key, _, input)| (key.clone(), input.read(cx).value().to_string()))
+            .map(|(key, _, input)| (key.clone(), input.read(cx).text().to_owned()))
             .collect();
         let types = self
             .fields
@@ -364,32 +364,26 @@ impl PeoplePage {
                         .child(title),
                 )
                 .child(
-                    Button::new("people-form-close")
-                        .small()
-                        .ghost()
-                        .label("Cancel")
+                    Button::new("people-form-close", "Cancel")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .disabled(form.saving)
                         .on_click(cx.listener(|page, _, _, cx| page.close_form(cx))),
                 ),
         );
-        let mut fields = div().flex().flex_col().gap_3().flex_none().w_full();
+        let page_entity = cx.entity();
+        let mut fields = ElyForm::new("people-form")
+            .on_submit(move |window, cx| {
+                page_entity.update(cx, |page, cx| page.save_form(window, cx));
+            });
+        let mut form_body = div().flex().flex_col().gap_3().flex_none().w_full();
         if let Some(name) = &form.name {
-            fields = fields.child(Input::new(name).small());
+            form_body = form_body.child(Input::new(name).size(ControlSize::Sm));
         }
         for (key, label, input) in &form.fields {
-            fields = fields.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(label.clone()),
-                    )
-                    .child(Input::new(input).small())
-                    .id(SharedString::from(format!("people-field-{key}"))),
+            form_body = form_body.child(
+                FormField::new(SharedString::from(format!("people-field-{key}")), label.clone())
+                    .child(Input::new(input).size(ControlSize::Sm)),
             );
         }
         let choices: Vec<(&str, &str)> = match &form.kind {
@@ -399,7 +393,7 @@ impl PeoplePage {
         };
         if !choices.is_empty() {
             let current = form.choice.clone();
-            fields = fields.child(
+            form_body = form_body.child(
                 div()
                     .flex()
                     .flex_wrap()
@@ -407,28 +401,29 @@ impl PeoplePage {
                     .children(choices.iter().map(|(value, label)| {
                         let choice_value = (*value).to_owned();
                         let choice_label = (*label).to_owned();
-                        Button::new(SharedString::from(format!("people-choice-{value}")))
-                            .small()
-                            .label(choice_label)
-                            .when(current == *value, |button| button.primary())
-                            .when(current != *value, |button| button.ghost())
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                if let Some(form) = page.form.as_mut() {
-                                    form.choice = choice_value.clone();
-                                }
-                                cx.notify();
-                            }))
+                        Button::new(
+                            SharedString::from(format!("people-choice-{value}")),
+                            choice_label,
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(if current == *value {
+                            ButtonVariant::Primary
+                        } else {
+                            ButtonVariant::Ghost
+                        })
+                        .on_click(cx.listener(move |page, _, _, cx| {
+                            if let Some(form) = page.form.as_mut() {
+                                form.choice = choice_value.clone();
+                            }
+                            cx.notify();
+                        }))
                     })),
             );
         }
         if let Some(error) = &form.error {
-            fields = fields.child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.red))
-                    .child(error.clone()),
-            );
+            form_body = form_body.child(FormError::new("people-form-error", error.clone()));
         }
+        fields = fields.child(form_body);
         card = card.child(
             div()
                 .id("people-form-fields")
@@ -443,10 +438,9 @@ impl PeoplePage {
         let saving = form.saving;
         card = card.child(
             div().flex_none().flex().justify_end().gap_2().child(
-                Button::new("people-form-save")
-                    .small()
+                Button::new("people-form-save", if saving { "Saving…" } else { "Save" })
+                    .size(ControlSize::Sm)
                     .primary()
-                    .label(if saving { "Saving…" } else { "Save" })
                     .disabled(saving)
                     .on_click(cx.listener(|page, _, window, cx| page.save_form(window, cx))),
             ),

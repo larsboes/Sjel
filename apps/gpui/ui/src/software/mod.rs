@@ -293,8 +293,7 @@ mod tests {
 
     #[gpui::test]
     fn table_sorts_sizes_and_opens_the_matching_decision_editor(cx: &mut gpui::TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let (page, cx) = cx.add_window_view(|_, _| {
             let mut page =
                 Software::new(Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)));

@@ -671,8 +671,7 @@ mod chart_tests {
 
     #[gpui_kit::test]
     fn storage_history_draws_after_two_samples(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let (view, cx) = cx.add_window_view(|_, _| {
             StoragePreview(StorageHistory {
                 samples: vec![

@@ -673,8 +673,7 @@ mod tests {
 
     #[gpui::test]
     fn edit_on_an_owned_row_opens_that_items_form(cx: &mut gpui::TestAppContext) {
-        cx.update(crate::ely::init_for_tests);
-        cx.update(gpui_kit::init);
+        crate::test_support::init(cx);
         let (page, cx) = cx.add_window_view(|_, cx| {
             let mut page = InventoryPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
             page.rows.value = Some(vec![

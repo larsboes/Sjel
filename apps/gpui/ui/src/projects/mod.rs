@@ -13,7 +13,7 @@ use crate::data::{self, Remote, Repo};
 use crate::editor::{self, EditorEvent, NoteEditor};
 use crate::primitives::{
     back_button, column_width, cycle_column_width, list, note, placeholder, row_for_density,
-    section, SortOrder,
+    section,
 };
 use crate::tasks::{self, NoteSort, StatusFilter, TaskFilter, TaskSort};
 use crate::theme::{tint, Density, Palette, ThemeContext};
@@ -3103,8 +3103,7 @@ mod tests {
     /// that the page never invents a blocked record and never keeps one the store has forgotten.
     #[gpui::test]
     fn the_blocked_band_holds_what_the_sync_reported(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let view = cx.new(|cx| {
             let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
             projects.set_blocked(
@@ -3135,8 +3134,7 @@ mod tests {
 
     #[gpui::test]
     fn project_inventory_review_mounts_at_mobile_density(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let (_, cx) = cx.add_window_view(move |window, cx| {
             let view = cx.new(|cx| {
                 let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
@@ -3183,8 +3181,7 @@ mod tests {
 
     #[gpui::test]
     fn project_mail_review_mounts_at_mobile_density(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let (_, cx) = cx.add_window_view(move |window, cx| {
             let view = cx.new(|cx| {
                 let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
@@ -3224,8 +3221,7 @@ mod tests {
 
     #[gpui::test]
     fn a_project_page_draws_its_tasks_as_a_table(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
@@ -3258,8 +3254,7 @@ mod tests {
 
     #[gpui::test]
     fn all_tasks_tab_filters_by_query(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
@@ -3309,8 +3304,7 @@ mod tests {
 
     #[gpui::test]
     fn all_tasks_panel_opens_on_a_task_and_draws_beside_the_table(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let task = |id: &str, status: &str| GlobalTask {
             id: format!("P/Tasks/{id}.md"),
             kind: "task".into(),
@@ -3377,8 +3371,7 @@ mod tests {
 
     #[gpui::test]
     fn all_notes_tab_filters_by_query(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
@@ -3419,8 +3412,7 @@ mod tests {
 
     #[gpui::test]
     fn project_section_auto_opens_hub_note(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
@@ -3458,8 +3450,7 @@ mod tests {
 
     #[gpui::test]
     fn projects_hub_renders_table_header_and_sorts_projects(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let p1 = ProjectSummary {
             name: "Hearth".into(),
             archived: false,
@@ -3526,8 +3517,7 @@ mod tests {
 
     #[gpui::test]
     fn project_tasks_supports_board_mode_and_task_panel_inspector(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let task1 = ProjectRecord {
             project: "P".into(),
             path: "P/Tasks/T1.md".into(),
@@ -3609,8 +3599,7 @@ mod tests {
 
     #[gpui::test]
     fn keyboard_navigation_and_inline_task_editing_in_projects(cx: &mut TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
+        crate::test_support::init(cx);
         let p1 = ProjectSummary {
             name: "Hearth".into(),
             archived: false,
@@ -3722,14 +3711,8 @@ mod tests {
         });
     }
 
-    #[gpui::test]
-    fn test_column_specs_and_sort_cycling(cx: &mut gpui::TestAppContext) {
-        cx.update(gpui_kit::init);
-        cx.update(crate::ely::init_for_tests);
-        let (projects, cx) = cx.add_window_view(|_window, cx| {
-            Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
-        });
-
+    #[test]
+    fn column_specs_and_sort_col_ids() {
         let desk = Columns::for_density(Density::Desktop);
         assert_eq!(desk.get("due"), Some(120.));
         assert_eq!(desk.get("priority"), Some(84.));
@@ -3752,6 +3735,14 @@ mod tests {
         );
         assert_eq!(TaskSort::from_col_id("due"), Some(TaskSort::Due));
         assert_eq!(NoteSort::from_col_id("kind"), Some(NoteSort::Kind));
+    }
+
+    #[gpui::test]
+    fn sort_cycling_updates_task_note_and_project_sorts(cx: &mut gpui::TestAppContext) {
+        crate::test_support::init(cx);
+        let (projects, cx) = cx.add_window_view(|_window, cx| {
+            Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
+        });
 
         projects.update(cx, |view, cx| {
             // Task sort cycle

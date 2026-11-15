@@ -49,9 +49,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tokens_dimensions() {
-        assert!(RADIUS_SM < RADIUS_MD);
-        assert!(RADIUS_MD < RADIUS_LG);
+    fn sort_order_and_column_width_cycling() {
         assert_eq!(SortOrder::Ascending.glyph(), " ↑");
         assert_eq!(SortOrder::Descending.glyph(), " ↓");
         assert_eq!(SortOrder::Ascending.flip(), SortOrder::Descending);

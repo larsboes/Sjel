@@ -3,10 +3,11 @@
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, Subscription, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, Focusable, Subscription,
+    Window,
 };
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::button::{Button as KitButton, ButtonVariants};
+use gpui_kit::component::input::Input as KitInput;
 use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::inventory::{
     budget_of, counted, format_cents, format_dimensions, months_to_pay, wishlist_view, Budget,
@@ -14,12 +15,15 @@ use sjel_gpui_core::inventory::{
 };
 use sjel_gpui_core::shell::{self, ShellError};
 
+use crate::ely::buttons::{Button as ElyButton, ButtonVariant};
+use crate::ely::forms::{Form as ElyForm, FormError, FormField, Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use crate::theme::{tint, Palette};
 
 use super::{nonempty, InventoryPage, InventoryTab};
 
 pub(crate) struct WishForm {
-    pub(super) fields: Vec<(String, Entity<InputState>)>,
+    pub(super) fields: Vec<(String, Entity<TextInput>)>,
     pub(super) kind: String,
     pub(super) state: InventoryState,
     pub(super) error: Option<String>,
@@ -31,14 +35,14 @@ impl WishForm {
         self.fields
             .iter()
             .find(|(field, _)| field == key)
-            .map(|(_, input)| input.read(cx).value().to_string())
+            .map(|(_, input)| input.read(cx).text().to_owned())
             .unwrap_or_default()
     }
 }
 
 /// The two fields a wish group is made of. Its members are chosen on the wishes themselves.
 pub(crate) struct GroupForm {
-    pub(super) fields: Vec<(String, String, Entity<InputState>)>,
+    pub(super) fields: Vec<(String, String, Entity<TextInput>)>,
     pub(super) error: Option<String>,
     pub(super) _subscriptions: Vec<Subscription>,
 }
@@ -48,7 +52,7 @@ impl GroupForm {
         self.fields
             .iter()
             .find(|(field, _, _)| field == key)
-            .map(|(_, _, input)| input.read(cx).value().to_string())
+            .map(|(_, _, input)| input.read(cx).text().to_owned())
             .unwrap_or_default()
     }
 }
@@ -113,13 +117,13 @@ impl InventoryPage {
         let mut subscriptions = Vec::new();
         for (key, label, value, placeholder) in definitions {
             let input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder(placeholder);
-                input.set_value(value, window, cx);
+                let mut input = TextInput::new(window, cx).placeholder(placeholder);
+                input.set_text(value, cx);
                 input
             });
             subscriptions.push(
                 cx.subscribe_in(&input, window, |page, _, event, window, cx| {
-                    if matches!(event, InputEvent::PressEnter { .. }) {
+                    if matches!(event, InputEvent::Submit) {
                         page.create_group(window, cx);
                     }
                 }),
@@ -127,7 +131,7 @@ impl InventoryPage {
             fields.push((key.to_owned(), label.to_owned(), input));
         }
         if let Some((_, _, input)) = fields.first() {
-            input.update(cx, |input, cx| input.focus(window, cx));
+            input.update(cx, |input, cx| input.focus_handle(cx).focus(window, cx));
         }
         self.group_form = Some(GroupForm {
             fields,
@@ -293,16 +297,16 @@ impl InventoryPage {
         let mut fields = Vec::new();
         let mut subscriptions = Vec::new();
         for (key, label, placeholder) in definitions {
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
+            let input = cx.new(|cx| TextInput::new(window, cx).placeholder(placeholder));
             subscriptions.push(cx.subscribe_in(&input, window, |page, _, event, _, cx| {
-                if matches!(event, InputEvent::PressEnter { .. }) {
+                if matches!(event, InputEvent::Submit) {
                     page.create_wish(cx);
                 }
             }));
             fields.push((format!("{key} · {label}"), input));
         }
         if let Some((_, input)) = fields.first() {
-            input.update(cx, |input, cx| input.focus(window, cx));
+            input.update(cx, |input, cx| input.focus_handle(cx).focus(window, cx));
         }
         self.wish_form = Some(WishForm {
             fields,
@@ -460,24 +464,20 @@ impl InventoryPage {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let form = self.wish_form.as_ref()?;
+        let page_entity = cx.entity();
         let mut fields = div().flex().flex_col().gap_2().flex_none().w_full();
         for (key, input) in &form.fields {
             let (field, label) = key.split_once(" · ").unwrap_or((key, key));
             fields = fields.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(label.to_owned()),
-                    )
-                    .child(Input::new(input).small())
-                    .id(format!("wishlist-new-{field}")),
+                FormField::new(format!("wishlist-new-{field}"), label.to_owned())
+                    .child(Input::new(input).size(ControlSize::Sm)),
             );
         }
+        let fields = ElyForm::new("wishlist-create-form")
+            .on_submit(move |_, cx| {
+                page_entity.update(cx, |page, cx| page.create_wish(cx));
+            })
+            .child(fields);
         let kind = form.kind.clone();
         let state = form.state;
         let saving = self.wish_busy.as_deref() == Some("new");
@@ -505,11 +505,13 @@ impl InventoryPage {
                     .flex()
                     .gap_2()
                     .child(
-                        Button::new("wishlist-kind-piece")
-                            .small()
-                            .label("Product")
-                            .when(kind == "piece", |button| button.primary())
-                            .when(kind != "piece", |button| button.ghost())
+                        ElyButton::new("wishlist-kind-piece", "Product")
+                            .size(ControlSize::Sm)
+                            .variant(if kind == "piece" {
+                                ButtonVariant::Primary
+                            } else {
+                                ButtonVariant::Ghost
+                            })
                             .on_click(cx.listener(|page, _, _, cx| {
                                 if let Some(form) = page.wish_form.as_mut() {
                                     form.kind = "piece".to_owned();
@@ -518,11 +520,13 @@ impl InventoryPage {
                             })),
                     )
                     .child(
-                        Button::new("wishlist-kind-slot")
-                            .small()
-                            .label("Flat need")
-                            .when(kind == "slot", |button| button.primary())
-                            .when(kind != "slot", |button| button.ghost())
+                        ElyButton::new("wishlist-kind-slot", "Flat need")
+                            .size(ControlSize::Sm)
+                            .variant(if kind == "slot" {
+                                ButtonVariant::Primary
+                            } else {
+                                ButtonVariant::Ghost
+                            })
                             .on_click(cx.listener(|page, _, _, cx| {
                                 if let Some(form) = page.wish_form.as_mut() {
                                     form.kind = "slot".to_owned();
@@ -532,11 +536,13 @@ impl InventoryPage {
                     )
                     .when(self.tab == InventoryTab::Owned, |row| {
                         row.child(
-                            Button::new("inventory-new-owned")
-                                .small()
-                                .label("Owned")
-                                .when(state == InventoryState::Owned, |button| button.primary())
-                                .when(state != InventoryState::Owned, |button| button.ghost())
+                            ElyButton::new("inventory-new-owned", "Owned")
+                                .size(ControlSize::Sm)
+                                .variant(if state == InventoryState::Owned {
+                                    ButtonVariant::Primary
+                                } else {
+                                    ButtonVariant::Ghost
+                                })
                                 .on_click(cx.listener(|page, _, _, cx| {
                                     if let Some(form) = page.wish_form.as_mut() {
                                         form.state = InventoryState::Owned;
@@ -545,11 +551,13 @@ impl InventoryPage {
                                 })),
                         )
                         .child(
-                            Button::new("inventory-new-wanted")
-                                .small()
-                                .label("Wanted")
-                                .when(state == InventoryState::Wanted, |button| button.primary())
-                                .when(state != InventoryState::Wanted, |button| button.ghost())
+                            ElyButton::new("inventory-new-wanted", "Wanted")
+                                .size(ControlSize::Sm)
+                                .variant(if state == InventoryState::Wanted {
+                                    ButtonVariant::Primary
+                                } else {
+                                    ButtonVariant::Ghost
+                                })
                                 .on_click(cx.listener(|page, _, _, cx| {
                                     if let Some(form) = page.wish_form.as_mut() {
                                         form.state = InventoryState::Wanted;
@@ -561,12 +569,7 @@ impl InventoryPage {
             )
             .child(fields);
         if let Some(error) = &form.error {
-            card = card.child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.red))
-                    .child(error.clone()),
-            );
+            card = card.child(FormError::new("wishlist-create-error", error.clone()));
         }
         Some(
             card.child(
@@ -575,10 +578,9 @@ impl InventoryPage {
                     .justify_end()
                     .gap_2()
                     .child(
-                        Button::new("wishlist-create-cancel")
-                            .small()
-                            .ghost()
-                            .label("Cancel")
+                        ElyButton::new("wishlist-create-cancel", "Cancel")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .disabled(saving)
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.wish_form = None;
@@ -586,16 +588,14 @@ impl InventoryPage {
                             })),
                     )
                     .child(
-                        Button::new("wishlist-create-save")
-                            .small()
-                            .primary()
-                            .label(if saving {
-                                "Adding…"
-                            } else {
-                                "Add to wishlist"
-                            })
-                            .disabled(saving)
-                            .on_click(cx.listener(|page, _, _, cx| page.create_wish(cx))),
+                        ElyButton::new(
+                            "wishlist-create-save",
+                            if saving { "Adding…" } else { "Add to wishlist" },
+                        )
+                        .size(ControlSize::Sm)
+                        .primary()
+                        .disabled(saving)
+                        .on_click(cx.listener(|page, _, _, cx| page.create_wish(cx))),
                     ),
             )
             .into_any_element(),
@@ -689,7 +689,7 @@ impl InventoryPage {
                             .items_center()
                             .gap_2()
                             .child(
-                                Button::new("wishlist-new-group")
+                                KitButton::new("wishlist-new-group")
                                     .small()
                                     .ghost()
                                     .label(if self.group_form.is_some() {
@@ -703,7 +703,7 @@ impl InventoryPage {
                                     })),
                             )
                             .child(
-                                Button::new("wishlist-new")
+                                KitButton::new("wishlist-new")
                                     .small()
                                     .primary()
                                     .label(if self.wish_form.is_some() {
@@ -724,14 +724,14 @@ impl InventoryPage {
                     .items_center()
                     .justify_between()
                     .gap_4()
-                    .child(div().w(px(280.)).child(Input::new(&search_field).small()))
+                    .child(div().w(px(280.)).child(KitInput::new(&search_field).small()))
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .gap_1()
                             .child(
-                                Button::new("group-all")
+                                KitButton::new("group-all")
                                     .small()
                                     .label(format!("All ({total_items})"))
                                     .when(group.is_none(), |b| b.primary())
@@ -746,7 +746,7 @@ impl InventoryPage {
                                 let active =
                                     group.as_ref().is_some_and(|group| group.id == candidate.id);
                                 let id = candidate.id.clone();
-                                Button::new(format!("group-{}", candidate.id))
+                                KitButton::new(format!("group-{}", candidate.id))
                                     .small()
                                     .label(format!(
                                         "{} ({})",
@@ -780,7 +780,7 @@ impl InventoryPage {
             );
             let toggle = group.clone();
             row = row.child(
-                Button::new(format!("group-alternatives-{}", group.id))
+                KitButton::new(format!("group-alternatives-{}", group.id))
                     .small()
                     .ghost()
                     .label(if group.alternatives {
@@ -796,7 +796,7 @@ impl InventoryPage {
             let id = group.id.clone();
             let confirming = self.confirm_remove_group.as_deref() == Some(id.as_str());
             row = row.child(
-                Button::new(format!("group-remove-{id}"))
+                KitButton::new(format!("group-remove-{id}"))
                     .small()
                     .ghost()
                     .label(if confirming {
@@ -952,23 +952,19 @@ impl InventoryPage {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let form = self.group_form.as_ref()?;
+        let page_entity = cx.entity();
         let mut fields = div().flex().flex_col().gap_2().flex_none().w_full();
         for (key, label, input) in &form.fields {
             fields = fields.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(label.clone()),
-                    )
-                    .child(Input::new(input).small())
-                    .id(format!("group-{key}")),
+                FormField::new(format!("group-{key}"), label.clone())
+                    .child(Input::new(input).size(ControlSize::Sm)),
             );
         }
+        let fields = ElyForm::new("wishlist-group-form")
+            .on_submit(move |window, cx| {
+                page_entity.update(cx, |page, cx| page.create_group(window, cx));
+            })
+            .child(fields);
         Some(
             div()
                 .p_4()
@@ -992,21 +988,17 @@ impl InventoryPage {
                         .items_center()
                         .gap_2()
                         .child(
-                            Button::new("group-create-save")
-                                .small()
+                            ElyButton::new("group-create-save", "Create group")
+                                .size(ControlSize::Sm)
                                 .primary()
-                                .label("Create group")
-                                .on_click(
-                                    cx.listener(|page, _, window, cx| {
-                                        page.create_group(window, cx)
-                                    }),
-                                ),
+                                .on_click(cx.listener(|page, _, window, cx| {
+                                    page.create_group(window, cx)
+                                })),
                         )
                         .child(
-                            Button::new("group-create-cancel")
-                                .small()
-                                .ghost()
-                                .label("Cancel")
+                            ElyButton::new("group-create-cancel", "Cancel")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|page, _, _, cx| {
                                     page.group_form = None;
                                     cx.notify();
@@ -1130,7 +1122,7 @@ impl InventoryPage {
                                     .flex()
                                     .gap_2()
                                     .child(
-                                        Button::new(format!("wishlist-group-{id}"))
+                                        KitButton::new(format!("wishlist-group-{id}"))
                                             .small()
                                             .ghost()
                                             .label("Group")
@@ -1147,7 +1139,7 @@ impl InventoryPage {
                                             })),
                                     )
                                     .child(
-                                        Button::new(format!("wishlist-edit-{id}"))
+                                        KitButton::new(format!("wishlist-edit-{id}"))
                                             .small()
                                             .ghost()
                                             .label("Edit")
@@ -1156,7 +1148,7 @@ impl InventoryPage {
                                             })),
                                     )
                                     .child(
-                                        Button::new(format!("wishlist-bought-{id}"))
+                                        KitButton::new(format!("wishlist-bought-{id}"))
                                             .small()
                                             .primary()
                                             .label(if busy { "Saving…" } else { "Mark bought" })
@@ -1170,7 +1162,7 @@ impl InventoryPage {
                                             })),
                                     )
                                     .child(
-                                        Button::new(format!("wishlist-remove-{id}"))
+                                        KitButton::new(format!("wishlist-remove-{id}"))
                                             .small()
                                             .ghost()
                                             .label(if confirming_remove {
@@ -1197,7 +1189,7 @@ impl InventoryPage {
                                     )
                                     .when(confirming_remove, |row| {
                                         row.child(
-                                            Button::new(format!("wishlist-remove-cancel-{id}"))
+                                            KitButton::new(format!("wishlist-remove-cancel-{id}"))
                                                 .small()
                                                 .ghost()
                                                 .label("Cancel")
@@ -1237,7 +1229,7 @@ impl InventoryPage {
                 let member = candidate.contains(&item.id);
                 let group = candidate.clone();
                 let item_id = item.id.clone();
-                Button::new(format!("wish-group-{}-{}", candidate.id, item.id))
+                KitButton::new(format!("wish-group-{}-{}", candidate.id, item.id))
                     .small()
                     .label(if member {
                         format!("✓ {}", candidate.title)

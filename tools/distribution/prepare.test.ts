@@ -48,7 +48,7 @@ describe("release preparation (no installation)", () => {
       writeFileSync(join(commands, "cargo"), '#!/bin/sh\nprintf \'%s\\n\' \'{"reason":"build-finished","success":true}\'\n');
       chmodSync(join(commands, "cargo"), 0o755);
       const output = join(scratch, "output");
-      const result = Bun.spawnSync([process.execPath, join(fixture, "tools/distribution/prepare.ts"), "cli", "--version", "v0.0.3", "--target-dir", target, "--out", output, "--build"], {
+      const result = Bun.spawnSync([process.execPath, "--no-env-file", join(fixture, "tools/distribution/prepare.ts"), "cli", "--version", "v0.0.3", "--target-dir", target, "--out", output, "--build"], {
         cwd: fixture, env: { ...process.env, PATH: `${commands}:${process.env.PATH}` }, stdout: "pipe", stderr: "pipe",
       });
       expect(result.exitCode).not.toBe(0);
@@ -77,7 +77,7 @@ describe("release preparation (no installation)", () => {
       const sentinel = join(fixture, "Packs/harness/skills/sjel/private-untracked.txt");
       writeFileSync(sentinel, "must not ship\n");
       const output = join(scratch, "output");
-      const run = Bun.spawnSync([process.execPath, join(fixture, "tools/distribution/prepare.ts"), "cli", "--version", "v0.0.2", "--target-dir", target, "--out", output], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
+      const run = Bun.spawnSync([process.execPath, "--no-env-file", join(fixture, "tools/distribution/prepare.ts"), "cli", "--version", "v0.0.2", "--target-dir", target, "--out", output], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
       expect(run.stderr.toString()).toBe("");
       expect(run.exitCode).toBe(0);
       const catalogue = JSON.parse(readFileSync(join(output, "release.json"), "utf8"));
@@ -121,7 +121,8 @@ describe("release preparation (no installation)", () => {
         expect(Bun.TOML.parse(read(`Packs/${pack}/pack.toml`)).skills).toEqual(skills);
         for (const skill of skills) expect(existsSync(join(payload, `Packs/${pack}/skills/${skill}/SKILL.md`))).toBe(true);
       }
-      for (const path of ["Packs/knowledge", "Packs/learning", "Packs/skills", "Packs/anatomy", "Packs/writing/skills/academic-writing", "Packs/writing/agents", "Packs/harness/pi-packages/accordion", "Packs/harness/pi-packages/pi-subagents", "Packs/harness/skills/sjel/private-untracked.txt", "tools/templates/overlay-skeleton"]) expect(existsSync(join(payload, path))).toBe(false);
+      expect(Bun.TOML.parse(read("Packs/knowledge/pack.toml")).skills).toEqual(["web-research"]);
+      for (const path of ["Packs/knowledge/skills/obsidian", "Packs/knowledge/skills/defuddle", "Packs/learning", "Packs/skills", "Packs/anatomy", "Packs/writing/skills/academic-writing", "Packs/writing/agents", "Packs/harness/pi-packages/accordion", "Packs/harness/pi-packages/pi-subagents", "Packs/harness/skills/sjel/private-untracked.txt", "tools/templates/overlay-skeleton"]) expect(existsSync(join(payload, path))).toBe(false);
       expect(JSON.parse(read("CLI_RUNTIME.json")).pi_dependencies).toBe("unprepared");
       for (const [wrapper, binary] of [["claude-code-config", "sjel-claude-config"], ["sjel-mcp", "sjel-mcp"]]) {
         const text = read(`tools/${wrapper}/${wrapper}`);
@@ -157,16 +158,24 @@ describe("release preparation (no installation)", () => {
     } finally { rmSync(scratch, { recursive: true, force: true }); }
   }, 30_000);
 
-  test("CLI selection refuses symlinked parents before copying and invalid profile subsets", () => {
+  test("CLI selection refuses symlinked parents before copying", () => {
     const scratch = mkdtempSync(join(tmpdir(), "sjel-cli-refusal-"));
     try {
       const { fixture } = cliFixture(scratch);
       rmSync(join(fixture, "tools/templates/pi"), { recursive: true });
       symlinkSync(join(root, "tools/templates/pi"), join(fixture, "tools/templates/pi"));
       expect(() => selectCliSources(fixture)).toThrow("symlink");
-      rmSync(join(fixture, "tools/templates/pi"));
+    } finally { rmSync(scratch, { recursive: true, force: true }); }
+  }, 30_000);
+
+  test("CLI selection refuses invalid profile subsets", () => {
+    const scratch = mkdtempSync(join(tmpdir(), "sjel-cli-profile-refusal-"));
+    try {
+      const { fixture } = cliFixture(scratch);
       const profiles = readFileSync(join(fixture, "profiles.toml"), "utf8");
-      writeFileSync(join(fixture, "profiles.toml"), profiles.replace('skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }', 'skills = { "writing" = ["not-a-skill"] }'));
+      const invalid = profiles.replace(/(name = "coding-harness"[\s\S]*?skills = \{[^}\n]*?"writing"\s*=\s*)\[[^\]]*\]/, '$1["not-a-skill"]');
+      expect(invalid).not.toBe(profiles);
+      writeFileSync(join(fixture, "profiles.toml"), invalid);
       expect(() => selectCliSources(fixture)).toThrow("invalid coding-harness skill subset");
     } finally { rmSync(scratch, { recursive: true, force: true }); }
   }, 30_000);
@@ -181,7 +190,7 @@ describe("release preparation (no installation)", () => {
         chmodSync(join(target, "release", name), 0o755);
       }
       const output = join(scratch, "output");
-      const run = Bun.spawnSync([process.execPath, program, "node", "--version", "v0.0.2", "--target-dir", target, "--out", output], { cwd: root, stdout: "pipe", stderr: "pipe" });
+      const run = Bun.spawnSync([process.execPath, "--no-env-file", program, "node", "--version", "v0.0.2", "--target-dir", target, "--out", output], { cwd: root, stdout: "pipe", stderr: "pipe" });
       expect(run.stderr.toString()).toBe("");
       expect(run.exitCode).toBe(0);
       const catalogue = JSON.parse(readFileSync(join(output, "release.json"), "utf8"));
@@ -205,7 +214,7 @@ describe("release preparation (no installation)", () => {
       writeFileSync(join(target, "release/calendar-server"), body);
       chmodSync(join(target, "release/calendar-server"), 0o755);
       const output = join(scratch, "output");
-      const run = Bun.spawnSync([process.execPath, program, "capability", "--version", "v1.2.3", "--target-dir", target, "--out", output], { cwd: root, stdout: "pipe", stderr: "pipe" });
+      const run = Bun.spawnSync([process.execPath, "--no-env-file", program, "capability", "--version", "v1.2.3", "--target-dir", target, "--out", output], { cwd: root, stdout: "pipe", stderr: "pipe" });
       expect(run.exitCode).toBe(0);
       const catalogue = JSON.parse(readFileSync(join(output, "release.json"), "utf8"));
       expect(catalogue.friend_ready).toBe(false);
@@ -230,7 +239,7 @@ describe("release preparation (no installation)", () => {
         expect(createHash("sha256").update(bytes).digest("hex")).toBe(file.sha256);
       }
       expect(readFileSync(join(output, "READINESS.txt"), "utf8")).toContain("NOT YET CLEARED");
-      const publication = Bun.spawnSync([process.execPath, join(import.meta.dir, "publish-draft.ts"), "--dir", output, "--confirm-draft"], { stdout: "pipe", stderr: "pipe" });
+      const publication = Bun.spawnSync([process.execPath, "--no-env-file", join(import.meta.dir, "publish-draft.ts"), "--dir", output, "--confirm-draft"], { stdout: "pipe", stderr: "pipe" });
       expect(publication.exitCode).not.toBe(0);
       expect(publication.stderr.toString()).toContain("rebuilt artifacts from a clean release checkout");
     } finally { rmSync(scratch, { recursive: true, force: true }); }
@@ -241,7 +250,7 @@ describe("release preparation (no installation)", () => {
     try {
       for (const extra of [["--version", "latest"], ["--version", "v1.2.3", "--capability", "../private"]]) {
         const output = join(scratch, "output");
-        const child = Bun.spawnSync([process.execPath, program, "capability", ...extra, "--out", output], { stdout: "pipe", stderr: "pipe" });
+        const child = Bun.spawnSync([process.execPath, "--no-env-file", program, "capability", ...extra, "--out", output], { stdout: "pipe", stderr: "pipe" });
         expect(child.exitCode).not.toBe(0);
         expect(existsSync(output)).toBe(false);
       }

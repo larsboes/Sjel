@@ -67,9 +67,10 @@ root; PATH instructions do not edit shell configuration. Truncated script bodies
 an installation. The distribution workflow rehearses the generated entry point and defaults to
 `v0.0.3`; `v0.0.2` assets remain unchanged. A new tag or public release has not been created.
 
-Verification: 38 installer/packaging/publication/notice tests with 1045 assertions pass on macOS
-and network-disabled Linux ARM64. Three-platform rebuilt bootstrap/install/update/rollback CI
-passes at `b33ad149` (`42654301653`), as does full CI (`42654299933`). Installed Pi 1.5.0 loads
+Verification: 39 installer/packaging/publication/notice tests with 1189 assertions pass locally
+on macOS. Selection tests retain the approved `web-research` subset and refuse vault skills;
+symlink and invalid-profile checks use independent fixtures. Test children disable ambient
+dotenv loading. The updated fixtures have not run locally on Linux ARM64. Installed Pi 1.5.0 loads
 all four registered extensions and both packaged extension entry points, runs startup handlers,
 and registers the packaged tools without a model request. Synthetic load and startup failures
 are rejected. The check also passes with SDK peers omitted from a fresh dependency installation.

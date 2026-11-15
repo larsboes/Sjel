@@ -185,7 +185,35 @@ fn assemble_baseline(base_path: &Path) -> Result<Baseline, String> {
         deny_overlay_data(&mut value, &PathBuf::from(overlay), home.as_deref());
         sources.push("the overlay's data/ closed to direct reads and writes".to_string());
     }
+    if let Some(target) = env::var_os("CARGO_TARGET_DIR").filter(|t| !t.is_empty()) {
+        push_unique(
+            &mut value,
+            &["sandbox", "filesystem", "allowWrite"],
+            PathBuf::from(target).display().to_string(),
+        );
+    }
     Ok(Baseline { value, sources })
+}
+
+/// Append `entry` to the string array at `pointer`, creating the path, once.
+fn push_unique(value: &mut Value, pointer: &[&str], entry: String) {
+    let mut node = &mut *value;
+    for key in pointer {
+        if !node.is_object() {
+            *node = merge::empty_object();
+        }
+        node = node
+            .as_object_mut()
+            .expect("an object was just ensured")
+            .entry(key.to_string())
+            .or_insert_with(|| Value::Array(Vec::new()));
+    }
+    if let Some(list) = node.as_array_mut() {
+        let entry = Value::String(entry);
+        if !list.contains(&entry) {
+            list.push(entry);
+        }
+    }
 }
 
 /// Close `<overlay>/data/` to the session's file tools and its sandboxed commands. Personal data
@@ -203,28 +231,11 @@ fn deny_overlay_data(value: &mut Value, overlay: &Path, home: Option<&Path>) {
             format!("/{}/**", data.display()),
         ),
     };
-    let push = |value: &mut Value, pointer: &[&str], entry: String| {
-        let mut node = &mut *value;
-        for key in pointer {
-            if !node.is_object() {
-                *node = merge::empty_object();
-            }
-            node = node
-                .as_object_mut()
-                .expect("an object was just ensured")
-                .entry(key.to_string())
-                .or_insert_with(|| Value::Array(Vec::new()));
-        }
-        if let Some(list) = node.as_array_mut() {
-            let entry = Value::String(entry);
-            if !list.contains(&entry) {
-                list.push(entry);
-            }
-        }
-    };
+    let push = push_unique;
     push(value, &["sandbox", "filesystem", "denyRead"], glob.clone());
     push(value, &["sandbox", "filesystem", "denyWrite"], glob);
-    for tool in ["Read", "Edit", "Write"] {
+    // `Edit(path)` covers every file-editing tool; Claude Code ignores `Write(path)` rules.
+    for tool in ["Read", "Edit"] {
         push(
             value,
             &["permissions", "deny"],
@@ -423,8 +434,7 @@ mod tests {
             serde_json::json!([
                 "Read(~/.ssh/**)",
                 "Read(~/overlay/data/**)",
-                "Edit(~/overlay/data/**)",
-                "Write(~/overlay/data/**)"
+                "Edit(~/overlay/data/**)"
             ])
         );
         let mut outside = serde_json::json!({});

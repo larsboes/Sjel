@@ -99,6 +99,7 @@
         "~/**/*.pem",
         "~/**/*.key"
       ],
+      "allowWrite": ["~/.cargo/registry", "~/.cargo/git"],
       "denyWrite": [
         "/etc/**",
         "/usr/**",
@@ -141,7 +142,24 @@
       ]
     },
     "network": {
-      "allowedDomains": ["localhost", "127.0.0.1"]
+      "allowLocalBinding": true,
+      "allowedDomains": [
+        "localhost",
+        "127.0.0.1",
+        "crates.io",
+        "static.crates.io",
+        "index.crates.io",
+        "registry.npmjs.org",
+        "registry.yarnpkg.com",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "proxy.golang.org",
+        "sum.golang.org",
+        "github.com",
+        "api.github.com",
+        "objects.githubusercontent.com",
+        "raw.githubusercontent.com"
+      ]
     }
   },
   "env": {

@@ -479,3 +479,20 @@ fn the_pi_wrapper_opens_no_overlay_data() {
         );
     }
 }
+
+/// The Claude Code sandbox baseline admits the same package registries the contained ring's
+/// proxy does, so the two allowlists cannot drift apart.
+#[test]
+fn the_claude_code_sandbox_admits_the_standard_registries() {
+    let template = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tools/templates/claude-code/settings.base.json");
+    let text = std::fs::read_to_string(&template).unwrap();
+    let network = &text[text.find("\"allowedDomains\"").expect("an allowlist")..];
+    let allowed = &network[..network.find(']').expect("a closed list")];
+    for host in sjel_containment::proxy::STANDARD_PACKAGE_REGISTRIES {
+        assert!(
+            allowed.contains(&format!("\"{host}\"")),
+            "{host} is missing from {template:?}"
+        );
+    }
+}

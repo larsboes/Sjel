@@ -1,5 +1,19 @@
 import { App, FuzzySuggestModal } from 'obsidian';
-import { modelKey, type PiModel } from './rpc';
+import { modelKey, type LearnSession, type PiModel } from './rpc';
+
+/** Saved learning conversations, read from Pi's native session directory. */
+export class SessionPicker extends FuzzySuggestModal<LearnSession> {
+  constructor(app: App, private readonly sessions: LearnSession[], private readonly onPick: (session: LearnSession) => void) {
+    super(app);
+    this.setPlaceholder('Find a saved learning session');
+  }
+
+  getItems() { return this.sessions; }
+  getItemText(session: LearnSession) {
+    return `${session.target} · ${session.kind} · ${new Date(session.modified).toLocaleString()}`;
+  }
+  onChooseItem(session: LearnSession) { this.onPick(session); }
+}
 
 /** The empty choice: keep pi's own default model. */
 const DEFAULT = { provider: '', id: '', name: 'pi default' } as PiModel;

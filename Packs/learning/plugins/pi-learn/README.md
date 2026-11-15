@@ -10,12 +10,16 @@ write. It runs on macOS, Linux and Windows.
   they do in the terminal.
 - Renders replies with Obsidian's Markdown renderer. `interactive` figures, mermaid, LaTeX and
   `[[links]]` render inside the chat through the plugins that already handle them in notes.
-- Renders `quiz` and `ask` as inline cards. It sets `PI_QUESTIONS_CLIENT=pi-questions/v1`, and
-  `Packs/knowledge/extensions/questions.ts` (`fromHost`) hands each widget to the plugin as JSON
-  instead of falling back to plain text. A card returns the same result object as the terminal
-  widget: answer, thinking, confidence, note and contest.
-- Holds Teach, Practice and Curate as persistent controls. Enter in an empty view starts the chosen kind
-  from the open note, path or typed topic. Starting over an unfinished sitting asks first.
+- Renders `quiz` and `ask` as inline cards. It sets `PI_QUESTIONS_CLIENT=pi-questions/v1`.
+  `Packs/knowledge/extensions/questions.ts` sends JSON through an `editor` dialog for quizzes
+  and an abortable `input` dialog for decisions. Decision cards defer after 60 seconds without
+  activity, preserving completed answers and unsubmitted text without accepting a recommendation.
+  **Resume decisions** invokes `/decisions` in the same sitting; answering does not start a model
+  turn or execute a pending action. Card results retain answer, thinking, confidence, note and contest.
+- Holds Teach, Practice and Curate as persistent modes. **Continue** restores the latest saved
+  conversation for the selected track and mode, or starts one when none exists. **New session**
+  starts fresh with one click; **History** searches saved learning conversations. Enter in an
+  empty view uses Continue for the open note, path or typed topic.
 - Closes a sitting on request. **Finish sitting** stops any outstanding question and asks the
   active skill to run its closing procedure; the sitting closes only after a complete reply with
   no failed tool call, so a claim, path or Learning Log write cannot be assumed.
@@ -44,19 +48,21 @@ hidden archives. The opening prompt includes the scoped structure check. The cur
 slims repetition, adds explanatory links and proposes consolidation without changing mastery,
 source qualifications or learning-path states. Merges, deletions, moves, splits and substantial
 rewrites receive a concrete preview before approval. Routine wording and metadata fixes apply
-directly within scope. Necessary approvals use plain chat questions; RPC `ask` currently defers
-to a terminal-only decision queue and is not used for Curate approvals. A visible fixed-target
+directly within scope. Curate uses plain chat questions for necessary approvals. A visible fixed-target
 notice explains when the currently browsed note differs from the sitting's anchor.
 These semantic rules are agent instructions;
 the plugin does not enforce them as a filesystem policy. Finish verifies saved edits and
 summarizes pending proposals without creating a teaching/practice log entry. Each mode remembers
 its own model and thinking level. Open a note and choose Curate, or select Curate in the planner.
 
-Teach, Practice and Curate each start a fresh pi session: the vault is the memory, and a learning sitting resumes
-from the path graph's `current` node. Decided 2026-11-05 (`docs/plans/learning.md`, stage 3).
-The session planner accepts a path or new topic, desired outcome, available minutes and mode.
-Leaving minutes blank asks the tutor to establish the budget once. Planning starts no model
-conversation. Starting a sitting uses the single current graph node, otherwise the first open
+Pi saves conversations in its native session directory. `Packs/learning/extensions/sessions.ts`
+uses Pi's session discovery to return metadata for the current vault, including older Learn
+sittings. Continue switches to a saved session and restores its messages without a model call;
+answered cards appear as read-only receipts. Live, unsubmitted card inputs and the in-memory
+pending-decision queue do not survive a process restart. The vault remains the record of learning
+progress; New session starts at the path graph's `current` node rather than assuming mastery.
+The session planner accepts a path or new topic, optional outcome and minutes, and mode.
+Blank minutes impose no time budget and no setup question. Planning starts no model conversation. Starting a sitting uses the single current graph node, otherwise the first open
 node whose prerequisites are held. Cycles, multiple current nodes and unsupported dependency
 syntax require inspection rather than selecting an arbitrary node. Directed dependency chains
 with `-->`, `-.->` and `==>` are supported. With no learning path open, type a topic first. A message sent while pi works becomes a steer.
@@ -133,3 +139,6 @@ The view needs Obsidian, so these checks are manual:
    renders.
 4. Press **Finish sitting**. The closing questions or summary arrive, and the controls report a
    closed sitting only when the skill completed its writes.
+5. Reload Learn, then choose Continue on the same track. The saved conversation opens without
+   generating a new reply. History opens an older sitting; New session starts fresh without
+   changing or deleting its predecessor.

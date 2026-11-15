@@ -71,12 +71,23 @@ practice session runs on the iPhone against vault claims.
 
 ## 3. Stage 3: the learning surface is Obsidian
 
+Inline decisions use an abortable RPC input handoff instead of immediate terminal-only
+deferral. Learn owns the idle deadline, preserves completed answers and both draft fields,
+returns drafts before Stop/Finish/close, and offers explicit same-sitting resumption without a
+model turn. Continue and History restore native Pi conversations without a model call;
+New session starts fresh in one click. Time, depth and outcome are optional startup preferences.
+The learning extension discovers saved sessions, including legacy Learn prompts, without a
+second transcript store. Verification: plugin typecheck and 72 DOM tests; 58 focused extension/path tests
+with one complementary no-Pi skip; five build/install checks with two unrelated plugin skips.
+The installed Learn bundle matches source. Live model-backed teaching after plugin reload and
+Windows/WSL remain unchecked; the real-sitting pilot below stays open.
+
 Curate is the third sidebar mode, backed by `Packs/learning/skills/curate`. It starts from one
 active note and its direct links, receives scoped structural findings, and preserves source
 qualifications and learning evidence. Merges, deletions and substantial restructuring require
 concrete previews. Check vault structure remains a mechanical checker. Type and DOM checks
 cover direct-edit and inline-approval prompts plus the fixed-target notice when browsing away.
-The shared RPC ask deferral remains unchanged; Curate asks necessary questions in chat text.
+Curate asks necessary questions in chat text.
 Permission cards collapse after an answer and expire with their RPC timeout; tests reject late
 approval clicks. Routine curation uses direct note tools under the existing Markdown grant.
 Type and DOM checks also cover scope, mode-specific settings and closing behavior. Live
@@ -93,7 +104,7 @@ maintain. Choices, decided 2026-11-05:
 | ID | Decision |
 |---|---|
 | S1 | The chat is a sidebar view. The main pane opens the note pi writes. |
-| S2 | Each Teach or Practice sitting starts a fresh pi session. The vault is the memory, and a sitting resumes from the path graph. |
+| S2 | Continue restores the last saved Pi conversation for the selected track and mode; History opens older conversations. New session starts fresh from the path graph. The vault owns learning progress. |
 | S3 | `quiz` and `ask` render as inline cards. `questions.ts` hands them over through `pi-questions/v1` (`fromHost`). |
 | S4 | The learning-path schema (node states `held`, `current`, `open` as mermaid classes) lives in the vault contract; `teach` writes it and the plugin reads it. |
 | S5 | The vault root carries an `AGENTS.md` that only points at the contract and the skills. |
@@ -161,7 +172,6 @@ UI and speed candidates, built only when item 1 observes the friction:
 | Model list | `get_available_models` lists 627 models, most without credentials. | Filter to providers with credentials, or to pi's `enabledModels`, before the picker. |
 | Start time | The view and the settings tab each start pi; the settings tab starts one per open. | Reuse the view's pi for the settings tab and cache the model list. |
 | Node ↔ note | The header cannot mark the focus note's node, and graph nodes do not open notes. | Schema: a node's label is its note's name, or a `click id "[[Note]]"` line; the plugin marks and links it. |
-| Past sittings | Fresh sittings leave no list of earlier ones. | A list from pi's session directory for the vault, read-only. |
 | Practice evidence | Progress is a held/current/open graph; practice leaves only its Learning Log line. | A per-claim practice record with a due date, kept separate from note `maturity`. |
 | Input | No file, image or dictation input. | `prompt` accepts images; add a paperclip and a drop target. |
 | Thinking | Model reasoning is hidden; a long silence reads as a hang. | A collapsed "Thinking" block fed by `thinking_delta`. |

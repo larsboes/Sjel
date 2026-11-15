@@ -191,17 +191,95 @@ describe.skipIf(!modules)("ask deferral", () => {
     } finally { c.restore(); }
   });
 
-  test("RPC reports unsupported native timeout/drafts instead of opening an uninterruptible editor", async () => {
+  test("RPC asks reach the host; idle drafts resume through /decisions without a model turn", async () => {
     const old = process.env.PI_QUESTIONS_CLIENT;
     process.env.PI_QUESTIONS_CLIENT = "pi-questions/v1";
     try {
       const h = harness();
       h.ctx.mode = "rpc";
-      const r = await h.run({ topic: "rpc", questions: [q("q")] });
-      expect(r.details.deferReason).toBe("rpc-unsupported");
-      expect(r.details.answers).toEqual([]);
-      expect(r.content[0].text).toContain("cannot preserve an unsubmitted RPC draft");
+      const controller = new AbortController();
+      const requests: any[] = [];
+      const completed = { id: "depth", selectedIndex: 1, label: "b", freeText: null, note: "mechanisms", followedRecommendation: false, skipped: false };
+      const draft = { id: "time", phase: "free", optionIndex: 0, text: "25 minutes", freeText: "25 minutes", note: "until lunch" };
+      h.ctx.ui.input = async (title: string, payload: string, options: any) => {
+        requests.push({ title, params: JSON.parse(payload), signal: options.signal });
+        return JSON.stringify(requests.length === 1
+          ? { topic: "rpc", answers: [completed], cancelled: false, deferred: true, deferReason: "idle", draft }
+          : { topic: "rpc", answers: [completed, { ...completed, id: "time", freeText: "25 minutes", label: null, selectedIndex: null, followedRecommendation: null }], cancelled: false });
+      };
+      const r = await h.run({ topic: "rpc", questions: [q("depth"), q("time")] }, controller.signal);
+      expect(requests[0]).toMatchObject({ title: "pi-questions/v1 ask", signal: controller.signal, params: { idleMs: 60_000, answers: [] } });
+      expect(r.details.deferReason).toBe("idle");
+      expect(r.details.unresolvedIds).toEqual(["time"]);
+      expect(r.details.draft).toEqual(draft);
       expect(h.editorCount).toBe(0);
+      await h.resume();
+      expect(requests[1].params.questions.map((q: any) => q.id)).toEqual(["time"]);
+      expect(requests[1].params.answers).toEqual([completed]);
+      expect(requests[1].params.draft).toEqual(draft);
+      expect(h.messages.at(-1)[0].details.answers).toHaveLength(2);
+      expect(h.messages.at(-1)[1].triggerTurn).toBe(false);
+      expect(h.statuses.at(-1)).toBeUndefined();
+    } finally {
+      if (old === undefined) delete process.env.PI_QUESTIONS_CLIENT;
+      else process.env.PI_QUESTIONS_CLIENT = old;
+    }
+  });
+
+  test("registered RPC ask round-trips through the Learn card renderer", async () => {
+    const old = process.env.PI_QUESTIONS_CLIENT;
+    process.env.PI_QUESTIONS_CLIENT = "pi-questions/v1";
+    try {
+      const { askCard } = await import("../Packs/learning/plugins/pi-learn/src/cards");
+      const { root, markdown, button } = await import("../Packs/learning/plugins/pi-learn/tests/dom");
+      const h = harness();
+      h.ctx.mode = "rpc";
+      const el = root();
+      h.ctx.ui.input = async (_title: string, payload: string, options: any) =>
+        JSON.stringify(await askCard(el, JSON.parse(payload), markdown, options.signal));
+      const pending = h.run({ topic: "Lesson setup", questions: [q("depth", false), q("time", false)] });
+      button(el, "Next").click();
+      const current = el.querySelector(".pi-learn-card-body > .pi-learn-item")!;
+      (current.querySelectorAll("button")[1] as HTMLButtonElement).click();
+      button(el, "Done").click();
+      const r = await pending;
+      expect(r.content[0].text).toContain("Decision round complete: 2/2 answered");
+      expect(r.details.answers.map((a: any) => [a.id, a.label])).toEqual([["depth", "a"], ["time", "b"]]);
+      expect(r.details.unresolvedIds).toEqual([]);
+      expect(h.statuses.at(-1)).toBeUndefined();
+      el.remove();
+    } finally {
+      if (old === undefined) delete process.env.PI_QUESTIONS_CLIENT;
+      else process.env.PI_QUESTIONS_CLIENT = old;
+    }
+  });
+
+  test("RPC cancellation and malformed replies do not accept a recommendation", async () => {
+    const old = process.env.PI_QUESTIONS_CLIENT;
+    process.env.PI_QUESTIONS_CLIENT = "pi-questions/v1";
+    try {
+      for (const reply of [
+        undefined, "not JSON", '{"answers":"wrong"}',
+        '{"answers":[{"id":"q"}],"cancelled":false}',
+        '{"answers":[null],"cancelled":false}',
+        JSON.stringify({ answers: [{ id: "q", skipped: false, selectedIndex: 0, label: "forged", freeText: null, note: null, followedRecommendation: true }], cancelled: false }),
+        JSON.stringify({ answers: [], cancelled: false, deferred: true, deferReason: "idle", draft: { id: "q" } }),
+      ]) {
+        const h = harness();
+        h.ctx.mode = "rpc";
+        h.ctx.ui.input = async () => reply;
+        const r = await h.run({ topic: "rpc", questions: [q("q")] });
+        expect(r.details.answers).toEqual([]);
+        expect(r.details.unresolvedIds).toEqual(["q"]);
+        expect(r.details.cancelled).toBe(true);
+        expect(r.details.deferred).toBe(true);
+      }
+      const h = harness();
+      h.ctx.mode = "rpc";
+      h.ctx.ui.input = () => { throw Error("pre-aborted ask must not open a dialog"); };
+      const controller = new AbortController();
+      controller.abort();
+      expect((await h.run({ topic: "rpc", questions: [q("q")] }, controller.signal)).details.deferReason).toBe("aborted");
     } finally {
       if (old === undefined) delete process.env.PI_QUESTIONS_CLIENT;
       else process.env.PI_QUESTIONS_CLIENT = old;

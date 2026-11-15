@@ -5,8 +5,8 @@ import { QUESTIONS_PROTOCOL, THINKING_LEVELS, buildLaunch, splitModel } from './
 import { parsePath, pathGraph, progress, resumePoint, sittingPrompt, type Kind, type SittingBrief } from './path';
 import { curationNeighbors, isCuratableNote, isLearningNote, isLearningPath, learningPaths } from './catalog';
 import { organizationIssues } from './organization';
-import { ModelPicker } from './picker';
-import { PiRpc, modelKey, type PiEvent, type PiModel } from './rpc';
+import { ModelPicker, SessionPicker } from './picker';
+import { PiRpc, modelKey, type LearnSession, type PiEvent, type PiModel } from './rpc';
 
 export const VIEW_TYPE = 'pi-learn';
 
@@ -25,7 +25,7 @@ interface Live {
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
 const CLOSED_MARKER = '<!-- pi-learn:sitting-closed -->';
 type DialogAnswer = { value?: string; confirmed?: boolean; cancelled?: true };
-type PendingDialog = { controller: AbortController; pi: PiRpc };
+type PendingDialog = { controller: AbortController; pi: PiRpc; response?: Promise<void> };
 
 export class LearnView extends ItemView {
   private pi: PiRpc | null = null;
@@ -55,6 +55,10 @@ export class LearnView extends ItemView {
   private resetModal: Modal | null = null;
   private activity: HTMLDetailsElement | null = null;
   private replyFailed = false;
+  private sessions: LearnSession[] = [];
+  private sessionFile: string | null = null;
+  private sessionUnavailable = false;
+  private sessionPicker: SessionPicker | null = null;
 
   /** Not `titleEl`: ItemView owns that name, and a field declaration resets it. */
   private pathTitleEl!: HTMLElement;
@@ -70,6 +74,9 @@ export class LearnView extends ItemView {
   private thinkSel!: HTMLSelectElement;
   private meterEl!: HTMLElement;
   private sendBtn!: HTMLButtonElement;
+  private continueBtn!: HTMLButtonElement;
+  private newBtn!: HTMLButtonElement;
+  private historyBtn!: HTMLButtonElement;
   private teachBtn!: HTMLButtonElement;
   private practiceBtn!: HTMLButtonElement;
   private curateBtn!: HTMLButtonElement;
@@ -118,13 +125,20 @@ export class LearnView extends ItemView {
     this.planEl.hide();
     const controls = head.createDiv({ cls: 'pi-learn-sittings', attr: { 'aria-label': 'Sitting controls' } });
     this.teachBtn = controls.createEl('button', { cls: 'pi-learn-chip', text: 'Teach' });
-    this.teachBtn.onclick = () => void this.sitting('teach');
+    this.teachBtn.onclick = () => void this.startOrContinue('teach');
     this.practiceBtn = controls.createEl('button', { cls: 'pi-learn-chip', text: 'Practice' });
-    this.practiceBtn.onclick = () => void this.sitting('practice');
+    this.practiceBtn.onclick = () => void this.startOrContinue('practice');
     this.curateBtn = controls.createEl('button', { cls: 'pi-learn-chip', text: 'Curate' });
-    this.curateBtn.onclick = () => void this.sitting('curate');
+    this.curateBtn.onclick = () => void this.startOrContinue('curate');
     this.finishBtn = controls.createEl('button', { cls: 'pi-learn-chip', text: 'Finish sitting' });
     this.finishBtn.onclick = () => void this.finishSitting();
+    const sessions = head.createDiv({ cls: 'pi-learn-sittings', attr: { 'aria-label': 'Saved sessions' } });
+    this.continueBtn = sessions.createEl('button', { cls: 'pi-learn-btn mod-cta', text: 'Continue' });
+    this.continueBtn.onclick = () => void this.startOrContinue(this.kind);
+    this.newBtn = sessions.createEl('button', { cls: 'pi-learn-btn', text: 'New session' });
+    this.newBtn.onclick = () => void this.sitting(this.kind, true);
+    this.historyBtn = sessions.createEl('button', { cls: 'pi-learn-btn', text: 'History' });
+    this.historyBtn.onclick = () => void this.showHistory();
     this.scopeEl = head.createDiv({ cls: 'pi-learn-title-sub' });
     this.scopeEl.hide();
     this.planner = head.createEl('details', { cls: 'pi-learn-planner' });
@@ -138,7 +152,7 @@ export class LearnView extends ItemView {
     this.refreshTargets();
     this.targetSel.onchange = () => void this.trackPath(this.app.workspace.getActiveFile());
     this.outcomeInput = field('Desired outcome').createEl('input', { attr: { type: 'text', placeholder: 'What should become possible?', 'aria-label': 'Desired outcome' } });
-    this.minutesInput = field('Available minutes').createEl('input', { attr: { type: 'number', min: '1', step: '1', placeholder: 'Ask me at the start', 'aria-label': 'Available minutes' } });
+    this.minutesInput = field('Available minutes').createEl('input', { attr: { type: 'number', min: '1', step: '1', placeholder: 'Optional', 'aria-label': 'Available minutes' } });
     this.modeSel = field('Mode').createEl('select', { attr: { 'aria-label': 'Sitting mode' } });
     this.modeSel.createEl('option', { text: 'Teach', attr: { value: 'teach' } });
     this.modeSel.createEl('option', { text: 'Practice', attr: { value: 'practice' } });
@@ -206,7 +220,8 @@ export class LearnView extends ItemView {
   async onClose() {
     this.disposed = true;
     this.resetModal?.close();
-    this.cancelDialogs();
+    this.sessionPicker?.close();
+    await this.cancelDialogs();
     this.pi?.stop();
     this.pi = null;
     this.clearTranscript();
@@ -383,7 +398,7 @@ export class LearnView extends ItemView {
     try {
       const list = await pi.command({ type: 'get_available_models' });
       this.models = (list?.models ?? []).sort((a: PiModel, b: PiModel) => modelKey(a).localeCompare(modelKey(b)));
-      await this.applyKind();
+      await this.paintModel();
     } catch (err) {
       this.notice(`Could not reach pi: ${(err as Error).message}. Check Settings → Learn.`, true);
     }
@@ -444,7 +459,131 @@ export class LearnView extends ItemView {
 
   /* ───────────── sittings and messages ───────────── */
 
-  private async sitting(kind: Kind) {
+  private target(kind: Kind): string {
+    return (kind === 'curate' ? this.curateFile?.path : this.pathFile?.path ?? this.focusFile?.path)
+      ?? ((!this.sittingActive ? this.input.value.trim() : '') || this.lastTopic);
+  }
+
+  private async savedSessions(): Promise<LearnSession[]> {
+    const pi = this.ensurePi();
+    const commands = await pi.command({ type: 'get_commands' });
+    if (!commands?.commands?.some((command: { name: string }) => command.name === 'learn-sessions')) {
+      throw new Error('Session discovery is not loaded. Reload Learn to load its extension');
+    }
+    this.sessions = [];
+    await pi.command({ type: 'prompt', message: '/learn-sessions' });
+    return this.sessions;
+  }
+
+  private async startOrContinue(kind: Kind) {
+    if (this.transitioning || this.disposed || this.stopping) return;
+    if (this.sittingActive && this.kind === kind) { this.input.focus(); return; }
+    this.transitioning = true;
+    this.paintControls();
+    let latest: LearnSession | undefined;
+    try {
+      const target = this.target(kind);
+      latest = (await this.savedSessions()).find((session) => session.kind === kind && session.target === target);
+    } catch (err) {
+      this.notice(`Could not read saved sessions: ${(err as Error).message}. New session is still available.`, true);
+      return;
+    } finally {
+      this.transitioning = false;
+      this.paintControls();
+    }
+    if (latest) await this.resumeSession(latest, this.sittingActive ? '' : this.input.value);
+    else await this.sitting(kind);
+  }
+
+  private async showHistory() {
+    if (this.transitioning || this.disposed || this.stopping || this.streaming) return;
+    this.transitioning = true;
+    this.paintControls();
+    try {
+      const sessions = await this.savedSessions();
+      if (!sessions.length) { this.notice('No saved learning sessions yet. Choose New session.'); return; }
+      this.sessionPicker = new SessionPicker(this.app, sessions, (session) => void this.resumeSession(session));
+      this.sessionPicker.open();
+    } catch (err) {
+      this.notice(`Could not read saved sessions: ${(err as Error).message}`, true);
+    } finally {
+      this.transitioning = false;
+      this.paintControls();
+    }
+  }
+
+  private async resumeSession(session: LearnSession, draft = '') {
+    if (this.transitioning || this.disposed || this.stopping) return;
+    if (this.sittingActive && this.sessionFile === session.path) { this.input.focus(); return; }
+    this.transitioning = true;
+    this.paintControls();
+    try {
+      if ((this.streaming || this.dialogs.size) && !(await this.abort())) return;
+      const pi = this.ensurePi();
+      const result = await pi.command({ type: 'switch_session', sessionPath: session.path });
+      if (result?.cancelled || this.disposed) return;
+      this.sessionUnavailable = true;
+      this.sittingActive = false;
+      this.clearTranscript();
+      this.sessionFile = session.path;
+      this.kind = session.kind;
+      this.modeSel.value = session.kind;
+      this.lastTopic = session.target;
+      this.pathFile = null;
+      this.focusFile = null;
+      this.curateFile = null;
+      const file = this.app.vault.getAbstractFileByPath(session.target);
+      if (file instanceof TFile) {
+        this.curateFile = isCuratableNote(this.app, file) ? file : null;
+        if (isLearningPath(this.app, file)) this.pathFile = file;
+        else if (isLearningNote(this.app, file)) this.focusFile = file;
+      }
+      this.input.value = draft;
+      await this.paintPath();
+      const history = await pi.command({ type: 'get_messages' });
+      if (this.disposed || this.pi !== pi) return;
+      this.sittingActive = true;
+      this.sessionUnavailable = false;
+      this.closing = false;
+      this.replyFailed = false;
+      this.divider(`Continued · ${session.target} · ${session.kind}`);
+      for (const message of history?.messages ?? []) this.restoreMessage(message);
+      await this.paintModel();
+      this.grow();
+      this.setStreaming(false);
+      this.input.focus();
+    } catch (err) {
+      if (this.sessionUnavailable && !this.disposed) {
+        this.replyFailed = true;
+        this.divider(`Could not load ${session.target}. Choose Continue or History to retry, or New session.`);
+      }
+      this.notice(`Could not continue the session: ${(err as Error).message}`, true);
+    } finally {
+      this.transitioning = false;
+      this.paintControls();
+    }
+  }
+
+  private restoreMessage(message: any) {
+    const content = typeof message.content === 'string' ? message.content : (message.content ?? [])
+      .filter((part: any) => part.type === 'text').map((part: any) => part.text).join('\n\n');
+    if (message.role === 'user') {
+      const shown = content.replace(/<skill\b[^>]*>[\s\S]*?<\/skill>\s*/g, '').trim();
+      if (shown) this.bubble(shown);
+    } else if (message.role === 'assistant') {
+      this.startAssistant();
+      this.endAssistant(message);
+    } else if (message.role === 'toolResult' && (message.toolName === 'ask' || message.toolName === 'quiz')) {
+      const receipt = this.streamEl.createEl('details', { cls: 'pi-learn-card-archive' });
+      receipt.createEl('summary', { text: `Saved ${message.toolName} result · read-only` });
+      const component = new Component();
+      component.load();
+      this.components.push(component);
+      void MarkdownRenderer.render(this.app, content, receipt.createDiv(), this.pathFile?.path ?? '', component);
+    }
+  }
+
+  private async sitting(kind: Kind, explicitNew = false) {
     if (this.transitioning || this.disposed || this.stopping) return;
     const topic = this.input.value.trim() || (!this.pathFile && !this.focusFile ? this.lastTopic : '');
     const path = kind !== 'curate' && this.pathFile ? `[[${this.pathFile.path.replace(/\.md$/, '')}]]` : null;
@@ -480,7 +619,7 @@ export class LearnView extends ItemView {
         }
         brief.next = `${next.node.id}: ${next.node.label}`;
       }
-      if (this.sittingActive && !(await this.confirmReset())) return;
+      if (this.sittingActive && !explicitNew && !(await this.confirmReset())) return;
       if (this.disposed) return;
       const pi = this.ensurePi();
       if ((this.streaming || this.dialogs.size) && !(await this.abort())) return;
@@ -490,8 +629,14 @@ export class LearnView extends ItemView {
         return;
       }
       this.cancelDialogs();
+      this.sessionUnavailable = true;
+      this.sittingActive = false;
+      this.clearTranscript();
+      this.sessionFile = null;
       this.kind = kind;
       this.modeSel.value = kind;
+      const target = (kind === 'curate' ? focusFile?.path : this.pathFile?.path ?? focusFile?.path) ?? topic;
+      await pi.command({ type: 'set_session_name', name: `Learn · ${kind} · ${target}` });
       await this.applyKind();
       await this.paintPath();
     } catch (err) {
@@ -504,6 +649,7 @@ export class LearnView extends ItemView {
     if (this.disposed) return;
     this.clearTranscript();
     this.sittingActive = true;
+    this.sessionUnavailable = false;
     this.paintScope();
     this.planner.open = false;
     this.lastTopic = topic;
@@ -518,8 +664,8 @@ export class LearnView extends ItemView {
   }
 
   private async send() {
-    if (this.transitioning || this.stopping || this.disposed) return;
-    if (!this.sittingActive) return this.sitting(this.kind);
+    if (this.transitioning || this.stopping || this.disposed || this.sessionUnavailable) return;
+    if (!this.sittingActive) return this.startOrContinue(this.kind);
     const message = this.input.value.trim();
     if (!message) return;
     this.input.value = '';
@@ -529,6 +675,7 @@ export class LearnView extends ItemView {
 
   /** Send a prompt; while a turn runs it becomes a steer. `shown` is what the user bubble says. */
   private async prompt(message: string, shown: string | null) {
+    if (this.sessionUnavailable) return false;
     const pi = this.ensurePi();
     if (shown !== null) this.bubble(shown);
     const wasStreaming = this.streaming;
@@ -605,7 +752,7 @@ export class LearnView extends ItemView {
     this.closing = false;
     this.closeConfirmed = false;
     this.paintControls();
-    this.cancelDialogs();
+    await this.cancelDialogs();
     try {
       if (this.pi?.running) {
         await this.pi.command({ type: 'clear_queue' });
@@ -803,12 +950,19 @@ export class LearnView extends ItemView {
 
   /* ───────────── extension dialogs ───────────── */
 
-  private cancelDialogs() {
+  private async cancelDialogs() {
+    const responses: Promise<void>[] = [];
     for (const [id, dialog] of this.dialogs) {
-      this.dialogs.delete(id);
-      if (dialog.pi.running) dialog.pi.respond(id, { cancelled: true });
-      dialog.controller.abort();
+      if (dialog.response) {
+        dialog.controller.abort();
+        responses.push(dialog.response);
+      } else {
+        this.dialogs.delete(id);
+        if (dialog.pi.running) dialog.pi.respond(id, { cancelled: true });
+        dialog.controller.abort();
+      }
     }
+    await Promise.all(responses);
   }
 
   private replyDialog(id: string, dialog: PendingDialog, answer: DialogAnswer) {
@@ -825,7 +979,7 @@ export class LearnView extends ItemView {
       if (!this.dialogs.has(e.id)) pi.respond(e.id, { cancelled: true });
       return;
     }
-    const dialog = isDialog ? { controller: new AbortController(), pi } : null;
+    const dialog: PendingDialog | null = isDialog ? { controller: new AbortController(), pi } : null;
     if (dialog) this.dialogs.set(e.id, dialog);
     const md = (el: HTMLElement, text: string) => {
       const component = new Component();
@@ -834,11 +988,11 @@ export class LearnView extends ItemView {
       void MarkdownRenderer.render(this.app, text, el, this.pathFile?.path ?? '', component);
     };
 
-    if (e.method === 'editor' && typeof e.title === 'string' && e.title.startsWith(`${QUESTIONS_PROTOCOL} `)) {
+    if ((e.method === 'editor' || e.method === 'input') && typeof e.title === 'string' && e.title.startsWith(`${QUESTIONS_PROTOCOL} `)) {
       const widget = e.title.slice(QUESTIONS_PROTOCOL.length + 1);
       let params: any;
       try {
-        params = JSON.parse(e.prefill ?? '');
+        params = JSON.parse((e.method === 'input' ? e.placeholder : e.prefill) ?? '');
       } catch {
         this.replyDialog(e.id, dialog!, { cancelled: true });
         return;
@@ -848,15 +1002,28 @@ export class LearnView extends ItemView {
       this.revealPending(slot);
       try {
         const signal = dialog!.controller.signal;
-        const result =
+        const response =
           widget === 'quiz'
-            ? await quizCard(slot, params, md, signal)
+            ? quizCard(slot, params, md, signal)
             : widget === 'quiz-review'
-              ? await reviewCard(slot, params, md, signal)
+              ? reviewCard(slot, params, md, signal)
               : widget === 'ask'
-                ? await askCard(slot, params, md, signal)
-                : null;
-        this.replyDialog(e.id, dialog!, result === null ? { cancelled: true } : { value: JSON.stringify(result) });
+                ? askCard(slot, params, md, signal)
+                : Promise.resolve(null);
+        const completion = response.then((result) => {
+          this.replyDialog(e.id, dialog!, result === null ? { cancelled: true } : { value: JSON.stringify(result) });
+          if (result && 'deferred' in result && result.deferred && !this.disposed && !this.stopping && !this.closing) {
+            const resume = slot.createEl('button', { cls: 'pi-learn-btn', text: 'Resume decisions' });
+            resume.onclick = async () => {
+              if (this.disposed || this.stopping || this.closing || this.pi !== pi) return;
+              if (this.streaming) return this.notice('Wait for the current reply, then resume decisions.');
+              resume.disabled = true;
+              if (!(await this.prompt('/decisions', 'Resume decisions'))) resume.disabled = false;
+            };
+          }
+        });
+        if (widget === 'ask') dialog!.response = completion;
+        await completion;
       } catch (err) {
         dialog!.controller.abort();
         this.replyDialog(e.id, dialog!, { cancelled: true });
@@ -875,6 +1042,14 @@ export class LearnView extends ItemView {
         break;
       case 'notify':
         this.notice(e.message ?? '', e.notifyType === 'error');
+        break;
+      case 'setWidget':
+        if (e.widgetKey === 'learn-sessions') {
+          try {
+            const data = JSON.parse(e.widgetLines?.[0] ?? e.widgetText?.[0] ?? '');
+            if (Array.isArray(data.sessions)) this.sessions = data.sessions;
+          } catch { this.notice('Could not read the saved-session list.', true); }
+        }
         break;
       case 'setStatus':
         this.setStatus(e.statusText ?? '');
@@ -945,8 +1120,8 @@ export class LearnView extends ItemView {
   private emptyState() {
     const empty = this.streamEl.createDiv({ cls: 'pi-learn-empty' });
     empty.createDiv({ cls: 'pi-learn-empty-title', text: 'Teach, practice or curate' });
-    empty.createDiv({ cls: 'pi-learn-empty-note', text: 'Choose above, or type a topic and press Enter.' });
-    empty.createDiv({ cls: 'pi-learn-empty-note', text: 'Each sitting starts fresh. Notes carry knowledge, progress and curation.' });
+    empty.createDiv({ cls: 'pi-learn-empty-note', text: 'Continue the selected track, start a New session, or open History.' });
+    empty.createDiv({ cls: 'pi-learn-empty-note', text: 'Conversations are saved in pi. Notes carry learning progress. Time and depth are optional.' });
   }
 
   private paintBadge() {
@@ -998,22 +1173,30 @@ export class LearnView extends ItemView {
       field.disabled = planningLocked;
       field.title = this.sittingActive ? 'Finish the current sitting before planning another' : '';
     }
+    this.continueBtn.disabled = locked || this.closing || this.streaming;
+    this.newBtn.disabled = locked || this.closing;
+    this.historyBtn.disabled = locked || this.closing || this.streaming;
+    const sessionLock = locked ? 'A session change is in progress' : this.closing ? 'Finish is saving learning records' : this.streaming ? 'Stop the current reply first' : '';
+    this.continueBtn.title = sessionLock || 'Restore the selected track’s last conversation without generating a reply';
+    this.newBtn.title = locked || this.closing ? sessionLock : 'Start fresh; the previous conversation stays saved';
+    this.historyBtn.title = sessionLock || 'Find a saved learning conversation';
     this.teachBtn.disabled = locked || this.closing;
     this.practiceBtn.disabled = locked || this.closing;
     this.curateBtn.disabled = locked || this.closing;
-    this.teachBtn.setAttr('aria-pressed', String(this.sittingActive && this.kind === 'teach'));
-    this.practiceBtn.setAttr('aria-pressed', String(this.sittingActive && this.kind === 'practice'));
-    this.curateBtn.setAttr('aria-pressed', String(this.sittingActive && this.kind === 'curate'));
+    this.teachBtn.setAttr('aria-pressed', String(this.kind === 'teach'));
+    this.practiceBtn.setAttr('aria-pressed', String(this.kind === 'practice'));
+    this.curateBtn.setAttr('aria-pressed', String(this.kind === 'curate'));
     this.finishBtn.disabled = locked || !this.sittingActive || this.closing;
     this.finishBtn.setAttr('title', !this.sittingActive ? 'Start a sitting first' : this.closing ? 'Saving learning records and the next step' : 'Complete the skill’s closing procedure and save its learning records');
     this.finishBtn.setText(this.closing ? 'Finishing…' : 'Finish sitting');
-    this.sendBtn.disabled = locked;
+    this.sendBtn.disabled = locked || this.sessionUnavailable;
+    this.input.disabled = this.sessionUnavailable;
     const stop = this.streaming && !this.input.value.trim();
     const label = stop ? 'Stop generating' : this.streaming ? 'Send steering message (Enter)' : this.sittingActive ? 'Send message (Enter)' : `Start ${this.kind === 'teach' ? 'teaching' : this.kind === 'curate' ? 'curation' : 'practice'} (Enter)`;
     setIcon(this.sendBtn, stop ? 'square' : 'arrow-up');
     this.sendBtn.setAttr('aria-label', label);
     this.sendBtn.setAttr('title', label);
-    this.input.placeholder = this.sittingActive ? 'Answer or ask…' : 'Name a topic, or use the open note…';
+    this.input.placeholder = this.sessionUnavailable ? 'Reopen the conversation or start a New session' : this.sittingActive ? 'Answer or ask…' : 'Name a topic, or use the open note…';
   }
 
   private setStreaming(on: boolean) {

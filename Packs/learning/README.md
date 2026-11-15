@@ -1,13 +1,15 @@
 # learning
 
-Teaching, practice and curation that grow the Obsidian vault. The skills hold the method. The vault holds
+Teaching, practice and curation that grow the Obsidian vault. The skills hold the method. Pi stores conversation history, exposed by `extensions/sessions.ts`.
+The vault holds
 the result as concept notes and claim notes. Open work and decisions live in
 [`docs/plans/learning.md`](../../docs/plans/learning.md).
 
 The Pack depends on [`knowledge`](../knowledge/README.md) by name. Every vault write goes
 through the `obsidian` skill, and graded quizzes come from that Pack's `quiz` pi extension.
 Without `quiz` (other harnesses, non-interactive runs), `teach` asks numbered text questions.
-The Learn plugin renders `quiz` and `ask` as cards in Obsidian.
+The Learn plugin renders `quiz` and `ask` as cards in Obsidian. Decision cards preserve drafts
+on idle deferral and resume within the same sitting.
 
 ## Skills
 
@@ -44,9 +46,9 @@ npx skills add wheresryan22/anatomy -g -a pi claude-code
 [`plugins/pi-learn/`](plugins/pi-learn/README.md) runs teach, practice and curate sittings with pi in
 Obsidian's sidebar, beside the notes they write. It holds the sitting controls, keeps answered
 cards readable, and runs the skill's closing procedure on request. Its `learning-hub` Markdown block projects
-paths, prerequisite-aware next steps, claims and recent handoffs from the vault. The session
-planner supplies a target, desired outcome and time budget; browsing notes leaves an active
-sitting's context fixed. The shared vault layout separates Learning, Knowledge and Resources;
+paths, prerequisite-aware next steps, claims and recent handoffs from the vault. Continue restores the latest saved conversation for the selected track and mode; History
+opens older conversations, and New session starts fresh. The session planner accepts optional
+outcome and time settings; browsing notes leaves an active sitting's context fixed. The shared vault layout separates Learning, Knowledge and Resources;
 the plugin checks mechanical issues through **Check vault structure**. Curate uses scoped
 structural findings as context for an agent-led improvement pass. Build and install it with
 `tools/obsidian-plugin pi-learn install`; `bun run check` in the plugin directory typechecks it

@@ -22,7 +22,12 @@ The contract owns the role boundaries. Learning holds plans and exercises; Knowl
 reusable concepts and claims, including checked source-derived synthesis; Resources holds
 source summaries and vault support. A note's location and source verification do not establish mastery.
 
-The arc is **Probe → Plan → Teach → Close**. Do not skip or merge phases.
+The arc is **Probe → Plan → Teach → Close**. Do not skip or merge phases. A resumed
+conversation continues its evidenced phase and pending question; it does not restart setup or
+repeat completed probes merely because the sidebar reopened. After a process restart, a
+saved pending question remains in the transcript but its live widget and decision queue may
+be gone. When the learner asks to continue, re-present that unanswered question from the saved
+record rather than sending the learner to a missing in-memory queue. Never infer its answer.
 
 ## Ground rules (all phases)
 
@@ -38,7 +43,7 @@ The arc is **Probe → Plan → Teach → Close**. Do not skip or merge phases.
 
 Goal: a detailed map of the student's current understanding on every strand the topic depends on.
 
-1. Read the supplied session brief first: target, desired outcome and available minutes. Ask for missing outcome, depth and time budget together, once; use values already supplied by the planner. Plan one reasoning step within the budget and reserve time for Close. Ask what they want to learn and to what depth, if not already clear. Note any context they volunteer about what they already know. Depth is a decision, so the `ask` tool fits it: 2-4 levels with a one-line consequence each, your recommendation marked, and the student's note coming back with the choice. Without the tool, ask it as plain text.
+1. Start from the supplied target or the path's next ready node. Outcome, depth and time are optional: use supplied values, but do not require a setup round or invent a time budget when they are absent. Begin with a short probe and adapt from the reasoning. Ask about a missing preference only when its answer changes the next teaching move; ask for a target only when none can be resolved. For a saved path, read its graph and latest matching handoff before the first probe. Defer archive reading and broader source discovery until the explanation needs them. With an explicit budget, plan one reasoning step and reserve time for Close.
 2. Build the dependency tree of the topic in your head, then **binary-search the edge on each strand** with the `quiz` tool (`purpose: "probe"`): start broad (does the foundation hold?), then split toward the frontier. 2-4 questions per call, graded, always with explanations. Continue until each strand's edge is located — don't stop at the first wrong answer; find *where* it stops holding. **If a result comes back with a contested answer, settle it before asking another question.** A contest is a claim that the grading was wrong, and the learner's reason is the most informative thing you will get all session: weigh it against your explanation, then call `quiz` with `mode: "review"` and your revised verdict — accepting the reason and restoring full marks when they were right. If they push back on that, call it again. The exchange is the teaching, not an interruption of it. Never let a contest drop because the next question is already queued.
 3. Pick the question tool by harness:
    - **pi:** `quiz`. The student types their thinking (`t`) and sets a confidence (`←→`) before answering. The result reports both per answer.

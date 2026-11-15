@@ -43,8 +43,10 @@ Keep existing progress and note quality separate from evidence of learner unders
 
 ## Session arc
 
-1. **Select.** Use the supplied target, desired outcome and time budget. Ask for missing
-   target and available minutes together, once. Read the latest matching Learning Log handoff
+1. **Select.** Use the supplied target, desired outcome and time budget. Time and outcome
+   are optional; do not require a setup round or invent a budget. Ask for a target only when
+   none can be resolved. Resume a saved conversation's pending problem instead of restarting
+   calibration. Read the latest matching Learning Log handoff
    and carry outstanding retests into the selection. A target can be a concept, claim note,
    claim folder, learning path or Learning Log entry. Read the claim notes and follow their `## Because` links one level down.
 2. **Warm up.** Pose one to three easy problems on the weakest claims to calibrate difficulty.

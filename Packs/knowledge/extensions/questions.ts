@@ -20,8 +20,8 @@
  * Non-interactive modes (-p, json, rpc-without-tui): both tools return a graceful error instead
  * of hanging — the model should fall back to asking in plain text.
  *
- * RPC clients opt into quiz rendering through `PI_QUESTIONS_CLIENT=HOST_PROTOCOL`.
- * RPC ask defers immediately because the editor handoff cannot time out or abort.
+ * RPC clients opt into cards through `PI_QUESTIONS_CLIENT=HOST_PROTOCOL`.
+ * Ask uses an abortable input dialog; the host owns idle deferral and draft capture.
  */
 
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
@@ -306,6 +306,8 @@ interface AskDraft {
 	phase: "options" | "note" | "free";
 	optionIndex: number;
 	text: string;
+	freeText?: string;
+	note?: string;
 }
 
 const ASK_IDLE_MS = 60_000;
@@ -316,9 +318,63 @@ interface AskResult {
 	answers: AskAnswer[];
 	cancelled: boolean;
 	deferred?: boolean;
-	deferReason?: "idle" | "aborted" | "disposed" | "rpc-unsupported";
+	deferReason?: "idle" | "aborted" | "disposed";
 	unresolvedIds?: string[];
 	draft?: AskDraft;
+}
+
+/** The host resets the idle deadline on activity and returns drafts before closing a card. */
+async function askFromHost(
+	ctx: ExtensionContext,
+	params: { topic: string; questions: AskQuestion[]; answers: AskAnswer[]; draft?: AskDraft; idleMs: number },
+	signal?: AbortSignal,
+): Promise<AskResult> {
+	const empty: AskResult = {
+		topic: params.topic, answers: params.answers, cancelled: true,
+		deferred: true, deferReason: "aborted", draft: params.draft,
+	};
+	const raw = await ctx.ui.input(`${HOST_PROTOCOL} ask`, JSON.stringify(params), { signal });
+	if (raw === undefined) return empty;
+	try {
+		const parsed = JSON.parse(raw) as AskResult;
+		if (!parsed || !Array.isArray(parsed.answers) || typeof parsed.cancelled !== "boolean") return empty;
+		if (parsed.deferred !== undefined && typeof parsed.deferred !== "boolean") return empty;
+		if (parsed.deferred && parsed.deferReason !== "idle" && parsed.deferReason !== "aborted") return empty;
+		const seen = new Set<string>();
+		const answers = [...params.answers];
+		for (const answer of parsed.answers) {
+			if (!answer || typeof answer !== "object" || seen.has(answer.id)) return empty;
+			seen.add(answer.id);
+			const prior = params.answers.find((a) => a.id === answer.id);
+			if (prior) {
+				if (!Object.entries(prior).every(([key, value]) => (answer as unknown as Record<string, unknown>)[key] === value)) return empty;
+				continue;
+			}
+			const question = params.questions.find((q) => q.id === answer.id);
+			if (!question || typeof answer.skipped !== "boolean" || (answer.note !== null && typeof answer.note !== "string")) return empty;
+			if (answer.freeText !== null && (typeof answer.freeText !== "string" || !answer.freeText.trim())) return empty;
+			if (answer.skipped || answer.freeText !== null) {
+				if (answer.selectedIndex !== null || answer.label !== null || answer.followedRecommendation !== null) return empty;
+				if (answer.skipped && (answer.freeText !== null || answer.note !== null)) return empty;
+			} else {
+				const index = answer.selectedIndex;
+				if (index === null || !Number.isInteger(index) || index < 0 || index >= question.options.length) return empty;
+				if (answer.label !== question.options[index].label) return empty;
+				const followed = question.recommendedIndex === undefined ? null : index === question.recommendedIndex;
+				if (answer.followedRecommendation !== followed) return empty;
+			}
+			answers.push({ ...answer, title: question.title });
+		}
+		const draft = parsed.draft;
+		if (draft !== undefined) {
+			const question = draft && params.questions.find((q) => q.id === draft.id);
+			if (!question || !["options", "note", "free"].includes(draft.phase) || typeof draft.text !== "string") return empty;
+			if (!Number.isInteger(draft.optionIndex) || draft.optionIndex < -1 || draft.optionIndex >= question.options.length) return empty;
+			if ((draft.freeText !== undefined && typeof draft.freeText !== "string") || (draft.note !== undefined && typeof draft.note !== "string")) return empty;
+		}
+		return { topic: params.topic, answers, cancelled: parsed.cancelled, deferred: parsed.deferred, deferReason: parsed.deferred ? parsed.deferReason : undefined, draft };
+	} catch { /* A malformed host reply leaves decisions unresolved. */ }
+	return empty;
 }
 
 const AskParams = Type.Object({
@@ -405,9 +461,11 @@ async function runAsk(
 		}
 	}
 
-	const result: AskResult = signal?.aborted || hostRenders(ctx) || deferredOnly
+	const result: AskResult = signal?.aborted || deferredOnly
 		? { topic, answers: completed, cancelled: false, deferred: true,
-			deferReason: signal?.aborted ? "aborted" : hostRenders(ctx) ? "rpc-unsupported" : previous?.deferReason ?? "idle", draft: previous?.draft }
+			deferReason: signal?.aborted ? "aborted" : previous?.deferReason ?? "idle", draft: previous?.draft }
+		: hostRenders(ctx)
+			? await askFromHost(ctx, { topic, questions, answers: completed, draft: previous?.draft, idleMs: ASK_IDLE_MS }, signal)
 		: await ctx.ui.custom<AskResult>((tui, theme, _kb, done) => {
 		let qIndex = 0;
 		let optionIndex = questions[0].recommendedIndex ?? 0;
@@ -725,7 +783,6 @@ async function runAsk(
 	if (result.unresolvedIds.length > 0) {
 		report.push(`Unresolved IDs: ${result.unresolvedIds.join(", ")}`);
 		if (result.draft) report.push(`Unsubmitted draft (not a decision): ${JSON.stringify(result.draft)}`);
-		if (result.deferReason === "rpc-unsupported") report.push("RPC ask deferred without opening the editor: this Pi editor API has no timeout or AbortSignal option and cannot preserve an unsubmitted RPC draft. Resume in the TUI.");
 		report.push(DEFER_INSTRUCTION);
 	}
 	return { content: [{ type: "text" as const, text: report.join("\n") }], details: result };

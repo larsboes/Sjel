@@ -15,6 +15,16 @@ export interface PiModel {
   contextWindow?: number;
 }
 
+/** Metadata from the learning extension; Pi remains the transcript store. */
+export interface LearnSession {
+  path: string;
+  name?: string;
+  modified: string;
+  messageCount: number;
+  kind: 'teach' | 'practice' | 'curate';
+  target: string;
+}
+
 /** `provider/id`, the form the settings store and `splitModel` reads. */
 export const modelKey = (m: Pick<PiModel, 'provider' | 'id'>) => `${m.provider}/${m.id}`;
 

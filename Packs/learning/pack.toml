@@ -1,7 +1,7 @@
 # See schemas/pack.toml.example for the field reference.
 # Vault access, the contract and quiz tools stay in the knowledge Pack.
 name        = "learning"
-description = "Teaching, practice and agent-led curation for an organized Obsidian vault — dependency paths, reusable concepts, linked notes and resumable handoffs."
+description = "Teaching, practice and curation in Obsidian — dependency paths, linked knowledge and resumable Pi conversations."
 skills      = ["teach", "practice", "curate"]
 license     = "MIT"
 links       = ["knowledge-base"]

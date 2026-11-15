@@ -29,7 +29,7 @@ class Modal {
 mock.module('obsidian', () => ({
   Component, MarkdownRenderChild, ItemView, TFile, Modal,
   Notice: class { constructor(text: string) { notices.push(text); } },
-  FuzzySuggestModal: class {},
+  FuzzySuggestModal: class extends Modal { setPlaceholder() {} },
   MarkdownRenderer: { async render(_app: unknown, text: string, el: HTMLElement) { markdown(el, text); } },
   setIcon(el: HTMLElement, icon: string) { el.setAttribute('data-icon', icon); },
 }));
@@ -48,11 +48,19 @@ async function fixture() {
   const plugin = { settings: { piCommand: 'pi', launcher: 'native', followEdits: false, teachModel: '', practiceModel: '', teachThinking: '', practiceThinking: '' }, save: async () => {} };
   const calls: any[] = [];
   const replies: any[] = [];
+  const saved: any[] = [];
+  const history: any[] = [];
   const pi = {
     running: true,
     async command(cmd: any) {
       calls.push(cmd);
       if (cmd.type === 'get_available_models') return { models: [] };
+      if (cmd.type === 'get_commands') return { commands: [{ name: 'learn-sessions' }] };
+      if (cmd.type === 'get_messages') return { messages: history };
+      if (cmd.type === 'prompt' && cmd.message === '/learn-sessions') {
+        view.onEvent({ type: 'extension_ui_request', method: 'setWidget', widgetKey: 'learn-sessions', widgetLines: [JSON.stringify({ sessions: saved })] });
+        return { disposition: 'handled' };
+      }
       if (cmd.type === 'get_state') return {};
       if (cmd.type === 'get_available_thinking_levels') return { levels: ['off'] };
       if (cmd.type === 'prompt') return { disposition: 'started' };
@@ -67,7 +75,7 @@ async function fixture() {
   await view.onOpen();
   await flush();
   calls.length = 0;
-  return { view, pi, calls, replies, events, plugin };
+  return { view, pi, calls, replies, events, plugin, saved, history };
 }
 
 async function start(f: Awaited<ReturnType<typeof fixture>>) {
@@ -137,7 +145,7 @@ describe('sitting controls', () => {
     key(f.view.input, 'Enter');
     await flush();
     expect(f.calls.some((c) => c.type === 'new_session')).toBe(true);
-    expect(f.calls.find((c) => c.type === 'prompt').message).toBe('/skill:teach Locality');
+    expect(f.calls.find((c) => c.type === 'prompt' && c.message !== '/learn-sessions').message).toBe('/skill:teach Locality');
     expect(button(f.view.contentEl, 'Teach')).toBeDefined();
     expect(button(f.view.contentEl, 'Practice')).toBeDefined();
     expect(button(f.view.contentEl, 'Finish sitting').disabled).toBe(false);
@@ -160,7 +168,7 @@ describe('sitting controls', () => {
     button(f.view.resetModal.contentEl, 'Start fresh').click();
     await fresh;
     expect(f.calls.some((c) => c.type === 'new_session')).toBe(true);
-    expect(f.calls.find((c) => c.type === 'prompt').message).toBe('/skill:practice Locality');
+    expect(f.calls.find((c) => c.type === 'prompt' && c.message !== '/learn-sessions').message).toBe('/skill:practice Locality');
     expect(f.view.kind).toBe('practice');
   });
 
@@ -310,6 +318,197 @@ describe('pending dialog lifecycle', () => {
   });
 });
 
+describe('saved learning sessions', () => {
+  const savedSession = (target = 'Learning/P.md') => ({ path: '/sessions/lesson.jsonl', target, kind: 'teach', modified: '2026-11-15T12:00:00Z', messageCount: 4 });
+
+  test('Continue restores the selected track and transcript without a model call or a fresh session', async () => {
+    const f = await fixture();
+    const { file } = addPath(f);
+    await f.view.trackPath(file);
+    f.saved.push({ ...savedSession('Other topic'), path: '/sessions/other.jsonl' }, savedSession());
+    f.history.push(
+      { role: 'user', content: [{ type: 'text', text: '<skill name="teach">Old instructions</skill>Continue this track' }] },
+      { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'What makes a fetch expensive?' }] },
+      { role: 'toolResult', toolName: 'quiz', content: [{ type: 'text', text: 'Saved answer: correct' }] },
+    );
+    await f.view.startOrContinue('teach');
+    await flush();
+    expect(f.calls.find((c) => c.type === 'switch_session')?.sessionPath).toBe('/sessions/lesson.jsonl');
+    expect(f.calls.some((c) => c.type === 'new_session' || c.type === 'set_model' || c.type === 'set_thinking_level')).toBe(false);
+    expect(f.calls.filter((c) => c.type === 'prompt').map((c) => c.message)).toEqual(['/learn-sessions']);
+    expect(f.view.streamEl.textContent).toContain('What makes a fetch expensive?');
+    expect(f.view.streamEl.textContent).not.toContain('Old instructions');
+    expect(f.view.streamEl.textContent).toContain('Saved quiz result · read-only');
+    expect(f.view.sittingActive).toBe(true);
+    const count = f.calls.length;
+    await f.view.startOrContinue('teach');
+    expect(f.calls).toHaveLength(count);
+  });
+
+  test('composer text does not replace the selected track during Continue lookup', async () => {
+    const f = await fixture();
+    const { file } = addPath(f);
+    await f.view.trackPath(file);
+    f.saved.push(savedSession());
+    f.view.input.value = 'Explain the next step';
+    await f.view.startOrContinue('teach');
+    expect(f.calls.find((c) => c.type === 'switch_session')?.sessionPath).toBe('/sessions/lesson.jsonl');
+    expect(f.calls.some((c) => c.type === 'new_session')).toBe(false);
+    expect(f.view.input.value).toBe('Explain the next step');
+  });
+
+  test('a failed transcript read blocks messages until a session is safely reopened or started', async () => {
+    const f = await fixture();
+    await start(f);
+    const original = f.pi.command.bind(f.pi);
+    f.pi.command = async (cmd) => {
+      if (cmd.type === 'get_messages') throw new Error('history unavailable');
+      return original(cmd);
+    };
+    f.calls.length = 0;
+    await f.view.resumeSession(savedSession('Another topic'));
+    expect(f.view.sittingActive).toBe(false);
+    expect(f.view.sessionUnavailable).toBe(true);
+    expect(f.view.input.disabled).toBe(true);
+    expect(f.view.streamEl.textContent).toContain('Could not load Another topic');
+    expect(f.view.streamEl.textContent).not.toContain('Teaching · Locality');
+    f.view.input.value = 'Follow-up that must not cross conversations';
+    await f.view.send();
+    await f.view.prompt('Direct follow-up', null);
+    expect(f.calls.some((c) => c.type === 'prompt')).toBe(false);
+    f.view.input.value = '';
+    await f.view.sitting('teach', true);
+    expect(f.view.sessionUnavailable).toBe(false);
+    expect(f.view.input.disabled).toBe(false);
+    expect(f.calls.some((c) => c.type === 'new_session')).toBe(true);
+  });
+
+  test('New session is explicit and starts with one click even when another sitting is active', async () => {
+    const f = await fixture();
+    await start(f);
+    f.calls.length = 0;
+    button(f.view.contentEl, 'New session').click();
+    await flush();
+    expect(f.view.resetModal).toBeNull();
+    expect(f.calls.some((c) => c.type === 'new_session')).toBe(true);
+    expect(f.calls.find((c) => c.type === 'set_session_name')?.name).toBe('Learn · teach · Locality');
+    expect(f.calls.find((c) => c.type === 'prompt')?.message).toBe('/skill:teach Locality');
+    expect(f.view.minutesInput.getAttribute('placeholder')).toBe('Optional');
+  });
+
+  test('History lists native saved sessions and opens the chosen conversation', async () => {
+    const f = await fixture();
+    f.saved.push(savedSession('Past topic'));
+    await f.view.showHistory();
+    expect(f.view.sessionPicker.getItems()).toEqual(f.saved);
+    f.view.sessionPicker.onChooseItem(f.saved[0]);
+    await flush();
+    expect(f.calls.find((c) => c.type === 'switch_session')?.sessionPath).toBe('/sessions/lesson.jsonl');
+    expect(f.view.lastTopic).toBe('Past topic');
+    expect(f.calls.some((c) => c.type === 'new_session')).toBe(false);
+  });
+
+  test('a transcript arriving after sidebar close cannot restore stale content', async () => {
+    const f = await fixture();
+    let resolveHistory: (value: any) => void;
+    const original = f.pi.command.bind(f.pi);
+    f.pi.command = async (cmd) => cmd.type === 'get_messages' ? new Promise((resolve) => { resolveHistory = resolve; }) : original(cmd);
+    const pending = f.view.resumeSession(savedSession());
+    await flush();
+    await f.view.onClose();
+    resolveHistory!({ messages: [{ role: 'assistant', content: [{ type: 'text', text: 'Late transcript' }] }] });
+    await pending;
+    expect(f.view.streamEl.textContent).not.toContain('Late transcript');
+    expect(f.view.components).toHaveLength(0);
+  });
+
+  test('a cancelled restore leaves the active conversation intact', async () => {
+    const f = await fixture();
+    await start(f);
+    const previous = f.view.streamEl.textContent;
+    const original = f.pi.command.bind(f.pi);
+    f.pi.command = async (cmd) => cmd.type === 'switch_session' ? { cancelled: true } : original(cmd);
+    await f.view.resumeSession(savedSession('Another topic'));
+    expect(f.view.streamEl.textContent).toBe(previous);
+    expect(f.view.lastTopic).toBe('Locality');
+  });
+
+  test('missing discovery never sends an unknown slash command to the model; New session still works', async () => {
+    const f = await fixture();
+    const original = f.pi.command.bind(f.pi);
+    f.pi.command = async (cmd) => cmd.type === 'get_commands' ? { commands: [] } : original(cmd);
+    f.view.input.value = 'Locality';
+    await f.view.startOrContinue('teach');
+    expect(f.calls.some((c) => c.type === 'prompt')).toBe(false);
+    expect(notices.at(-1)).toContain('Reload Learn');
+    await f.view.sitting('teach', true);
+    expect(f.calls.some((c) => c.type === 'new_session')).toBe(true);
+  });
+});
+
+describe('inline decision bridge', () => {
+  const params = { topic: 'Lesson setup', questions: [
+    { id: 'depth', prompt: 'Depth?', options: [{ label: 'Mechanisms' }, { label: 'Overview' }], recommendedIndex: 0 },
+    { id: 'time', prompt: 'Time?', options: [{ label: '20 minutes' }, { label: '40 minutes' }], recommendedIndex: 0 },
+  ] };
+  const request = (extra = {}) => ({ type: 'extension_ui_request', id: 'ask-1', method: 'input', title: 'pi-questions/v1 ask', placeholder: JSON.stringify({ ...params, ...extra }) });
+
+  test('abortable input requests show decision cards and send both setup answers', async () => {
+    const f = await fixture();
+    await start(f);
+    const pending = f.view.uiRequest(request());
+    button(f.view.streamEl, 'Next').click();
+    const current = f.view.streamEl.querySelector('.pi-learn-card-body > .pi-learn-item');
+    current.querySelectorAll('.pi-learn-option')[1].click();
+    button(f.view.streamEl, 'Done').click();
+    await pending;
+    const result = JSON.parse(f.replies[0].value);
+    expect(result.cancelled).toBe(false);
+    expect(result.answers.map((a) => [a.id, a.label])).toEqual([['depth', 'Mechanisms'], ['time', '40 minutes']]);
+    expect(f.view.dialogs.size).toBe(0);
+  });
+
+  test('idle preserves the unsubmitted draft and offers explicit sidebar resumption', async () => {
+    const f = await fixture();
+    await start(f);
+    const pending = f.view.uiRequest(request({ idleMs: 5 }));
+    const free = f.view.streamEl.querySelector('textarea');
+    free.value = 'Only the next step';
+    free.dispatchEvent(new Event('input', { bubbles: true }));
+    await pending;
+    const result = JSON.parse(f.replies[0].value);
+    expect(result).toMatchObject({ cancelled: false, deferred: true, deferReason: 'idle', answers: [], draft: { freeText: 'Only the next step' } });
+    button(f.view.streamEl, 'Resume decisions').click();
+    await flush();
+    expect(f.calls.filter((c) => c.type === 'prompt').at(-1).message).toBe('/decisions');
+  });
+
+  for (const end of ['Stop', 'Finish', 'close']) test(`${end} returns the ask draft before abort or process shutdown`, async () => {
+    const f = await fixture();
+    await start(f);
+    f.view.setStreaming(true);
+    const pending = f.view.uiRequest(request());
+    const free = f.view.streamEl.querySelector('textarea');
+    free.value = 'Unsubmitted';
+    const next = button(f.view.streamEl, 'Next');
+    const stale = next.onclick;
+    const original = f.pi.command.bind(f.pi);
+    f.pi.command = async (cmd) => {
+      if (cmd.type === 'abort') expect(JSON.parse(f.replies[0].value).draft.freeText).toBe('Unsubmitted');
+      return original(cmd);
+    };
+    if (end === 'Stop') await f.view.abort();
+    else if (end === 'Finish') await f.view.finishSitting();
+    else await f.view.onClose();
+    await pending;
+    stale.call(next, new Event('click'));
+    expect(f.replies).toHaveLength(1);
+    expect(JSON.parse(f.replies[0].value)).toMatchObject({ cancelled: true, deferred: true, answers: [], draft: { freeText: 'Unsubmitted' } });
+    expect(f.view.dialogs.size).toBe(0);
+    expect(f.view.streamEl.querySelectorAll('.pi-learn-card-archive')).toHaveLength(0);
+  });
+});
+
 describe('header and follow-up safety', () => {
   test('overlapping path paints leave one subtitle and one dots row', async () => {
     const { view } = await fixture();
@@ -418,7 +617,7 @@ describe('planning and context', () => {
     expect(f.view.focusFile).toBeNull();
     button(f.view.contentEl, 'Curate').click();
     await flush();
-    const prompt = f.calls.find((c) => c.type === 'prompt').message;
+    const prompt = f.calls.find((c) => c.type === 'prompt' && c.message !== '/learn-sessions').message;
     expect(prompt).toStartWith('/skill:curate Curate [[Resources/Workshop]]');
     expect(prompt).toContain('[[Knowledge/Discovery]]');
     expect(prompt).not.toContain(distant.path);

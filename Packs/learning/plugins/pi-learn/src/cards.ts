@@ -18,9 +18,17 @@ interface AskQuestion {
   id: string; title?: string; prompt: string; context?: string;
   options: AskOption[]; recommendedIndex?: number; allowNote?: boolean;
 }
-interface AskAnswer {
+export interface AskAnswer {
   id: string; title?: string; selectedIndex: number | null; label: string | null; freeText: string | null;
   note: string | null; followedRecommendation: boolean | null; skipped: boolean;
+}
+export interface AskDraft {
+  id: string; phase: 'options' | 'note' | 'free'; optionIndex: number; text: string;
+  freeText?: string; note?: string;
+}
+export interface AskResult {
+  topic: string; answers: AskAnswer[]; cancelled: boolean;
+  deferred?: boolean; deferReason?: 'idle' | 'aborted'; draft?: AskDraft;
 }
 interface QuizReview { id: string; prompt: string; chosen: string; correct: string; accepted: boolean; reason: string }
 interface ReviewOutcome { id: string; accepted: boolean; note: string | null }
@@ -364,32 +372,54 @@ export function reviewCard(
 
 export function askCard(
   parent: HTMLElement,
-  params: { topic: string; questions: AskQuestion[] },
+  params: { topic: string; questions: AskQuestion[]; idleMs?: number; answers?: AskAnswer[]; draft?: AskDraft },
   md: RenderMarkdown,
   signal?: AbortSignal,
-): Promise<{ topic: string; answers: AskAnswer[]; cancelled: boolean }> {
+): Promise<AskResult> {
   const { topic, questions } = params;
-  const answers: AskAnswer[] = [];
-  const { card, body, setCount } = shell(parent, 'decide', topic, questions.length);
+  const answers = (params.answers ?? []).filter((a) => !a.skipped);
+  const completed = answers.length;
+  const total = completed + questions.length;
+  const { card, body, setCount } = shell(parent, 'decide', topic, total);
 
   return new Promise((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let idle = false;
+    let snapshot: (() => AskDraft) | undefined;
+    const first = questions[0];
+    if (first) snapshot = () => params.draft?.id === first.id ? { ...params.draft } : {
+      id: first.id, phase: 'options', optionIndex: first.recommendedIndex ?? -1, text: '', freeText: '', note: '',
+    };
+    const activityEvents = ['keydown', 'input', 'pointerdown', 'focusin'] as const;
+    const resetIdle = () => {
+      if (session.done) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => { idle = true; session.finish(false); }, params.idleMs ?? 60000);
+    };
     const session = interaction(card, signal, (cancelled) => {
-      const decided = answers.filter((a) => !a.skipped).length;
-      summarize(card, `${decided}/${questions.length} decided${cancelled ? ' · stopped early' : ''}`);
-      resolve({ topic, answers, cancelled });
+      clearTimeout(timer);
+      activityEvents.forEach((event) => card.removeEventListener(event, resetIdle, true));
+      const deferred = idle || cancelled;
+      summarize(card, `${answers.length}/${total} decided${idle ? ' · deferred' : cancelled ? ' · stopped early' : ''}`);
+      resolve({ topic, answers, cancelled, ...(deferred ? {
+        deferred: true, deferReason: idle ? 'idle' : 'aborted', draft: snapshot?.(),
+      } : {}) });
     });
+    activityEvents.forEach((event) => card.addEventListener(event, resetIdle, true));
     const show = (i: number) => {
       if (session.done) return;
-      if (i >= questions.length) return session.finish(false);
-      setCount(i);
+      if (i >= questions.length) { snapshot = undefined; return session.finish(false); }
+      setCount(completed + i);
       let active = true;
       const item = body.createDiv({ cls: 'pi-learn-item' });
       const q = questions[i];
+      const draft = params.draft?.id === q.id ? params.draft : undefined;
+      let phase: AskDraft['phase'] = draft?.phase ?? 'options';
       if (q.title) item.createDiv({ cls: 'pi-learn-ask-title', text: q.title });
       md(item.createDiv({ cls: 'pi-learn-prompt' }), q.prompt);
       if (q.context) md(item.createDiv({ cls: 'pi-learn-context' }), q.context);
 
-      let selected: number | null = q.recommendedIndex ?? null;
+      let selected: number | null = draft ? (draft.optionIndex >= 0 && draft.optionIndex < q.options.length ? draft.optionIndex : null) : q.recommendedIndex ?? null;
       const list = item.createDiv({ cls: 'pi-learn-options' });
       const preview = item.createEl('pre', { cls: 'pi-learn-preview' });
       const paint = () => {
@@ -405,6 +435,7 @@ export function askCard(
       const choose = (idx: number) => {
         if (session.done || !active) return;
         selected = idx;
+        phase = 'options';
         paint();
       };
       const choices = q.options.map((o, idx) => {
@@ -420,16 +451,26 @@ export function askCard(
 
       const free = textarea(item, 'Your own answer', 'None of these? Answer in your own words.');
       const note = q.allowNote === false ? null : textarea(item, 'Decision note', 'Note on this decision (optional)');
+      free.value = draft?.freeText ?? (draft?.phase === 'free' ? draft.text : '');
+      if (note) note.value = draft?.note ?? (draft?.phase === 'note' ? draft.text : '');
+      const trackPhase = (field: HTMLTextAreaElement, value: 'free' | 'note') => {
+        for (const event of ['focus', 'input']) field.addEventListener(event, () => {
+          if (!session.done && active) phase = value;
+        });
+      };
+      trackPhase(free, 'free');
+      if (note) trackPhase(note, 'note');
+      snapshot = () => ({
+        id: q.id, phase, optionIndex: selected ?? -1,
+        text: phase === 'free' ? free.value : phase === 'note' ? note?.value ?? '' : '',
+        freeText: free.value, note: note?.value ?? '',
+      });
       const actions = item.createDiv({ cls: 'pi-learn-actions' });
       button(actions, 'Stop', 'mod-muted').onclick = () => { if (active) session.finish(true); };
       const skip = button(actions, 'Skip', 'mod-muted');
       skip.onclick = () => {
         if (session.done || !active) return;
         active = false;
-        answers.push({
-          id: q.id, title: q.title, selectedIndex: null, label: null, freeText: null,
-          note: null, followedRecommendation: null, skipped: true,
-        });
         archive(item, `Decision ${i + 1} · Skipped`);
         show(i + 1);
       };
@@ -470,9 +511,14 @@ export function askCard(
         }
       });
       paint();
-      card.focus({ preventScroll: true });
+      if (phase === 'free') free.focus({ preventScroll: true });
+      else if (phase === 'note' && note) note.focus({ preventScroll: true });
+      else card.focus({ preventScroll: true });
     };
     if (signal?.aborted) session.finish(true);
-    else show(0);
+    else {
+      show(0);
+      resetIdle();
+    }
   });
 }

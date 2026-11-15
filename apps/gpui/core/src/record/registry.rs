@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
-use route_manifest::registry::Registry;
 use reqwest::Method;
+use route_manifest::registry::Registry;
 use serde_json::Value;
 
 use crate::shell::{Shell, ShellError, ShellResult};

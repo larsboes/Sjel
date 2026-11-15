@@ -14,7 +14,7 @@ use crate::tasks::{self, NoteSort, StatusFilter, TaskFilter, TaskSort, TASK_STAT
 use crate::theme::{Density, Palette};
 use sjel_gpui_core::shell::{GlobalNote, GlobalTask, ProjectRecord};
 
-use super::{search_box, NoteKindFilter, Projects, ProjectsTab};
+use super::{search_box, NoteKindFilter, ProjectSection, ProjectSort, Projects, ProjectsTab};
 
 fn ely_density(density: Density) -> ElyDensity {
     match density {
@@ -224,17 +224,17 @@ impl Projects {
             .collect();
 
         let columns = vec![
-            Column::new("done", "").width(rems((32.) / 16.)).editable(),
+            Column::new("done", "").width(rems(32. / 16.)).editable(),
             Column::new("title", "TASK").editable(),
             Column::new("status", "STATUS")
-                .width(rems((cols.status.unwrap_or(100.) / 16.)))
+                .width(rems(cols.status.unwrap_or(100. / 16.)))
                 .choices(TASK_STATUSES),
-            Column::new("due", "DUE").width(rems((cols.due) / 16.)).editable(),
+            Column::new("due", "DUE").width(rems(cols.due / 16.)).editable(),
             Column::new("priority", "PRIORITY")
-                .width(rems((cols.priority) / 16.))
+                .width(rems(cols.priority / 16.))
                 .choices(["P1", "P2", "P3"]),
             Column::new("actions", "")
-                .width(rems((110.) / 16.))
+                .width(rems(110. / 16.))
                 .actions([RowAction::new("due", "Due"), RowAction::new("delete", "Delete")]),
         ];
 
@@ -537,18 +537,18 @@ impl Projects {
             .collect();
 
         let columns = vec![
-            Column::new("done", "").width(rems((32.) / 16.)).editable(),
+            Column::new("done", "").width(rems(32. / 16.)).editable(),
             Column::new("title", "TASK"),
-            Column::new("project", "PROJECT").width(rems((cols.project.unwrap_or(140.) / 16.))),
+            Column::new("project", "PROJECT").width(rems(cols.project.unwrap_or(140. / 16.))),
             Column::new("status", "STATUS")
-                .width(rems((cols.status.unwrap_or(100.) / 16.)))
+                .width(rems(cols.status.unwrap_or(100. / 16.)))
                 .choices(TASK_STATUSES),
-            Column::new("due", "DUE").width(rems((cols.due) / 16.)).editable(),
+            Column::new("due", "DUE").width(rems(cols.due / 16.)).editable(),
             Column::new("priority", "PRIO")
-                .width(rems((cols.priority) / 16.))
+                .width(rems(cols.priority / 16.))
                 .choices(["P1", "P2", "P3"]),
             Column::new("actions", "")
-                .width(rems((120.) / 16.))
+                .width(rems(120. / 16.))
                 .actions([RowAction::new("due", "Due"), RowAction::new("project", "Project")]),
         ];
 
@@ -775,10 +775,10 @@ impl Projects {
 
         let columns = vec![
             Column::new("title", "NOTE"),
-            Column::new("project", "PROJECT").width(rems((cols.project.unwrap_or(140.) / 16.))),
-            Column::new("kind", "TYPE").width(rems((cols.kind.unwrap_or(80.) / 16.))),
+            Column::new("project", "PROJECT").width(rems(cols.project.unwrap_or(140. / 16.))),
+            Column::new("kind", "TYPE").width(rems(cols.kind.unwrap_or(80. / 16.))),
             Column::new("actions", "")
-                .width(rems((80.) / 16.))
+                .width(rems(80. / 16.))
                 .actions([RowAction::new("project", "Project")]),
         ];
 
@@ -871,6 +871,126 @@ impl Projects {
             .gap_1()
             .child(filter_bar)
             .child(table)
+            .into_any_element()
+    }
+
+    pub(super) fn hubs_table(
+        &self,
+        filtered: &[sjel_gpui_core::shell::ProjectSummary],
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let cols = self.columns();
+        let query = self.search_query.as_str();
+        let columns = vec![
+            Column::new("name", "PROJECT"),
+            Column::new("project_tasks", "TASKS").width(rems(cols.project_tasks / 16.)),
+            Column::new("project_progress", "PROGRESS")
+                .width(rems(cols.project_progress.max(100.) / 16.)),
+            Column::new("project_notes", "NOTES")
+                .width(rems(cols.project_notes / 16.))
+                .end(),
+            Column::new("actions", "")
+                .width(rems(5.))
+                .actions([RowAction::new("task", "+ Task")]),
+        ];
+
+        let mut hidden: Vec<&'static str> = Vec::new();
+        if cols.project_progress <= 0. {
+            hidden.push("project_progress");
+        }
+
+        let rows: Rc<Vec<Row>> = Rc::new(
+            filtered
+                .iter()
+                .map(|project| {
+                    let total_tasks = project.open + project.done;
+                    let tasks_cell = if project.open > 0 {
+                        Cell::Tag(format!("● {} open", project.open).into(), Tone::Warning)
+                    } else if project.done > 0 {
+                        Cell::Tag(format!("✓ {} done", project.done).into(), Tone::Success)
+                    } else {
+                        Cell::Text("0 tasks".into())
+                    };
+                    let progress_cell = if total_tasks > 0 {
+                        let pct = ((project.done as f32 / total_tasks as f32) * 100.0).round() as u32;
+                        Cell::Figure(format!("{pct}%").into(), pct as f64, Tone::Neutral)
+                    } else {
+                        Cell::Empty
+                    };
+                    let notes_label = format!(
+                        "{} note{}",
+                        project.notes,
+                        if project.notes == 1 { "" } else { "s" }
+                    );
+                    Row::new(
+                        project.name.clone(),
+                        [
+                            Cell::Text(project.name.clone().into()),
+                            tasks_cell,
+                            progress_cell,
+                            Cell::Figure(notes_label.into(), project.notes as f64, Tone::Neutral),
+                            Cell::Actions(vec!["task".into()]),
+                        ],
+                    )
+                })
+                .collect(),
+        );
+
+        let (sort_col, sort_asc) = self.project_sort;
+        let sort_col_key = match sort_col {
+            ProjectSort::Name => "name",
+            ProjectSort::Tasks => "project_tasks",
+            ProjectSort::Progress => "project_progress",
+            ProjectSort::Notes => "project_notes",
+        };
+        let current_name = self
+            .selected_index
+            .and_then(|i| filtered.get(i).map(|p| p.name.clone()));
+        let empty_msg = if query.is_empty() {
+            "No projects in this filter view.".to_string()
+        } else {
+            format!("No projects matching \"{query}\".")
+        };
+        let _ = palette;
+
+        let (on_open, on_sort, on_act) = (cx.entity(), cx.entity(), cx.entity());
+        DataTable::new("projects-hub", columns)
+            .rows(rows)
+            .hidden(hidden)
+            .sorts([SortKey {
+                column: sort_col_key.into(),
+                rising: sort_asc,
+            }])
+            .density(ely_density(cols.density))
+            .current(current_name)
+            .on_open(move |key, _, cx| {
+                let name = key.to_string();
+                on_open.update(cx, |view, cx| {
+                    view.open_project(name, cx);
+                });
+            })
+            .on_sort(move |keys, _, cx| {
+                if let Some(first) = keys.first() {
+                    if let Some(col) = ProjectSort::from_col_id(first.column.as_ref()) {
+                        on_sort.update(cx, |view, cx| {
+                            view.project_sort = (col, first.rising);
+                            cx.notify();
+                        });
+                    }
+                }
+            })
+            .on_action(move |key, action, _, cx| {
+                if action.as_ref() == "task" {
+                    let name = key.to_string();
+                    on_act.update(cx, |view, cx| {
+                        view.open_project(name, cx);
+                        view.project_section = ProjectSection::Tasks;
+                        cx.notify();
+                    });
+                }
+            })
+            .empty(empty_msg)
             .into_any_element()
     }
 }

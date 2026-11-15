@@ -143,12 +143,11 @@ pub use docs::MermaidPlugin;
 pub use nav::{mobile_tab_bar, nav_header, NavItem};
 #[cfg(feature = "gpui")]
 pub use primitives::{
-    back_button, card, column_width, cycle_column_width, data_row, dot, due_badge, due_status,
-    filter_pill, key_bar, list, mono_num, note, page_scroll, placeholder, priority_pill,
-    progress_bar, remote_state, resizable_table_header, row, row_for_density, section,
-    shortcut_hint, sortable_table_header, stat_card, stat_card_interactive, stat_strip, sub_tabs,
-    sync_status_badge, table_header, tabular_cell, tone_chip, virtual_list, DueStatus, SortOrder,
-    SortableColumn, RADIUS_LG, RADIUS_MD, RADIUS_SM,
+    back_button, card, column_width, cycle_column_width, dot, due_badge, due_status, filter_pill,
+    key_bar, list, mono_num, note, placeholder, priority_pill, progress_bar, row, row_for_density,
+    section, shortcut_hint, stat_card, stat_card_interactive, stat_strip, sub_tabs,
+    sync_status_badge, tabular_cell, tone_chip, virtual_list, DueStatus, SortOrder, RADIUS_LG,
+    RADIUS_MD, RADIUS_SM,
 };
 #[cfg(feature = "gpui")]
 pub use sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};

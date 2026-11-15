@@ -809,14 +809,19 @@ Open:
    account. Headless tests cover the rows and the Edit press. Not checked: how either page
    looks. Nobody has opened them on Ely's table yet.
 
-   Gaps against the old table: Ely's table has no accessibility label and no outer border.
-   The current row (below) brings back keyboard row selection.
+   Moved: `projects/tables.rs`, `projects/mod.rs` (Hubs), and `documents/mod.rs`. Projects keeps
+   its inline due-date preset bar and new-task input row beside the `DataTable`, uses
+   `Cell::Lines` for subtask progress, and delegates up/down/j/k/Enter to `DataTable` while
+   driving `Space`, `e`, and stage-move keys from `on_current`. Documents uses `DataTable`
+   virtualization, `group_by`, `hidden` on narrow windows, and `on_sort`.
+   `ui/src/primitives/data_table.rs` and `tables.rs` are deleted; `sub_tabs`, `key_bar`,
+   `tabular_cell`, `SortOrder`, `column_width`, and `cycle_column_width` live in
+   `ui/src/primitives/chrome.rs` (`mono_num` in `badges.rs`).
 
-   Next: `projects` and `documents`, which need the current row, `on_sort`, `Check` and
-   `choices`.
-   When `tables.rs` goes, `sub_tabs`, `key_bar`, `tabular_cell` and `mono_num` move to their
-   own file. `sortable_table_header`, `data_row`, `page_scroll` and `remote_state` have no
-   caller and are deleted.
+   Not checked: nobody has opened Inventory, Import, Projects, or Documents on Ely's table in the
+   running Mac app yet. The `Column::choices` menu opens from a pointer press only.
+
+   Gaps against the old table: Ely's table has no accessibility label and no outer border.
 
 #### Resume checklist (Ely)
 

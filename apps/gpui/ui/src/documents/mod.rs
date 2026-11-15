@@ -5,10 +5,11 @@
 //! reviews and regenerations go through the Documents API; filing remains a separate explicit
 //! `PATCH /api/documents/{id}` action.
 
+use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, ClickEvent, Context, Entity, ExternalPaths,
+    div, prelude::*, px, rems, rgb, rgba, AnyElement, ClickEvent, Context, Entity, ExternalPaths,
     FontWeight, PathPromptOptions, Subscription, Window,
 };
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -21,10 +22,10 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::primitives::{
-    column_width, cycle_column_width, filter_pill, resizable_table_header, tabular_cell,
-    virtual_list, SortOrder, SortableColumn,
-};
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
+use crate::ely::theme::Density as ElyDensity;
+use crate::primitives::{column_width, cycle_column_width, filter_pill, SortOrder};
 use crate::theme::{tint, Density, Palette};
 
 mod duplicates;
@@ -301,6 +302,7 @@ pub struct Documents {
     pub(super) sort: (DocSort, SortOrder),
     pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     pub(super) selected: Option<String>,
+    pub(super) current: Option<String>,
     /// The list's own scroller: it draws only the rows the window shows.
     pub(super) list: gpui::ListState,
     /// The rows in draw order, each with the group header that opens its group.
@@ -373,6 +375,7 @@ impl Documents {
             sort: (DocSort::Added, SortOrder::Descending),
             col_widths: Default::default(),
             selected: None,
+            current: None,
             list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
             order: Vec::new(),
             counts: [0; 5],
@@ -1093,173 +1096,161 @@ impl Documents {
         cx.notify();
     }
 
-    /// One list row: the group header when it opens one, then the record itself.
-    fn document_row(
+    fn documents_table(
         &self,
-        ix: usize,
         narrow: bool,
-        palette: Palette,
+        total: usize,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some(entry) = self.order.get(ix) else {
-            return div().into_any_element();
-        };
-        let Some(row) = self
-            .rows
-            .value
-            .as_ref()
-            .and_then(|rows| rows.get(entry.index))
-        else {
-            return div().into_any_element();
-        };
-        let mut item = div().w_full().flex().flex_col();
-        if let Some((group, count)) = &entry.group {
-            item = item.child(
-                div()
-                    .w_full()
-                    .pt_3()
-                    .pb_1()
-                    .px(self.density.pad_x())
-                    .text_xs()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(rgb(palette.muted))
-                    .child(format!("{group} · {count}")),
-            );
+        let (sort_col, sort_order) = self.sort;
+        let columns = vec![
+            Column::new("name", "DOCUMENT"),
+            Column::new("category", "CATEGORY").width(rems(self.col_w("category") / 16.)),
+            Column::new("pages", "PAGES")
+                .width(rems(self.col_w("pages") / 16.))
+                .end(),
+            Column::new("status", "STATUS").width(rems(self.col_w("status") / 16.)),
+            Column::new("added", "ADDED")
+                .width(rems(self.col_w("added") / 16.))
+                .end(),
+            Column::new("group", ""),
+        ];
+
+        let mut hidden: Vec<&'static str> = vec!["group"];
+        if narrow {
+            hidden.extend(["category", "pages", "added"]);
         }
-        let id = row.id.clone();
-        let chosen = self.selected.as_deref() == Some(row.id.as_str());
-        let category = row
-            .category
-            .as_deref()
-            .or(row.suggested_category.as_deref())
-            .unwrap_or("—");
-        let date = row.imported_at.get(..10).unwrap_or("—").to_owned();
-        let pages_label = if row.page_count > 0 {
-            format!("{}p", row.page_count)
-        } else {
-            "—".to_owned()
-        };
-        let category_w = self.col_w("category");
-        let pages_w = self.col_w("pages");
-        let status_w = self.col_w("status");
-        let added_w = self.col_w("added");
-        let workflow = workflow_label(&row.workflow_stage);
-        let primary_title = row
-            .extracted_title
-            .as_deref()
-            .map(str::trim)
-            .filter(|t| !t.is_empty())
-            .unwrap_or(&row.filename)
-            .to_owned();
-        let show_filename_sub = primary_title != row.filename;
-        item.child(
-            div()
-                .id(("document-row", ix))
-                .w_full()
-                .flex()
-                .items_center()
-                .gap_3()
-                .min_h(self.density.row_height())
-                .px(self.density.pad_x())
-                .py_1p5()
-                .rounded(px(6.))
-                .border_b_1()
-                .border_color(rgba(tint(palette.border, 0x15)))
-                .when(chosen, |el| {
-                    el.bg(rgba(tint(palette.accent, 0x18)))
-                        .border_l_2()
-                        .border_color(rgb(palette.accent))
-                })
-                .when(!chosen, |el| {
-                    el.hover(|style| style.bg(rgba(tint(palette.raised, 0x22))))
-                })
-                .cursor_pointer()
-                .on_click(cx.listener(move |view, _, _, cx| {
-                    if view.selected.as_deref() == Some(id.as_str()) {
-                        view.close(cx);
-                    } else {
-                        view.open(id.clone(), cx);
+
+        let rows_slice = self.rows.value.as_deref().unwrap_or_default();
+        let rows: Rc<Vec<Row>> = Rc::new(
+            self.order
+                .iter()
+                .filter_map(|entry| rows_slice.get(entry.index))
+                .map(|row| {
+                    let primary_title = row
+                        .extracted_title
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|t| !t.is_empty())
+                        .unwrap_or(&row.filename)
+                        .to_owned();
+                    let mut meta_parts: Vec<String> = Vec::new();
+                    if primary_title != row.filename {
+                        meta_parts.push(row.filename.clone());
                     }
-                }))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap_0p5()
-                        .child(
-                            div()
-                                .truncate()
-                                .text_sm()
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(if chosen {
-                                    rgb(palette.accent)
-                                } else {
-                                    rgb(palette.text)
-                                })
-                                .child(primary_title),
+                    if row.status == "inbox" {
+                        meta_parts.push(workflow_label(&row.workflow_stage).to_owned());
+                    }
+                    if !row.matched_pages.is_empty() {
+                        let pages = row
+                            .matched_pages
+                            .iter()
+                            .map(u32::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        meta_parts.push(format!("Matches on page {pages}"));
+                    }
+                    let name_cell = if meta_parts.is_empty() {
+                        Cell::Text(primary_title.into())
+                    } else {
+                        Cell::Lines(primary_title.into(), meta_parts.join(" · ").into())
+                    };
+                    let category = row
+                        .category
+                        .as_deref()
+                        .or(row.suggested_category.as_deref())
+                        .unwrap_or("—");
+                    let pages_cell = if row.page_count > 0 {
+                        Cell::Figure(
+                            format!("{}p", row.page_count).into(),
+                            row.page_count as f64,
+                            Tone::Neutral,
                         )
-                        .when(show_filename_sub, |column| {
-                            column.child(
-                                div()
-                                    .truncate()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(row.filename.clone()),
-                            )
-                        })
-                        .when(row.status == "inbox", |column| {
-                            column.child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(workflow),
-                            )
-                        })
-                        .when(!row.matched_pages.is_empty(), |column| {
-                            let pages = row
-                                .matched_pages
-                                .iter()
-                                .map(u32::to_string)
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            column.child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.accent))
-                                    .child(format!("Matches on page {pages}")),
-                            )
-                        }),
-                )
-                .when(!narrow, |cells| {
-                    cells.child(
-                        div()
-                            .w(px(category_w))
-                            .flex_none()
-                            .truncate()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(category.to_owned()),
+                    } else {
+                        Cell::Empty
+                    };
+                    let status_tone = match row.status.as_str() {
+                        "filed" => Tone::Success,
+                        "inbox" => Tone::Accent,
+                        "archived" => Tone::Neutral,
+                        _ => Tone::Warning,
+                    };
+                    let date = row.imported_at.get(..10).unwrap_or("—");
+                    Row::new(
+                        row.id.clone(),
+                        [
+                            name_cell,
+                            Cell::Text(category.to_owned().into()),
+                            pages_cell,
+                            Cell::Tag(row.status.clone().into(), status_tone),
+                            Cell::Text(date.to_owned().into()),
+                            Cell::Text(grouping_key(row, self.grouping).into()),
+                        ],
                     )
                 })
-                .when(!narrow, |cells| {
-                    cells.child(tabular_cell(pages_label, px(pages_w), palette.muted))
-                })
-                .child(
-                    div()
-                        .w(px(status_w))
-                        .flex_none()
-                        .flex()
-                        .items_center()
-                        .justify_start()
-                        .child(status_chip(&row.status, palette)),
-                )
-                .when(!narrow, |cells| {
-                    cells.child(tabular_cell(date, px(added_w), palette.muted))
-                }),
-        )
-        .into_any_element()
+                .collect(),
+        );
+
+        let sort_col_key = match sort_col {
+            DocSort::Name => "name",
+            DocSort::Category => "category",
+            DocSort::Pages => "pages",
+            DocSort::Status => "status",
+            DocSort::Added => "added",
+        };
+        let empty_msg = if total == 0 {
+            "No documents yet."
+        } else {
+            "No documents in this view."
+        };
+
+        let (on_curr, on_open, on_sort) = (cx.entity(), cx.entity(), cx.entity());
+        div()
+            .flex_1()
+            .min_h_0()
+            .child(
+                DataTable::new("documents", columns)
+                    .rows(rows)
+                    .hidden(hidden)
+                    .sorts([SortKey {
+                        column: sort_col_key.into(),
+                        rising: sort_order.is_ascending(),
+                    }])
+                    .when(self.grouping != Grouping::None, |t| t.group_by("group"))
+                    .density(ElyDensity::Comfortable)
+                    .virtualized()
+                    .current(self.current.clone().or_else(|| self.selected.clone()))
+                    .on_current(move |key, _, cx| {
+                        on_curr.update(cx, |view, cx| {
+                            view.current = Some(key.to_string());
+                            cx.notify();
+                        });
+                    })
+                    .on_open(move |key, _, cx| {
+                        on_open.update(cx, |view, cx| {
+                            view.current = Some(key.to_string());
+                            if view.selected.as_deref() == Some(key.as_ref()) {
+                                view.close(cx);
+                            } else {
+                                view.open(key.to_string(), cx);
+                            }
+                        });
+                    })
+                    .on_sort(move |keys, _, cx| {
+                        if let Some(first) = keys.first() {
+                            if let Some(col) = DocColDef::find(first.column.as_ref()) {
+                                on_sort.update(cx, |view, cx| {
+                                    view.sort = (col.sort, SortOrder::from_bool(first.rising));
+                                    view.order_rev = view.order_rev.wrapping_add(1);
+                                    cx.notify();
+                                });
+                            }
+                        }
+                    })
+                    .empty(empty_msg)
+                    .size_full(),
+            )
+            .into_any_element()
     }
 }
 
@@ -1514,41 +1505,6 @@ impl Render for Documents {
                         }),
                 ),
         );
-        let sort_state = |column: DocSort| (sort_col == column).then_some(sort_order);
-        let header_cols: Vec<_> = DOC_COLUMNS
-            .iter()
-            .filter(|col| !narrow || !col.hide_on_narrow)
-            .map(|col| {
-                let mut c = match col.default_width {
-                    Some(default) => SortableColumn::fixed(
-                        col.id,
-                        col.label,
-                        px(self.col_width(col.id, default)),
-                    ),
-                    None => SortableColumn::flex(col.id, col.label),
-                };
-                if col.right_align {
-                    c = c.right_align();
-                }
-                c.sorted(sort_state(col.sort))
-            })
-            .collect();
-        let sort_entity = cx.entity();
-        let resize_entity = cx.entity();
-        table = table.child(resizable_table_header(
-            "documents",
-            header_cols,
-            self.density,
-            palette,
-            move |col_id, _, cx| {
-                if let Some(col) = DocColDef::find(col_id) {
-                    sort_entity.update(cx, |view, cx| view.set_sort(col.sort, cx));
-                }
-            },
-            move |col_id, _, cx| {
-                resize_entity.update(cx, |view, cx| view.resize_column(col_id, cx));
-            },
-        ));
         if self.rows.value.is_none() && self.rows.loading {
             table = table.child(
                 div()
@@ -1557,8 +1513,7 @@ impl Render for Documents {
                     .text_color(rgb(palette.muted))
                     .child("Loading documents…"),
             );
-        }
-        if let Some(error) = &self.rows.error {
+        } else if let Some(error) = &self.rows.error {
             table = table.child(
                 div()
                     .py_3()
@@ -1566,28 +1521,8 @@ impl Render for Documents {
                     .text_color(rgb(palette.red))
                     .child(error.to_string()),
             );
-        }
-        if self.order.is_empty() && !self.rows.loading {
-            table = table.child(div().py_5().text_sm().text_color(rgb(palette.muted)).child(
-                if total == 0 {
-                    "No documents yet."
-                } else {
-                    "No documents in this view."
-                },
-            ));
-        }
-        if !self.order.is_empty() {
-            // The library holds every record; only the rows in the window are built.
-            let entity = cx.entity();
-            table = table.child(virtual_list(
-                "documents-list",
-                &self.list,
-                move |ix, _window, cx| {
-                    entity.update(cx, |documents, cx| {
-                        documents.document_row(ix, narrow, palette, cx)
-                    })
-                },
-            ));
+        } else {
+            table = table.child(self.documents_table(narrow, total, cx));
         }
 
         // With a record open the list keeps a column and the reader takes the rest; with nothing

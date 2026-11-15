@@ -15,6 +15,13 @@ either — `tools/service-runner.sh` renders launchd units from a manifest alrea
 this capability is a manifest and not a plist. `tools/host-patch.sh` is the whole implementation,
 and what it holds is the order of the steps, the guard in front of each one, and the receipt.
 
+## Owned harness deployments
+
+The job delegates routine Pack refresh to `tools/harnesses maintain`. The maintained set and
+refresh boundaries are defined in [the harness Pack](../../Packs/harness/README.md#automatic-maintenance).
+A failed refresh is recorded as `owned harness deployments` in the existing receipt; later
+steps and the audit still run. Upstream-managed skills and plugins retain their native lifecycle.
+
 ## What it does not upgrade, and why
 
 Casks that ship their own updater ARE upgraded, since 2026-09-02: `brew upgrade --cask

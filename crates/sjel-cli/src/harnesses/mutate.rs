@@ -500,6 +500,54 @@ fn remove_owned_unit(
 
 // ---- the verbs -----------------------------------------------------------------------------
 
+/// Refresh existing units without changing the deployment selection.
+///
+/// # Errors
+/// A unit is unowned, held, drifted, invalid, or cannot be installed and verified.
+pub(super) fn refresh_units(
+    config: &DeployConfig,
+    pack: &str,
+    keys: &BTreeSet<String>,
+) -> Result<Vec<String>, String> {
+    with_state_lock(config, || {
+        let mut state = read_state(config)?;
+        let held = held_units(config)?;
+        let units: Vec<Unit> = pack_units(config, pack)?
+            .into_iter()
+            .filter(|u| keys.contains(&u.key))
+            .collect();
+        if units.len() != keys.len() {
+            return Err(format!("{pack}: refresh unit no longer exists"));
+        }
+        for unit in &units {
+            if hold_matches(&held, &format!("{pack}/{}", unit.key)) {
+                return Err(format!("{pack}/{}: held; refusing to refresh", unit.key));
+            }
+            let mut record = state
+                .packs
+                .get(pack)
+                .and_then(|p| p.skills.get(&unit.key))
+                .cloned()
+                .ok_or_else(|| format!("{pack}/{}: not owned", unit.key))?;
+            if !unit.destination.exists() {
+                return Err(format!(
+                    "{pack}/{}: missing; refusing to recreate",
+                    unit.key
+                ));
+            }
+            adopt_digest_policy_if_safe(config, &mut record, &unit.destination, &unit.key)?;
+            let files = engine::desired_files(config, pack, unit)?;
+            validate_unit(config, &files, unit, &format!("{pack}/{}", unit.key))?;
+        }
+        let mut messages = Vec::new();
+        for unit in &units {
+            messages.push(install_one(config, &mut state, pack, unit, "sync")?);
+            write_state(config, &state)?;
+        }
+        Ok(messages)
+    })
+}
+
 pub fn sync_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, String> {
     with_state_lock(config, || {
         let sources = held_sources(config)?;
@@ -2088,7 +2136,11 @@ packs = ["coding"]
         for harness in ["claude", "codex", "antigravity", "opencode", "copilot"] {
             let profile = bound_profile_at(&root, harness).unwrap().unwrap();
             assert_eq!(profile.name, "coding-harness");
-            assert!(!profile.packs.contains(&"knowledge".to_owned()));
+            assert!(profile.packs.contains(&"knowledge".to_owned()));
+            assert_eq!(
+                profile.skills.as_ref().unwrap()["knowledge"],
+                vec!["web-research"]
+            );
             assert!(!profile.packs.contains(&"learning".to_owned()));
         }
         assert_eq!(bound_profile_at(&root, "pi").unwrap().unwrap().name, "full");
@@ -2790,6 +2842,42 @@ mod discard_tests {
         };
         deploy_pack(&config, "demo", None).unwrap();
         (root, config)
+    }
+
+    #[test]
+    fn refresh_updates_existing_units_without_changing_selection() {
+        let (root, config) = deployed("refresh");
+        let source = config.sjel_root.join("Packs/demo");
+        fs::write(source.join("skills/alpha/references/guide.md"), "updated\n").unwrap();
+        fs::create_dir_all(source.join("skills/beta")).unwrap();
+        fs::write(
+            source.join("skills/beta/SKILL.md"),
+            "---\nname: beta\ndescription: test\n---\n",
+        )
+        .unwrap();
+        fs::write(
+            source.join("pack.toml"),
+            "name = 'demo'\ndescription = 'test'\nskills = ['alpha', 'beta']\n",
+        )
+        .unwrap();
+        let keys = BTreeSet::from(["alpha".to_owned()]);
+        refresh_units(&config, "demo", &keys).unwrap();
+        assert_eq!(status(&config), SkillStatus::Current);
+        assert!(!config.destination.join("beta").exists());
+        assert_eq!(read_state(&config).unwrap().packs["demo"].skills.len(), 1);
+        fs::write(
+            config.destination.join("alpha/references/guide.md"),
+            "local edit\n",
+        )
+        .unwrap();
+        assert!(refresh_units(&config, "demo", &keys).is_err());
+        assert_eq!(
+            fs::read_to_string(config.destination.join("alpha/references/guide.md")).unwrap(),
+            "local edit\n"
+        );
+        let unowned = BTreeSet::from(["beta".to_owned()]);
+        assert!(refresh_units(&config, "demo", &unowned).is_err());
+        fs::remove_dir_all(&root).unwrap();
     }
 
     fn alpha(config: &DeployConfig) -> Unit {

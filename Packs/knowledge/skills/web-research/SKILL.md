@@ -1,6 +1,6 @@
 ---
 name: web-research
-description: Chooses the route for a research question and drafts the prompt when the answer must come from Google AI Studio with Search grounding. Routes quick cited facts to the built-in web search and fetch tools, long multi-source investigations to interceptor-research, and Google-verified answers to the user, who types the drafted prompt into AI Studio and clips the answer. Use when the user asks to research, look up, compare, fact-check or verify something on the web, asks for a prompt for AI Studio or Gemini, or asks to read back an AI Studio answer. Do not use for software investigation and repo research reports (use repository tools and primary sources), for running a deep multi-source investigation itself (use interceptor-research), for personal or private data, or for saving knowledge into the vault (use obsidian).
+description: Routes public web research and prepares Google AI Studio prompts, then retrieves the matching Sjel Clipper answer when the user says done, clipped or saved during an active research handoff. Use for public product comparisons, fact checks, AI Studio or Gemini prompts, and reading their saved answers. Do not use for code investigation, exporting private records or saving research into the vault. Use interceptor-research for a wide investigation performed by the agent.
 ---
 
 # Web research
@@ -19,8 +19,8 @@ in a query or a prompt. If the question needs them, ask the user to remove them 
 Do not open, type into, click or scroll an AI Studio chat page (`aistudio.google.com/prompts/`,
 `/app`) with a browser tool. Its `robots.txt` disallows these paths, and the Google Terms of
 Service prohibit automated access against such instructions. The risk is a suspension of the
-user's Google account. The user types in AI Studio. You only draft the prompt and read the
-saved clip.
+user's Google account. The user runs the prompt in AI Studio. The agent drafts the prompt and
+reads the saved clip.
 
 ## Choose the route
 
@@ -34,35 +34,9 @@ If the user does not say, use the first route and offer the AI Studio route at t
 
 ## The AI Studio route
 
-1. **Draft the prompt.** Include:
-   - the question and the decision it serves;
-   - the constraints from the conversation: budget, country, deadline, minimum specification;
-   - the instruction to use Google Search for every factual claim, cite the source and its date
-     inline, and mark what it could not verify as "unverified";
-   - the output shape: a comparison table with named columns, then a recommendation that uses
-     the numbers from the table;
-   - placeholders in `<ANGLE_BRACKETS>` for facts you do not know, and tell the user to fill them.
-2. **Put it in the prompt outbox**, so it shows on the Sjel Today page with a Copy button:
-
-   ```bash
-   comms prompts add --title "<short title>" < prompt.txt   # prints: queued draft <id>
-   ```
-
-   If the outbox refuses it or `comms` is not available, show the prompt in one fenced code
-   block instead.
-3. **Tell the user** to copy it from Today, turn on "Grounding with Google Search" in AI Studio,
-   send the prompt, and save the answer with the Sjel Clipper.
-4. **Read the clip** when the user says it is saved:
-
-   ```bash
-   comms clips --limit 5             # newest first; find the document key by its title
-   comms clips show <document-key>   # the conversation as Markdown
-   ```
-
-   If `comms` is not on `PATH`, build it from the Sjel checkout:
-   `cargo build --bin comms -p sjel-comms`, then run `target/debug/comms`.
-5. **Report** the answer to the user with its sources. Check the claims that decide the
-   outcome against their cited pages with the fetch tool, and say which ones you checked.
+Read [references/ai-studio.md](references/ai-studio.md) when preparing the prompt or resuming
+the handoff. During an active handoff, "done", "clipped" or "saved" requests retrieval of the
+matching clip; it does not require the user to paste the answer into chat.
 
 ## Grounded answers are a record, not a data source
 

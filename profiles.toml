@@ -18,6 +18,10 @@ pi = [
 ]
 codex = ["writing/skill-creator"]
 
+# Routine maintenance is separate from installation and profile selection.
+[maintenance]
+harnesses = ["pi", "claude", "codex", "antigravity"]
+
 # Profile for `tools/harnesses apply`; "*" covers unnamed harnesses.
 [harness_profile]
 claude = "coding-harness"
@@ -58,9 +62,9 @@ skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", 
 
 [[profile]]
 name = "coding-harness"
-description = "Coding agents: repository work, decks and secret handling; no vault, no learning"
-packs = ["coding", "design", "cognitive-load", "deliberation", "harness", "writing", "presentations", "security"]
-skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
+description = "Coding agents: repository work, public research, decks and secret handling; no vault, no learning"
+packs = ["coding", "design", "cognitive-load", "deliberation", "harness", "writing", "presentations", "security", "knowledge"]
+skills = { "writing" = ["human-writing", "skill-creator", "unslop"], "knowledge" = ["web-research"] }
 
 [[profile]]
 name = "thesis"

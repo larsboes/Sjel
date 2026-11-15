@@ -107,6 +107,23 @@ SJEL_TEST_FAIL_STEP="" SJEL_TEST_AUDIT_RC=1 run_patch "$MOCK_BIN:/usr/bin:/bin"
 [ "$(receipt_field audit)" = "finding" ] || {
   cat "$RECEIPT"; echo "FAIL: the receipt did not record the audit finding" >&2; exit 1; }
 
+# Harness maintenance failures use the same receipt and do not prevent the audit.
+cat > "$FIXTURE/tools/harnesses" <<'HARNESS'
+#!/bin/sh
+printf 'harnesses %s\n' "$*" >> "$SJEL_TEST_CALLS"
+exit 1
+HARNESS
+chmod +x "$FIXTURE/tools/harnesses"
+SJEL_TEST_FAIL_STEP="" SJEL_TEST_AUDIT_RC=0 run_patch "$MOCK_BIN:/usr/bin:/bin"
+[ "$patch_rc" -eq 2 ] || { echo "FAIL: harness maintenance failure must exit 2" >&2; exit 1; }
+grep -F 'harnesses maintain' "$CALLS" >/dev/null || exit 1
+grep -F 'audit' "$CALLS" >/dev/null || exit 1
+case "$(receipt_field failed)" in
+  *"owned harness deployments"*) ;;
+  *) echo "FAIL: receipt omitted harness maintenance failure" >&2; exit 1 ;;
+esac
+rm "$FIXTURE/tools/harnesses"
+
 # 4. No overlay means no receipt, and the run says so rather than passing silently — doctor
 #    would otherwise report a job that ran as one that never has.
 rm -f "$RECEIPT"

@@ -61,9 +61,22 @@ pub(crate) async fn packs_handler() -> Result<Json<Value>, (StatusCode, Json<Val
             String::from_utf8_lossy(&out.stderr).trim()
         )));
     }
-    serde_json::from_slice(&out.stdout)
-        .map(Json)
-        .map_err(|e| bad_gateway(format!("tools/harnesses did not emit JSON: {e}")))
+    let mut view: Value = serde_json::from_slice(&out.stdout)
+        .map_err(|e| bad_gateway(format!("tools/harnesses did not emit JSON: {e}")))?;
+    annotate_write_support(&root, &mut view);
+    Ok(Json(view))
+}
+
+fn annotate_write_support(root: &std::path::Path, view: &mut Value) {
+    if let Some(harnesses) = view.get_mut("harnesses").and_then(Value::as_array_mut) {
+        for harness in harnesses {
+            let supported = harness["id"].as_str().is_some_and(|id| {
+                plain_name(id, "harness").is_ok()
+                    && root.join(format!("tools/packs-{id}")).is_file()
+            });
+            harness["writeSupported"] = json!(supported);
+        }
+    }
 }
 
 /// Body of `POST /api/sjel-status/packs`.
@@ -88,10 +101,7 @@ pub(crate) async fn packs_write_handler(
         .map_err(bad_request)?;
     let root = sjel_root().map_err(bad_gateway)?;
 
-    // A registry harness may have no per-harness launcher at all — sjel-agent is declared in its
-    // own overlay config and reached with `tools/harnesses use`. Saying so is the answer; spawning
-    // a missing binary and reporting ENOENT is not.
-    if !root.join(&tool).exists() {
+    if !root.join(&tool).is_file() {
         return Err(bad_request(format!(
             "no deploy launcher for harness '{}' — {tool} does not exist; its Pack set is declared in that harness's own config",
             request.harness.trim()
@@ -110,14 +120,22 @@ pub(crate) async fn packs_write_handler(
     if !out.status.success() {
         // A refusal from the launcher is the caller's input: a drifted copy, a name another
         // Pack already owns, a Pack that is not deployed. Same reading as `upstreams/watch`.
-        return Err(bad_request(if stderr.is_empty() { stdout } else { stderr }));
+        return Err(bad_request(command_detail(&stdout, &stderr)));
     }
     Ok(Json(json!({
         "action": request.action,
         "harness": request.harness.trim(),
         "packs": request.packs,
-        "detail": stdout,
+        "detail": command_detail(&stdout, &stderr),
     })))
+}
+
+fn command_detail(stdout: &str, stderr: &str) -> String {
+    [stdout, stderr]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Which launcher a request means, as a path relative to `SJEL_ROOT` plus its argv.
@@ -188,9 +206,37 @@ mod write_tests {
         names.iter().map(|n| n.to_string()).collect()
     }
 
-    /// Every verb goes to the harness's own launcher. Routing `sync` through
-    /// `tools/harnesses` was the first attempt and is wrong for a registry harness: that tool
-    /// prints a hint instead of syncing, so the pi column's buttons would do nothing.
+    #[test]
+    fn write_support_requires_a_launcher_file() {
+        let root = std::env::temp_dir().join(format!("sjel-pack-launchers-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("tools/packs-directory")).unwrap();
+        std::fs::write(root.join("tools/packs-claude"), "launcher").unwrap();
+        let mut view = json!({"harnesses": [
+            {"id": "claude"}, {"id": "sjel-agent"}, {"id": "antigravity"},
+            {"id": "directory"}, {"id": "../claude"}
+        ]});
+        annotate_write_support(&root, &mut view);
+        let supported: Vec<_> = view["harnesses"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h["writeSupported"].as_bool().unwrap())
+            .collect();
+        assert_eq!(supported, [true, false, false, false, false]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn command_details_preserve_partial_success_and_failure() {
+        assert_eq!(
+            command_detail("coding synced", "writing failed"),
+            "coding synced\nwriting failed"
+        );
+        assert_eq!(command_detail("", "failure"), "failure");
+        assert_eq!(command_detail("success", ""), "success");
+        assert_eq!(command_detail("", ""), "");
+    }
+
     #[test]
     fn every_verb_reaches_the_harness_own_launcher() {
         let (tool, args) = plan_pack_write("deploy", "claude", &packs(&["coding"])).unwrap();

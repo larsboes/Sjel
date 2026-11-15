@@ -54,6 +54,22 @@ tools/harnesses promote <skill> --pack <p>   # a harness skill Sjel does not own
 tools/harnesses accept <pack> <skill>        # an edit to a skill Sjel already owns
 ```
 
+### Automatic maintenance
+
+`profiles.toml [maintenance].harnesses` selects maintained harnesses independently of
+installation and profile bindings. `tools/harnesses list` shows both states; JSON status
+includes `maintained`. Unlisted harnesses remain installed and unchanged.
+
+`tools/harnesses maintain --check` checks existing deployments without writing.
+`tools/harnesses maintain` refreshes clean, outdated Sjel-owned units through the shared
+installer and verifies destination status. It does not activate profiles, add missing units,
+remove units or change registry selections. Drift, missing recorded units and installation
+failures return a failure for resolution; other clean units can still refresh. Upstream-managed
+components remain with their own lifecycle.
+
+The existing [host-patch job](../../services/host-patch/README.md) runs maintenance on its
+normal schedule and records failures in its receipt. Configuration errors fail closed.
+
 ### Harness profiles
 
 `profiles.toml` binds harnesses to profiles through `[harness_profile]`. A named entry takes

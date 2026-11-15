@@ -100,7 +100,7 @@ fn pi_agents_root() -> PathBuf {
 
 /// The agent channel's config: the general engine pointed at a flat destination, with manifest
 /// skills switched off because this adapter registers those rather than copying them.
-fn agents_config(skill_config: &DeployConfig) -> DeployConfig {
+pub(super) fn agents_config(skill_config: &DeployConfig) -> DeployConfig {
     let root = pi_agents_root();
     DeployConfig {
         sjel_root: skill_config.sjel_root.clone(),

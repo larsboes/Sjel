@@ -27,7 +27,7 @@ tools/packs-claude — materialize Sjel Packs into Claude Code.
   tools/packs-claude status [<pack>|--all]  show source/install/drift state
   tools/packs-claude deploy <pack>...       install one or more Packs
   tools/packs-claude adopt <pack>...        take ownership of identical copies already in place
-  tools/packs-claude sync <pack>|--all      update already-deployed Packs
+  tools/packs-claude sync <pack>...|--all   update already-deployed Packs
   tools/packs-claude remove <pack>...       remove one or more owned Packs
   tools/packs-claude use [<profile>]        activate a profile (or list them interactively)
 
@@ -42,7 +42,7 @@ tools/packs-codex — materialize Sjel Packs.
 
   tools/packs-codex status [<pack>|--all]  show source/install/drift state
   tools/packs-codex deploy <pack>...       install one or more Packs
-  tools/packs-codex sync <pack>|--all      update already-deployed Packs
+  tools/packs-codex sync <pack>...|--all   update already-deployed Packs
   tools/packs-codex remove <pack>...       remove one or more owned Packs
   tools/packs-codex migrate-generated <pack> --accept-current
                                             adopt generated-artifact exclusions after review
@@ -58,7 +58,7 @@ tools/packs-opencode — materialize Sjel Packs into OpenCode.
 
   tools/packs-opencode status [<pack>|--all]  show source/install/drift state
   tools/packs-opencode deploy <pack>...       install one or more Packs
-  tools/packs-opencode sync <pack>|--all      update already-deployed Packs
+  tools/packs-opencode sync <pack>...|--all   update already-deployed Packs
   tools/packs-opencode remove <pack>...       remove one or more owned Packs
   tools/packs-opencode list                   list available Packs
   tools/harnesses use <profile> --harness opencode  activate a profile
@@ -73,7 +73,7 @@ tools/packs-copilot — materialize Sjel Packs into GitHub Copilot CLI.
   tools/packs-copilot status [<pack>|--all]  show source/install/drift state
   tools/packs-copilot deploy <pack>...       install one or more Packs
   tools/packs-copilot adopt <pack>...        take ownership of identical copies already in place
-  tools/packs-copilot sync <pack>|--all      update already-deployed Packs
+  tools/packs-copilot sync <pack>...|--all   update already-deployed Packs
   tools/packs-copilot remove <pack>...       remove one or more owned Packs
   tools/packs-copilot list                   list available Packs
   tools/harnesses use <profile> --harness copilot  activate a profile
@@ -189,22 +189,37 @@ fn adopt(config: &DeployConfig, packs: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn sync(config: &DeployConfig, target: Option<&str>, header_on_all: bool) -> Result<(), String> {
-    match target {
-        Some("--all") => {
-            let state = engine::read_state(config)?;
-            for pack in state.packs.keys() {
-                let lines = mutate::sync_pack(config, pack)?;
-                emit(&lines, if header_on_all { Some(pack) } else { None });
-            }
-            Ok(())
+fn sync(config: &DeployConfig, targets: &[String], header_on_all: bool) -> Result<(), String> {
+    if targets.is_empty() {
+        return Err("sync needs a pack or --all".to_string());
+    }
+    let all = targets.iter().any(|target| target == "--all");
+    if all && targets.len() != 1 {
+        return Err("sync: --all must be used alone, without pack names".to_string());
+    }
+    let packs = if all {
+        engine::read_state(config)?.packs.into_keys().collect()
+    } else {
+        targets.to_vec()
+    };
+    let mut failures = Vec::new();
+    for pack in &packs {
+        match mutate::sync_pack(config, pack) {
+            Ok(lines) => emit(
+                &lines,
+                if !all || header_on_all {
+                    Some(pack)
+                } else {
+                    None
+                },
+            ),
+            Err(error) => failures.push(format!("{pack}: {error}")),
         }
-        Some(pack) => {
-            let lines = mutate::sync_pack(config, pack)?;
-            emit(&lines, None);
-            Ok(())
-        }
-        None => Err("sync needs a pack or --all".to_string()),
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("\n"))
     }
 }
 
@@ -336,9 +351,9 @@ fn claude(registry: &Registry, args: &[String]) -> Result<(), String> {
             }
             adopt(&config, rest)
         }
-        "sync" => sync(&config, rest.first().map(String::as_str), true).map_err(|e| {
+        "sync" => sync(&config, rest, true).map_err(|e| {
             if e == "sync needs a pack or --all" {
-                "usage: tools/packs-claude sync <pack>|--all".to_string()
+                "usage: tools/packs-claude sync <pack>...|--all".to_string()
             } else {
                 e
             }
@@ -372,9 +387,9 @@ fn codex(registry: &Registry, args: &[String]) -> Result<(), String> {
             }
             deploy(&config, rest, false)
         }
-        "sync" => sync(&config, rest.first().map(String::as_str), true).map_err(|e| {
+        "sync" => sync(&config, rest, true).map_err(|e| {
             if e == "sync needs a pack or --all" {
-                "usage: tools/packs-codex sync <pack>|--all".to_string()
+                "usage: tools/packs-codex sync <pack>...|--all".to_string()
             } else {
                 e
             }
@@ -446,7 +461,7 @@ fn opencode(registry: &Registry, args: &[String]) -> Result<(), String> {
             if rest.is_empty() {
                 return Err(OPENCODE_HELP.to_string());
             }
-            sync(&config, rest.first().map(String::as_str), false)
+            sync(&config, rest, false)
         }
         "remove" => {
             if rest.is_empty() {
@@ -487,7 +502,7 @@ fn copilot(registry: &Registry, args: &[String]) -> Result<(), String> {
             if rest.is_empty() {
                 return Err(COPILOT_HELP.to_string());
             }
-            sync(&config, rest.first().map(String::as_str), false)
+            sync(&config, rest, false)
         }
         "remove" => {
             if rest.is_empty() {
@@ -608,7 +623,7 @@ packs = ["coding"]
     #[test]
     fn opencode_help_lists_global_controls() {
         assert!(OPENCODE_HELP.contains("tools/packs-opencode deploy <pack>..."));
-        assert!(OPENCODE_HELP.contains("tools/packs-opencode sync <pack>|--all"));
+        assert!(OPENCODE_HELP.contains("tools/packs-opencode sync <pack>...|--all"));
         assert!(OPENCODE_HELP.contains("tools/harnesses use <profile> --harness opencode"));
         assert!(OPENCODE_HELP.contains("OPENCODE_SKILLS_DIR"));
         assert!(OPENCODE_HELP.contains("SJEL_OPENCODE_PACKS_STATE_FILE"));

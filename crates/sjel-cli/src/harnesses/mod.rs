@@ -24,6 +24,7 @@ mod agentfile;
 pub(crate) mod antigravity;
 pub mod engine;
 mod frontmatter;
+mod maintenance;
 pub(crate) mod mutate;
 pub(crate) mod pi;
 pub(crate) mod pi_settings;
@@ -37,6 +38,7 @@ const HELP: &str = "tools/harnesses — Packs across every agent harness at once
   list                                  which harnesses exist, and which are installed here
   status [<pack>] [--json]              one matrix: every Pack skill x every harness
   drift [<pack>] [--diff]               per-file detail for anything that drifted
+  maintain [--check]                   refresh existing clean units on maintained harnesses
   sync <pack>|--all                     one-way Sjel -> harness (installed harnesses only)
   use <profile> [--harness <id>]        activate a profile on every installed harness (or one)
   apply [--harness <id>]                activate the profile profiles.toml [harness_profile] binds to each harness
@@ -58,7 +60,7 @@ pub fn run(args: &[String]) -> ExitCode {
             return ExitCode::SUCCESS;
         }
         "list" | "status" | "drift" | "sync" | "use" | "apply" | "promote" | "accept"
-        | "discard" => {}
+        | "discard" | "maintain" => {}
         other => {
             eprintln!("{HELP}");
             eprintln!("harnesses: unknown verb '{other}'");
@@ -74,12 +76,13 @@ pub fn run(args: &[String]) -> ExitCode {
     };
     let registry = Registry::new(&root);
     let result = match verb {
-        "list" => list(&registry),
+        "list" => list(&registry, &root),
         "status" => status(&registry, args),
         "drift" => drift(&registry, args),
         "sync" => sync(&registry, args),
         "use" => use_profile(&registry, &root, args),
         "apply" => apply(&registry, &root, args),
+        "maintain" => maintenance::run(&registry, &root, has(args, "check")),
         "promote" => promote(&registry, &root, args),
         "accept" => accept(&registry, &root, args),
         "discard" => discard(&registry, &root, args),
@@ -108,6 +111,7 @@ fn sync(registry: &Registry, args: &[String]) -> Result<(), String> {
     if pack.is_none() && !all {
         return Err("usage: tools/harnesses sync <pack>|--all [--harness <id>]".to_owned());
     }
+    let mut failures = Vec::new();
     for harness in selected_harnesses(registry, args)? {
         println!("{}:", harness.label);
         if harness.model == Model::Registry {
@@ -135,11 +139,18 @@ fn sync(registry: &Registry, args: &[String]) -> Result<(), String> {
         for target in mutate::sync_targets(pack, all, &known) {
             match mutate::sync_pack(config, &target) {
                 Ok(lines) => lines.iter().for_each(|l| println!("  {l}")),
-                Err(e) => println!("  ✗ {target}: {e}"),
+                Err(e) => {
+                    println!("  ✗ {target}: {e}");
+                    failures.push(format!("{}: {target}: {e}", harness.id));
+                }
             }
         }
     }
-    Ok(())
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("\n"))
+    }
 }
 
 /// Activate a profile on every selected harness through the registry: pi rewrites settings.json
@@ -515,8 +526,9 @@ pub(crate) fn statuses_for(
 
 // ---- list ----------------------------------------------------------------------------------
 
-fn list(registry: &Registry) -> Result<(), String> {
-    println!("harness      state       delivery       marker");
+fn list(registry: &Registry, root: &Path) -> Result<(), String> {
+    let maintained = maintenance::maintained(root, registry)?;
+    println!("harness      state       maintenance   delivery       marker");
     for h in &registry.harnesses {
         let state = if is_installed(h) {
             "installed"
@@ -524,9 +536,14 @@ fn list(registry: &Registry) -> Result<(), String> {
             "absent   "
         };
         println!(
-            "{:<12} {}   {:<14} {}",
+            "{:<12} {}   {:<13} {:<14} {}",
             h.id,
             state,
+            if maintained.contains(h.id) {
+                "maintained"
+            } else {
+                "excluded"
+            },
             h.model.as_str(),
             h.marker.display()
         );
@@ -577,6 +594,7 @@ struct HarnessView {
     id: &'static str,
     label: &'static str,
     installed: bool,
+    maintained: bool,
     model: &'static str,
     marker: String,
     destination: Option<String>,
@@ -630,6 +648,8 @@ fn status(registry: &Registry, args: &[String]) -> Result<(), String> {
     if has(args, "json") {
         // The machine-readable shape any surface reads — a dashboard panel, a doctor section,
         // a hook. Emitted by the same code path as the table so the two cannot disagree.
+        let maintained =
+            maintenance::maintained(&registry.harnesses[0].config.sjel_root, registry)?;
         let mut harnesses = Vec::with_capacity(registry.harnesses.len());
         for h in &registry.harnesses {
             let units = statuses_for(h, selected.as_deref())?
@@ -671,6 +691,7 @@ fn status(registry: &Registry, args: &[String]) -> Result<(), String> {
                 id: h.id,
                 label: h.label,
                 installed: is_installed(h),
+                maintained: maintained.contains(h.id),
                 model: h.model.as_str(),
                 marker: h.marker.display().to_string(),
                 destination: match h.model {

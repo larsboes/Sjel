@@ -112,8 +112,28 @@ no profile until the next `use <profile>` on that machine.
    - Recommendation (an estimate, not measured): the store. It closes defect 3 and the vault
      case with the engine that exists, and the P6 digest binds each copy to its approval.
 
-Coding harnesses use `coding-harness`; pi keeps `full`. Content-pinned upstream snapshots are
-reference material; runtime selection follows the owned-component decision in section 5.
+Coding harnesses use `coding-harness`, including only `web-research` from the knowledge Pack;
+vault and learning skills remain excluded. Pi keeps `full`. Content-pinned upstream snapshots
+are reference material; runtime selection follows the owned-component decision in section 5.
+
+The [AI Studio handoff](../../Packs/knowledge/skills/web-research/references/ai-studio.md) uses
+Sjel clip metadata and numeric document IDs to resume on done, with topic and freshness checks.
+Open acceptance: one newly clipped answer is retrieved from the handoff, then its decisive
+claims are checked against original sources. Source metadata validation and deployed clip-list
+MCP discovery pass; this full handoff remains unchecked until the user saves an answer.
+Pi and Antigravity read the updated source. Claude and Codex still lack `web-research`;
+install only that selected unit, without activating an entire profile or adding vault skills.
+OpenCode and Copilot remain installed but excluded from routine maintenance. The deployment
+restriction and rename-preflight gap remain in [tooling.md](tooling.md#open); the latest
+refresh of existing Claude and Codex units succeeded through the atomic installer.
+
+Automatic maintenance uses `profiles.toml [maintenance].harnesses` and the existing host-patch
+schedule. `tools/harnesses maintain` refreshes only existing clean owned units, preserves local
+drift and unit selection, and verifies destination status. The host-patch persistence unit is
+installed. Focused verification: 443 sjel-cli unit tests, 114 sjel-status tests and the
+host-patch fixture tests pass, including regressions for corrupt manifests and removed units;
+live refresh and the subsequent check pass. New-unit deployment and the clipped-answer acceptance remain open. Full-workspace checks did
+not run.
 
 ## 5. Work packages
 

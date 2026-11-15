@@ -1393,6 +1393,9 @@ pub struct HarnessView {
     pub destination: Option<String>,
     #[serde(default)]
     pub cli: String,
+    /// Whether the status gateway can execute this harness's Pack launcher.
+    #[serde(default)]
+    pub write_supported: bool,
     #[serde(default)]
     pub units: Vec<PackUnitView>,
     #[serde(default)]

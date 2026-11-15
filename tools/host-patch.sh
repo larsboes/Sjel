@@ -101,6 +101,7 @@ update_globals() {
   [ $? -ne 2 ]
 }
 step "$SJEL_ROOT/tools/updates" "cargo and npm globals" update_globals
+step "$SJEL_ROOT/tools/harnesses" "owned harness deployments" "$SJEL_ROOT/tools/harnesses" maintain
 
 echo
 echo "▸ tools/audit"

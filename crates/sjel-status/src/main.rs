@@ -382,7 +382,8 @@ async fn main() {
         }
         None => sjel_server::InboundAuth::from_deployment(),
     }
-    .require_credential();
+    .require_credential()
+    .admit_agents(CAPABILITY, AGENT_ROUTES);
     // The same router on the local network, for paired devices only, when the deployment
     // enabled it. Without the registry there is nothing to admit, so it does not start.
     if let Some(verifier) = verifier {
@@ -425,6 +426,18 @@ async fn lan_handler() -> Json<Value> {
 /// (`SJEL_SJEL_STATUS_ALLOWED_ORIGIN_HOSTS` -- the doubling is what the derivation
 /// produces, and `libs/sjel-server/src/origin.rs` asserts exactly this string).
 const CAPABILITY: &str = "sjel-status";
+
+/// The only routes the agent token reaches on this process. Everything else here starts, stops,
+/// configures or proxies, so the gate closes it to an agent whatever the owner's mode says.
+const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
+    sjel_server::agent_policy::AgentRoutes {
+        only: &[
+            ("GET", "/api/sjel-status/backups"),
+            ("GET", "/api/sjel-status/backup/targets"),
+            ("GET", "/api/sjel-status/backup/runs"),
+        ],
+        ..sjel_server::agent_policy::AgentRoutes::NONE
+    };
 
 /// The wired router, so a test can drive the real thing rather than a handler.
 ///
@@ -1205,6 +1218,40 @@ mod origin_tests {
                 StatusCode::OK,
                 "the guard refused a caller it must admit: {origin:?}"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod agent_route_tests {
+    use super::AGENT_ROUTES;
+
+    #[test]
+    fn the_agent_reaches_the_backup_reads_and_nothing_else() {
+        for path in [
+            "/api/sjel-status/backups",
+            "/api/sjel-status/backup/targets",
+            "/api/sjel-status/backup/runs",
+        ] {
+            assert!(!AGENT_ROUTES.closes("GET", path), "{path}");
+            assert!(AGENT_ROUTES.closes("POST", path), "POST {path}");
+        }
+        for (method, path) in [
+            ("POST", "/api/sjel-status/backup/policy"),
+            ("POST", "/api/sjel-status/backup/verify"),
+            ("POST", "/api/sjel-status/capabilities/finance/backup"),
+            ("POST", "/api/sjel-status/capabilities/finance/start"),
+            ("GET", "/api/sjel-status/setup"),
+            ("POST", "/api/sjel-status/setup/apply"),
+            ("GET", "/api/sjel-status/credentials"),
+            ("GET", "/api/sjel-status/mirror"),
+            ("GET", "/api/sjel-status/agent"),
+            ("POST", "/api/sjel-status/agent/mode"),
+            ("GET", "/api/sjel-status/capabilities"),
+            ("GET", "/api/finance/accounts"),
+            ("GET", "/"),
+        ] {
+            assert!(AGENT_ROUTES.closes(method, path), "{method} {path}");
         }
     }
 }

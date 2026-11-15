@@ -45,7 +45,7 @@ use sha2::{Digest, Sha256};
 use crate::agent_policy::{
     write_digest, AgentCall, AgentRoutes, Consumed, Mode, PolicyFiles, Tier,
 };
-use sjel_pseudonymize::view::{agent_view_public, cap_view, is_withheld, trusted_view};
+use sjel_pseudonymize::view::{agent_view_public, cap_view, is_withheld, trusted_view_public};
 use sjel_pseudonymize::{EntityRegistry, PseudonymizerSession};
 
 /// The header an agent may send to scope its tokens to one conversation.
@@ -661,7 +661,7 @@ async fn pseudonymize_response(
         .filter(|k| !k.is_empty())
         .collect();
     let (report, receipt) = if tier.reads_names() {
-        let report = trusted_view(&mut value);
+        let report = trusted_view_public(&mut value, &public);
         let receipt = format!(
             "tier {}: names verbatim; contact, account and location fields removed",
             tier.as_str()

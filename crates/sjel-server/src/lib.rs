@@ -321,6 +321,7 @@ mod http_tests {
         confirm: &[("POST", "/triage/{id}/gmail")],
         get_writes: &[("GET", "/discover")],
         closed: &[("POST", "/shell"), ("GET", "/shell/{id}/stream")],
+        only: &[],
     };
 
     /// Agent access for "comms" under `mode`, with its own policy files in a temp directory.
@@ -441,6 +442,52 @@ mod http_tests {
             .await
             .unwrap();
         assert_eq!(whoami.status().as_u16(), 200);
+    }
+
+    /// An allowlist admits the agent only on its routes; the rest answer as closed, and the
+    /// deployment token still reaches every route.
+    #[tokio::test]
+    async fn an_allowlist_closes_every_route_it_does_not_name() {
+        const ONLY: agent_policy::AgentRoutes = agent_policy::AgentRoutes {
+            only: &[("GET", "/whoami")],
+            ..agent_policy::AgentRoutes::NONE
+        };
+        let dir = std::env::temp_dir().join(format!("sjel-gate-only-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let files = std::sync::Arc::new(agent_policy::PolicyFiles::new(dir));
+        files.set_mode("comms", agent_policy::Mode::Auto).unwrap();
+        let access = agent_access().for_capability("comms", ONLY, Some(files));
+        let auth = InboundAuth::with_token(Some("deploy-token".into()))
+            .require_credential()
+            .with_agent_access(access);
+        let base = serve_agent_router(auth).await;
+        let client = reqwest::Client::new();
+
+        let named = client
+            .get(format!("{base}/whoami"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(named.status().as_u16(), 200);
+
+        for (method, path) in [("GET", "/triage"), ("POST", "/triage/x/status"), ("POST", "/whoami")] {
+            let response = client
+                .request(method.parse().unwrap(), format!("{base}{path}"))
+                .bearer_auth("agent-token")
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status().as_u16(), 401, "{method} {path}");
+        }
+
+        let operator = client
+            .get(format!("{base}/triage"))
+            .bearer_auth("deploy-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(operator.status().as_u16(), 200);
     }
 
     #[tokio::test]

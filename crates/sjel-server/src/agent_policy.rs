@@ -112,6 +112,9 @@ pub struct AgentRoutes {
     /// A route an agent token never reaches, whatever the mode. For the one thing the gate cannot
     /// check: an interactive shell, where a keystroke is a command and no card can precede it.
     pub closed: &'static [(&'static str, &'static str)],
+    /// When non-empty, the only routes an agent token reaches; every other route is closed. For
+    /// a capability whose routes are operator controls except for a few reads.
+    pub only: &'static [(&'static str, &'static str)],
 }
 
 impl AgentRoutes {
@@ -119,6 +122,7 @@ impl AgentRoutes {
         confirm: &[],
         get_writes: &[],
         closed: &[],
+        only: &[],
     };
 
     pub fn confirms(&self, method: &str, path: &str) -> bool {
@@ -131,6 +135,7 @@ impl AgentRoutes {
 
     pub fn closes(&self, method: &str, path: &str) -> bool {
         any_matches(self.closed, method, path)
+            || (!self.only.is_empty() && !any_matches(self.only, method, path))
     }
 }
 

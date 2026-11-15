@@ -573,6 +573,7 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
         ],
         get_writes: &[],
         closed: &[("POST", "/triage/mail-evidence/replay")],
+        only: &[],
     };
 
 #[tokio::main]

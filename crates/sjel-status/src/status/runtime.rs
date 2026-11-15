@@ -44,8 +44,8 @@ pub(crate) async fn runtime_handler() -> Result<Json<Status>, Error> {
     .map(Json)
 }
 
-// sjel-status deliberately does not admit_agents: the existing credential middleware
-// rejects agent tokens before any operator control, including this route, can run.
+// The agent gate closes this route: sjel-status admits the agent token only on the backup
+// reads in `AGENT_ROUTES` (`main.rs`).
 pub(crate) async fn runtime_update_handler(
     Json(update): Json<Update>,
 ) -> Result<Json<Status>, Error> {

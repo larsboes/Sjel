@@ -193,8 +193,17 @@ pub(crate) fn backup_state(age_secs: Option<u64>, c: &BackupContract) -> &'stati
     }
 }
 
+/// Keys of the backup reads that stay verbatim for an agent: timestamps and digests carry no
+/// personal value, and a restore check compares the digest.
+const PUBLIC_FIELDS: [(&str, &str); 1] = [(
+    sjel_server::agent::PUBLIC_FIELDS_HEADER,
+    "last_success, sha256, started_at, finished_at, seen_at, verified_at, verified_verdict",
+)];
+
+type Public = ([(&'static str, &'static str); 1], Json<Value>);
+
 /// Every capability that declares a backup contract, with the age of its last one.
-pub(crate) async fn backups_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+pub(crate) async fn backups_handler() -> Result<Public, (StatusCode, Json<Value>)> {
     let services = registry().await.map_err(bad_gateway)?;
     let overlay = overlay_root().map_err(bad_gateway)?;
     let now = now_epoch();
@@ -244,8 +253,9 @@ pub(crate) async fn backups_handler() -> Result<Json<Value>, (StatusCode, Json<V
             "attempt": attempts.iter().find(|row| row.capability == service.name),
         }));
     }
-    Ok(Json(
-        json!({ "backups": out, "attempt_error": attempt_error }),
+    Ok((
+        PUBLIC_FIELDS,
+        Json(json!({ "backups": out, "attempt_error": attempt_error })),
     ))
 }
 
@@ -365,13 +375,13 @@ pub(crate) async fn backup_handler(
 ///
 /// The declarations are re-read from the tools on every call, so a capability that starts
 /// declaring a contract appears without a restart of this process.
-pub(crate) async fn backup_targets_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+pub(crate) async fn backup_targets_handler() -> Result<Public, (StatusCode, Json<Value>)> {
     let root = sjel_root().map_err(bad_gateway)?;
     let store = backup_store().map_err(bad_gateway)?;
     let declared = ::backup::targets::declared(&root).map_err(gateway)?;
     store.refresh_targets(&declared).map_err(gateway)?;
     let targets = store.targets().map_err(gateway)?;
-    Ok(Json(json!({ "targets": targets })))
+    Ok((PUBLIC_FIELDS, Json(json!({ "targets": targets }))))
 }
 
 /// `GET /api/sjel-status/backup/runs?limit=N` — every attempt, newest first.
@@ -380,12 +390,12 @@ pub(crate) async fn backup_targets_handler() -> Result<Json<Value>, (StatusCode,
 /// answerable, which no receipt ever could.
 pub(crate) async fn backup_runs_handler(
     axum::extract::Query(query): axum::extract::Query<RunQuery>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+) -> Result<Public, (StatusCode, Json<Value>)> {
     let store = backup_store().map_err(bad_gateway)?;
     let limit = query.limit.unwrap_or(50).clamp(1, 500);
     let runs = store.runs(limit).map_err(gateway)?;
     let running = store.running_count().map_err(gateway)?;
-    Ok(Json(json!({ "runs": runs, "running": running })))
+    Ok((PUBLIC_FIELDS, Json(json!({ "runs": runs, "running": running }))))
 }
 
 #[derive(Deserialize, Default)]

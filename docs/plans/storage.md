@@ -354,15 +354,11 @@ Open:
    manual runs. `tools/doctor` now names an off timer, and the timer is back on at 24h
    (2026-11-03). Open: why it was turned off.
 2. **Live run inspection.** Backup status/history commands and new-receipt enforcement shipped
-   in `4fa41461`; all 16 backup tests, 452 CLI tests and scoped Clippy pass.
-   Live run inspection on 2026-11-15 returned `invalid or missing authentication token`,
-   including with `SJEL_AGENT=1` and the enrolled agent helper.
-   Source inspection shows `crates/sjel-status/src/main.rs` never calls `admit_agents`;
-   the refusal does not establish a broken token. Define and test narrowly scoped read-only
-   backup inspection without opening lifecycle, setup or credential routes to agents.
-   Token rotation is not the diagnostic remedy.
-   Scheduled firing, mounted-target failure recording and isolated live restores remain
-   unverified; no timer or credential was changed.
+   in `4fa41461`. The agent token now reads `GET /backups`, `/backup/targets` and
+   `/backup/runs` on `sjel-status` and nothing else there: `AgentRoutes::only` closes every
+   other route, including the proxy fallback (`crates/sjel-status/src/main.rs`, `AGENT_ROUTES`).
+   Timestamps and digests stay verbatim in both agent views. `GET /backup/targets` refreshes the
+   declared-target cache, so it is a write only in the sense of a derived cache.
 3. **Per-kind proof.** A target kind counts as verified only when its own restore passes. Only
    the local kind is rehearsed. iCloud and ssh are unproven.
 4. **Documents on the external SSD.** Originals are local. Done when a restore from the selected

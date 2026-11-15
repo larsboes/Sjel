@@ -36,6 +36,7 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
             ("POST", "/api/inventory-links/remove"),
             ("GET", "/api/links"),
         ],
+        only: &[],
     };
 
 const ROUTES: &[route_manifest::Route] = &[

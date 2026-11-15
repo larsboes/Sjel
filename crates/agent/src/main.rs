@@ -74,6 +74,7 @@ const AGENT_ROUTES: AgentRoutes = AgentRoutes {
         ("POST", ROUTE_AGENT_TERMINAL_RESIZE),
         ("DELETE", ROUTE_AGENT_TERMINAL_DELETE),
     ],
+    only: &[],
 };
 
 struct AppState {

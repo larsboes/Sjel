@@ -549,8 +549,8 @@ pub struct Store {
 
 type Error = Box<dyn std::error::Error>;
 
-pub(crate) const SNAPSHOT_SELECT: &str =
-    "SELECT i.id, i.label, i.revision, s.state, s.id FROM inventory_item i
+pub(crate) const SNAPSHOT_COLUMNS: &str = "i.id, i.label, i.revision, s.state, s.id";
+pub(crate) const SNAPSHOT_FROM: &str = "FROM inventory_item i
     LEFT JOIN inventory_item_state s ON s.id = (SELECT id FROM inventory_item_state
         WHERE item_id = i.id ORDER BY since DESC, id DESC LIMIT 1)";
 
@@ -571,7 +571,7 @@ pub(crate) fn item_snapshot(
     id: &str,
 ) -> rusqlite::Result<Option<inventory_api::MailMatchSnapshot>> {
     conn.query_row(
-        &format!("{SNAPSHOT_SELECT} WHERE i.id = ?1"),
+        &format!("SELECT {SNAPSHOT_COLUMNS} {SNAPSHOT_FROM} WHERE i.id = ?1"),
         [id],
         read_snapshot,
     )
@@ -696,6 +696,19 @@ impl Store {
                 decision TEXT, item_id TEXT, approved_title TEXT,
                 UNIQUE(source_id, line_id, event)
             );
+            CREATE TABLE IF NOT EXISTS {prefix}_item_alias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                namespace TEXT NOT NULL, value TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('physical_item','product_model')),
+                item_id TEXT NOT NULL, reviewed_item_revision INTEGER NOT NULL,
+                reviewed_state_id INTEGER NOT NULL, source_ref TEXT NOT NULL,
+                data_class TEXT NOT NULL CHECK (data_class IN ('c0','c1')),
+                version INTEGER NOT NULL DEFAULT 1,
+                reviewed_at TEXT NOT NULL, revoked_at TEXT
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS {prefix}_active_alias
+                ON {prefix}_item_alias(namespace, value, kind, item_id)
+                WHERE revoked_at IS NULL;
             CREATE TABLE IF NOT EXISTS {prefix}_sync_operation (
                 operation_id TEXT PRIMARY KEY,
                 revision INTEGER NOT NULL,

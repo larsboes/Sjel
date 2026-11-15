@@ -48,6 +48,17 @@ async fn health() -> &'static str {
 /// source and fails when a route is missing here.
 const ROUTES: &[route_manifest::Route] = &[
     route_manifest::Route {
+        method: "POST", path: "/api/item-aliases",
+        summary: "Record an owner-reviewed source-scoped item or product alias at a current snapshot.",
+        request_schema: Some(route_manifest::schema_of::<inventory_api::aliases::AliasReview>),
+    },
+    route_manifest::Route {
+        method: "POST", path: "/api/item-aliases/{id}/revoke",
+        summary: "Revoke an alias review at its version, retaining its provenance.",
+        request_schema: Some(route_manifest::schema_of::<inventory_api::aliases::AliasRevocation>),
+    },
+    r("GET", "/api/item-refs/{reference}/aliases", "Owner-reviewed aliases and retained revocations for an item reference."),
+    route_manifest::Route {
         method: "POST",
         path: "/api/items/resolve",
         summary: "Resolve an item reference or retrieve review-only title candidates. Never changes inventory.",
@@ -830,6 +841,18 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/inventory", get(api_inventory))
         .route("/api/item-refs/{reference}", get(api_item_ref))
         .route(
+            "/api/item-refs/{reference}/aliases",
+            get(crate::aliases::list),
+        )
+        .route(
+            "/api/item-aliases",
+            post(crate::aliases::review).layer(axum::extract::DefaultBodyLimit::max(4096)),
+        )
+        .route(
+            "/api/item-aliases/{id}/revoke",
+            post(crate::aliases::revoke).layer(axum::extract::DefaultBodyLimit::max(512)),
+        )
+        .route(
             "/api/items/resolve",
             post(crate::resolution::resolve).layer(axum::extract::DefaultBodyLimit::max(2048)),
         )
@@ -881,6 +904,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
     sjel_server::agent_policy::AgentRoutes {
         closed: &[
+            ("POST", "/api/item-aliases"),
+            ("POST", "/api/item-aliases/{id}/revoke"),
+            ("GET", "/api/item-refs/{reference}/aliases"),
             ("POST", "/api/items/resolve"),
             ("GET", "/api/mail-proposals"),
             ("GET", "/api/item-refs/{reference}"),
@@ -912,6 +938,9 @@ mod route_manifest_tests {
     #[test]
     fn mail_routes_are_closed_to_agent_tokens() {
         for (method, path) in [
+            ("POST", "/api/item-aliases"),
+            ("POST", "/api/item-aliases/1/revoke"),
+            ("GET", "/api/item-refs/inv:61/aliases"),
             ("POST", "/api/items/resolve"),
             ("GET", "/api/mail-proposals"),
             ("GET", "/api/item-refs/inv:61"),

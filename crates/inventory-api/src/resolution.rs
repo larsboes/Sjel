@@ -2,12 +2,13 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Exactly one selector: a canonical item reference or an untrusted title mention.
+/// Exactly one selector: a canonical reference, untrusted title or reviewed scoped alias.
 #[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ResolveRequest {
     pub reference: Option<String>,
     pub title: Option<String>,
+    pub alias: Option<crate::aliases::AliasKey>,
 }
 
 /// Whether physical identity is established, unresolved with candidates, or unknown.
@@ -26,11 +27,14 @@ pub enum CandidateReason {
     Reference,
     TitleEqual,
     TokenOverlap,
+    ReviewedItemAlias,
+    ReviewedProductAlias,
 }
 
 /// A current review snapshot with an explainable retrieval score.
 #[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct ResolutionCandidate {
+    pub alias_id: Option<i64>,
     #[serde(flatten)]
     pub item: crate::MailMatchSnapshot,
     pub typed_ref: String,

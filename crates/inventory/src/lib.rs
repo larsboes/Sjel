@@ -5,6 +5,7 @@
 //! This is its own capability because `interior` is on-demand, and trips' packing lists need the
 //! rows after every restart.
 
+mod aliases;
 pub mod api;
 pub mod budget;
 pub mod identity;

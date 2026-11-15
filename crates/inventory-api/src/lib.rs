@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod aliases;
 pub mod mail_evidence;
 pub mod resolution;
 

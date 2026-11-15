@@ -180,3 +180,234 @@ async fn candidate_memory_is_bounded_and_ties_are_stable() {
     assert_eq!(result, resolve(&router, json!({"title":"Blue mug"})).await);
     std::fs::remove_file(path).unwrap();
 }
+
+fn alias_key(kind: &str, value: &str) -> Value {
+    json!({"namespace":"source:example","value":value,"kind":kind})
+}
+
+async fn review_body(router: &Router, id: &str, key: Value) -> Value {
+    let (status, snapshot) = request(
+        router,
+        "GET",
+        &format!("/api/items/{id}/mail-match-snapshot"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    json!({"key":key,"reference":encode_item_ref(id).unwrap(),"expected_item_revision":snapshot["item_revision"],"expected_state_id":snapshot["state_id"],"source_ref":"manual:reviewed-label","data_class":"c1"})
+}
+
+async fn review(router: &Router, body: Value) -> Value {
+    let (status, alias) = request(router, "POST", "/api/item-aliases", body, true).await;
+    assert_eq!(status, StatusCode::OK, "{alias}");
+    alias
+}
+
+#[tokio::test]
+async fn aliases_require_owner_review_at_a_current_snapshot_and_keep_exact_scope() {
+    let (router, path) = router("alias-review");
+    seed(&router, "one", "Blue mug").await;
+    let key = alias_key("physical_item", "SERIAL-1");
+    let body = review_body(&router, "one", key.clone()).await;
+    assert_eq!(
+        request(&router, "POST", "/api/item-aliases", body.clone(), false)
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED
+    );
+    for field in ["expected_item_revision", "expected_state_id"] {
+        let mut stale = body.clone();
+        stale[field] = json!(999);
+        assert_eq!(
+            request(&router, "POST", "/api/item-aliases", stale, true)
+                .await
+                .0,
+            StatusCode::CONFLICT
+        );
+    }
+    for class in ["c2", "c3", "unknown"] {
+        let mut invalid = body.clone();
+        invalid["data_class"] = json!(class);
+        assert_eq!(
+            request(&router, "POST", "/api/item-aliases", invalid, true)
+                .await
+                .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    let alias = review(&router, body.clone()).await;
+    assert_eq!(alias, review(&router, body.clone()).await);
+    let exact = resolve(&router, json!({"alias":key})).await;
+    assert_eq!(exact["status"], "exact");
+    assert_eq!(exact["candidates"][0]["alias_id"], alias["id"]);
+    assert_eq!(exact["candidates"][0]["reason"], "reviewed_item_alias");
+    let mut other_scope = key.clone();
+    other_scope["namespace"] = json!("source:other");
+    assert_eq!(
+        resolve(&router, json!({"alias":other_scope})).await["status"],
+        "unknown"
+    );
+    assert_eq!(
+        resolve(
+            &router,
+            json!({"alias":alias_key("physical_item","serial-1")})
+        )
+        .await["status"],
+        "unknown"
+    );
+    assert_eq!(
+        resolve(&router, json!({"title":"SERIAL-1"})).await["status"],
+        "unknown"
+    );
+    let mut changed = body;
+    changed["source_ref"] = json!("manual:different-review");
+    assert_eq!(
+        request(&router, "POST", "/api/item-aliases", changed, true)
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+    std::fs::remove_file(path).unwrap();
+}
+
+#[tokio::test]
+async fn product_models_and_duplicate_physical_aliases_remain_ambiguous() {
+    let (router, path) = router("alias-ambiguity");
+    seed(&router, "one", "Same product").await;
+    seed(&router, "two", "Same product").await;
+    let product = alias_key("product_model", "MODEL-1");
+    review(&router, review_body(&router, "one", product.clone()).await).await;
+    assert_eq!(
+        resolve(&router, json!({"alias":product})).await["status"],
+        "ambiguous"
+    );
+    review(&router, review_body(&router, "two", product.clone()).await).await;
+    assert_eq!(
+        resolve(&router, json!({"alias":product})).await["total_candidates"],
+        2
+    );
+    let physical = alias_key("physical_item", "DUPLICATE-SERIAL");
+    for id in ["one", "two"] {
+        review(&router, review_body(&router, id, physical.clone()).await).await;
+    }
+    let result = resolve(&router, json!({"alias":physical})).await;
+    assert_eq!(result["status"], "ambiguous");
+    assert_eq!(result["total_candidates"], 2);
+    let request_body = review_body(&router, "one", alias_key("physical_item", "another")).await;
+    request(
+        &router,
+        "POST",
+        "/api/items/one/state",
+        json!({"state":"gone"}),
+        true,
+    )
+    .await;
+    assert_eq!(
+        request(&router, "POST", "/api/item-aliases", request_body, true)
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+    let historical = alias_key("physical_item", "historical-item");
+    review(
+        &router,
+        review_body(&router, "one", historical.clone()).await,
+    )
+    .await;
+    let result = resolve(&router, json!({"alias":historical})).await;
+    assert_eq!(result["status"], "exact");
+    assert_eq!(result["candidates"][0]["state"], "gone");
+    std::fs::remove_file(path).unwrap();
+}
+
+#[tokio::test]
+async fn revocations_are_versioned_idempotent_and_retained() {
+    let (router, path) = router("alias-revoke");
+    seed(&router, "one", "Blue mug").await;
+    let key = alias_key("physical_item", "SERIAL-1");
+    let body = review_body(&router, "one", key.clone()).await;
+    let alias = review(&router, body.clone()).await;
+    let uri = format!("/api/item-aliases/{}/revoke", alias["id"]);
+    assert_eq!(
+        request(&router, "POST", &uri, json!({"version":2}), true)
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+    let (status, revoked) = request(&router, "POST", &uri, json!({"version":1}), true).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(revoked["version"], 2);
+    assert!(revoked["revoked_at"].is_string());
+    assert_eq!(
+        request(&router, "POST", &uri, json!({"version":1}), true)
+            .await
+            .1,
+        revoked
+    );
+    assert_eq!(
+        resolve(&router, json!({"alias":key})).await["status"],
+        "unknown"
+    );
+    let replacement = review(&router, body).await;
+    assert_ne!(replacement["id"], alias["id"]);
+    let uri = format!("/api/item-refs/{}/aliases", encode_item_ref("one").unwrap());
+    assert_eq!(
+        request(&router, "GET", &uri, Value::Null, false).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (_, history) = request(&router, "GET", &uri, Value::Null, true).await;
+    assert_eq!(history["total"], 2);
+    assert_eq!(history["aliases"][1], revoked);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[tokio::test]
+async fn item_id_reuse_never_resurrects_an_old_alias() {
+    let (router, path) = router("alias-lifetime");
+    seed(&router, "one", "Original item").await;
+    let key = alias_key("physical_item", "SERIAL-1");
+    let body = review_body(&router, "one", key.clone()).await;
+    let alias = review(&router, body.clone()).await;
+    {
+        let store = sjel_inventory::store::Store::open(&path).unwrap();
+        let conn = store.borrow_connection().unwrap();
+        conn.execute("DELETE FROM inventory_item WHERE id='one'", [])
+            .unwrap();
+        let original_state: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM inventory_item_state WHERE id=?1",
+                [body["expected_state_id"].as_i64().unwrap()],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(original_state, 0);
+    }
+    seed(&router, "one", "Different physical item").await;
+    assert_eq!(
+        resolve(&router, json!({"alias":key})).await["status"],
+        "unknown"
+    );
+    assert_eq!(review(&router, body).await, alias);
+    assert_eq!(
+        resolve(&router, json!({"alias":key})).await["status"],
+        "unknown"
+    );
+    std::fs::remove_file(path).unwrap();
+}
+
+#[tokio::test]
+async fn alias_candidates_keep_the_same_bounded_contract() {
+    let (router, path) = router("alias-bound");
+    let key = alias_key("product_model", "MODEL-1");
+    for n in (0..12).rev() {
+        let id = format!("item-{n:02}");
+        seed(&router, &id, "Same product").await;
+        review(&router, review_body(&router, &id, key.clone()).await).await;
+    }
+    let result = resolve(&router, json!({"alias":key})).await;
+    assert_eq!(result["total_candidates"], 12);
+    assert_eq!(result["candidates"].as_array().unwrap().len(), 10);
+    assert_eq!(result["candidates"][0]["item_id"], "item-00");
+    std::fs::remove_file(path).unwrap();
+}

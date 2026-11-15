@@ -74,11 +74,14 @@ the destination's classification.
 
 Inventory owns `POST /api/items/resolve`, with the shared
 [`ResolveRequest`](../../crates/inventory-api/src/resolution.rs). Supply exactly one of
-`reference` (a canonical `inv:` reference) or `title` (a mention of at most 256 bytes).
+`reference` (a canonical `inv:` reference), `title` (a mention of at most 256 bytes), or
+`alias` (a reviewed namespace/value/kind key).
 The operation reads current item/state snapshots and changes no record, proposal or link.
 It is closed to agent tokens, like the existing item-reference and mail-match reads.
 
 A reference resolves to `exact` only when that item exists; a missing reference is `unknown`.
+An active, uniquely resolved physical-item alias also establishes identity. A product-model alias
+always returns review candidates, including when only one item currently carries that model.
 A title returns `ambiguous` whenever it retrieves candidates, including one identical label.
 An identical product name cannot establish which physical item a message concerns. No lexical
 result is promoted to an identity or an automatic link. A title with no shared token returns `unknown`.
@@ -87,19 +90,53 @@ Candidate retrieval uses Unicode alphanumeric tokens, lowercase normalization an
 `overlap_bp` is intersection divided by union in basis points, not a confidence probability.
 Reference results leave it null. `reason` distinguishes `reference`, `title_equal` and
 `token_overlap`; `shared_tokens` explains lexical results. Accents and model digits are retained.
+Alias results identify the retained review with `alias_id` and leave lexical overlap null.
 Results include `item_revision`, `state_id` and state for the existing guarded review decision.
 That decision rechecks the snapshot before applying a match.
 
-The implementation scans existing labels and retains at most ten candidates, ordered by score
-then item ID. `total_candidates` exposes truncation. It adds no table, embedding, learned state,
-dependency or service. Source-scoped keys and reviewed aliases remain separate work in the
-[data plan](../plans/data.md#mail-evidence-semantics-and-resolution).
+Lexical retrieval scans existing labels and retains at most ten candidates, ordered by score
+then item ID. Alias retrieval also returns at most ten candidates, ordered by item ID.
+`total_candidates` exposes truncation. Reviewed aliases use one additional table and a partial
+unique index in the existing Inventory store. No embedding, learned state, dependency or service
+is introduced.
+
+### Reviewed aliases
+
+`POST /api/item-aliases` accepts the shared
+[`AliasReview`](../../crates/inventory-api/src/aliases.rs): a `key` containing `namespace`,
+`value` and `kind`; the target `reference`; `expected_item_revision` and `expected_state_id`;
+the reviewer's `source_ref`; and `data_class`. The namespace uses lowercase ASCII letters,
+digits, dots, colons, underscores or hyphens, at most 128 bytes. Values are case-sensitive,
+control-free identifiers of at most 256 bytes. Both fields are compared exactly. Neither a
+missing scope nor a missing alias falls through to a title match.
+
+`physical_item` identifies one physical instance after explicit owner review. `product_model`
+names a model that may describe multiple items. Duplicate active physical aliases remain
+ambiguous. Creating a review checks the item/state snapshot in one write transaction. Identity
+is separate from ownership: a historical item may still resolve exactly while its state is
+`gone`; existing mail decisions still refuse matching an item that is not owned.
+
+The review retains source provenance, classification, reviewed revisions and time. Only `c0`
+and `c1` aliases are admitted by this first contract. Aliases are never inferred or written by
+the mail scanner. An identical replay returns the original review; different evidence at an
+active key requires explicit revocation and a new review.
+
+`POST /api/item-aliases/{id}/revoke` takes `version` and retains the revoked record. Repeating the
+same revocation is idempotent. `GET /api/item-refs/{reference}/aliases` lists up to 100 reviews,
+including revocations, with `total` and `truncated`. All three routes are closed to agent tokens.
+
+An alias is bound to the target item's reviewed state-history entry. Resolution requires
+that entry to still belong to the live item. Deleting an item leaves the alias review in history;
+recreating the same raw item ID cannot reactivate it. Later state changes preserve identity while
+returning the current snapshot. Native review integration and source-specific identifier adapters
+remain in the [data plan](../plans/data.md#mail-evidence-semantics-and-resolution).
 
 ## Verification
 
 ```sh
 sjel cargo test --locked -p sjel-comms --lib mail_evidence
 sjel cargo test --locked -p sjel-inventory --test mail_proposals --test mail_match --test mail_privacy
+sjel cargo test --locked -p sjel-inventory --test resolution
 sjel cargo test --locked -p sjel-projects --bin projects-server mail_proposals
 ```
 

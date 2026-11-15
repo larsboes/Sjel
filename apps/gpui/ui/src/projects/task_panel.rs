@@ -62,6 +62,15 @@ impl Projects {
             cx.notify();
             return;
         }
+        if task.read_only() {
+            self.task_panel = Some(TaskPanel {
+                path: task.id.clone(),
+                inputs: Vec::new(),
+                _subscriptions: Vec::new(),
+            });
+            cx.notify();
+            return;
+        }
         let mut inputs = Vec::new();
         let mut subscriptions = Vec::new();
         for (key, label) in TEXT_KEYS {
@@ -101,6 +110,43 @@ impl Projects {
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        if task.read_only() {
+            let source_uri = task.fields.get("source_uri").cloned().unwrap_or_default();
+            return div()
+                .w(px(340.))
+                .flex_none()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .p_4()
+                .child(div().text_lg().child(task.title.clone()))
+                .child(
+                    div()
+                        .text_sm()
+                        .child("Read-only source task. Edit it in its project."),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .truncate()
+                        .child(task.fields.get("source_path").cloned().unwrap_or_default()),
+                )
+                .when(!self.repo.is_replica() && !source_uri.is_empty(), |panel| {
+                    panel.child(
+                        Button::new("open-task-source")
+                            .small()
+                            .label("Open task source")
+                            .on_click(move |_, _, cx| cx.open_url(&source_uri)),
+                    )
+                })
+                .child(div().text_xs().child(format!("Status: {}", task.status())))
+                .child(
+                    div()
+                        .text_sm()
+                        .child(task.summary.clone().unwrap_or_default()),
+                )
+                .into_any_element();
+        }
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         let label = |text: &'static str| {
             div()

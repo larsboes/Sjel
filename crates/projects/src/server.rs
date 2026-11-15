@@ -531,7 +531,9 @@ async fn list_tasks(
 async fn list_projects(
     State(projects): State<Shared>,
 ) -> Result<Json<ProjectListResponse>, ApiError> {
-    let records = projects.all().await.map_err(|e| api_error(false, e))?;
+    let records = ops::view_records(&projects)
+        .await
+        .map_err(|e| api_error(false, e))?;
     let mut summaries: Vec<ClassifiedProjectSummary> = Vec::new();
     for r in records.into_iter().filter(|r| !r.domain) {
         let index = match summaries
@@ -658,10 +660,17 @@ async fn get_project(
 ) -> Result<Json<ProjectReadResponse>, ApiError> {
     let name = query.name;
     let with_content = query.content.unwrap_or(true);
-    let records = projects
+    let mut records = projects
         .by_project_timed(&name)
         .await
         .map_err(|e| api_error(false, e))?;
+    records.extend(
+        projects::sources::records(&projects)
+            .await
+            .map_err(|e| api_error(false, e))?
+            .into_iter()
+            .filter(|(r, _)| r.project == name),
+    );
     if records.is_empty() {
         return Err(ApiError(StatusCode::NOT_FOUND, "no such project".into()));
     }
@@ -677,8 +686,7 @@ async fn get_record(
     Query(query): Query<RecordQuery>,
 ) -> Result<Json<RecordReadResponse>, ApiError> {
     let path = query.path;
-    let (record, updated_at) = projects
-        .get_timed(&path)
+    let (record, updated_at) = ops::view_record(&projects, &path)
         .await
         .map_err(|e| api_error(false, e))?
         .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "no such record".into()))?;
@@ -1031,6 +1039,71 @@ mod tests {
             .uri(uri)
             .body(axum::body::Body::empty())
             .expect("request builds")
+    }
+
+    #[tokio::test]
+    async fn source_tasks_share_list_detail_and_project_reads_without_allowing_writes() {
+        let dir =
+            std::env::temp_dir().join(format!("sjel-projects-source-api-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("source")).unwrap();
+        let file = dir.join("source/Question.md");
+        std::fs::write(&file, "---\ntyp: Aufgabe\nstatus: Offen\n---\n\nQuestion\n").unwrap();
+        let config = dir.join("sources.json");
+        std::fs::write(
+            &config,
+            serde_json::to_vec(&json!([{
+                "project":"Client", "root":dir.join("source"), "pattern":"*.md", "format":"notes"
+            }]))
+            .unwrap(),
+        )
+        .unwrap();
+        let projects = Projects::open(&dir.join("sjel.db"), dir.join("rendered"))
+            .await
+            .unwrap()
+            .with_sources(Some(config));
+        ops::add_project(&projects, "Client", "").await.unwrap();
+        let shared = Arc::new(projects);
+        let router = router(shared.clone());
+        let (_, body) = call(&router, get("/api/tasks")).await;
+        assert_eq!(body["tasks"].as_array().unwrap().len(), 1);
+        assert_eq!(body["tasks"][0]["fields"]["read_only"], "true");
+        assert_eq!(body["tasks"][0]["data_class"], "c2");
+        let id = body["tasks"][0]["id"].as_str().unwrap();
+        let (_, detail) = call(
+            &router,
+            get("/api/record?path=Client/External%20tasks/Question.md"),
+        )
+        .await;
+        assert_eq!(detail["record"]["path"], id);
+        let (_, project) = call(&router, get("/api/project?name=Client")).await;
+        assert_eq!(project["records"].as_array().unwrap().len(), 2);
+        let (_, summary) = call(&router, get("/api/projects")).await;
+        assert_eq!(summary["projects"][0]["open"], 1);
+        assert_ne!(
+            call(
+                &router,
+                post("/api/tasks/done", json!({"id":id,"done":true}))
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_ne!(
+            call(
+                &router,
+                post(
+                    "/api/tasks",
+                    json!({"project":"Client","title":"Duplicate"})
+                )
+            )
+            .await
+            .0,
+            StatusCode::CREATED
+        );
+        assert_eq!(shared.all().await.unwrap().len(), 1);
+        std::fs::remove_file(file).unwrap();
+        assert_eq!(call(&router, get("/api/tasks")).await.1["tasks"], json!([]));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[tokio::test]

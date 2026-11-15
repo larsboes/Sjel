@@ -156,6 +156,15 @@ archive includes the managed path resolver; its extracted-path regression passes
 
 ## Open
 
+- **Activate a capability from a writable build cache.** Projects activation could not remove
+  Cargo archive temporary directories in either live cache, including an elevated restart.
+  The service remained stopped while the release was built in the existing writable verification
+  cache; deployment required copying the verified binary while stopped. The signed client could
+  activate it on demand; shell lifecycle could not read protected deployment configuration.
+  Add a service-runner build-target option with stopped-service checks and atomic binary
+  installation. Done when a cache-cleanup refusal uses a writable cache without replacing an
+  executing binary, and a failed build retains the previous artifact and restart hold.
+
 - **Read web clips from the CLI and MCP.** Comms exposes `/clips` and `/clips/document`
   through the agent privacy gate, with numeric `id` handles and document lookup by `id`
   because trusted redaction can replace destination keys with `[token]`.

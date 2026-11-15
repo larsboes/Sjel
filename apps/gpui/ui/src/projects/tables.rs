@@ -294,15 +294,18 @@ impl Projects {
                         row.bg(rgba(tint(palette.accent, 0x18)))
                     })
                     .when(task.done, |row| row.opacity(0.55))
-                    .child(
-                        div().w(px(24.)).flex().items_center().child(
-                            Checkbox::new(("task-done", index))
-                                .checked(task.done)
-                                .on_click(cx.listener(move |view, done: &bool, window, cx| {
-                                    view.toggle_task(toggle.path.clone(), *done, window, cx)
-                                })),
+                    .child(div().w(px(24.)).flex().items_center().child(
+                        Checkbox::new(("task-done", index)).checked(task.done).when(
+                            !sjel_gpui_core::shell::is_external_task(&task.path),
+                            |checkbox| {
+                                checkbox.on_click(cx.listener(
+                                    move |view, done: &bool, window, cx| {
+                                        view.toggle_task(toggle.path.clone(), *done, window, cx)
+                                    },
+                                ))
+                            },
                         ),
-                    )
+                    ))
                     .child(title_cell)
                     .child(status_cell)
                     .child(due_cell)
@@ -745,9 +748,11 @@ impl Projects {
                 div().w(px(24.)).flex().items_center().child(
                     Checkbox::new(("all-task-done", index))
                         .checked(task.done)
-                        .on_click(cx.listener(move |view, done: &bool, window, cx| {
-                            view.toggle_global_task(toggle.clone(), *done, window, cx)
-                        })),
+                        .when(!task.read_only(), |checkbox| {
+                            checkbox.on_click(cx.listener(move |view, done: &bool, window, cx| {
+                                view.toggle_global_task(toggle.clone(), *done, window, cx)
+                            }))
+                        }),
                 ),
             )
             .child(

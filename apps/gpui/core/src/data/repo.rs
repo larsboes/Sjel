@@ -1,7 +1,7 @@
-//! The local-first read path: the Mac's own database when it is readable, the shell otherwise.
+//! Shared capability reads, with a local replica on the phone.
 //!
 //! `Repo` is the adapter the Projects page reads and writes through on both platforms. On the Mac
-//! it reads this machine's database and writes through the shell. On the phone it holds the
+//! Projects reads and writes go through the capability. On the phone it holds the
 //! replica ([`Repo::replica`]): every read answers from it, and every write lands there first and
 //! is logged in `_offline_mutations`, which `crate::sync` replays at the Mac.
 
@@ -75,6 +75,15 @@ fn task_fields(content: &str) -> std::collections::BTreeMap<String, String> {
 
 fn store_error(error: StoreError) -> ShellError {
     ShellError::Store(error.to_string())
+}
+
+fn editable_record(path: &str) -> ShellResult<()> {
+    if projects_api::is_external_task(path) {
+        return Err(ShellError::Store(
+            "This task is read-only in Sjel. Edit its project source.".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// The project a record path lives in: its first segment.
@@ -297,8 +306,11 @@ impl Repo {
         }
     }
 
-    /// Read projects directly from the local LibSQL database if accessible, otherwise the shell.
+    /// Read project views from the Mac capability or the phone's local replica.
     pub async fn fetch_projects(&self) -> ShellResult<Vec<ProjectSummary>> {
+        if self.replica.is_none() {
+            return self.shell()?.projects().await;
+        }
         if let Some(conn) = self.connection().await {
             if let Ok(mut rows) = conn
                 .query(
@@ -343,8 +355,11 @@ impl Repo {
         shell.projects().await
     }
 
-    /// Read tasks directly from the local LibSQL database if accessible, otherwise the shell.
+    /// Read tasks from the Mac capability or the phone's local replica.
     pub async fn fetch_tasks(&self, status: Option<&str>) -> ShellResult<Vec<GlobalTask>> {
+        if self.replica.is_none() {
+            return self.shell()?.tasks(status).await;
+        }
         if let Some(conn) = self.connection().await {
             let filter = match status {
                 Some("open") => " AND done = 0",
@@ -570,9 +585,11 @@ impl Repo {
         }
     }
 
-    /// Read project records directly from the local LibSQL database if accessible, otherwise the
-    /// shell.
+    /// Read project records from the Mac capability or the phone's local replica.
     pub async fn fetch_project_records(&self, project: &str) -> ShellResult<Vec<ProjectRecord>> {
+        if self.replica.is_none() {
+            return self.shell()?.project(project).await;
+        }
         if let Some(conn) = self.connection().await {
             let query = "SELECT path, kind, title, done, due, priority \
                          FROM projects_records \
@@ -611,6 +628,9 @@ impl Repo {
     /// from the local LibSQL database, otherwise from the shell. Every answer is kept, so opening
     /// the same note again costs no read, no disk and no network.
     pub async fn fetch_record(&self, path: &str) -> ShellResult<ProjectRecord> {
+        if projects_api::is_external_task(path) {
+            return self.read_record(path).await;
+        }
         if let Some(record) = self.notes.get(path) {
             return Ok(record);
         }
@@ -622,6 +642,9 @@ impl Repo {
     /// The slow half of [`Repo::fetch_record`]: one record with its content, from the local LibSQL
     /// database otherwise from the shell.
     async fn read_record(&self, path: &str) -> ShellResult<ProjectRecord> {
+        if self.replica.is_none() {
+            return self.shell()?.record(path).await;
+        }
         if let Some(conn) = self.connection().await {
             let query = "SELECT path, kind, title, content, done, due, priority \
                          FROM projects_records \
@@ -656,6 +679,7 @@ impl Repo {
     /// over a newer version. The phone writes its replica; the sync settles a conflict there.
     /// Either way the kept copy becomes what was written, so opening the note again shows it.
     pub async fn save_record(&self, path: &str, content: &str, base: &str) -> ShellResult<()> {
+        editable_record(path)?;
         match &self.replica {
             None => self.shell()?.save_record(path, content, base).await?,
             Some(replica) => {
@@ -678,6 +702,7 @@ impl Repo {
     /// one row at a time, so a move there would arrive as a new note beside the old one: the
     /// title stays read-only on the phone until the replica can carry a move.
     pub async fn rename_record(&self, path: &str, title: &str) -> ShellResult<RenamedRecord> {
+        editable_record(path)?;
         if self.replica.is_some() {
             return Err(ShellError::Store(
                 "renaming a note happens on the Mac".to_owned(),
@@ -694,6 +719,7 @@ impl Repo {
 
     /// Ticks or reopens a task, answering with its new frontmatter.
     pub async fn set_task_done(&self, path: &str, done: bool) -> ShellResult<GlobalTask> {
+        editable_record(path)?;
         let Some(replica) = &self.replica else {
             return self.shell()?.set_task_done(path, done).await;
         };
@@ -713,6 +739,7 @@ impl Repo {
         key: &str,
         value: &str,
     ) -> ShellResult<GlobalTask> {
+        editable_record(path)?;
         let Some(replica) = &self.replica else {
             return self.shell()?.set_property(path, key, value).await;
         };
@@ -749,6 +776,16 @@ impl Repo {
                 .add_task_with_details(project, title, due, priority)
                 .await;
         };
+        let hub = replica.record(&format!("{project}/{project}.md")).await?;
+        let fields = task_fields(&hub.content);
+        if fields
+            .get("task_source")
+            .is_some_and(|source| !source.is_empty() && source != "sjel")
+        {
+            return Err(ShellError::Store(
+                "This project's tasks belong to its declared source.".into(),
+            ));
+        }
         let path = task_path(project, SystemTime::now());
         replica
             .store
@@ -798,6 +835,7 @@ impl Repo {
 
     /// Removes a record.
     pub async fn remove_record(&self, path: &str) -> ShellResult<()> {
+        editable_record(path)?;
         self.notes.forget(path);
         let Some(replica) = &self.replica else {
             return self.shell()?.remove_record(path).await;
@@ -870,6 +908,35 @@ mod tests {
         let store = Arc::new(TursoStore::in_memory().await.expect("store"));
         let repo = Repo::replica(store.clone(), || {});
         (store, repo)
+    }
+
+    #[test]
+    fn source_tasks_refuse_offline_mutations_before_queueing() {
+        runtime().block_on(async {
+            let (store, repo) = replica().await;
+            store
+                .save_record(
+                    "Client",
+                    "Client/Client.md",
+                    "project",
+                    "Client",
+                    "---\ntask_source: vault\n---\n",
+                )
+                .await
+                .unwrap();
+            let before = store.pending_in(None).await.unwrap().len();
+            let path = "Client/External tasks/Question.md";
+            assert!(repo.set_task_done(path, true).await.is_err());
+            assert!(repo.set_property(path, "status", "done").await.is_err());
+            assert!(repo.save_record(path, "changed", "base").await.is_err());
+            assert!(repo.remove_record(path).await.is_err());
+            assert!(repo.rename_record(path, "New title").await.is_err());
+            assert!(repo
+                .add_task("Client", "Duplicate authority")
+                .await
+                .is_err());
+            assert_eq!(store.pending_in(None).await.unwrap().len(), before);
+        });
     }
 
     fn an_entry(title: &str, starts_at: &str, ends_at: &str) -> CalendarEntry {

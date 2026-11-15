@@ -37,6 +37,11 @@ pub const ROUTE_INVENTORY_LINKS_REMOVE: &str = "/api/inventory-links/remove";
 /// The states a task can be in, in the order a picker shows them. `done:` follows `status:`.
 pub const TASK_STATUSES: [&str; 6] = ["open", "doing", "waiting", "blocked", "done", "cancelled"];
 
+/// Whether a record identity names a live task owned by an external project source.
+pub fn is_external_task(path: &str) -> bool {
+    path.split('/').nth(1) == Some("External tasks")
+}
+
 /// A status that closes the task, so `done:` is `true`. A cancelled task is closed but not done.
 pub fn status_closes(status: &str) -> bool {
     matches!(status, "done" | "cancelled")
@@ -126,6 +131,11 @@ pub struct GlobalTask {
 }
 
 impl GlobalTask {
+    /// A source task must be edited at its source, including on an offline device.
+    pub fn read_only(&self) -> bool {
+        is_external_task(&self.id) || self.fields.get("read_only").is_some_and(|v| v == "true")
+    }
+
     /// The task's status: its `status:` key when that is one of [`TASK_STATUSES`] and agrees with
     /// `done:`, else what `done:` implies.
     pub fn status(&self) -> &str {

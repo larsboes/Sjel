@@ -104,6 +104,14 @@ pub async fn tasks(projects: &Projects, status: Option<&str>) -> Fallible<Vec<Ta
     let mut tasks: Vec<Task> = projects
         .by_kind(Kind::Task)
         .await?
+        .into_iter()
+        .chain(
+            crate::sources::records(projects)
+                .await?
+                .into_iter()
+                .map(|(r, _)| r),
+        )
+        .collect::<Vec<_>>()
         .iter()
         .filter(|r| !r.archived && !r.domain)
         .filter(|r| match status {
@@ -125,13 +133,63 @@ pub async fn tasks(projects: &Projects, status: Option<&str>) -> Fallible<Vec<Ta
 
 /// Every record of one kind in live projects, in the task shape, ordered by path.
 pub async fn records(projects: &Projects, kind: Kind) -> Fallible<Vec<Task>> {
-    Ok(projects
-        .by_kind(kind)
+    Ok(view_records(projects)
         .await?
         .iter()
-        .filter(|r| !r.archived && !r.domain)
+        .filter(|r| r.kind == kind && !r.archived && !r.domain)
         .map(Task::from_record)
         .collect())
+}
+
+/// Stored records joined with live, read-only source tasks.
+///
+/// # Errors
+/// The store or a declared task source is unavailable.
+pub async fn view_records(projects: &Projects) -> Fallible<Vec<Record>> {
+    let mut records = projects.all().await?;
+    records.extend(
+        crate::sources::records(projects)
+            .await?
+            .into_iter()
+            .map(|(r, _)| r),
+    );
+    records.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(records)
+}
+
+/// One stored record or a live source task, with its revision time.
+///
+/// # Errors
+/// The store or a declared task source is unavailable.
+pub async fn view_record(projects: &Projects, path: &str) -> Fallible<Option<(Record, String)>> {
+    if crate::sources::is_external(path) {
+        crate::sources::get(projects, path).await
+    } else {
+        projects.get_timed(path).await
+    }
+}
+
+async fn inherit_project_class(projects: &Projects, mut record: Record) -> Fallible<Record> {
+    if record.kind == Kind::Project || record.domain {
+        return Ok(record);
+    }
+    let floor = projects
+        .by_project(&record.project)
+        .await?
+        .iter()
+        .filter(|r| r.kind == Kind::Project)
+        .filter_map(|r| r.fields().get("class").cloned())
+        .max()
+        .unwrap_or_else(|| "c0".into());
+    let fields = record.fields();
+    if let Some(class) = fields.get("class").filter(|c| !c.is_empty()) {
+        if !["c0", "c1", "c2", "c3"].contains(&class.as_str()) || class < &floor {
+            return Err("a project record cannot lower its project hub's data class".into());
+        }
+    } else if classify_record(&record).value < floor {
+        record.content = record::set_field(&record.content, "class", Some(&floor))?;
+    }
+    Ok(record)
 }
 
 /// Create a task note in a live project.
@@ -148,6 +206,7 @@ pub async fn add_task(
 ) -> Fallible<Record> {
     let project = check_name(project)?;
     let title = check_name(title)?;
+    crate::sources::require_local_tasks(projects, project)?;
     if record::is_domain(project) {
         return Err(format!("{project:?} is a domain, not a project").into());
     }
@@ -171,6 +230,7 @@ pub async fn add_task(
         return Err(format!("{path} exists").into());
     }
     let record = Record::from_content(&path, record::new_task(project, summary, due, priority))?;
+    let record = inherit_project_class(projects, record).await?;
     projects.put(&record).await?;
     Ok(record)
 }
@@ -276,6 +336,7 @@ pub async fn set_property(
         record::set_field(&current.content, key, (!value.is_empty()).then_some(value))?
     };
     let record = Record::from_content(path, content)?;
+    let record = inherit_project_class(projects, record).await?;
     projects.put(&record).await?;
     Ok(record)
 }
@@ -388,6 +449,16 @@ pub async fn save(
         );
     }
     let record = Record::from_content(path, content.to_string()).map_err(SaveError::Refused)?;
+    if crate::sources::is_external(path) {
+        return Err(SaveError::Refused(
+            "source tasks are read-only; edit their source_path".into(),
+        )
+        .into());
+    }
+    if record.kind == Kind::Task {
+        crate::sources::require_local_tasks(projects, &record.project)?;
+    }
+    let record = inherit_project_class(projects, record).await?;
     match (projects.get(path).await?, base) {
         (Some(current), Some(base)) if current.content == base => {}
         (Some(current), Some(_)) => return Err(SaveError::Stale(current.content).into()),
@@ -856,6 +927,36 @@ fn encode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn private_projects_keep_new_tasks_and_notes_private() {
+        let (projects, dir) = crate::store::tests::scratch("project-class-floor").await;
+        add_project(&projects, "Private", "").await.unwrap();
+        set_property(&projects, "Private/Private.md", "class", "c2")
+            .await
+            .unwrap();
+        let task = add_task(&projects, "Private", "Action", "", None, 2)
+            .await
+            .unwrap();
+        assert_eq!(classify_record(&task).value, "c2");
+        let note = save(
+            &projects,
+            "Private/Note.md",
+            "---\ntype: note\n---\n\nPrivate note\n",
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(classify_record(&note).value, "c2");
+        assert!(set_property(&projects, &note.path, "class", "c1")
+            .await
+            .is_err());
+        assert_eq!(
+            classify_record(&projects.get(&note.path).await.unwrap().unwrap()).value,
+            "c2"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
     use crate::store::{tests::scratch, Drift};
 
     fn vault(dir: &Path) -> std::path::PathBuf {

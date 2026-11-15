@@ -25,6 +25,21 @@ views is open in [`gpui.md` §11](gpui.md#11-ui-stack).
 Verification: route-manifest, projects-api, sjel-projects and sjel-mcp tests and Clippy pass.
 Open acceptance: live governed reads with real data through MCP.
 
+## Private project delivery workflows
+
+Projects supports private workspace adoption, Markdown setup templates, live read-only task
+sources, checkout and optional CI inspection, and reviewed lesson publication
+(`crates/projects/src/workspace.rs`, `crates/projects/src/sources.rs`). Existing project,
+record and task reads include source views without storing a second task authority. The Mac
+uses those capability reads; the shared client refuses source-task mutations before offline
+queueing. New records inherit an explicitly private project's class.
+
+Verification: 50 Projects tests, 385 shared-client tests plus the source-task offline regression,
+the headless read-only editor regression, and native UI compilation passed. Full workspace gates,
+live CI inspection and iPhone device acceptance did not run. Owner review of exact concept drafts
+precedes any lowering of their private source classification. General Markdown file authority
+remains separate work in [`storage.md`](storage.md#one-vault-for-prose).
+
 ## Mail evidence for projects and inventory
 
 Decided 2026-10-28: scan existing indexed mail and new mail for evidence relevant to projects

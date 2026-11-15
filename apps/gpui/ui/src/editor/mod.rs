@@ -81,17 +81,22 @@ impl NoteEditor {
         cx: &mut Context<Self>,
     ) -> Self {
         let doc = Doc::parse(&record.content);
-        let editable = doc.lossless(&record.content);
+        let external = sjel_gpui_core::shell::is_external_task(&record.path);
+        let editable = !external && doc.lossless(&record.content);
         let mut editor = Self {
             path: record.path,
             title: record.title.into(),
             rows: Vec::new(),
             base: record.content,
             editable,
-            problem: (!editable).then(|| {
+            problem: if external {
+                Some("This task belongs to its project source and is read-only in Sjel.".into())
+            } else {
+                (!editable).then(|| {
                 "This note has markdown the editor cannot write back exactly, so it is read-only."
                     .to_owned()
-            }),
+            })
+            },
             saving: false,
             editable_saves: std::env::var_os("SJEL_GPUI_NO_SAVE").is_none(),
             revision: 0,
@@ -910,6 +915,23 @@ mod tests {
     use super::*;
 
     const CONTENT: &str = "---\ntype: note\n---\n# Plan\n\n- one\n- two\n\nText\n";
+
+    #[gpui::test]
+    fn a_source_task_opens_without_an_editable_document(cx: &mut TestAppContext) {
+        let mut source = record();
+        source.path = "P/External tasks/Question.md".into();
+        source.kind = "task".into();
+        let (editor, cx) = open_with(cx, source, false);
+        editor.read_with(cx, |editor, _| {
+            assert!(!editor.editable);
+            assert!(editor
+                .problem
+                .as_deref()
+                .unwrap()
+                .contains("project source"));
+            assert_eq!(editor.base, CONTENT);
+        });
+    }
 
     fn record() -> ProjectRecord {
         ProjectRecord {

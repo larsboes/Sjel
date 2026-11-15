@@ -1,0 +1,16 @@
+[
+  {
+    "project": "Example client",
+    "root": "~/Projects/example-client/docs/tasks",
+    "pattern": "*.md",
+    "format": "notes",
+    "data_class": "c2"
+  },
+  {
+    "project": "Example concept",
+    "root": "~/Projects/example-concept/docs",
+    "pattern": "next.md",
+    "format": "checklist",
+    "data_class": "c2"
+  }
+]

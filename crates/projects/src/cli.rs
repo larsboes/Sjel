@@ -24,7 +24,11 @@ const USAGE: &str = "usage: projects <command>
   import <vault> --folder Atlas/<Domain>       copy one domain folder, keeping its path
   freeze-vault <vault>/Projects [--only PROJECT]  mark imported vault notes as moved
   verify                                       compare the store with the rendered files
-  render                                       re-render every record";
+  render                                       re-render every record
+  workspace adopt <manifest.json>              adopt private indexes and delivery assets
+  workspace setup <name> <template-directory>   prepare a private project from Markdown templates
+  workspace status [--github]                   source tasks, next actions, checkout and optional CI
+  workspace lesson draft|publish ...            prepare and explicitly review reusable lessons";
 
 fn main() {
     let runtime = match tokio::runtime::Runtime::new() {
@@ -59,6 +63,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
     let projects = open_default().await?;
     match command.as_str() {
+        "workspace" => projects::workspace::run(&projects, &args[1..]).await?,
         "list" => {
             let status = if args.iter().any(|a| a == "--all") {
                 None
@@ -81,7 +86,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         "projects" => {
             let mut rows: std::collections::BTreeMap<(bool, String), (usize, usize, usize)> =
                 Default::default();
-            for r in projects.all().await?.into_iter().filter(|r| !r.domain) {
+            for r in ops::view_records(&projects)
+                .await?
+                .into_iter()
+                .filter(|r| !r.domain)
+            {
                 let row = rows.entry((r.archived, r.project.clone())).or_default();
                 match (r.kind, r.done) {
                     (projects::Kind::Task, false) => row.0 += 1,

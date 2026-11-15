@@ -27,6 +27,7 @@ type Fallible<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub struct Projects {
     db: Store,
     root: PathBuf,
+    pub(crate) source_config: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema, PartialEq, Eq)]
@@ -145,7 +146,17 @@ impl Projects {
     /// The database cannot be opened or migrated.
     pub async fn open(database: &Path, root: PathBuf) -> Fallible<Self> {
         let db = Store::open(database, PREFIX, migrate).await?;
-        Ok(Self { db, root })
+        Ok(Self {
+            db,
+            root,
+            source_config: None,
+        })
+    }
+
+    /// Select the deployment's read-only project task sources.
+    pub fn with_sources(mut self, path: Option<PathBuf>) -> Self {
+        self.source_config = path;
+        self
     }
 
     /// `<overlay>/data/projects`, or nothing when no overlay is configured.

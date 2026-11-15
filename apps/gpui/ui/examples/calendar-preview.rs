@@ -32,9 +32,7 @@ fn main() {
         Palette::light()
     };
     gpui_kit::application()
-        .with_assets(sjel_gpui_ui::ely::Assets::before(
-            gpui_kit::assets::Assets::new(""),
-        ))
+        .with_assets(sjel_gpui_ui::ely::Assets)
         .run(move |cx: &mut App| {
             gpui_kit::init(cx);
             sjel_gpui_ui::ely::init(cx).expect("preview assets");

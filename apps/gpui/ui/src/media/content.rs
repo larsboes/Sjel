@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use gpui_kit::component::{
-    button::{Button, ButtonVariants},
-    input::{Input, InputEvent, InputState},
-    Disableable, Sizable,
+use crate::ely::{
+    buttons::{Button, ButtonVariant},
+    forms::{Input, InputEvent, TextInput},
+    theme::ControlSize,
 };
 use gpui_kit::{
     div, img, prelude::*, px, rgb, AnyElement, Context, Entity, Image, ImageFormat, ObjectFit,
@@ -41,8 +41,8 @@ pub(crate) struct ContentReview {
 
 pub(super) struct ReviewForm {
     id: i64,
-    tags: Entity<InputState>,
-    collections: Entity<InputState>,
+    tags: Entity<TextInput>,
+    collections: Entity<TextInput>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -109,15 +109,15 @@ impl MediaPage {
             }
         };
         let tags =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Chosen tags, comma-separated"));
+            cx.new(|cx| TextInput::new(window, cx).placeholder("Chosen tags, comma-separated"));
         let collections = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Chosen collections, comma-separated")
+            TextInput::new(window, cx).placeholder("Chosen collections, comma-separated")
         });
         let subscriptions = [&tags, &collections]
             .iter()
             .map(|input| {
                 cx.subscribe_in(input, window, |_, _, event, _, cx| {
-                    if matches!(event, InputEvent::Change) {
+                    if matches!(event, InputEvent::Changed) {
                         cx.notify();
                     }
                 })
@@ -185,12 +185,12 @@ impl MediaPage {
             fingerprint: detail.proposal.fingerprint.clone(),
             action,
             tags: if action == ContentAction::Accept {
-                media::content_names(form.tags.read(cx).value().as_str())
+                media::content_names(form.tags.read(cx).text())
             } else {
                 Vec::new()
             },
             collections: if action == ContentAction::Accept {
-                media::content_names(form.collections.read(cx).value().as_str())
+                media::content_names(form.collections.read(cx).text())
             } else {
                 Vec::new()
             },
@@ -252,10 +252,11 @@ impl MediaPage {
             ("rejected", "Rejected"),
         ] {
             filters = filters.child(
-                Button::new(SharedString::from(format!("content-filter-{state}")))
-                    .small()
-                    .label(label)
-                    .when(self.content.state != state, |b| b.ghost())
+                Button::new(SharedString::from(format!("content-filter-{state}")), label)
+                    .size(ControlSize::Sm)
+                    .when(self.content.state != state, |b| {
+                        b.variant(ButtonVariant::Ghost)
+                    })
                     .disabled(self.content.busy)
                     .on_click(cx.listener(move |page, _, _, cx| {
                         page.content.state = state.into();
@@ -268,9 +269,8 @@ impl MediaPage {
         }
         panel = panel.child(
             filters.child(
-                Button::new("content-refresh")
-                    .small()
-                    .label("Refresh review")
+                Button::new("content-refresh", "Refresh review")
+                    .size(ControlSize::Sm)
                     .disabled(self.content.busy || self.content.queue.loading)
                     .on_click(cx.listener(|page, _, _, cx| {
                         page.content.form = None;
@@ -313,17 +313,19 @@ impl MediaPage {
                             proposal.created_at
                         )))
                         .child(
-                            Button::new(SharedString::from(format!("content-inspect-{id}")))
-                                .small()
-                                .label("Inspect evidence")
-                                .disabled(
-                                    self.content.busy
-                                        || self.content.queue.loading
-                                        || self.content.queue.error.is_some(),
-                                )
-                                .on_click(cx.listener(move |page, _, window, cx| {
-                                    page.select_content(id, window, cx)
-                                })),
+                            Button::new(
+                                SharedString::from(format!("content-inspect-{id}")),
+                                "Inspect evidence",
+                            )
+                            .size(ControlSize::Sm)
+                            .disabled(
+                                self.content.busy
+                                    || self.content.queue.loading
+                                    || self.content.queue.error.is_some(),
+                            )
+                            .on_click(cx.listener(
+                                move |page, _, window, cx| page.select_content(id, window, cx),
+                            )),
                         ),
                 );
             }
@@ -333,9 +335,8 @@ impl MediaPage {
                     .flex()
                     .gap_2()
                     .child(
-                        Button::new("content-first")
-                            .small()
-                            .label("First page")
+                        Button::new("content-first", "First page")
+                            .size(ControlSize::Sm)
                             .disabled(
                                 self.content.busy
                                     || self.content.after == 0
@@ -349,9 +350,8 @@ impl MediaPage {
                             })),
                     )
                     .child(
-                        Button::new("content-next")
-                            .small()
-                            .label("Next page")
+                        Button::new("content-next", "Next page")
+                            .size(ControlSize::Sm)
                             .disabled(
                                 self.content.busy || next.is_none() || self.content.queue.loading,
                             )
@@ -396,28 +396,26 @@ impl MediaPage {
                 for (label_index, label) in frame.labels.iter().enumerate() {
                     let name = label.identifier.clone();
                     frame_view = frame_view.child(
-                        Button::new(SharedString::from(format!(
-                            "content-label-{frame_index}-{label_index}"
-                        )))
-                        .small()
-                        .ghost()
-                        .label(format!(
-                            "Add tag: {} · score {:.3}",
-                            label.identifier, label.score
-                        ))
+                        Button::new(
+                            SharedString::from(format!(
+                                "content-label-{frame_index}-{label_index}"
+                            )),
+                            format!("Add tag: {} · score {:.3}", label.identifier, label.score),
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .disabled(
                             self.content.busy || detail.proposal.state != ContentState::Pending,
                         )
                         .on_click(cx.listener(
-                            move |page, _, window, cx| {
+                            move |page, _, _window, cx| {
                                 if let Some(form) = &page.content.form {
-                                    let mut names =
-                                        media::content_names(form.tags.read(cx).value().as_str());
+                                    let mut names = media::content_names(form.tags.read(cx).text());
                                     if !names.contains(&name) {
                                         names.push(name.clone());
                                     }
                                     form.tags.update(cx, |input, cx| {
-                                        input.set_value(names.join(", "), window, cx)
+                                        input.set_text(names.join(", "), cx)
                                     });
                                 }
                             },
@@ -427,34 +425,32 @@ impl MediaPage {
                 panel = panel.child(frame_view);
             }
             if detail.proposal.state == ContentState::Pending {
-                let empty = media::content_names(form.tags.read(cx).value().as_str()).is_empty()
-                    && media::content_names(form.collections.read(cx).value().as_str()).is_empty();
+                let empty = media::content_names(form.tags.read(cx).text()).is_empty()
+                    && media::content_names(form.collections.read(cx).text()).is_empty();
                 let stale = self.content.queue.loading
                     || self.content.queue.error.is_some()
                     || self.content.detail.error.is_some();
                 panel = panel
                     .child("Chosen tags (edit or remove candidate names before saving)")
-                    .child(Input::new(&form.tags).small())
+                    .child(Input::new(&form.tags).size(ControlSize::Sm))
                     .child("Chosen collections")
-                    .child(Input::new(&form.collections).small())
+                    .child(Input::new(&form.collections).size(ControlSize::Sm))
                     .child(
                         div()
                             .flex()
                             .gap_2()
                             .child(
-                                Button::new("content-accept")
-                                    .small()
-                                    .primary()
-                                    .label("Save chosen metadata")
+                                Button::new("content-accept", "Save chosen metadata")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Primary)
                                     .disabled(self.content.busy || stale || empty)
                                     .on_click(cx.listener(|page, _, _, cx| {
                                         page.decide_content(ContentAction::Accept, cx)
                                     })),
                             )
                             .child(
-                                Button::new("content-reject")
-                                    .small()
-                                    .label("Reject proposal")
+                                Button::new("content-reject", "Reject proposal")
+                                    .size(ControlSize::Sm)
                                     .disabled(self.content.busy || stale)
                                     .on_click(cx.listener(|page, _, _, cx| {
                                         page.decide_content(ContentAction::Reject, cx)
@@ -470,10 +466,9 @@ impl MediaPage {
                 ));
             }
             panel = panel.child(
-                Button::new("content-close")
-                    .small()
-                    .ghost()
-                    .label("Leave review")
+                Button::new("content-close", "Leave review")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .disabled(self.content.busy)
                     .on_click(cx.listener(|page, _, _, cx| {
                         page.content.form = None;

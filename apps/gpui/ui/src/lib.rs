@@ -128,6 +128,7 @@ pub mod systems;
 pub mod tasks;
 #[cfg(feature = "gpui")]
 pub mod terminal;
+#[cfg(any(feature = "nsh", test))]
 mod terminal_screen;
 #[cfg(all(feature = "gpui", any(test, feature = "test-support")))]
 pub mod test_support;

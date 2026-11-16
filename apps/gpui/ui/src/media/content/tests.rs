@@ -1,12 +1,13 @@
 use super::*;
 use crate::data::Repo;
+use gpui::Focusable;
 use std::{cell::RefCell, rc::Rc};
 
 #[gpui::test]
 fn pending_review_renders_and_typing_remains_an_explicit_unsaved_choice(
     cx: &mut gpui::TestAppContext,
 ) {
-    cx.update(gpui_kit::init);
+    crate::test_support::init(cx);
     let slot = Rc::new(RefCell::new(None));
     let found = slot.clone();
     let (_, cx) = cx.add_window_view(move |window, cx| {
@@ -34,9 +35,9 @@ fn pending_review_renders_and_typing_remains_an_explicit_unsaved_choice(
                 ))
                 .to_vec(),
             ))];
-            let tags = cx.new(|cx| InputState::new(window, cx));
-            let collections = cx.new(|cx| InputState::new(window, cx));
-            tags.update(cx, |input, cx| input.focus(window, cx));
+            let tags = cx.new(|cx| TextInput::new(window, cx));
+            let collections = cx.new(|cx| TextInput::new(window, cx));
+            tags.read(cx).focus_handle(cx).focus(window, cx);
             page.content.form = Some(ReviewForm {
                 id: 1,
                 tags,
@@ -58,7 +59,7 @@ fn pending_review_renders_and_typing_remains_an_explicit_unsaved_choice(
             .unwrap()
             .tags
             .read(cx)
-            .value()
+            .text()
             .is_empty());
         assert!(page
             .content
@@ -74,14 +75,7 @@ fn pending_review_renders_and_typing_remains_an_explicit_unsaved_choice(
     cx.run_until_parked();
     page.update(cx, |page, cx| {
         assert_eq!(
-            page.content
-                .form
-                .as_ref()
-                .unwrap()
-                .tags
-                .read(cx)
-                .value()
-                .as_str(),
+            page.content.form.as_ref().unwrap().tags.read(cx).text(),
             "family"
         );
         let proposal = &page.content.detail.value.as_ref().unwrap().proposal;
@@ -98,14 +92,7 @@ fn pending_review_renders_and_typing_remains_an_explicit_unsaved_choice(
         assert!(page.content.message.as_ref().unwrap().0);
         assert!(!page.content.busy);
         assert_eq!(
-            page.content
-                .form
-                .as_ref()
-                .unwrap()
-                .tags
-                .read(cx)
-                .value()
-                .as_str(),
+            page.content.form.as_ref().unwrap().tags.read(cx).text(),
             "family"
         );
         assert_eq!(

@@ -22,6 +22,38 @@ pub use tokens::{dot, note, placeholder, FONT_MONO_TABULAR, RADIUS_LG, RADIUS_MD
 mod tests {
     use super::*;
 
+    #[gpui::test]
+    fn back_button_accepts_pointer_and_keyboard_activation(cx: &mut gpui::TestAppContext) {
+        use gpui::{div, px, Context, IntoElement, ParentElement, Render, Window};
+
+        struct BackView(usize);
+
+        impl Render for BackView {
+            fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+                div().child(back_button(
+                    "Back to projects",
+                    cx.listener(|view, _, _, cx| {
+                        view.0 += 1;
+                        cx.notify();
+                    }),
+                    crate::theme::Palette::dark(),
+                ))
+            }
+        }
+
+        let (view, cx) = crate::test_support::mount_root(cx, None, |_, _| BackView(0));
+        cx.update(|window, cx| window.focus_next(cx));
+        cx.simulate_keystrokes("enter");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| assert_eq!(view.0, 1));
+        cx.simulate_click(gpui::point(px(8.), px(8.)), gpui::Modifiers::none());
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| assert_eq!(view.0, 2));
+    }
+
     #[test]
     fn test_due_status_logic() {
         assert_eq!(due_status(None, false, "2026-11-05"), DueStatus::None);

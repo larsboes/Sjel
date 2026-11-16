@@ -86,20 +86,27 @@ impl Workspace {
         let deck = cx.new(|cx| {
             TerminalDeck::new(Host::Shell(shell), false, TERMINAL_COLS, TERMINAL_ROWS, cx)
         });
-        cx.subscribe(&deck, |workspace, _, event: &TerminalEvent, cx| {
-            if let TerminalEvent::Zoom(steps) = event {
-                let settings = workspace.appearance_settings;
-                let terminal_font_size =
-                    step_terminal_font_size(settings.terminal_font_size, *steps);
-                workspace.set_appearance(
-                    AppearanceSettings {
-                        terminal_font_size,
-                        ..settings
-                    },
-                    cx,
-                );
-            }
-        })
+        cx.subscribe_in(
+            &deck,
+            window,
+            |workspace, _, event: &TerminalEvent, window, cx| {
+                if matches!(event, TerminalEvent::Find) {
+                    workspace.on_focus_search(&super::FocusSearch, window, cx);
+                }
+                if let TerminalEvent::Zoom(steps) = event {
+                    let settings = workspace.appearance_settings;
+                    let terminal_font_size =
+                        step_terminal_font_size(settings.terminal_font_size, *steps);
+                    workspace.set_appearance(
+                        AppearanceSettings {
+                            terminal_font_size,
+                            ..settings
+                        },
+                        cx,
+                    );
+                }
+            },
+        )
         .detach();
         deck.update(cx, |deck, cx| deck.load(cx));
         self.terminal = Some(deck);

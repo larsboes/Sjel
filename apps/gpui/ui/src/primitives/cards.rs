@@ -7,21 +7,15 @@ use gpui_kit::{
 };
 
 use super::tokens::RADIUS_MD;
+use crate::ely::{
+    buttons::{Button, ButtonVariant},
+    layout::Section,
+    theme::ControlSize,
+};
 use crate::theme::{tint, Density, Palette};
 
-pub fn section(title: &'static str, body: AnyElement, palette: Palette) -> impl IntoElement {
-    div()
-        .flex()
-        .flex_col()
-        .gap_2()
-        .child(
-            div()
-                .text_xs()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(rgb(palette.muted))
-                .child(title),
-        )
-        .child(body)
+pub fn section(title: &'static str, body: AnyElement, _palette: Palette) -> impl IntoElement {
+    Section::new(title).child(body)
 }
 
 pub fn list(rows: Vec<AnyElement>, palette: Palette) -> AnyElement {
@@ -108,16 +102,12 @@ pub fn progress_bar(progress: f32, color: u32, palette: Palette) -> AnyElement {
 pub fn back_button(
     label: impl Into<SharedString>,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-    palette: Palette,
+    _palette: Palette,
 ) -> AnyElement {
-    div()
-        .id("back")
-        .text_sm()
-        .text_color(rgb(palette.accent))
-        .cursor_pointer()
-        .hover(move |s| s.text_color(rgb(palette.text)))
+    Button::new("back", label)
+        .variant(ButtonVariant::Link)
+        .size(ControlSize::Sm)
         .on_click(on_click)
-        .child(label.into())
         .into_any_element()
 }
 

@@ -9,9 +9,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use gpui_kit::component::button::Button;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, img, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FontWeight, ObjectFit,
     RenderImage, ScrollHandle, StyledImage, Window,
@@ -24,6 +22,8 @@ use sjel_gpui_core::mail::MailOffline;
 use sjel_gpui_core::originals::Originals;
 use sjel_gpui_core::shell::{self, Shell};
 use sjel_gpui_ui::documents::PdfRenderer;
+use sjel_gpui_ui::ely::buttons::Button;
+use sjel_gpui_ui::ely::theme::ControlSize;
 use sjel_gpui_ui::nsh_documents::{
     connect, set_nsh_page, set_originals, set_pdf_viewer, NshHostScreen, NshPage, PDF_COMPONENT,
 };
@@ -421,16 +421,14 @@ impl Render for NshPdfView {
             .border_b_1()
             .border_color(rgba(palette.border))
             .child(
-                Button::new("nsh-pdf-prev")
-                    .small()
-                    .label("‹ Page")
+                Button::new("nsh-pdf-prev", "‹ Page")
+                    .size(ControlSize::Sm)
                     .disabled(page == 0)
                     .on_click(cx.listener(|view, _, _, cx| view.step_page(-1, cx))),
             )
             .child(
-                Button::new("nsh-pdf-next")
-                    .small()
-                    .label("Page ›")
+                Button::new("nsh-pdf-next", "Page ›")
+                    .size(ControlSize::Sm)
                     .disabled(pages == 0 || page + 1 >= pages)
                     .on_click(cx.listener(|view, _, _, cx| view.step_page(1, cx))),
             )
@@ -442,28 +440,28 @@ impl Render for NshPdfView {
                     .child(page_label),
             )
             .child(
-                Button::new("nsh-pdf-zoom")
-                    .small()
-                    .label(if zoomed { "2×" } else { "Fit" })
+                Button::new("nsh-pdf-zoom", if zoomed { "2×" } else { "Fit" })
+                    .size(ControlSize::Sm)
                     .on_click(cx.listener(move |view, _, _, cx| view.set_zoom(!zoomed, cx))),
             )
             .when(pages > 1, |bar| {
                 bar.child(
-                    Button::new("nsh-pdf-thumbs")
-                        .small()
-                        .label(if show_thumbnails {
+                    Button::new(
+                        "nsh-pdf-thumbs",
+                        if show_thumbnails {
                             "Hide thumbs"
                         } else {
                             "Thumbnails"
-                        })
-                        .on_click(cx.listener(|view, _, _, cx| view.toggle_thumbnails(cx))),
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .on_click(cx.listener(|view, _, _, cx| view.toggle_thumbnails(cx))),
                 )
             })
             .child(div().flex_1())
             .child(
-                Button::new("nsh-pdf-preview")
-                    .small()
-                    .label("Open in Preview")
+                Button::new("nsh-pdf-preview", "Open in Preview")
+                    .size(ControlSize::Sm)
                     .disabled(self.bytes.is_none())
                     .on_click(cx.listener(|view, _, _, _| view.open_in_preview())),
             );

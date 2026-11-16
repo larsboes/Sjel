@@ -14,10 +14,10 @@ pub mod types;
 pub use actions::*;
 pub use types::*;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{InputEvent, InputState};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, point, prelude::*, px, rgb, AnyElement, Context, Entity, FocusHandle, FontWeight,
     ListAlignment, ListOffset, ListState, ScrollHandle, SharedString, Subscription, Window,
@@ -85,7 +85,7 @@ pub struct Feed {
     pub library_status: Option<Filter>,
     pub library_kind: Option<String>,
     pub(crate) library_query: String,
-    pub(crate) library_input: Option<(Entity<InputState>, Subscription)>,
+    pub(crate) library_input: Option<(Entity<TextInput>, Subscription)>,
     /// The archive's scroller, and its order: the Library tab draws only the rows on screen.
     pub(crate) library_list: ListState,
     pub(crate) library_order: Vec<usize>,
@@ -324,15 +324,15 @@ impl Feed {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.library_input {
             return input.clone();
         }
         let input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search title, author or link…"));
+            cx.new(|cx| TextInput::new(window, cx).placeholder("Search title, author or link…"));
         let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
-                view.library_query = input.read(cx).value().trim().to_lowercase();
+            if matches!(event, InputEvent::Changed) {
+                view.library_query = input.read(cx).text().trim().to_lowercase();
                 view.library_rev = view.library_rev.wrapping_add(1);
                 cx.notify();
             }
@@ -505,11 +505,13 @@ impl Feed {
     /// The page title and the native Feed task switch.
     pub(crate) fn title_row(&self, cx: &mut Context<Self>) -> AnyElement {
         let tab = |label: &'static str, tab: Tab, cx: &mut Context<Self>| {
-            Button::new(SharedString::from(format!("feed-tab-{label}")))
-                .small()
-                .label(label)
-                .when(self.tab == tab, |b| b.primary())
-                .when(self.tab != tab, |b| b.ghost())
+            Button::new(SharedString::from(format!("feed-tab-{label}")), label)
+                .size(ControlSize::Sm)
+                .variant(if self.tab == tab {
+                    ButtonVariant::Primary
+                } else {
+                    ButtonVariant::Ghost
+                })
                 .on_click(cx.listener(move |view, _, _, cx| view.set_tab(tab, cx)))
         };
         div()
@@ -530,9 +532,8 @@ impl Feed {
             .child(tab("Clips", Tab::Clips, cx))
             .child(div().flex_1())
             .child(
-                Button::new("feed-quick-clip")
-                    .small()
-                    .label("+ Quick Clip")
+                Button::new("feed-quick-clip", "+ Quick Clip")
+                    .size(ControlSize::Sm)
                     .on_click(cx.listener(|view, _, window, cx| {
                         view.tab = Tab::Clips;
                         view.reading = None;

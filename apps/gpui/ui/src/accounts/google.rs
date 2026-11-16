@@ -1,8 +1,8 @@
 //! Google client JSON drag-and-drop, OAuth consent flow, and credential card.
 
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui::ExternalPaths;
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 use sjel_gpui_core::accounts::CredentialRow;
 
@@ -150,26 +150,30 @@ impl Accounts {
                 move |view, paths: &ExternalPaths, _, cx| view.drop_file(&id, paths, cx)
             }))
             .child(drop_label);
-        let connect = Button::new(SharedString::from(format!("connect-{}", row.id)))
-            .primary()
-            .small()
-            .label(if busy { "Connecting…" } else { "Connect" })
-            .disabled(dropped.is_none() || self.busy.is_some())
-            .on_click(cx.listener({
-                let row = row.clone();
-                move |view, _, _, cx| view.connect(row.clone(), cx)
-            }));
+        let connect = Button::new(
+            SharedString::from(format!("connect-{}", row.id)),
+            if busy { "Connecting…" } else { "Connect" },
+        )
+        .variant(ButtonVariant::Primary)
+        .size(ControlSize::Sm)
+        .disabled(dropped.is_none() || self.busy.is_some())
+        .on_click(cx.listener({
+            let row = row.clone();
+            move |view, _, _, cx| view.connect(row.clone(), cx)
+        }));
         // Offered only when the old env file holds the grant and the keychain does not.
         let move_button = (row.env_file && !row.in_keychain).then(|| {
-            Button::new(SharedString::from(format!("move-{}", row.id)))
-                .outline()
-                .small()
-                .label("Move to keychain")
-                .disabled(self.busy.is_some())
-                .on_click(cx.listener({
-                    let row = row.clone();
-                    move |view, _, _, cx| view.move_to_keychain(row.clone(), cx)
-                }))
+            Button::new(
+                SharedString::from(format!("move-{}", row.id)),
+                "Move to keychain",
+            )
+            .variant(ButtonVariant::Outline)
+            .size(ControlSize::Sm)
+            .disabled(self.busy.is_some())
+            .on_click(cx.listener({
+                let row = row.clone();
+                move |view, _, _, cx| view.move_to_keychain(row.clone(), cx)
+            }))
         });
         let steps = row.steps.iter().enumerate().map(|(i, step)| {
             div()

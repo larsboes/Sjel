@@ -1,6 +1,6 @@
 //! Individual mail row rendering and mobile drawer actions.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
 use sjel_gpui_core::mail::{category_label, MailAction, MailProposal, CATEGORIES};
 
@@ -156,15 +156,14 @@ impl Mail {
                                         )
                                         .when_some(proposed, |el, stream| {
                                             el.child(
-                                                Button::new(SharedString::from(format!(
-                                                    "mail-model-accept-{i}"
-                                                )))
-                                                .xsmall()
-                                                .ghost()
-                                                .label(format!(
-                                                    "Accept {}",
-                                                    category_label(&stream)
-                                                ))
+                                                Button::new(
+                                                    SharedString::from(format!(
+                                                        "mail-model-accept-{i}"
+                                                    )),
+                                                    format!("Accept {}", category_label(&stream)),
+                                                )
+                                                .size(ControlSize::Sm)
+                                                .variant(ButtonVariant::Ghost)
                                                 .on_click(cx.listener(move |view, _, _, cx| {
                                                     cx.stop_propagation();
                                                     view.direct_action(
@@ -190,28 +189,32 @@ impl Mail {
                                             ),
                                         )
                                         .child(
-                                            Button::new(SharedString::from(format!(
-                                                "mail-job-retry-{i}"
-                                            )))
-                                            .xsmall()
-                                            .ghost()
-                                            .label("Retry")
-                                            .on_click(cx.listener(move |view, _, _, cx| {
-                                                cx.stop_propagation();
-                                                view.gmail_job(retry.clone(), "retry", cx);
-                                            })),
+                                            Button::new(
+                                                SharedString::from(format!("mail-job-retry-{i}")),
+                                                "Retry",
+                                            )
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Ghost)
+                                            .on_click(
+                                                cx.listener(move |view, _, _, cx| {
+                                                    cx.stop_propagation();
+                                                    view.gmail_job(retry.clone(), "retry", cx);
+                                                }),
+                                            ),
                                         )
                                         .child(
-                                            Button::new(SharedString::from(format!(
-                                                "mail-job-cancel-{i}"
-                                            )))
-                                            .xsmall()
-                                            .ghost()
-                                            .label("Cancel action")
-                                            .on_click(cx.listener(move |view, _, _, cx| {
-                                                cx.stop_propagation();
-                                                view.gmail_job(id.clone(), "cancel", cx);
-                                            })),
+                                            Button::new(
+                                                SharedString::from(format!("mail-job-cancel-{i}")),
+                                                "Cancel action",
+                                            )
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Ghost)
+                                            .on_click(
+                                                cx.listener(move |view, _, _, cx| {
+                                                    cx.stop_propagation();
+                                                    view.gmail_job(id.clone(), "cancel", cx);
+                                                }),
+                                            ),
                                         ),
                                 )
                             })
@@ -259,68 +262,86 @@ impl Mail {
                                 .flex_wrap()
                                 .gap_1()
                                 .child(
-                                    Button::new(SharedString::from(format!("mail-row-d-{i}")))
-                                        .xsmall()
-                                        .ghost()
-                                        .label("Dismiss")
-                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                    Button::new(
+                                        SharedString::from(format!("mail-row-d-{i}")),
+                                        "Dismiss",
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(cx.listener(
+                                        move |view, _, _, cx| {
                                             view.direct_action(
                                                 id1.clone(),
                                                 MailAction::Dismiss,
                                                 cx,
                                             );
-                                        })),
+                                        },
+                                    )),
                                 )
                                 .child(
-                                    Button::new(SharedString::from(format!("mail-row-w-{i}")))
-                                        .xsmall()
-                                        .ghost()
-                                        .label("Waiting")
-                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                    Button::new(
+                                        SharedString::from(format!("mail-row-w-{i}")),
+                                        "Waiting",
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(cx.listener(
+                                        move |view, _, _, cx| {
                                             view.direct_action(
                                                 id2.clone(),
                                                 MailAction::Waiting,
                                                 cx,
                                             );
-                                        })),
+                                        },
+                                    )),
                                 )
                                 .child(
-                                    Button::new(SharedString::from(format!("mail-row-e-{i}")))
-                                        .xsmall()
-                                        .ghost()
-                                        .label("Archive")
-                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                    Button::new(
+                                        SharedString::from(format!("mail-row-e-{i}")),
+                                        "Archive",
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(cx.listener(
+                                        move |view, _, _, cx| {
                                             view.direct_action(
                                                 id3.clone(),
                                                 MailAction::Archive,
                                                 cx,
                                             );
-                                        })),
+                                        },
+                                    )),
                                 )
                                 .child(
-                                    Button::new(SharedString::from(format!("mail-row-t-{i}")))
-                                        .xsmall()
-                                        .ghost()
-                                        .label("Trash")
-                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                    Button::new(
+                                        SharedString::from(format!("mail-row-t-{i}")),
+                                        "Trash",
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(cx.listener(
+                                        move |view, _, _, cx| {
                                             view.direct_action(id4.clone(), MailAction::Trash, cx);
-                                        })),
+                                        },
+                                    )),
                                 )
                                 .children(CATEGORIES.iter().take(3).map(|(key, label)| {
                                     let this_id = id_cat.clone();
-                                    Button::new(SharedString::from(format!(
-                                        "mail-row-cat-{key}-{i}"
-                                    )))
-                                    .xsmall()
-                                    .ghost()
-                                    .label(format!("→ {label}"))
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.direct_action(
-                                            this_id.clone(),
-                                            MailAction::Categorize((*key).to_owned()),
-                                            cx,
-                                        );
-                                    }))
+                                    Button::new(
+                                        SharedString::from(format!("mail-row-cat-{key}-{i}")),
+                                        format!("→ {label}"),
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(cx.listener(
+                                        move |view, _, _, cx| {
+                                            view.direct_action(
+                                                this_id.clone(),
+                                                MailAction::Categorize((*key).to_owned()),
+                                                cx,
+                                            );
+                                        },
+                                    ))
                                 })),
                         ),
                 )

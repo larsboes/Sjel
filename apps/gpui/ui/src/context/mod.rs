@@ -10,9 +10,9 @@ pub mod types;
 
 pub use types::{bind_keys, ContextEvent, NextDay, PreviousDay, Refresh, Today};
 
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use chrono::{Duration, Local, NaiveDate};
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, rgb, AnyElement, Context, EventEmitter, FocusHandle, FontWeight, Window,
 };
@@ -309,10 +309,9 @@ impl ContextPage {
                                 )
                                 .when(self.filter_kind.is_some(), |el| {
                                     el.child(
-                                        Button::new("context-clear-filter")
-                                            .xsmall()
-                                            .ghost()
-                                            .label("Show all")
+                                        Button::new("context-clear-filter", "Show all")
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Ghost)
                                             .on_click(cx.listener(|page, _, _, cx| {
                                                 page.filter_kind = None;
                                                 cx.notify();

@@ -8,9 +8,6 @@ use gpui::{
     div, prelude::*, px, rems, rgb, rgba, AnyElement, App, Context, Entity, Focusable,
     Subscription, Window,
 };
-use gpui_kit::component::button::{Button as KitButton, ButtonVariants};
-use gpui_kit::component::input::Input as KitInput;
-use gpui_kit::component::Sizable;
 use sjel_gpui_core::inventory::{
     filter_inventory, format_cents, format_dimensions, group_of, InteriorItemImpact, InventoryItem,
     InventoryRow, InventoryState, InventoryStateHistoryEntry,
@@ -18,7 +15,7 @@ use sjel_gpui_core::inventory::{
 use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::data::Remote;
-use crate::ely::buttons::{Button as ElyButton, ButtonVariant};
+use crate::ely::buttons::{Button as ElyButton, ButtonVariant, ToggleButton, ToggleItem};
 use crate::ely::data_display::Tone;
 use crate::ely::forms::{Form as ElyForm, FormError, FormField, Input, InputEvent, TextInput};
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
@@ -567,48 +564,64 @@ impl InventoryPage {
                 ),
             ]))
             .child(
-                // Filter Bar
                 div()
+                    .id("inventory-owned-filters")
+                    .debug_selector(|| "inventory-owned-filters".to_owned())
                     .flex()
+                    .flex_wrap()
                     .items_center()
-                    .justify_between()
                     .gap_4()
                     .child(
                         div()
+                            .id("inventory-owned-search")
+                            .debug_selector(|| "inventory-owned-search".to_owned())
                             .w(px(280.))
-                            .child(KitInput::new(&search_field).small()),
+                            .flex_none()
+                            .child(Input::new(&search_field).size(ControlSize::Sm)),
                     )
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .items_center()
                             .gap_1()
                             .child(
-                                KitButton::new("cat-all")
-                                    .small()
-                                    .label("All")
-                                    .when(self.selected_category.is_none(), |b| b.primary())
-                                    .when(self.selected_category.is_some(), |b| b.ghost())
-                                    .on_click(cx.listener(|page, _, _, cx| {
-                                        page.selected_category = None;
-                                        page.filter_rev = page.filter_rev.wrapping_add(1);
-                                        cx.notify();
-                                    })),
+                                ToggleButton::new(
+                                    "cat-all",
+                                    ToggleItem::new("All").label("All"),
+                                    self.selected_category.is_none(),
+                                )
+                                .size(ControlSize::Sm)
+                                .on_toggle({
+                                    let page = cx.entity();
+                                    move |_, _, cx| {
+                                        page.update(cx, |page, cx| {
+                                            page.selected_category = None;
+                                            page.filter_rev = page.filter_rev.wrapping_add(1);
+                                            cx.notify();
+                                        })
+                                    }
+                                }),
                             )
                             .children(categories.into_iter().map(|cat| {
                                 let active = self.selected_category.as_deref() == Some(&cat);
                                 let cat_name = cat.clone();
-                                KitButton::new(format!("cat-{}", cat))
-                                    .small()
-                                    .label(cat.clone())
-                                    .when(active, |b| b.primary())
-                                    .when(!active, |b| b.ghost())
-                                    .on_click(cx.listener(move |page, _, _, cx| {
-                                        page.selected_category =
-                                            if active { None } else { Some(cat_name.clone()) };
-                                        page.filter_rev = page.filter_rev.wrapping_add(1);
-                                        cx.notify();
-                                    }))
+                                ToggleButton::new(
+                                    format!("cat-{}", cat),
+                                    ToggleItem::new(cat.clone()).label(cat),
+                                    active,
+                                )
+                                .size(ControlSize::Sm)
+                                .on_toggle({
+                                    let page = cx.entity();
+                                    move |on, _, cx| {
+                                        page.update(cx, |page, cx| {
+                                            page.selected_category = on.then(|| cat_name.clone());
+                                            page.filter_rev = page.filter_rev.wrapping_add(1);
+                                            cx.notify();
+                                        })
+                                    }
+                                })
                             })),
                     ),
             );
@@ -630,6 +643,7 @@ impl InventoryPage {
             .child(
                 div().flex_1().min_h_0().child(
                     DataTable::new("inventory-owned", owned_columns())
+                        .label("Owned assets")
                         .rows(rows)
                         .sorts([SortKey {
                             column: "name".into(),

@@ -1,9 +1,8 @@
 //! Trip discovery, calendar drafts, and library list.
 use super::forms::FormKind;
 use super::{trip_draft_key, Travel};
+use crate::ely::{buttons::ButtonVariant, theme::ControlSize};
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
-use gpui_kit::component::button::ButtonVariants;
-use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::travel::{PlanExt, TravelRoute, TripSection};
 
 impl Travel {
@@ -119,17 +118,19 @@ impl Travel {
                     .gap_2()
                     .child(line(draft.place.clone(), detail))
                     .child(
-                        self.button("home-create-trip")
-                            .primary()
-                            .label(if busy {
+                        self.button(
+                            "home-create-trip",
+                            if busy {
                                 "Creating trip…"
                             } else {
                                 "Create trip"
-                            })
-                            .disabled(busy || self.writer().is_none())
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.materialize_trip_draft(draft.clone(), cx)
-                            })),
+                            },
+                        )
+                        .variant(ButtonVariant::Primary)
+                        .disabled(busy || self.writer().is_none())
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.materialize_trip_draft(draft.clone(), cx)
+                        })),
                     )
                     .into_any_element(),
                 None,
@@ -169,10 +170,9 @@ impl Travel {
                     )
                     .child(
                         div().flex().items_center().gap_1().child(
-                            self.button("open-location-map")
-                                .small()
-                                .ghost()
-                                .label("Open map")
+                            self.button("open-location-map", "Open map")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.open_route(TravelRoute::Map, cx)
                                 })),
@@ -189,8 +189,7 @@ impl Travel {
             .child(self.trip_suggestions(cx))
             .child(
                 div().child(
-                    self.button("open-connections")
-                        .label("Find a connection")
+                    self.button("open-connections", "Find a connection")
                         .on_click(cx.listener(|view, _, _, cx| {
                             view.open_route(TravelRoute::Connections, cx)
                         })),
@@ -387,17 +386,19 @@ impl Travel {
                 }
             }
             list = list.child(
-                self.button("toggle-past-trips")
-                    .ghost()
-                    .label(if self.show_all {
+                self.button(
+                    "toggle-past-trips",
+                    if self.show_all {
                         "Hide past trips".to_string()
                     } else {
                         format!("Show {past_count} past trips")
-                    })
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.show_all = !view.show_all;
-                        cx.notify();
-                    })),
+                    },
+                )
+                .variant(ButtonVariant::Ghost)
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.show_all = !view.show_all;
+                    cx.notify();
+                })),
             );
         }
         if self.density.is_mobile() {
@@ -552,39 +553,43 @@ impl Travel {
                                     },
                                 ))
                                 .child(
-                                    self.button(SharedString::from(format!(
-                                        "open-draft-trip-{id}"
-                                    )))
-                                    .ghost()
-                                    .label("Open trip")
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.open_route(
-                                            TravelRoute::Trip {
-                                                id: id.clone(),
-                                                section: TripSection::Overview,
-                                            },
-                                            cx,
-                                        )
-                                    })),
+                                    self.button(
+                                        SharedString::from(format!("open-draft-trip-{id}")),
+                                        "Open trip",
+                                    )
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(cx.listener(
+                                        move |view, _, _, cx| {
+                                            view.open_route(
+                                                TravelRoute::Trip {
+                                                    id: id.clone(),
+                                                    section: TripSection::Overview,
+                                                },
+                                                cx,
+                                            )
+                                        },
+                                    )),
                                 )
                                 .into_any_element()
                         } else if self.writer().is_some() {
                             let draft = draft.clone();
                             div()
                                 .child(
-                                    self.button(SharedString::from(format!(
-                                        "create-draft-trip-{key}"
-                                    )))
-                                    .primary()
-                                    .label(if busy {
-                                        "Creating trip…".to_owned()
-                                    } else {
-                                        format!("Create {title}")
-                                    })
+                                    self.button(
+                                        SharedString::from(format!("create-draft-trip-{key}")),
+                                        if busy {
+                                            "Creating trip…".to_owned()
+                                        } else {
+                                            format!("Create {title}")
+                                        },
+                                    )
+                                    .variant(ButtonVariant::Primary)
                                     .disabled(self.trip_draft_action.is_some())
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.materialize_trip_draft(draft.clone(), cx)
-                                    })),
+                                    .on_click(cx.listener(
+                                        move |view, _, _, cx| {
+                                            view.materialize_trip_draft(draft.clone(), cx)
+                                        },
+                                    )),
                                 )
                                 .into_any_element()
                         } else {

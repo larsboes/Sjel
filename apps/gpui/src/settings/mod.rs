@@ -9,11 +9,11 @@
 use std::collections::BTreeSet;
 use std::fs;
 
-use gpui_kit::component::button::{Button, ButtonGroup, ButtonVariants};
-use gpui_kit::component::input::Input;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Selectable, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString, Window};
+use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
+use sjel_gpui_ui::ely::forms::Input;
+use sjel_gpui_ui::ely::theme::ControlSize;
 
 pub(super) use crate::update::{BUILD_TIME, RUNNING_COMMIT};
 use crate::workspace::Workspace;
@@ -623,28 +623,30 @@ pub(super) fn segmented<L: Into<SharedString>>(
     cx: &mut Context<Workspace>,
     next: impl Fn(usize) -> AppearanceSettings + 'static,
 ) -> impl IntoElement {
-    // The chosen option is filled with the accent and the rest are outlined: gpui-kit draws a
-    // selected outline button like a pressed one, which reads the same as the others.
-    ButtonGroup::new(id)
-        .small()
+    let next = std::rc::Rc::new(next);
+    div()
+        .id(id)
+        .flex()
+        .items_center()
+        .gap_1()
         .children(
             options
                 .into_iter()
                 .enumerate()
                 .map(|(ix, (label, selected))| {
-                    let button = Button::new((id, ix)).label(label).selected(selected);
-                    if selected {
-                        button.primary()
-                    } else {
-                        button.outline()
-                    }
+                    let next = next.clone();
+                    Button::new((id, ix), label)
+                        .size(ControlSize::Sm)
+                        .variant(if selected {
+                            ButtonVariant::Primary
+                        } else {
+                            ButtonVariant::Outline
+                        })
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.set_appearance(next(ix), cx);
+                        }))
                 }),
         )
-        .on_click(cx.listener(move |view, picked: &Vec<usize>, _, cx| {
-            if let Some(&ix) = picked.first() {
-                view.set_appearance(next(ix), cx);
-            }
-        }))
 }
 
 /// One dot per accent, the current one ringed.

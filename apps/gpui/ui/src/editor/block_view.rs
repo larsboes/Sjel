@@ -334,7 +334,7 @@ pub(crate) fn render_block(
         .menu
         .as_ref()
         .filter(|menu| menu.block == index)
-        .map(|menu| render_menu(menu, palette, cx));
+        .map(|menu| render_menu(menu, row.input.downgrade(), cx));
     div()
         .id(("block", index))
         .group("block")

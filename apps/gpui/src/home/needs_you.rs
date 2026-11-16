@@ -1,7 +1,9 @@
-use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::tag::Tag;
-use gpui_kit::component::{ActiveTheme, Disableable, Sizable};
+use gpui_kit::component::{ActiveTheme, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, SharedString};
+use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
+use sjel_gpui_ui::ely::primitives::Tooltip;
+use sjel_gpui_ui::ely::theme::ControlSize;
 
 use crate::route::Page;
 use crate::selection::Item;
@@ -93,26 +95,35 @@ pub fn approval_row(
                 ),
         )
         .child(
-            Button::new(SharedString::from(format!("deny-{}", approval.id)))
-                .ghost()
-                .small()
-                .label("Deny")
-                .tooltip("Deny (⌘⌫)")
-                .disabled(busy)
-                .on_click(cx.listener(move |view, _, window, cx| {
-                    view.decide(deny_id.clone(), false, window, cx)
-                })),
+            div()
+                .id(SharedString::from(format!("deny-tip-{}", approval.id)))
+                .tooltip(Tooltip::text("Deny (⌘⌫)"))
+                .child(
+                    Button::new(SharedString::from(format!("deny-{}", approval.id)), "Deny")
+                        .variant(ButtonVariant::Ghost)
+                        .size(ControlSize::Sm)
+                        .disabled(busy)
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            view.decide(deny_id.clone(), false, window, cx)
+                        })),
+                ),
         )
         .child(
-            Button::new(SharedString::from(format!("allow-{}", approval.id)))
-                .primary()
-                .small()
-                .label("Allow")
-                .tooltip("Allow (↩)")
-                .loading(busy)
-                .on_click(cx.listener(move |view, _, window, cx| {
-                    view.decide(allow_id.clone(), true, window, cx)
-                })),
+            div()
+                .id(SharedString::from(format!("allow-tip-{}", approval.id)))
+                .tooltip(Tooltip::text("Allow (↩)"))
+                .child(
+                    Button::new(
+                        SharedString::from(format!("allow-{}", approval.id)),
+                        "Allow",
+                    )
+                    .variant(ButtonVariant::Primary)
+                    .size(ControlSize::Sm)
+                    .loading(busy)
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        view.decide(allow_id.clone(), true, window, cx)
+                    })),
+                ),
         )
         .into_any_element()
 }
@@ -149,14 +160,17 @@ pub fn down_row(
                 ),
         )
         .child(
-            Button::new(SharedString::from(format!("start-{name}")))
-                .small()
-                .label("Start")
-                .tooltip("Start (↩)")
-                .loading(busy)
-                .on_click(cx.listener(move |view, _, window, cx| {
-                    view.set_running(start_name.clone(), true, window, cx)
-                })),
+            div()
+                .id(SharedString::from(format!("start-tip-{name}")))
+                .tooltip(Tooltip::text("Start (↩)"))
+                .child(
+                    Button::new(SharedString::from(format!("start-{name}")), "Start")
+                        .size(ControlSize::Sm)
+                        .loading(busy)
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            view.set_running(start_name.clone(), true, window, cx)
+                        })),
+                ),
         )
         .into_any_element()
 }

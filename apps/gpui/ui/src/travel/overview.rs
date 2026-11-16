@@ -2,7 +2,6 @@
 use super::forms::Remove;
 use super::Travel;
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context};
-use gpui_kit::component::Disableable;
 use sjel_gpui_core::{
     shell::CalendarEntry,
     travel::{Item, Place, Plan, Retrospective, TripSection},
@@ -46,42 +45,42 @@ impl Travel {
                     .flex()
                     .flex_wrap()
                     .gap_2()
-                    .child(
-                        self.button("open-itinerary")
-                            .label("Open itinerary")
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.open_section(TripSection::Itinerary, cx)
-                            })),
-                    )
-                    .child(self.button("open-map").label("View map").on_click(
+                    .child(self.button("open-itinerary", "Open itinerary").on_click(
+                        cx.listener(|view, _, _, cx| view.open_section(TripSection::Itinerary, cx)),
+                    ))
+                    .child(self.button("open-map", "View map").on_click(
                         cx.listener(|view, _, _, cx| view.open_section(TripSection::Map, cx)),
                     ))
                     .when(has_unlocated, |bar| {
                         bar.child(
-                            self.button("resolve-plan-places")
-                                .label(if self.resolving {
+                            self.button(
+                                "resolve-plan-places",
+                                if self.resolving {
                                     "Locating stops…"
                                 } else {
                                     "Locate stops"
-                                })
-                                .disabled(self.resolving)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.resolve_current_plan(false, cx)
-                                })),
+                                },
+                            )
+                            .disabled(self.resolving)
+                            .on_click(
+                                cx.listener(|view, _, _, cx| view.resolve_current_plan(false, cx)),
+                            ),
                         )
                     })
                     .when(!has_unlocated, |bar| {
                         bar.child(
-                            self.button("refresh-plan-places")
-                                .label(if self.resolving {
+                            self.button(
+                                "refresh-plan-places",
+                                if self.resolving {
                                     "Locating stops…"
                                 } else {
                                     "Refresh coordinates"
-                                })
-                                .disabled(self.resolving)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.resolve_current_plan(true, cx)
-                                })),
+                                },
+                            )
+                            .disabled(self.resolving)
+                            .on_click(
+                                cx.listener(|view, _, _, cx| view.resolve_current_plan(true, cx)),
+                            ),
                         )
                     }),
             );
@@ -935,9 +934,11 @@ impl Travel {
             });
         if place.coordinate().is_some() {
             row = row.child(
-                self.button(gpui::SharedString::from(format!("place-{index}")))
-                    .label("Show on map")
-                    .on_click(cx.listener(move |view, _, _, cx| view.show_stop(place.clone(), cx))),
+                self.button(
+                    gpui::SharedString::from(format!("place-{index}")),
+                    "Show on map",
+                )
+                .on_click(cx.listener(move |view, _, _, cx| view.show_stop(place.clone(), cx))),
             );
         } else {
             row = row.child(
@@ -952,16 +953,18 @@ impl Travel {
                             .child("Coordinates not available"),
                     )
                     .child(
-                        self.button(gpui::SharedString::from(format!("place-locate-{index}")))
-                            .label(if self.resolving {
+                        self.button(
+                            gpui::SharedString::from(format!("place-locate-{index}")),
+                            if self.resolving {
                                 "Locating…"
                             } else {
                                 "Locate"
-                            })
-                            .disabled(self.resolving)
-                            .on_click(
-                                cx.listener(|view, _, _, cx| view.resolve_current_plan(false, cx)),
-                            ),
+                            },
+                        )
+                        .disabled(self.resolving)
+                        .on_click(
+                            cx.listener(|view, _, _, cx| view.resolve_current_plan(false, cx)),
+                        ),
                     ),
             );
         }

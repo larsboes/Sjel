@@ -5,12 +5,12 @@ use super::{
     page::CalendarPage,
     types::{muted, CalendarIntent},
 };
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use crate::theme::tint;
 use crate::Palette;
 use chrono::Local;
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::calendar::{self, kind_color, kind_label, time_label};
 
 impl CalendarPage {
@@ -49,20 +49,18 @@ impl CalendarPage {
                     }),
             )
             .child(
-                Button::new("day-panel-add")
-                    .xsmall()
-                    .ghost()
-                    .label("+ Add")
+                Button::new("day-panel-add", "+ Add")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|page, _, window, cx| page.open_form(window, cx))),
             );
 
         let mut panel = div().flex().flex_col().gap_3().child(header);
         if self.selected_entry.is_some() {
             panel = panel.child(
-                Button::new("calendar-edit-selected")
-                    .small()
-                    .ghost()
-                    .label("Edit entry · Enter")
+                Button::new("calendar-edit-selected", "Edit entry · Enter")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .disabled(self.changing_time)
                     .on_click(cx.listener(|page, _, window, cx| page.edit_selected(window, cx))),
             );
@@ -336,15 +334,17 @@ impl CalendarPage {
                                                     .child("Source: Mail / Comms"),
                                             )
                                             .child(
-                                                Button::new("calendar-open-source-mail")
-                                                    .xsmall()
-                                                    .primary()
-                                                    .label("Open in Mail ↗")
-                                                    .on_click(cx.listener(move |_, _, _, cx| {
-                                                        cx.emit(CalendarIntent::OpenMail {
-                                                            item_id: origin_id.clone(),
-                                                        });
-                                                    })),
+                                                Button::new(
+                                                    "calendar-open-source-mail",
+                                                    "Open in Mail ↗",
+                                                )
+                                                .size(ControlSize::Sm)
+                                                .variant(ButtonVariant::Primary)
+                                                .on_click(cx.listener(move |_, _, _, cx| {
+                                                    cx.emit(CalendarIntent::OpenMail {
+                                                        item_id: origin_id.clone(),
+                                                    });
+                                                })),
                                             ),
                                     )
                                     .when_some(importance_rationale, |card, reason| {
@@ -378,18 +378,22 @@ impl CalendarPage {
                                             .child("Source: Travel / Trips"),
                                     )
                                     .child(
-                                        Button::new("calendar-open-source-travel")
-                                            .xsmall()
-                                            .primary()
-                                            .label("View in Travel ↗")
-                                            .disabled(plan_id.is_none())
-                                            .on_click(cx.listener(move |_, _, _, cx| {
+                                        Button::new(
+                                            "calendar-open-source-travel",
+                                            "View in Travel ↗",
+                                        )
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Primary)
+                                        .disabled(plan_id.is_none())
+                                        .on_click(
+                                            cx.listener(move |_, _, _, cx| {
                                                 if let Some(plan_id) = &plan_id {
                                                     cx.emit(CalendarIntent::OpenTrip {
                                                         plan_id: plan_id.clone(),
                                                     });
                                                 }
-                                            })),
+                                            }),
+                                        ),
                                     ),
                             )
                         })
@@ -432,16 +436,20 @@ impl CalendarPage {
                             for (label, days) in [("Tomorrow", 1), ("+7d", 7), ("−1d", -1)] {
                                 let eid = entry_id.clone();
                                 day_row = day_row.child(
-                                    Button::new(SharedString::from(format!(
-                                        "calendar-quick-day-{days}-{eid}"
-                                    )))
-                                    .xsmall()
-                                    .ghost()
-                                    .label(label)
+                                    Button::new(
+                                        SharedString::from(format!(
+                                            "calendar-quick-day-{days}-{eid}"
+                                        )),
+                                        label,
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
                                     .disabled(self.changing_time)
-                                    .on_click(cx.listener(move |page, _, _, cx| {
-                                        page.quick_shift_days(&eid, days, cx);
-                                    })),
+                                    .on_click(cx.listener(
+                                        move |page, _, _, cx| {
+                                            page.quick_shift_days(&eid, days, cx);
+                                        },
+                                    )),
                                 );
                             }
                             bar = bar.child(day_row);
@@ -464,39 +472,45 @@ impl CalendarPage {
                                     ("+15m len", 15, true),
                                 ] {
                                     let eid = entry_id.clone();
-                                    time_row =
-                                        time_row.child(
-                                            Button::new(SharedString::from(format!(
+                                    time_row = time_row.child(
+                                        Button::new(
+                                            SharedString::from(format!(
                                                 "calendar-quick-time-{label}-{eid}"
-                                            )))
-                                            .xsmall()
-                                            .ghost()
-                                            .label(label)
-                                            .disabled(self.changing_time)
-                                            .on_click(cx.listener(move |page, _, _, cx| {
+                                            )),
+                                            label,
+                                        )
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
+                                        .disabled(self.changing_time)
+                                        .on_click(
+                                            cx.listener(move |page, _, _, cx| {
                                                 page.quick_shift_minutes(&eid, delta, resize, cx);
-                                            })),
-                                        );
+                                            }),
+                                        ),
+                                    );
                                 }
                                 bar = bar.child(time_row);
                             }
 
                             if self.undo_time.is_some() {
-                                bar =
-                                    bar.child(
-                                        div().flex().items_center().justify_end().child(
-                                            Button::new(SharedString::from(format!(
+                                bar = bar.child(
+                                    div().flex().items_center().justify_end().child(
+                                        Button::new(
+                                            SharedString::from(format!(
                                                 "calendar-quick-undo-{entry_id}"
-                                            )))
-                                            .xsmall()
-                                            .ghost()
-                                            .label("Undo change ⎌")
-                                            .disabled(self.changing_time)
-                                            .on_click(cx.listener(|page, _, _, cx| {
+                                            )),
+                                            "Undo change ⎌",
+                                        )
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
+                                        .disabled(self.changing_time)
+                                        .on_click(
+                                            cx.listener(|page, _, _, cx| {
                                                 page.undo_time(cx);
-                                            })),
+                                            }),
                                         ),
-                                    );
+                                    ),
+                                );
                             }
 
                             card.child(bar)

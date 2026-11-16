@@ -1,6 +1,6 @@
 //! Opportunity cards, calendar status badges, and action rows.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
 use sjel_gpui_core::scouting::{can_promote_to_calendar, OpportunityStatus, ScoutingOpportunity};
 
@@ -122,70 +122,82 @@ impl ScoutingPage {
                     .flex_wrap()
                     .gap_2()
                     .child(
-                        Button::new(SharedString::from(format!("scout-original-{id}")))
-                            .small()
-                            .ghost()
-                            .label("Open original ↗")
-                            .on_click(move |_, _, cx| cx.open_url(&original_url)),
+                        Button::new(
+                            SharedString::from(format!("scout-original-{id}")),
+                            "Open original ↗",
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(move |_, _, cx| cx.open_url(&original_url)),
                     )
                     .when(can_calendar, |row| {
                         row.child(
-                            Button::new(SharedString::from(format!("scout-calendar-{id}")))
-                                .small()
-                                .ghost()
-                                .label(if already_in_calendar {
+                            Button::new(
+                                SharedString::from(format!("scout-calendar-{id}")),
+                                if already_in_calendar {
                                     "Already in Calendar"
                                 } else {
                                     "Calendar…"
-                                })
-                                .disabled(busy || already_in_calendar)
-                                .on_click(cx.listener(move |page, _, window, cx| {
+                                },
+                            )
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
+                            .disabled(busy || already_in_calendar)
+                            .on_click(cx.listener(
+                                move |page, _, window, cx| {
                                     page.open_promotion(promote.clone(), window, cx)
-                                })),
+                                },
+                            )),
                         )
                     })
                     .child(
-                        Button::new(SharedString::from(format!("scout-save-{id}")))
-                            .small()
-                            .when(status == OpportunityStatus::Saved, |button| {
-                                button.primary()
-                            })
-                            .when(status != OpportunityStatus::Saved, |button| button.ghost())
-                            .label(if busy {
+                        Button::new(
+                            SharedString::from(format!("scout-save-{id}")),
+                            if busy {
                                 "Saving…"
                             } else if status == OpportunityStatus::Saved {
                                 "Saved · Restore"
                             } else {
                                 "Save"
-                            })
-                            .disabled(busy)
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                let next = if status == OpportunityStatus::Saved {
-                                    OpportunityStatus::New
-                                } else {
-                                    OpportunityStatus::Saved
-                                };
-                                page.set_status(save_id.clone(), next, cx);
-                            })),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .when(status == OpportunityStatus::Saved, |button| {
+                            button.variant(ButtonVariant::Primary)
+                        })
+                        .when(status != OpportunityStatus::Saved, |button| {
+                            button.variant(ButtonVariant::Ghost)
+                        })
+                        .disabled(busy)
+                        .on_click(cx.listener(move |page, _, _, cx| {
+                            let next = if status == OpportunityStatus::Saved {
+                                OpportunityStatus::New
+                            } else {
+                                OpportunityStatus::Saved
+                            };
+                            page.set_status(save_id.clone(), next, cx);
+                        })),
                     )
                     .child(
-                        Button::new(SharedString::from(format!("scout-dismiss-{id}")))
-                            .small()
-                            .ghost()
-                            .label(if status == OpportunityStatus::Dismissed {
+                        Button::new(
+                            SharedString::from(format!("scout-dismiss-{id}")),
+                            if status == OpportunityStatus::Dismissed {
                                 "Restore"
                             } else {
                                 "Dismiss"
-                            })
-                            .disabled(busy)
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                let next = if status == OpportunityStatus::Dismissed {
-                                    OpportunityStatus::New
-                                } else {
-                                    OpportunityStatus::Dismissed
-                                };
-                                page.set_status(dismiss_id.clone(), next, cx);
-                            })),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .disabled(busy)
+                        .on_click(cx.listener(move |page, _, _, cx| {
+                            let next = if status == OpportunityStatus::Dismissed {
+                                OpportunityStatus::New
+                            } else {
+                                OpportunityStatus::Dismissed
+                            };
+                            page.set_status(dismiss_id.clone(), next, cx);
+                        })),
                     ),
             )
             .into_any_element()

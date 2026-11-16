@@ -10,8 +10,8 @@ pub mod row;
 
 pub use actions::*;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, rgb, Context, FocusHandle, FontWeight, SharedString, Window};
 use sjel_gpui_core::mail::{
     self, category_label, MailAction, MailProposal, StatusFilter, CATEGORIES,
@@ -382,33 +382,45 @@ impl gpui_kit::Render for Mail {
         };
 
         let statuses = div().flex().gap_1().children(StatusFilter::ALL.map(|s| {
-            Button::new(SharedString::from(format!("mail-status-{}", s.label())))
-                .small()
-                .label(format!("{} {}", s.label(), status_count(s)))
-                .when(self.status == s, |b| b.primary())
-                .when(self.status != s, |b| b.ghost())
-                .on_click(cx.listener(move |view, _, _, cx| view.set_status(s, cx)))
+            Button::new(
+                SharedString::from(format!("mail-status-{}", s.label())),
+                format!("{} {}", s.label(), status_count(s)),
+            )
+            .size(ControlSize::Sm)
+            .variant(if self.status == s {
+                ButtonVariant::Primary
+            } else {
+                ButtonVariant::Ghost
+            })
+            .on_click(cx.listener(move |view, _, _, cx| view.set_status(s, cx)))
         }));
         let categories = div()
             .flex()
             .flex_wrap()
             .gap_1()
             .child(
-                Button::new("mail-category-all")
-                    .xsmall()
-                    .label("All categories")
-                    .when(self.category.is_none(), |b| b.primary())
-                    .when(self.category.is_some(), |b| b.ghost())
+                Button::new("mail-category-all", "All categories")
+                    .size(ControlSize::Sm)
+                    .variant(if self.category.is_none() {
+                        ButtonVariant::Primary
+                    } else {
+                        ButtonVariant::Ghost
+                    })
                     .on_click(cx.listener(|view, _, _, cx| view.set_category(None, cx))),
             )
             .children(CATEGORIES.iter().map(|(key, label)| {
                 let on = self.category == Some(*key);
-                Button::new(SharedString::from(format!("mail-category-{key}")))
-                    .xsmall()
-                    .label(format!("{label} {}", category_count(key)))
-                    .when(on, |b| b.primary())
-                    .when(!on, |b| b.ghost())
-                    .on_click(cx.listener(move |view, _, _, cx| view.set_category(Some(key), cx)))
+                Button::new(
+                    SharedString::from(format!("mail-category-{key}")),
+                    format!("{label} {}", category_count(key)),
+                )
+                .size(ControlSize::Sm)
+                .variant(if on {
+                    ButtonVariant::Primary
+                } else {
+                    ButtonVariant::Ghost
+                })
+                .on_click(cx.listener(move |view, _, _, cx| view.set_category(Some(key), cx)))
             }));
 
         let targets = self.targets();
@@ -465,14 +477,16 @@ impl gpui_kit::Render for Mail {
         }
         if total > self.shown {
             list = list.child(
-                Button::new("mail-show-more")
-                    .small()
-                    .ghost()
-                    .label(format!("Show more ({} of {total} shown)", self.shown))
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.shown += PAGE;
-                        cx.notify();
-                    })),
+                Button::new(
+                    "mail-show-more",
+                    format!("Show more ({} of {total} shown)", self.shown),
+                )
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.shown += PAGE;
+                    cx.notify();
+                })),
             );
         }
 
@@ -485,14 +499,19 @@ impl gpui_kit::Render for Mail {
             .into_iter()
             .map(|d| {
                 let active = self.density == d;
-                Button::new(SharedString::from(format!("mail-density-{}", d.label())))
-                    .xsmall()
-                    .ghost()
-                    .when(active, |b| b.primary())
-                    .label(d.label())
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.set_density(d, cx);
-                    }))
+                Button::new(
+                    SharedString::from(format!("mail-density-{}", d.label())),
+                    d.label(),
+                )
+                .size(ControlSize::Sm)
+                .variant(if active {
+                    ButtonVariant::Primary
+                } else {
+                    ButtonVariant::Ghost
+                })
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.set_density(d, cx);
+                }))
             }),
         );
 

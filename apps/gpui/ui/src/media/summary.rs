@@ -1,7 +1,7 @@
 //! Index metrics, volume integrity summary, and mounted volumes table.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 use sjel_gpui_core::media::{format_bytes, total_volume_bytes, MediaStatus, MediaVolume};
 
@@ -41,10 +41,9 @@ pub fn render_index_summary(
                         ),
                 )
                 .child(
-                    Button::new("media-refresh")
-                        .small()
-                        .ghost()
-                        .label("Refresh")
+                    Button::new("media-refresh", "Refresh")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.refresh(cx);
                         })),

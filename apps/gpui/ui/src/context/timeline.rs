@@ -1,8 +1,8 @@
 //! Timeline rows, kind pills, and empty quiet day view.
 
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use chrono::NaiveDate;
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
 use sjel_gpui_core::context::{format_money, TimelineItem, TimelineKind};
 
@@ -85,14 +85,16 @@ pub fn render_timeline_row(
                 .unwrap_or(&item.id)
                 .to_string();
             let is_done = item.completed;
-            Button::new(SharedString::from(format!("toggle-task-{}", item.id)))
-                .xsmall()
-                .ghost()
-                .label(if is_done { "✓ Done" } else { "○ Mark Done" })
-                .on_click(cx.listener(move |page, _, _, cx| {
-                    page.toggle_task(task_id.clone(), is_done, cx);
-                }))
-                .into_any_element()
+            Button::new(
+                SharedString::from(format!("toggle-task-{}", item.id)),
+                if is_done { "✓ Done" } else { "○ Mark Done" },
+            )
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
+            .on_click(cx.listener(move |page, _, _, cx| {
+                page.toggle_task(task_id.clone(), is_done, cx);
+            }))
+            .into_any_element()
         }
         TimelineKind::Spend => {
             if let Some(cents) = item.amount_cents {

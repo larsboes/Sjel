@@ -1,6 +1,6 @@
 //! CV Master header, profile builder controls, output card, and built PDF list.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 use sjel_gpui_core::cv::{count_stale_pdfs, pdf_for_profile, CvView, CvWriteRequest};
 
@@ -143,37 +143,33 @@ impl CvPage {
         let profile_buttons = view.profiles.iter().cloned().map(|prof| {
             let is_selected = prof == selected_profile;
             let prof_clone = prof.clone();
-            Button::new(SharedString::from(format!("prof-{}", prof)))
-                .small()
-                .when(!is_selected, |b| b.ghost())
-                .label(prof)
+            Button::new(SharedString::from(format!("prof-{}", prof)), prof)
+                .size(ControlSize::Sm)
+                .when(!is_selected, |b| b.variant(ButtonVariant::Ghost))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.selected_profile = prof_clone.clone();
                     cx.notify();
                 }))
         });
 
-        let lang_en = Button::new("lang-en")
-            .small()
-            .when(selected_lang != "en", |b| b.ghost())
-            .label("English (en)")
+        let lang_en = Button::new("lang-en", "English (en)")
+            .size(ControlSize::Sm)
+            .when(selected_lang != "en", |b| b.variant(ButtonVariant::Ghost))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.selected_lang = "en".to_string();
                 cx.notify();
             }));
 
-        let lang_de = Button::new("lang-de")
-            .small()
-            .when(selected_lang != "de", |b| b.ghost())
-            .label("German (de)")
+        let lang_de = Button::new("lang-de", "German (de)")
+            .size(ControlSize::Sm)
+            .when(selected_lang != "de", |b| b.variant(ButtonVariant::Ghost))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.selected_lang = "de".to_string();
                 cx.notify();
             }));
 
-        let btn_build = Button::new("btn-build")
-            .small()
-            .label("Build PDF")
+        let btn_build = Button::new("btn-build", "Build PDF")
+            .size(ControlSize::Sm)
             .disabled(is_busy)
             .on_click(cx.listener({
                 let profile = selected_profile.clone();
@@ -192,10 +188,9 @@ impl CvPage {
                 }
             }));
 
-        let btn_build_all = Button::new("btn-build-all")
-            .small()
-            .ghost()
-            .label("Build All")
+        let btn_build_all = Button::new("btn-build-all", "Build All")
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
             .disabled(is_busy)
             .on_click(cx.listener(|this, _, window, cx| {
                 this.run_action(
@@ -208,10 +203,9 @@ impl CvPage {
                 );
             }));
 
-        let btn_li_pull = Button::new("btn-li-pull")
-            .small()
-            .ghost()
-            .label("Pull LinkedIn")
+        let btn_li_pull = Button::new("btn-li-pull", "Pull LinkedIn")
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
             .disabled(is_busy)
             .on_click(cx.listener(|this, _, window, cx| {
                 this.run_action(
@@ -224,10 +218,9 @@ impl CvPage {
                 );
             }));
 
-        let btn_li_diff = Button::new("btn-li-diff")
-            .small()
-            .ghost()
-            .label("LinkedIn Diff")
+        let btn_li_diff = Button::new("btn-li-diff", "LinkedIn Diff")
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
             .disabled(is_busy || view.linkedin_pulled.is_none())
             .on_click(cx.listener(|this, _, window, cx| {
                 this.run_action(
@@ -240,10 +233,9 @@ impl CvPage {
                 );
             }));
 
-        let btn_li_sheet = Button::new("btn-li-sheet")
-            .small()
-            .ghost()
-            .label(format!("Paste Sheet ({})", selected_lang))
+        let btn_li_sheet = Button::new("btn-li-sheet", format!("Paste Sheet ({})", selected_lang))
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
             .disabled(is_busy)
             .on_click(cx.listener({
                 let lang = selected_lang.clone();
@@ -354,10 +346,9 @@ impl CvPage {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let output = self.output.as_ref()?;
-        let dismiss_btn = Button::new("btn-dismiss-output")
-            .small()
-            .ghost()
-            .label("Dismiss")
+        let dismiss_btn = Button::new("btn-dismiss-output", "Dismiss")
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
             .on_click(cx.listener(|this, _, _, cx| {
                 this.output = None;
                 cx.notify();

@@ -1,7 +1,8 @@
 //! Settings editor for Sjel Clipper templates and interpreter models.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputState, Textarea, TextareaState};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, TextInput};
+use crate::ely::theme::ControlSize;
+use gpui_kit::component::input::{Textarea, TextareaState};
 use gpui_kit::{div, prelude::*, rgb, AnyElement, Context, Entity, IntoElement, Render, Window};
 use serde_json::Value;
 use sjel_gpui_core::clipper::{self, Settings, BEHAVIORS};
@@ -11,9 +12,9 @@ use crate::theme::ThemeContext;
 
 /// The editor's inputs for the selected template.
 struct Editor {
-    name: Entity<InputState>,
-    path: Entity<InputState>,
-    note_name: Entity<InputState>,
+    name: Entity<TextInput>,
+    path: Entity<TextInput>,
+    note_name: Entity<TextInput>,
     content: Entity<TextareaState>,
     triggers: Entity<TextareaState>,
 }
@@ -73,9 +74,9 @@ impl ClipperSettings {
     fn editor(&mut self, window: &mut Window, cx: &mut Context<Self>) -> &Editor {
         if self.editor.is_none() {
             self.editor = Some(Editor {
-                name: cx.new(|cx| InputState::new(window, cx).placeholder("Template name")),
-                path: cx.new(|cx| InputState::new(window, cx).placeholder("Clippings")),
-                note_name: cx.new(|cx| InputState::new(window, cx).placeholder("{{title}}")),
+                name: cx.new(|cx| TextInput::new(window, cx).placeholder("Template name")),
+                path: cx.new(|cx| TextInput::new(window, cx).placeholder("Clippings")),
+                note_name: cx.new(|cx| TextInput::new(window, cx).placeholder("{{title}}")),
                 content: cx.new(|cx| TextareaState::new(window, cx).auto_grow(6, 18)),
                 triggers: cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 6)),
             });
@@ -94,11 +95,11 @@ impl ClipperSettings {
             .unwrap_or(Value::Null);
         self.behavior = clipper::text_field(&template, "behavior");
         if let Some(editor) = &self.editor {
-            let set = |input: &Entity<InputState>,
+            let set = |input: &Entity<TextInput>,
                        value: String,
-                       window: &mut Window,
+                       _window: &mut Window,
                        cx: &mut Context<Self>| {
-                input.update(cx, |input, cx| input.set_value(value, window, cx));
+                input.update(cx, |input, cx| input.set_text(value, cx));
             };
             set(
                 &editor.name,
@@ -139,11 +140,11 @@ impl ClipperSettings {
             return;
         };
         let fields = [
-            ("name", editor.name.read(cx).value().to_string()),
-            ("path", editor.path.read(cx).value().to_string()),
+            ("name", editor.name.read(cx).text().to_owned()),
+            ("path", editor.path.read(cx).text().to_owned()),
             (
                 "noteNameFormat",
-                editor.note_name.read(cx).value().to_string(),
+                editor.note_name.read(cx).text().to_owned(),
             ),
             (
                 "noteContentFormat",
@@ -300,13 +301,18 @@ impl Render for ClipperSettings {
             .enumerate()
             .map(|(index, template)| {
                 let selected = index == self.selected;
-                Button::new(("clipper-template", index))
-                    .small()
-                    .when(selected, |b| b.primary())
-                    .when(!selected, |b| b.ghost())
-                    .label(clipper::text_field(template, "name"))
-                    .on_click(cx.listener(move |view, _, _, cx| view.select(index, cx)))
-                    .into_any_element()
+                Button::new(
+                    ("clipper-template", index),
+                    clipper::text_field(template, "name"),
+                )
+                .size(ControlSize::Sm)
+                .variant(if selected {
+                    ButtonVariant::Primary
+                } else {
+                    ButtonVariant::Ghost
+                })
+                .on_click(cx.listener(move |view, _, _, cx| view.select(index, cx)))
+                .into_any_element()
             })
             .collect();
         let behaviors = div()
@@ -316,11 +322,13 @@ impl Render for ClipperSettings {
             .children(BEHAVIORS.iter().map(|(value, label)| {
                 let selected = self.behavior == *value;
                 let value = (*value).to_owned();
-                Button::new(format!("clipper-behavior-{value}"))
-                    .small()
-                    .when(selected, |b| b.primary())
-                    .when(!selected, |b| b.ghost())
-                    .label(*label)
+                Button::new(format!("clipper-behavior-{value}"), *label)
+                    .size(ControlSize::Sm)
+                    .variant(if selected {
+                        ButtonVariant::Primary
+                    } else {
+                        ButtonVariant::Ghost
+                    })
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.behavior = value.clone();
                         view.commit_editor(cx);
@@ -340,45 +348,39 @@ impl Render for ClipperSettings {
             .flex_wrap()
             .gap_2()
             .child(
-                Button::new("clipper-up")
-                    .small()
-                    .ghost()
-                    .label("Move up")
+                Button::new("clipper-up", "Move up")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|v, _, _, cx| v.reorder(true, cx))),
             )
             .child(
-                Button::new("clipper-down")
-                    .small()
-                    .ghost()
-                    .label("Move down")
+                Button::new("clipper-down", "Move down")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|v, _, _, cx| v.reorder(false, cx))),
             )
             .child(
-                Button::new("clipper-new")
-                    .small()
-                    .ghost()
-                    .label("New template")
+                Button::new("clipper-new", "New template")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|v, _, _, cx| v.add(cx))),
             )
             .child(
-                Button::new("clipper-delete")
-                    .small()
-                    .ghost()
-                    .label("Delete")
+                Button::new("clipper-delete", "Delete")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|v, _, _, cx| v.remove(cx))),
             )
             .child(
-                Button::new("clipper-reload")
-                    .small()
-                    .ghost()
-                    .label("Reload")
+                Button::new("clipper-reload", "Reload")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|v, _, _, cx| v.refresh(cx))),
             )
             .child(
-                Button::new("clipper-save")
-                    .small()
-                    .primary()
-                    .label("Save")
+                Button::new("clipper-save", "Save")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Primary)
                     .on_click(cx.listener(|v, _, _, cx| v.save(cx))),
             );
         div()

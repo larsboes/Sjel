@@ -1,12 +1,12 @@
 //! Native Finance page (`/finance`): personal ledger, transaction search,
 //! account breakdowns, and recurring subscription tracking.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{
-    actions, div, prelude::*, px, App, Context, Entity, FocusHandle, KeyBinding, ScrollHandle,
-    SharedString, Subscription, Window,
+    actions, div, prelude::*, px, App, Context, Entity, FocusHandle, Focusable, KeyBinding,
+    ScrollHandle, SharedString, Subscription, Window,
 };
 use sjel_gpui_core::finance::ReviewQueueMode;
 use sjel_gpui_core::shell::{
@@ -85,13 +85,13 @@ pub struct FinancePage {
     pub(super) csv_mapping_fields: Option<Vec<CsvMappingField>>,
     pub(super) selected_reclass_candidate: Option<String>,
     pub(super) reclass_account: String,
-    pub(super) reclass_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) reclass_input: Option<(Entity<TextInput>, Subscription)>,
     pub(super) queue_mode: ReviewQueueMode,
     pub(super) review_trip_id: String,
     pub(super) selected_expense: Option<String>,
     pub(super) allocation_purpose: String,
     pub(super) personal_amount: String,
-    pub(super) personal_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) personal_input: Option<(Entity<TextInput>, Subscription)>,
     pub(super) selected_trip_id: String,
     pub(super) selected_inflow: Option<String>,
     pub(super) reimbursement_target: Option<String>,
@@ -104,8 +104,8 @@ pub struct FinancePage {
     pub(super) balance_as_of: String,
     pub(super) balance_currency: String,
     pub(super) balance_coverage: BalanceCoverage,
-    pub(super) balance_date_input: Option<(Entity<InputState>, Subscription)>,
-    pub(super) balance_currency_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) balance_date_input: Option<(Entity<crate::ely::forms::TextInput>, Subscription)>,
+    pub(super) balance_currency_input: Option<(Entity<crate::ely::forms::TextInput>, Subscription)>,
     pub(super) balance_fields: Vec<BalanceDraft>,
     pub search_query: String,
     pub selected_category: Option<String>,
@@ -122,7 +122,7 @@ pub struct FinancePage {
     pub overview_scroll: ScrollHandle,
     pub subscriptions_scroll: ScrollHandle,
     pub import_scroll: ScrollHandle,
-    pub(super) search_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) search_input: Option<(Entity<TextInput>, Subscription)>,
     pub(super) focus: FocusHandle,
     pub(super) focus_next: bool,
     pub(super) ideas: Remote<Vec<shell::FinanceIdea>>,
@@ -341,14 +341,14 @@ impl FinancePage {
         .detach();
     }
 
-    fn search_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    fn search_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
         if let Some((input, _)) = &self.search_input {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search transactions…"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Search transactions…"));
         let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
-                view.search_query = input.read(cx).value().trim().to_lowercase();
+            if matches!(event, InputEvent::Changed) {
+                view.search_query = input.read(cx).text().trim().to_lowercase();
                 view.filter_rev = view.filter_rev.wrapping_add(1);
                 cx.notify();
             }
@@ -395,7 +395,7 @@ impl FinancePage {
     pub fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.set_view(View::Transactions, cx);
         let field = self.search_field(window, cx);
-        field.update(cx, |input, cx| input.focus(window, cx));
+        field.update(cx, |input, cx| window.focus(&input.focus_handle(cx), cx));
     }
 
     pub fn open_date(&mut self, date: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -403,7 +403,7 @@ impl FinancePage {
         self.search_query = date.clone();
         self.filter_rev = self.filter_rev.wrapping_add(1);
         let field = self.search_field(window, cx);
-        field.update(cx, |input, cx| input.set_value(date, window, cx));
+        field.update(cx, |input, cx| input.set_text(date, cx));
         cx.notify();
     }
 
@@ -427,15 +427,13 @@ impl Render for FinancePage {
             .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
 
         let view_btn = |label: &'static str, target: View, cx: &mut Context<Self>| {
-            Button::new(SharedString::from(format!("fin-view-{label}")))
-                .small()
-                .label(label)
+            Button::new(SharedString::from(format!("fin-view-{label}")), label)
+                .size(ControlSize::Sm)
                 .when(self.view == target, |b| b.primary())
-                .when(self.view != target, |b| b.ghost())
+                .when(self.view != target, |b| b.variant(ButtonVariant::Ghost))
                 .on_click(cx.listener(move |page, _, _, cx| page.set_view(target, cx)))
         };
 
-        // Header with clean sub-tabs (overview/transactions/subscriptions/import)
         let header = div().flex().items_center().justify_between().gap_4().child(
             div()
                 .flex()
@@ -491,6 +489,29 @@ impl Render for FinancePage {
 mod tests {
     use super::*;
     use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn transaction_search_uses_ely_input_events_and_survives_navigation(cx: &mut TestAppContext) {
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, cx| {
+            let mut page = FinancePage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.set_view(View::Transactions, cx);
+            page
+        });
+        cx.update(|window, cx| page.update(cx, |page, cx| page.focus_search(window, cx)));
+        cx.simulate_input("  Grocery  ");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert_eq!(page.search_query, "grocery"));
+        page.update(cx, |page, cx| page.set_view(View::Overview, cx));
+        cx.run_until_parked();
+        page.update(cx, |page, cx| page.set_view(View::Transactions, cx));
+        cx.run_until_parked();
+        page.read_with(cx, |page, cx| {
+            assert_eq!(
+                page.search_input.as_ref().unwrap().0.read(cx).text(),
+                "  Grocery  "
+            )
+        });
+    }
 
     #[gpui::test]
     fn finance_tab_switching(cx: &mut TestAppContext) {

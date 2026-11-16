@@ -2,8 +2,8 @@
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::interior::{RoomPlanJob, RoomPlanJobState};
 use sjel_gpui_core::shell::{self, ShellError};
@@ -300,30 +300,32 @@ impl RoomPlanHistory {
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let mut choices = vec![Button::new("roomplan-current-layout")
-            .small()
-            .ghost()
-            .label(if self.selected_layout_id.is_none() {
+        let mut choices = vec![Button::new(
+            "roomplan-current-layout",
+            if self.selected_layout_id.is_none() {
                 "✓ Current placements"
             } else {
                 "Current placements"
-            })
-            .on_click(cx.listener(|page, _, _, cx| page.select_layout(None, cx)))
-            .into_any_element()];
+            },
+        )
+        .size(ControlSize::Sm)
+        .variant(ButtonVariant::Ghost)
+        .on_click(cx.listener(|page, _, _, cx| page.select_layout(None, cx)))
+        .into_any_element()];
         if let Some(layouts) = self.layouts.value.as_ref() {
             for layout in layouts {
                 let id = layout.id.clone();
                 choices.push(
-                    Button::new(gpui_kit::SharedString::from(format!(
-                        "roomplan-layout-{id}"
-                    )))
-                    .small()
-                    .ghost()
-                    .label(if self.selected_layout_id.as_deref() == Some(&id) {
-                        format!("✓ {}", layout.name)
-                    } else {
-                        layout.name.clone()
-                    })
+                    Button::new(
+                        gpui_kit::SharedString::from(format!("roomplan-layout-{id}")),
+                        if self.selected_layout_id.as_deref() == Some(&id) {
+                            format!("✓ {}", layout.name)
+                        } else {
+                            layout.name.clone()
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(
                         cx.listener(move |page, _, _, cx| page.select_layout(Some(id.clone()), cx)),
                     )
@@ -395,11 +397,11 @@ impl RoomPlanHistory {
             } else {
                 row.item.label.clone()
             };
-            Button::new(gpui_kit::SharedString::from(format!(
-                "roomplan-compose-item-{id}"
-            )))
-            .small()
-            .label(label)
+            Button::new(
+                gpui_kit::SharedString::from(format!("roomplan-compose-item-{id}")),
+                label,
+            )
+            .size(ControlSize::Sm)
             .on_click(cx.listener(move |page, _, _, cx| page.toggle_compose_ref(id.clone(), cx)))
         });
         let compose_state = if self.inventory.loading {
@@ -458,15 +460,15 @@ impl RoomPlanHistory {
                             ),
                     )
                     .child(
-                        Button::new(gpui_kit::SharedString::from(format!(
-                            "roomplan-save-proposal-{index}"
-                        )))
-                        .small()
-                        .label(if self.saving_candidate == Some(index) {
-                            "Saving…"
-                        } else {
-                            "Save proposal"
-                        })
+                        Button::new(
+                            gpui_kit::SharedString::from(format!("roomplan-save-proposal-{index}")),
+                            if self.saving_candidate == Some(index) {
+                                "Saving…"
+                            } else {
+                                "Save proposal"
+                            },
+                        )
+                        .size(ControlSize::Sm)
                         .disabled(self.saving_candidate.is_some() || self.planning_analysis_pending)
                         .on_click(cx.listener(move |page, _, _, cx| {
                             page.save_planning_candidate(index, cx)
@@ -483,14 +485,12 @@ impl RoomPlanHistory {
             .child(div().text_sm().font_weight(gpui::FontWeight::SEMIBOLD).child("Plan a layout"))
             .child(div().text_xs().text_color(rgb(palette.muted)).child("Run the Interior solver, review its arrangements, then save a proposal as a new layout. Current placements stay unchanged."))
             .child(div().flex().items_center().gap_2()
-                .child(Button::new("roomplan-search-layout")
-                    .small()
-                    .label(if let Some(id) = &self.selected_layout_id { format!("Search {} · move all items", id) } else { "Choose a saved layout to search".into() })
+                .child(Button::new("roomplan-search-layout", if let Some(id) = &self.selected_layout_id { format!("Search {} · move all items", id) } else { "Choose a saved layout to search".into() })
+                    .size(ControlSize::Sm)
                     .disabled(searching || !base_loaded)
                     .on_click(cx.listener(|page, _, _, cx| page.start_planning(PlanningKind::Search, cx))))
-                .child(Button::new("roomplan-compose-layout")
-                    .small()
-                    .label(format!("Compose from {} selected", self.compose_refs.len()))
+                .child(Button::new("roomplan-compose-layout", format!("Compose from {} selected", self.compose_refs.len()))
+                    .size(ControlSize::Sm)
                     .disabled(searching || self.compose_refs.is_empty())
                     .on_click(cx.listener(|page, _, _, cx| page.start_planning(PlanningKind::Compose, cx)))))
             .when(!base_loaded, |panel| panel.child(div().text_xs().text_color(rgb(palette.muted)).child("Choose a named layout above and wait for its item positions to load before searching.")))
@@ -499,7 +499,7 @@ impl RoomPlanHistory {
             .when_some(self.inventory.error.clone(), |panel, error| panel.child(
                 div().flex().items_center().gap_2()
                     .child(div().text_xs().text_color(rgb(palette.red)).child(format!("Owned items unavailable · {error}")))
-                    .child(Button::new("roomplan-compose-retry").small().ghost().label("Retry")
+                    .child(Button::new("roomplan-compose-retry", "Retry").size(ControlSize::Sm).variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|page, _, _, cx| page.refresh_inventory(cx))))
             ))
             .when_some(job_status, |panel, status| panel.child(div().text_xs().text_color(rgb(palette.muted)).child(status)))

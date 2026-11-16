@@ -63,24 +63,23 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
         .then(|| view.projects.read(cx).active_project_name())
         .flatten()
     {
-        div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .child(
-                div()
-                    .id("header-projects-breadcrumb")
-                    .cursor_pointer()
-                    .text_color(rgb(palette.muted))
-                    .hover(move |s| s.text_color(rgb(palette.text)))
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.projects.update(cx, |p, cx| p.close_project(cx));
-                    }))
-                    .child("Projects"),
-            )
-            .child(div().text_color(rgb(palette.muted)).child("/"))
-            .child(div().text_color(rgb(palette.text)).child(project_name))
-            .into_any_element()
+        let owner = cx.entity();
+        sjel_gpui_ui::ely::navigation::Breadcrumb::new(
+            "header-projects-breadcrumb",
+            [
+                sjel_gpui_ui::ely::navigation::Crumb::new("projects", "Projects"),
+                sjel_gpui_ui::ely::navigation::Crumb::new("current", project_name),
+            ],
+        )
+        .on_select(move |level, _, _, cx| {
+            if level == 0 {
+                owner.update(cx, |view, cx| {
+                    view.projects
+                        .update(cx, |project, cx| project.close_project(cx));
+                });
+            }
+        })
+        .into_any_element()
     } else {
         div()
             .child(area.map_or(view.page.label(), Area::label))

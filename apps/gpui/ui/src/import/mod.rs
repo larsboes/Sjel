@@ -7,11 +7,12 @@ pub mod types;
 
 use std::time::Duration;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, prelude::*, rgb, AnyElement, Context, IntoElement, PathPromptOptions, SharedString, Window,
 };
+
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{list, note, section};
@@ -190,17 +191,15 @@ impl ImportPage {
             .flex()
             .gap_2()
             .child(
-                Button::new("import-choose")
-                    .small()
-                    .ghost()
-                    .label("Choose folder…")
+                Button::new("import-choose", "Choose folder…")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .disabled(running)
                     .on_click(cx.listener(|view, _, _, cx| view.choose(cx))),
             )
             .child(
-                Button::new("import-run")
-                    .small()
-                    .label("Import")
+                Button::new("import-run", "Import")
+                    .size(ControlSize::Sm)
                     .disabled(!chosen || running)
                     .loading(self.busy.contains(RUN) || running)
                     .on_click(cx.listener(|view, _, window, cx| view.start(window, cx))),

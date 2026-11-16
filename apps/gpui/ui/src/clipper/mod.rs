@@ -10,8 +10,8 @@ mod reader;
 mod settings;
 mod types;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{
     div, prelude::*, px, rgb, AnyElement, Context, FontWeight, IntoElement, Render, Window,
 };
@@ -201,10 +201,9 @@ impl Clips {
                     .items_center()
                     .gap_2()
                     .children((clip_count > 0).then(|| {
-                        Button::new("clips-delete-all")
-                            .small()
-                            .ghost()
-                            .label(delete_all_label)
+                        Button::new("clips-delete-all", delete_all_label)
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 if view.confirm_delete_all {
                                     view.delete_all_documents(cx);
@@ -215,17 +214,15 @@ impl Clips {
                             }))
                     }))
                     .child(
-                        Button::new("clips-refresh")
-                            .small()
-                            .ghost()
-                            .label("Refresh")
+                        Button::new("clips-refresh", "Refresh")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|view, _, _, cx| view.load(cx))),
                     )
                     .child(
-                        Button::new("clips-new-thread")
-                            .small()
-                            .primary()
-                            .label("+ New Thread Clip")
+                        Button::new("clips-new-thread", "+ New Thread Clip")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Primary)
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.start_composer("".into(), "".into(), vec![], window, cx);
                             })),

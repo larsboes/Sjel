@@ -6,16 +6,13 @@ use gpui::{
     div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, Focusable, Subscription,
     Window,
 };
-use gpui_kit::component::button::{Button as KitButton, ButtonVariants};
-use gpui_kit::component::input::Input as KitInput;
-use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::inventory::{
     budget_of, counted, format_cents, format_dimensions, months_to_pay, wishlist_view, Budget,
     InventoryItem, InventoryState, NewInventoryItem, WishGroup,
 };
 use sjel_gpui_core::shell::{self, ShellError};
 
-use crate::ely::buttons::{Button as ElyButton, ButtonVariant};
+use crate::ely::buttons::{Button as ElyButton, ButtonVariant, ToggleButton, ToggleItem};
 use crate::ely::forms::{Form as ElyForm, FormError, FormField, Input, InputEvent, TextInput};
 use crate::ely::theme::ControlSize;
 use crate::theme::{tint, Palette};
@@ -693,32 +690,36 @@ impl InventoryPage {
                             .items_center()
                             .gap_2()
                             .child(
-                                KitButton::new("wishlist-new-group")
-                                    .small()
-                                    .ghost()
-                                    .label(if self.group_form.is_some() {
+                                ElyButton::new(
+                                    "wishlist-new-group",
+                                    if self.group_form.is_some() {
                                         "Cancel"
                                     } else {
                                         "+ New group"
-                                    })
-                                    .disabled(group_busy)
-                                    .on_click(cx.listener(|page, _, window, cx| {
-                                        page.open_group_form(window, cx)
-                                    })),
+                                    },
+                                )
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .disabled(group_busy)
+                                .on_click(cx.listener(
+                                    |page, _, window, cx| page.open_group_form(window, cx),
+                                )),
                             )
                             .child(
-                                KitButton::new("wishlist-new")
-                                    .small()
-                                    .primary()
-                                    .label(if self.wish_form.is_some() {
+                                ElyButton::new(
+                                    "wishlist-new",
+                                    if self.wish_form.is_some() {
                                         "Cancel"
                                     } else {
                                         "+ Add wish"
-                                    })
-                                    .disabled(self.wish_busy.as_deref() == Some("new"))
-                                    .on_click(cx.listener(|page, _, window, cx| {
-                                        page.open_wish_form(window, cx)
-                                    })),
+                                    },
+                                )
+                                .size(ControlSize::Sm)
+                                .primary()
+                                .disabled(self.wish_busy.as_deref() == Some("new"))
+                                .on_click(cx.listener(
+                                    |page, _, window, cx| page.open_wish_form(window, cx),
+                                )),
                             ),
                     ),
             )
@@ -726,48 +727,62 @@ impl InventoryPage {
                 div()
                     .flex()
                     .items_center()
-                    .justify_between()
+                    .flex_wrap()
                     .gap_4()
                     .child(
                         div()
                             .w(px(280.))
-                            .child(KitInput::new(&search_field).small()),
+                            .flex_none()
+                            .child(Input::new(&search_field).size(ControlSize::Sm)),
                     )
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .items_center()
                             .gap_1()
                             .child(
-                                KitButton::new("group-all")
-                                    .small()
-                                    .label(format!("All ({total_items})"))
-                                    .when(group.is_none(), |b| b.primary())
-                                    .when(group.is_some(), |b| b.ghost())
-                                    .on_click(cx.listener(|page, _, _, cx| {
-                                        page.selected_group = None;
-                                        page.filter_rev = page.filter_rev.wrapping_add(1);
-                                        cx.notify();
-                                    })),
+                                ToggleButton::new(
+                                    "group-all",
+                                    ToggleItem::new("All groups")
+                                        .label(format!("All ({total_items})")),
+                                    group.is_none(),
+                                )
+                                .size(ControlSize::Sm)
+                                .on_toggle({
+                                    let page = cx.entity();
+                                    move |_, _, cx| {
+                                        page.update(cx, |page, cx| {
+                                            page.selected_group = None;
+                                            page.filter_rev = page.filter_rev.wrapping_add(1);
+                                            cx.notify();
+                                        })
+                                    }
+                                }),
                             )
                             .children(groups.iter().map(|candidate| {
                                 let active =
                                     group.as_ref().is_some_and(|group| group.id == candidate.id);
                                 let id = candidate.id.clone();
-                                KitButton::new(format!("group-{}", candidate.id))
-                                    .small()
-                                    .label(format!(
+                                ToggleButton::new(
+                                    format!("group-{}", candidate.id),
+                                    ToggleItem::new(candidate.id.clone()).label(format!(
                                         "{} ({})",
                                         candidate.title, candidate.items_count
-                                    ))
-                                    .when(active, |b| b.primary())
-                                    .when(!active, |b| b.ghost())
-                                    .on_click(cx.listener(move |page, _, _, cx| {
-                                        page.selected_group =
-                                            if active { None } else { Some(id.clone()) };
-                                        page.filter_rev = page.filter_rev.wrapping_add(1);
-                                        cx.notify();
-                                    }))
+                                    )),
+                                    active,
+                                )
+                                .size(ControlSize::Sm)
+                                .on_toggle({
+                                    let page = cx.entity();
+                                    move |on, _, cx| {
+                                        page.update(cx, |page, cx| {
+                                            page.selected_group = on.then(|| id.clone());
+                                            page.filter_rev = page.filter_rev.wrapping_add(1);
+                                            cx.notify();
+                                        })
+                                    }
+                                })
                             })),
                     ),
             );
@@ -788,39 +803,43 @@ impl InventoryPage {
             );
             let toggle = group.clone();
             row = row.child(
-                KitButton::new(format!("group-alternatives-{}", group.id))
-                    .small()
-                    .ghost()
-                    .label(if group.alternatives {
+                ElyButton::new(
+                    format!("group-alternatives-{}", group.id),
+                    if group.alternatives {
                         "Pick one: on"
                     } else {
                         "Pick one: off"
-                    })
-                    .disabled(group_busy)
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        page.set_alternatives(toggle.clone(), cx);
-                    })),
+                    },
+                )
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
+                .disabled(group_busy)
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    page.set_alternatives(toggle.clone(), cx);
+                })),
             );
             let id = group.id.clone();
             let confirming = self.confirm_remove_group.as_deref() == Some(id.as_str());
             row = row.child(
-                KitButton::new(format!("group-remove-{id}"))
-                    .small()
-                    .ghost()
-                    .label(if confirming {
+                ElyButton::new(
+                    format!("group-remove-{id}"),
+                    if confirming {
                         "Confirm removal"
                     } else {
                         "Remove group"
-                    })
-                    .disabled(group_busy)
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        if page.confirm_remove_group.as_deref() == Some(id.as_str()) {
-                            page.remove_group(id.clone(), cx);
-                        } else {
-                            page.confirm_remove_group = Some(id.clone());
-                            cx.notify();
-                        }
-                    })),
+                    },
+                )
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
+                .disabled(group_busy)
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    if page.confirm_remove_group.as_deref() == Some(id.as_str()) {
+                        page.remove_group(id.clone(), cx);
+                    } else {
+                        page.confirm_remove_group = Some(id.clone());
+                        cx.notify();
+                    }
+                })),
             );
             content = content.child(row);
         }
@@ -1049,6 +1068,12 @@ impl InventoryPage {
         let confirming_remove = self.confirm_remove_wish.as_deref() == Some(id.as_str());
         let picker_open = self.group_menu.as_deref() == Some(id.as_str());
         let mut card = div()
+            .id(format!("wishlist-card-{id}"))
+            .debug_selector({
+                let id = id.clone();
+                move || format!("wishlist-card-{id}")
+            })
+            .min_w_0()
             .p_3p5()
             .rounded(px(12.))
             .bg(rgba(tint(palette.raised, 0x25)))
@@ -1065,21 +1090,26 @@ impl InventoryPage {
                 div()
                     .flex()
                     .items_center()
-                    .justify_between()
+                    .gap_3()
                     .child(
                         div()
+                            .flex_1()
+                            .min_w_0()
                             .flex()
                             .flex_col()
                             .gap_1()
                             .child(
                                 div()
                                     .flex()
+                                    .flex_wrap()
                                     .items_center()
                                     .gap_2()
                                     .child(
                                         div()
                                             .text_sm()
                                             .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .min_w_0()
+                                            .text_ellipsis()
                                             .child(item.label.clone()),
                                     )
                                     .children(item.priority.as_ref().map(|pri| {
@@ -1102,6 +1132,7 @@ impl InventoryPage {
                                 div()
                                     .flex()
                                     .items_center()
+                                    .flex_wrap()
                                     .gap_3()
                                     .text_xs()
                                     .text_color(rgb(palette.muted))
@@ -1111,13 +1142,21 @@ impl InventoryPage {
                                     } else {
                                         None
                                     })
-                                    .children(item.notes.as_ref().map(|n| format!("Note: {n}"))),
+                                    .children(item.notes.as_ref().map(|n| {
+                                        div().min_w_0().text_ellipsis().child(format!("Note: {n}"))
+                                    })),
                             ),
                     )
                     .child(
                         div()
+                            .id(format!("wishlist-actions-{id}"))
+                            .debug_selector({
+                                let id = id.clone();
+                                move || format!("wishlist-actions-{id}")
+                            })
                             .flex()
                             .flex_col()
+                            .flex_none()
                             .items_end()
                             .gap_2()
                             .child(
@@ -1132,10 +1171,9 @@ impl InventoryPage {
                                     .flex()
                                     .gap_2()
                                     .child(
-                                        KitButton::new(format!("wishlist-group-{id}"))
-                                            .small()
-                                            .ghost()
-                                            .label("Group")
+                                        ElyButton::new(format!("wishlist-group-{id}"), "Group")
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Ghost)
                                             .disabled(groups.is_empty())
                                             .on_click(cx.listener(move |page, _, _, cx| {
                                                 page.group_menu = if page.group_menu.as_deref()
@@ -1149,39 +1187,45 @@ impl InventoryPage {
                                             })),
                                     )
                                     .child(
-                                        KitButton::new(format!("wishlist-edit-{id}"))
-                                            .small()
-                                            .ghost()
-                                            .label("Edit")
+                                        ElyButton::new(format!("wishlist-edit-{id}"), "Edit")
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Ghost)
                                             .on_click(cx.listener(move |page, _, window, cx| {
                                                 page.open_item_edit(edit_item.clone(), window, cx)
                                             })),
                                     )
                                     .child(
-                                        KitButton::new(format!("wishlist-bought-{id}"))
-                                            .small()
-                                            .primary()
-                                            .label(if busy { "Saving…" } else { "Mark bought" })
-                                            .disabled(self.wish_busy.is_some())
-                                            .on_click(cx.listener(move |page, _, _, cx| {
+                                        ElyButton::new(
+                                            format!("wishlist-bought-{id}"),
+                                            if busy { "Saving…" } else { "Mark bought" },
+                                        )
+                                        .size(ControlSize::Sm)
+                                        .primary()
+                                        .disabled(self.wish_busy.is_some())
+                                        .on_click(
+                                            cx.listener(move |page, _, _, cx| {
                                                 page.set_wish_state(
                                                     bought_id.clone(),
                                                     InventoryState::Owned,
                                                     cx,
                                                 )
-                                            })),
+                                            }),
+                                        ),
                                     )
                                     .child(
-                                        KitButton::new(format!("wishlist-remove-{id}"))
-                                            .small()
-                                            .ghost()
-                                            .label(if confirming_remove {
+                                        ElyButton::new(
+                                            format!("wishlist-remove-{id}"),
+                                            if confirming_remove {
                                                 "Confirm removal"
                                             } else {
                                                 "No longer wanted"
-                                            })
-                                            .disabled(self.wish_busy.is_some())
-                                            .on_click(cx.listener(move |page, _, _, cx| {
+                                            },
+                                        )
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
+                                        .disabled(self.wish_busy.is_some())
+                                        .on_click(
+                                            cx.listener(move |page, _, _, cx| {
                                                 if page.confirm_remove_wish.as_deref()
                                                     == Some(remove_id.as_str())
                                                 {
@@ -1195,18 +1239,23 @@ impl InventoryPage {
                                                         Some(remove_id.clone());
                                                     cx.notify();
                                                 }
-                                            })),
+                                            }),
+                                        ),
                                     )
                                     .when(confirming_remove, |row| {
                                         row.child(
-                                            KitButton::new(format!("wishlist-remove-cancel-{id}"))
-                                                .small()
-                                                .ghost()
-                                                .label("Cancel")
-                                                .on_click(cx.listener(move |page, _, _, cx| {
+                                            ElyButton::new(
+                                                format!("wishlist-remove-cancel-{id}"),
+                                                "Cancel",
+                                            )
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Ghost)
+                                            .on_click(
+                                                cx.listener(move |page, _, _, cx| {
                                                     page.confirm_remove_wish = None;
                                                     cx.notify();
-                                                })),
+                                                }),
+                                            ),
                                         )
                                     }),
                             ),
@@ -1239,19 +1288,21 @@ impl InventoryPage {
                 let member = candidate.contains(&item.id);
                 let group = candidate.clone();
                 let item_id = item.id.clone();
-                KitButton::new(format!("wish-group-{}-{}", candidate.id, item.id))
-                    .small()
-                    .label(if member {
+                ElyButton::new(
+                    format!("wish-group-{}-{}", candidate.id, item.id),
+                    if member {
                         format!("✓ {}", candidate.title)
                     } else {
                         candidate.title.clone()
-                    })
-                    .when(member, |button| button.primary())
-                    .when(!member, |button| button.ghost())
-                    .disabled(busy)
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        page.toggle_group_member(group.clone(), item_id.clone(), cx);
-                    }))
+                    },
+                )
+                .size(ControlSize::Sm)
+                .when(member, |button| button.primary())
+                .when(!member, |button| button.variant(ButtonVariant::Ghost))
+                .disabled(busy)
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    page.toggle_group_member(group.clone(), item_id.clone(), cx);
+                }))
             }))
             .into_any_element()
     }

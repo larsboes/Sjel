@@ -52,19 +52,6 @@ pub(crate) const TOUCH_KEYS: [(&str, &[u8]); 11] = [
     ("ctrl-c", &[0x03]),
 ];
 
-/// What a paste sends. Line breaks become Return, which is what a typed newline is. A program that
-/// turned on bracketed paste gets the text between the markers, minus any end marker inside it, so
-/// pasted text cannot end the paste early and run as typed commands.
-pub(crate) fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
-    let text = text.replace("\r\n", "\r").replace('\n', "\r");
-    if bracketed {
-        let inner = text.replace("\x1b[201~", "");
-        format!("\x1b[200~{inner}\x1b[201~").into_bytes()
-    } else {
-        text.into_bytes()
-    }
-}
-
 /// The bytes a keystroke sends to a pty.
 ///
 /// `None` means the view keeps the key: a `⌘`-combination belongs to the window (copy, close), and

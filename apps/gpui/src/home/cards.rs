@@ -1,6 +1,7 @@
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
+use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
+use sjel_gpui_ui::ely::primitives::Tooltip;
+use sjel_gpui_ui::ely::theme::ControlSize;
 
 use crate::route::Page;
 use crate::workspace::Workspace;
@@ -39,13 +40,18 @@ pub fn prompt_outbox(
                         ),
                 )
                 .child(
-                    Button::new(SharedString::from(format!("copy-prompt-{id}")))
-                        .primary()
-                        .small()
-                        .label("Copy")
-                        .tooltip("Copy the prompt and remove it from this list")
-                        .on_click(
-                            cx.listener(move |view, _, _, cx| view.copy_prompt_draft(id, cx)),
+                    div()
+                        .id(SharedString::from(format!("copy-prompt-tip-{id}")))
+                        .tooltip(Tooltip::text(
+                            "Copy the prompt and remove it from this list",
+                        ))
+                        .child(
+                            Button::new(SharedString::from(format!("copy-prompt-{id}")), "Copy")
+                                .variant(ButtonVariant::Primary)
+                                .size(ControlSize::Sm)
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.copy_prompt_draft(id, cx)
+                                })),
                         ),
                 )
                 .into_any_element()
@@ -72,39 +78,51 @@ pub fn travel_card(
         .update(cx, |travel, cx| travel.home_next_trip(palette, cx));
     let imminent = force_map || days_away.is_some_and(|days| days <= 2);
 
-    let apple_maps_button = Button::new("home-apple-maps")
-        .ghost()
-        .small()
-        .label("Apple Maps")
-        .tooltip("Open interactive native Apple Maps window")
-        .on_click(cx.listener(|view, _, _, cx| {
-            view.travel
-                .update(cx, |travel, cx| travel.open_apple_maps(cx));
-        }));
+    let apple_maps_button = div()
+        .id("home-apple-maps-tip")
+        .tooltip(Tooltip::text("Open interactive native Apple Maps window"))
+        .child(
+            Button::new("home-apple-maps", "Apple Maps")
+                .variant(ButtonVariant::Ghost)
+                .size(ControlSize::Sm)
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.travel
+                        .update(cx, |travel, cx| travel.open_apple_maps(cx));
+                })),
+        );
 
-    let size_button = Button::new("home-map-size")
-        .ghost()
-        .small()
-        .label(if large_map { "Compact" } else { "Larger" })
-        .tooltip("Toggle map size on Today")
-        .on_click(cx.listener(|view, _, _, cx| {
-            view.home_prefs.large_map = !view.home_prefs.large_map;
-            let _ = view.home_prefs.save();
-            cx.notify();
-        }));
+    let size_button = div()
+        .id("home-map-size-tip")
+        .tooltip(Tooltip::text("Toggle map size on Today"))
+        .child(
+            Button::new(
+                "home-map-size",
+                if large_map { "Compact" } else { "Larger" },
+            )
+            .variant(ButtonVariant::Ghost)
+            .size(ControlSize::Sm)
+            .on_click(cx.listener(|view, _, _, cx| {
+                view.home_prefs.large_map = !view.home_prefs.large_map;
+                let _ = view.home_prefs.save();
+                cx.notify();
+            })),
+        );
 
-    let map_button = Button::new("home-open-map")
-        .ghost()
-        .small()
-        .label(if imminent { "Expand ↗" } else { "Map" })
-        .tooltip("Open full map in Travel")
-        .on_click(cx.listener(|view, _, _, cx| {
-            view.travel.update(cx, |travel, cx| {
-                travel.set_compact_map(false);
-                travel.open_route(sjel_gpui_core::travel::TravelRoute::Map, cx);
-            });
-            view.go(Page::Travel, cx);
-        }));
+    let map_button = div()
+        .id("home-open-map-tip")
+        .tooltip(Tooltip::text("Open full map in Travel"))
+        .child(
+            Button::new("home-open-map", if imminent { "Expand ↗" } else { "Map" })
+                .variant(ButtonVariant::Ghost)
+                .size(ControlSize::Sm)
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.travel.update(cx, |travel, cx| {
+                        travel.set_compact_map(false);
+                        travel.open_route(sjel_gpui_core::travel::TravelRoute::Map, cx);
+                    });
+                    view.go(Page::Travel, cx);
+                })),
+        );
 
     let Some((trip, plan_id)) = trip_info else {
         if !force_map {
@@ -138,10 +156,9 @@ pub fn travel_card(
     };
 
     let open_trip_button = plan_id.map(|id| {
-        Button::new("home-open-trip")
-            .ghost()
-            .small()
-            .label("Open trip")
+        Button::new("home-open-trip", "Open trip")
+            .variant(ButtonVariant::Ghost)
+            .size(ControlSize::Sm)
             .on_click(cx.listener(move |view, _, _, cx| {
                 let route = sjel_gpui_core::travel::TravelRoute::Trip {
                     id: id.clone(),

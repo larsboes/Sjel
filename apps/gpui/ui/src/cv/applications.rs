@@ -1,15 +1,90 @@
-//! CV Application ledger, status filtering, and career pipeline table.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
-use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
+//! Application ledger, status filtering, and career pipeline actions.
+
+use gpui_kit::{div, prelude::*, px, rems, AnyElement, Context};
 use sjel_gpui_core::cv::{
     filter_applications, last_status_date, CvApplication, CvView, CvWriteRequest,
 };
 
+use crate::ely::buttons::{ToggleButton, ToggleItem};
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction};
+use crate::ely::theme::{ControlSize, Density};
 use crate::primitives::card;
 use crate::theme::Palette;
 
 use super::CvPage;
+
+fn application_columns(statuses: &[String]) -> [Column; 6] {
+    [
+        Column::new("company", "Company / Role").min_width(rems(14.)),
+        Column::new("profile", "Profile / Language").width(rems(10.)),
+        Column::new("status", "Status").width(rems(9.)),
+        Column::new("date", "Updated").width(rems(7.)).end().muted(),
+        Column::new("posting", "Posting").width(rems(8.)),
+        Column::new("actions", "Actions").width(rems(22.)).actions(
+            std::iter::once(RowAction::new("build", "Build CV")).chain(
+                statuses.iter().map(|status| {
+                    RowAction::new(format!("status:{status}"), format!("→ {status}"))
+                }),
+            ),
+        ),
+    ]
+}
+
+fn application_row(app: &CvApplication, statuses: &[String], busy: bool) -> Row {
+    let tone = match app.status.as_str() {
+        "offer" | "accepted" => Tone::Success,
+        "interviewing" | "interview" => Tone::Accent,
+        "rejected" => Tone::Danger,
+        _ => Tone::Neutral,
+    };
+    let actions = if busy {
+        Vec::new()
+    } else {
+        std::iter::once("build".into())
+            .chain(
+                statuses
+                    .iter()
+                    .filter(|status| *status != &app.status)
+                    .take(2)
+                    .map(|status| format!("status:{status}").into()),
+            )
+            .collect()
+    };
+    Row::new(
+        app.slug.clone(),
+        [
+            Cell::Lines(app.company.clone().into(), app.role.clone().into()),
+            Cell::Text(format!("{} · {}", app.profile, app.lang).into()),
+            Cell::Tag(app.status.clone().into(), tone),
+            Cell::Text(last_status_date(app).into()),
+            match app.url.as_ref().filter(|url| !url.is_empty()) {
+                Some(url) => Cell::Link("Open posting".into(), url.clone().into()),
+                None => Cell::Empty,
+            },
+            Cell::Actions(actions),
+        ],
+    )
+}
+
+fn application_action(view: &CvView, slug: &str, action: &str) -> Option<CvWriteRequest> {
+    let app = view.applications.iter().find(|app| app.slug == slug)?;
+    let mut request = CvWriteRequest {
+        slug: app.slug.clone(),
+        ..Default::default()
+    };
+    if action == "build" {
+        request.action = "app-build".into();
+    } else {
+        let status = action.strip_prefix("status:")?;
+        if status == app.status || !view.statuses.iter().any(|known| known == status) {
+            return None;
+        }
+        request.action = "app-status".into();
+        request.status = status.into();
+    }
+    Some(request)
+}
 
 impl CvPage {
     pub(super) fn render_applications_table(
@@ -18,235 +93,230 @@ impl CvPage {
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let is_busy = !self.busy.is_empty();
-        let filter = &self.filter_status;
-        let apps: Vec<&CvApplication> = if filter == "all" {
+        let busy = !self.busy.is_empty();
+        let apps = if self.filter_status == "all" {
             view.applications.iter().collect()
         } else {
-            filter_applications(view, filter)
+            filter_applications(view, &self.filter_status)
         };
-
-        let mut status_counts: std::collections::HashMap<&str, usize> =
-            std::collections::HashMap::new();
-        for app in &view.applications {
-            *status_counts.entry(&app.status).or_insert(0) += 1;
-        }
-
-        let tab_all = Button::new("tab-all")
-            .small()
-            .when(filter != "all", |b| b.ghost())
-            .label(format!("All ({})", view.applications.len()))
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.filter_status = "all".to_string();
-                cx.notify();
-            }));
-
-        let status_tabs = view.statuses.iter().map(|st| {
-            let count = status_counts.get(st.as_str()).copied().unwrap_or(0);
-            let is_active = st == filter;
-            let st_clone = st.clone();
-            Button::new(SharedString::from(format!("tab-{}", st)))
-                .small()
-                .when(!is_active, |b| b.ghost())
-                .label(format!("{} ({})", st, count))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.filter_status = st_clone.clone();
-                    cx.notify();
-                }))
+        let filters = std::iter::once((
+            "all".to_owned(),
+            format!("All ({})", view.applications.len()),
+        ))
+        .chain(view.statuses.iter().map(|status| {
+            let count = view
+                .applications
+                .iter()
+                .filter(|app| app.status == *status)
+                .count();
+            (status.clone(), format!("{status} ({count})"))
+        }));
+        let toggles = filters.map(|(status, label)| {
+            ToggleButton::new(
+                format!("cv-status-{status}"),
+                ToggleItem::new(status.clone()).label(label),
+                status == self.filter_status,
+            )
+            .size(ControlSize::Sm)
+            .on_toggle({
+                let page = cx.entity();
+                move |_, _, cx| {
+                    page.update(cx, |page, cx| {
+                        page.filter_status = status.clone();
+                        cx.notify();
+                    })
+                }
+            })
         });
-
-        let app_rows = if apps.is_empty() {
-            div()
-                .p(px(16.0))
-                .text_size(px(12.0))
-                .text_color(rgb(palette.muted))
-                .child("No applications found matching this status.")
-                .into_any_element()
-        } else {
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(4.0))
-                .children(apps.into_iter().enumerate().map(|(idx, app)| {
-                    let company = app.company.clone();
-                    let role = app.role.clone();
-                    let slug = app.slug.clone();
-                    let status = app.status.clone();
-                    let profile_lang = format!("{} · {}", app.profile, app.lang);
-                    let last_date = last_status_date(app).to_string();
-                    let url_opt = app.url.clone();
-
-                    let next_statuses: Vec<String> = view
-                        .statuses
-                        .iter()
-                        .filter(|s| *s != &status)
-                        .cloned()
-                        .collect();
-
-                    let status_badge_color = match status.as_str() {
-                        "offer" => rgb(palette.green),
-                        "interviewing" | "interview" => rgb(palette.accent),
-                        "rejected" => rgb(palette.red),
-                        _ => rgb(palette.muted),
-                    };
-
-                    let next_btns = next_statuses.into_iter().take(2).map(|target_st| {
-                        let slug_c = slug.clone();
-                        let target_c = target_st.clone();
-                        Button::new(SharedString::from(format!("st-{}-{}", slug, target_st)))
-                            .small()
-                            .ghost()
-                            .disabled(is_busy)
-                            .label(format!("→ {}", target_st))
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.run_action(
-                                    CvWriteRequest {
-                                        action: "app-status".to_string(),
-                                        slug: slug_c.clone(),
-                                        status: target_c.clone(),
-                                        ..Default::default()
-                                    },
-                                    window,
-                                    cx,
-                                );
-                            }))
-                    });
-
-                    let build_app_btn =
-                        Button::new(SharedString::from(format!("build-app-{}", slug)))
-                            .small()
-                            .ghost()
-                            .disabled(is_busy)
-                            .label("Build CV")
-                            .on_click(cx.listener({
-                                let slug_clone = slug.clone();
-                                move |this, _, window, cx| {
-                                    this.run_action(
-                                        CvWriteRequest {
-                                            action: "app-build".to_string(),
-                                            slug: slug_clone.clone(),
-                                            ..Default::default()
-                                        },
-                                        window,
-                                        cx,
-                                    );
-                                }
-                            }));
-
-                    div()
-                        .id(SharedString::from(format!("app-row-{}", idx)))
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .p(px(8.0))
-                        .rounded(px(6.0))
-                        .bg(if idx % 2 == 0 {
-                            rgba(palette.surface)
-                        } else {
-                            rgba(palette.window_tint)
-                        })
-                        .child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .w(px(220.0))
-                                .child(
-                                    div()
-                                        .text_size(px(13.0))
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .text_color(rgb(palette.text))
-                                        .child(company),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(px(11.0))
-                                        .text_color(rgb(palette.muted))
-                                        .child(role),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .w(px(110.0))
-                                .text_size(px(11.0))
-                                .text_color(rgb(palette.muted))
-                                .child(profile_lang),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(6.0))
-                                .child(
-                                    div()
-                                        .px(px(6.0))
-                                        .py(px(2.0))
-                                        .rounded(px(4.0))
-                                        .bg(status_badge_color)
-                                        .text_size(px(11.0))
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .text_color(rgb(0xffffff))
-                                        .child(status.clone()),
-                                )
-                                .children(next_btns),
-                        )
-                        .child(
-                            div()
-                                .w(px(90.0))
-                                .text_size(px(11.0))
-                                .text_color(rgb(palette.muted))
-                                .child(if last_date.is_empty() {
-                                    "-".to_string()
-                                } else {
-                                    last_date
-                                }),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(6.0))
-                                .child(build_app_btn)
-                                .children(url_opt.map(|u| {
-                                    div()
-                                        .text_size(px(11.0))
-                                        .text_color(rgb(palette.accent))
-                                        .child(format!(
-                                            "↗ {}",
-                                            u.chars().take(24).collect::<String>()
-                                        ))
-                                })),
-                        )
-                }))
-                .into_any_element()
-        };
-
+        let page = cx.entity();
         let content = div()
             .flex()
             .flex_col()
-            .gap(px(12.0))
+            .gap(px(12.))
+            .child(div().child("Applications Ledger"))
+            .child(div().flex().flex_wrap().gap(px(6.)).children(toggles))
             .child(
-                div()
-                    .flex()
-                    .justify_between()
-                    .items_center()
-                    .child(
-                        div()
-                            .text_size(px(13.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(rgb(palette.text))
-                            .child("Applications Ledger"),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .gap(px(6.0))
-                            .child(tab_all)
-                            .children(status_tabs),
-                    ),
-            )
-            .child(app_rows);
-
+                DataTable::new("cv-applications", application_columns(&view.statuses))
+                    .label("Applications ledger")
+                    .rows(std::rc::Rc::new(
+                        apps.into_iter()
+                            .map(|app| application_row(app, &view.statuses, busy))
+                            .collect(),
+                    ))
+                    .density(Density::Comfortable)
+                    .paged(20)
+                    .empty("No applications found matching this status.")
+                    .on_action(move |slug, action, window, cx| {
+                        page.update(cx, |page, cx| {
+                            if !page.busy.is_empty() {
+                                return;
+                            }
+                            let request = page
+                                .cv
+                                .value
+                                .as_ref()
+                                .and_then(|view| application_action(view, slug, action));
+                            if let Some(request) = request {
+                                page.run_action(request, window, cx);
+                            }
+                        })
+                    }),
+            );
         card(content.into_any_element(), palette)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture() -> CvView {
+        serde_json::from_value(serde_json::json!({
+            "master": "master.yaml", "master_mtime": 0, "profiles": ["default"],
+            "statuses": ["draft", "applied", "interview", "offer"], "pdfs": [],
+            "applications": [{"slug": "acme-engineer", "company": "Acme", "role": "Engineer",
+                "profile": "default", "lang": "en", "status": "interview", "log": [],
+                "url": "https://example.org/job"}]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn ledger_actions_keep_the_slug_and_validate_the_current_statuses() {
+        let view = fixture();
+        let build = application_action(&view, "acme-engineer", "build").unwrap();
+        assert_eq!(
+            (build.action.as_str(), build.slug.as_str()),
+            ("app-build", "acme-engineer")
+        );
+        let status = application_action(&view, "acme-engineer", "status:offer").unwrap();
+        assert_eq!(
+            (status.action.as_str(), status.status.as_str()),
+            ("app-status", "offer")
+        );
+        assert!(application_action(&view, "missing", "build").is_none());
+        assert!(application_action(&view, "acme-engineer", "status:unknown").is_none());
+        assert!(application_action(&view, "acme-engineer", "status:interview").is_none());
+    }
+
+    #[test]
+    fn ledger_rows_keep_status_tone_posting_link_and_busy_actions() {
+        let view = fixture();
+        let app = &view.applications[0];
+        let expected = |actions| {
+            Row::new(
+                "acme-engineer",
+                [
+                    Cell::Lines("Acme".into(), "Engineer".into()),
+                    Cell::Text("default · en".into()),
+                    Cell::Tag("interview".into(), Tone::Accent),
+                    Cell::Text("".into()),
+                    Cell::Link("Open posting".into(), "https://example.org/job".into()),
+                    Cell::Actions(actions),
+                ],
+            )
+        };
+        assert_eq!(
+            application_row(app, &view.statuses, false),
+            expected(vec![
+                "build".into(),
+                "status:draft".into(),
+                "status:applied".into()
+            ])
+        );
+        assert_eq!(application_row(app, &view.statuses, true), expected(vec![]));
+    }
+
+    #[gpui_kit::test]
+    fn status_toggles_filter_the_production_ledger(cx: &mut gpui_kit::TestAppContext) {
+        let (page, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui_kit::size(px(1400.), px(1200.))),
+            |_, _| {
+                let mut page = CvPage::new(crate::data::Repo::new(Err(
+                    sjel_gpui_core::shell::ShellError::NotSetUp,
+                )));
+                page.cv.value = Some(fixture());
+                page
+            },
+        );
+        let offer = cx
+            .debug_bounds("toggle offer")
+            .expect("offer filter renders");
+        cx.simulate_click(offer.center(), gpui_kit::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert_eq!(page.filter_status, "offer"));
+        assert!(cx.debug_bounds("table-row acme-engineer").is_none());
+        let all = cx
+            .debug_bounds("toggle all")
+            .expect("all filter remains reachable");
+        cx.simulate_click(all.center(), gpui_kit::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert_eq!(page.filter_status, "all"));
+        assert!(cx.debug_bounds("table-row acme-engineer").is_some());
+    }
+
+    #[gpui_kit::test]
+    fn capture_keeps_typed_fields_when_the_shell_is_unavailable(cx: &mut gpui_kit::TestAppContext) {
+        use gpui_kit::Focusable;
+
+        let (page, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui_kit::size(px(1400.), px(1600.))),
+            |_, _| {
+                let mut page = CvPage::new(crate::data::Repo::new(Err(
+                    sjel_gpui_core::shell::ShellError::NotSetUp,
+                )));
+                page.cv.value = Some(fixture());
+                page
+            },
+        );
+        cx.update(|window, cx| {
+            page.read(cx)
+                .company_input
+                .as_ref()
+                .unwrap()
+                .0
+                .read(cx)
+                .focus_handle(cx)
+                .focus(window, cx);
+        });
+        cx.simulate_input("Example Company");
+        cx.update(|window, cx| {
+            page.read(cx)
+                .role_input
+                .as_ref()
+                .unwrap()
+                .0
+                .read(cx)
+                .focus_handle(cx)
+                .focus(window, cx);
+        });
+        cx.simulate_input("Engineer");
+        cx.run_until_parked();
+        let submit = cx
+            .debug_bounds("cv-capture-submit")
+            .expect("capture action renders");
+        cx.simulate_click(submit.center(), gpui_kit::Modifiers::none());
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let toaster = crate::feedback::toaster(window, cx);
+            assert_eq!(
+                toaster.read(cx).shown().len(),
+                1,
+                "the failed capture reports through the write boundary"
+            );
+        });
+        page.read_with(cx, |page, cx| {
+            assert_eq!(
+                page.company_input.as_ref().unwrap().0.read(cx).text(),
+                "Example Company"
+            );
+            assert_eq!(
+                page.role_input.as_ref().unwrap().0.read(cx).text(),
+                "Engineer"
+            );
+            assert!(page.busy.is_empty());
+        });
     }
 }

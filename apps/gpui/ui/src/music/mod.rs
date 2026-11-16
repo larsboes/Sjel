@@ -5,9 +5,10 @@ pub mod types;
 
 use std::time::Duration;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputState, TextareaState};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, TextInput};
+use crate::ely::theme::ControlSize;
+use gpui_kit::component::input::TextareaState;
 use gpui_kit::{div, prelude::*, rgb, Context, Entity, EventEmitter, FontWeight, Window};
 use sjel_gpui_core::shell::{self, MusicBuild, MusicJob, ShellError};
 
@@ -22,14 +23,14 @@ use self::forms::{render_album_inputs, render_job_card, render_song_inputs};
 pub struct Music {
     pub(crate) repo: Repo,
     pub(crate) mode: Mode,
-    pub(crate) title: Entity<InputState>,
-    pub(crate) start: Entity<InputState>,
-    pub(crate) end: Entity<InputState>,
+    pub(crate) title: Entity<TextInput>,
+    pub(crate) start: Entity<TextInput>,
+    pub(crate) end: Entity<TextInput>,
     pub(crate) palette: Option<Palette>,
-    pub(crate) url: Entity<InputState>,
-    pub(crate) album: Entity<InputState>,
-    pub(crate) artist: Entity<InputState>,
-    pub(crate) year: Entity<InputState>,
+    pub(crate) url: Entity<TextInput>,
+    pub(crate) album: Entity<TextInput>,
+    pub(crate) artist: Entity<TextInput>,
+    pub(crate) year: Entity<TextInput>,
     pub(crate) tracklist: Entity<TextareaState>,
     pub(crate) probing: bool,
     pub(crate) starting: bool,
@@ -43,16 +44,16 @@ impl EventEmitter<MusicEvent> for Music {}
 impl Music {
     pub fn new(repo: Repo, url: &str, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let url_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("YouTube video URL");
-            state.set_value(url.to_owned(), window, cx);
+            let mut state = TextInput::new(window, cx).placeholder("YouTube video URL");
+            state.set_text(url.to_owned(), cx);
             state
         });
-        let title = cx.new(|cx| InputState::new(window, cx).placeholder("Song title"));
-        let start = cx.new(|cx| InputState::new(window, cx).placeholder("Start (optional, M:SS)"));
-        let end = cx.new(|cx| InputState::new(window, cx).placeholder("End (optional, M:SS)"));
-        let album = cx.new(|cx| InputState::new(window, cx).placeholder("Album name"));
-        let artist = cx.new(|cx| InputState::new(window, cx).placeholder("Album artist"));
-        let year = cx.new(|cx| InputState::new(window, cx).placeholder("Year"));
+        let title = cx.new(|cx| TextInput::new(window, cx).placeholder("Song title"));
+        let start = cx.new(|cx| TextInput::new(window, cx).placeholder("Start (optional, M:SS)"));
+        let end = cx.new(|cx| TextInput::new(window, cx).placeholder("End (optional, M:SS)"));
+        let album = cx.new(|cx| TextInput::new(window, cx).placeholder("Album name"));
+        let artist = cx.new(|cx| TextInput::new(window, cx).placeholder("Album artist"));
+        let year = cx.new(|cx| TextInput::new(window, cx).placeholder("Year"));
         let tracklist = cx.new(|cx| TextareaState::new(window, cx).auto_grow(6, 14));
         Self {
             repo,
@@ -82,7 +83,7 @@ impl Music {
     }
 
     pub fn probe(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let url = self.url.read(cx).value().to_string();
+        let url = self.url.read(cx).text().to_owned();
         if url.trim().is_empty() {
             self.error = Some("Enter a YouTube URL first.".into());
             cx.notify();
@@ -107,20 +108,17 @@ impl Music {
                 view.probing = false;
                 match result {
                     Ok(probe) => {
-                        if view.title.read(cx).value().trim().is_empty() {
-                            view.title.update(cx, |input, cx| {
-                                input.set_value(probe.title.clone(), window, cx)
-                            });
+                        if view.title.read(cx).text().trim().is_empty() {
+                            view.title
+                                .update(cx, |input, cx| input.set_text(probe.title.clone(), cx));
                         }
-                        if view.album.read(cx).value().trim().is_empty() {
-                            view.album.update(cx, |input, cx| {
-                                input.set_value(probe.title.clone(), window, cx)
-                            });
+                        if view.album.read(cx).text().trim().is_empty() {
+                            view.album
+                                .update(cx, |input, cx| input.set_text(probe.title.clone(), cx));
                         }
-                        if view.artist.read(cx).value().trim().is_empty() {
-                            view.artist.update(cx, |input, cx| {
-                                input.set_value(probe.uploader.clone(), window, cx)
-                            });
+                        if view.artist.read(cx).text().trim().is_empty() {
+                            view.artist
+                                .update(cx, |input, cx| input.set_text(probe.uploader.clone(), cx));
                         }
                         if view.mode == Mode::Song {
                             view.message = Some(format!("{} · video ready", probe.duration_hms));
@@ -157,9 +155,9 @@ impl Music {
 
     pub fn build(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let song = self.mode == Mode::Song;
-        let text = |input: &Entity<InputState>| input.read(cx).value().trim().to_owned();
+        let text = |input: &Entity<TextInput>| input.read(cx).text().trim().to_owned();
         let build = MusicBuild {
-            url: self.url.read(cx).value().trim().to_owned(),
+            url: self.url.read(cx).text().trim().to_owned(),
             mode: if song { "song" } else { "album" }.to_owned(),
             album: if song {
                 String::new()
@@ -282,7 +280,7 @@ impl Render for Music {
         let palette = self.palette.unwrap_or_else(Palette::dark);
         let song = self.mode == Mode::Song;
         let ready = if song {
-            !self.title.read(cx).value().trim().is_empty()
+            !self.title.read(cx).text().trim().is_empty()
         } else {
             !self.tracklist.read(cx).value().trim().is_empty()
         };
@@ -300,10 +298,9 @@ impl Render for Music {
                     .items_center()
                     .gap_3()
                     .child(
-                        Button::new("music-back")
-                            .small()
-                            .ghost()
-                            .label("← Inbox")
+                        Button::new("music-back", "← Inbox")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|_, _, _, cx| cx.emit(MusicEvent::Close))),
                     )
                     .child(
@@ -318,10 +315,9 @@ impl Render for Music {
                     .flex()
                     .gap_2()
                     .child(
-                        Button::new("music-mode-song")
-                            .small()
-                            .label("Song")
-                            .when(!song, |b| b.ghost())
+                        Button::new("music-mode-song", "Song")
+                            .size(ControlSize::Sm)
+                            .when(!song, |b| b.variant(ButtonVariant::Ghost))
                             .disabled(job_running)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.mode = Mode::Song;
@@ -329,10 +325,9 @@ impl Render for Music {
                             })),
                     )
                     .child(
-                        Button::new("music-mode-album")
-                            .small()
-                            .label("Album")
-                            .when(song, |b| b.ghost())
+                        Button::new("music-mode-album", "Album")
+                            .size(ControlSize::Sm)
+                            .when(song, |b| b.variant(ButtonVariant::Ghost))
                             .disabled(job_running)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.mode = Mode::Album;
@@ -346,14 +341,16 @@ impl Render for Music {
                     .gap_2()
                     .child(div().flex_1().child(Input::new(&self.url)))
                     .child(
-                        Button::new("music-probe")
-                            .label(if self.probing {
+                        Button::new(
+                            "music-probe",
+                            if self.probing {
                                 "Checking…"
                             } else {
                                 "Check video"
-                            })
-                            .disabled(self.probing || self.starting || job_running)
-                            .on_click(cx.listener(|view, _, window, cx| view.probe(window, cx))),
+                            },
+                        )
+                        .disabled(self.probing || self.starting || job_running)
+                        .on_click(cx.listener(|view, _, window, cx| view.probe(window, cx))),
                     ),
             )
             .when(song, |el| el.child(render_song_inputs(self)))
@@ -364,8 +361,9 @@ impl Render for Music {
                     .items_center()
                     .gap_3()
                     .child(
-                        Button::new("music-build")
-                            .label(if self.starting {
+                        Button::new(
+                            "music-build",
+                            if self.starting {
                                 "Starting…"
                             } else if job_running {
                                 "Building…"
@@ -373,9 +371,10 @@ impl Render for Music {
                                 "Import song"
                             } else {
                                 "Build album"
-                            })
-                            .disabled(self.probing || self.starting || job_running || !ready)
-                            .on_click(cx.listener(|view, _, window, cx| view.build(window, cx))),
+                            },
+                        )
+                        .disabled(self.probing || self.starting || job_running || !ready)
+                        .on_click(cx.listener(|view, _, window, cx| view.build(window, cx))),
                     )
                     .when_some(self.message.clone(), |el, message| {
                         el.child(

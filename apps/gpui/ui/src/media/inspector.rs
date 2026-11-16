@@ -1,7 +1,7 @@
 //! Ingest run detail inspector and disposition filters.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 use sjel_gpui_core::media::{format_bytes, run_label, sort_run_items, MediaIngestItem};
 
@@ -38,10 +38,9 @@ pub fn render_run_detail_card(
             _ => sorted.iter().collect(),
         };
 
-        let close_btn = Button::new("close-run-detail")
-            .small()
-            .ghost()
-            .label("Close Inspector")
+        let close_btn = Button::new("close-run-detail", "Close Inspector")
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
             .on_click(cx.listener(|this, _, _, cx| {
                 this.selected_run_id = None;
                 this.selected_run_detail = Remote::default();
@@ -52,40 +51,39 @@ pub fn render_run_detail_card(
             .flex()
             .gap(px(6.0))
             .child(
-                Button::new("disp-all")
-                    .small()
-                    .when(filter != "all", |b| b.ghost())
-                    .label(format!("All ({})", sorted.len()))
+                Button::new("disp-all", format!("All ({})", sorted.len()))
+                    .size(ControlSize::Sm)
+                    .when(filter != "all", |b| b.variant(ButtonVariant::Ghost))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.filter_disposition = "all".to_string();
                         cx.notify();
                     })),
             )
             .child(
-                Button::new("disp-attention")
-                    .small()
-                    .when(filter != "attention", |b| b.ghost())
-                    .label(format!("Attention ({})", run.refused + run.failed))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.filter_disposition = "attention".to_string();
-                        cx.notify();
-                    })),
+                Button::new(
+                    "disp-attention",
+                    format!("Attention ({})", run.refused + run.failed),
+                )
+                .size(ControlSize::Sm)
+                .when(filter != "attention", |b| b.variant(ButtonVariant::Ghost))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.filter_disposition = "attention".to_string();
+                    cx.notify();
+                })),
             )
             .child(
-                Button::new("disp-imported")
-                    .small()
-                    .when(filter != "imported", |b| b.ghost())
-                    .label(format!("Imported ({})", run.imported))
+                Button::new("disp-imported", format!("Imported ({})", run.imported))
+                    .size(ControlSize::Sm)
+                    .when(filter != "imported", |b| b.variant(ButtonVariant::Ghost))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.filter_disposition = "imported".to_string();
                         cx.notify();
                     })),
             )
             .child(
-                Button::new("disp-duplicate")
-                    .small()
-                    .when(filter != "duplicate", |b| b.ghost())
-                    .label(format!("Duplicate ({})", run.duplicates))
+                Button::new("disp-duplicate", format!("Duplicate ({})", run.duplicates))
+                    .size(ControlSize::Sm)
+                    .when(filter != "duplicate", |b| b.variant(ButtonVariant::Ghost))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.filter_disposition = "duplicate".to_string();
                         cx.notify();

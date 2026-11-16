@@ -8,7 +8,6 @@ use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
 use futures::StreamExt;
-use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::Theme;
 use gpui_kit::{
@@ -16,6 +15,7 @@ use gpui_kit::{
     KeyBinding, MouseButton, MouseMoveEvent, SharedString, Subscription, Window,
 };
 use sjel_gpui_ui::ely::feedback::Toast;
+use sjel_gpui_ui::ely::forms::{InputEvent, TextInput};
 use sjel_gpui_ui::ely::primitives::Severity;
 use sjel_gpui_ui::feedback::WindowToastExt;
 
@@ -421,7 +421,7 @@ pub struct Workspace {
     pub settings_query: String,
     /// A shortcut group selected from the Settings contents rail.
     pub settings_shortcut_group: Option<&'static str>,
-    pub settings_search: Option<(Entity<gpui_kit::component::input::InputState>, Subscription)>,
+    pub settings_search: Option<(Entity<TextInput>, Subscription)>,
     pub update_info: Option<crate::update::UpdateInfo>,
     /// When the last `git` check started, so the poll can skip the ones it does not need.
     update_checked_at: Option<Instant>,
@@ -566,15 +566,14 @@ impl Workspace {
         };
         let finder_events = cx.subscribe_in(&finder, window, Self::on_finder);
         let settings_search = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("Search settings, accounts, features, shortcuts")
+            TextInput::new(window, cx).placeholder("Search settings, accounts, features, shortcuts")
         });
         let settings_search_events = cx.subscribe_in(
             &settings_search,
             window,
             |view, input, event, window, cx| {
-                if matches!(event, InputEvent::Change) {
-                    view.settings_query = input.read(cx).value().to_string();
+                if matches!(event, InputEvent::Changed) {
+                    view.settings_query = input.read(cx).text().to_owned();
                     view.settings_shortcut_group = None;
                     view.settings_feature_detail = None;
                     view.feature_install_confirmation = None;

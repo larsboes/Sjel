@@ -1,5 +1,5 @@
 //! Types, status filters, promotion forms, and formatting helpers for Scouting.
-use gpui_kit::component::input::InputState;
+use crate::ely::forms::TextInput;
 use gpui_kit::{div, prelude::*, rgb, AnyElement, Entity, SharedString, Subscription};
 use sjel_gpui_core::scouting::{
     CalendarCandidateVerdict, OpportunityStatus, ScoutingOpportunity, ScoutingSource,
@@ -42,7 +42,7 @@ impl StatusFilter {
 
 pub struct PromotionForm {
     pub opportunity: ScoutingOpportunity,
-    pub fields: Vec<(String, String, Entity<InputState>)>,
+    pub fields: Vec<(String, String, Entity<TextInput>)>,
     pub error: Option<SharedString>,
     pub saving: bool,
     pub _subscriptions: Vec<Subscription>,
@@ -53,7 +53,7 @@ impl PromotionForm {
         self.fields
             .iter()
             .find(|(field, _, _)| field == key)
-            .map(|(_, _, input)| input.read(cx).value().to_string())
+            .map(|(_, _, input)| input.read(cx).text().to_owned())
             .unwrap_or_default()
     }
 }

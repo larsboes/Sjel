@@ -1,10 +1,10 @@
 //! Desktop CalendarPage view, month/week navigation, side panel and day entries.
 use super::adapter;
+use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::calendar::jiff::{tz::TimeZone, Timestamp};
+use crate::ely::theme::ControlSize;
 use chrono::{Duration, Local, Months, NaiveDate};
-use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, Context, FocusHandle, FontWeight, ScrollHandle, SharedString,
     Window,
@@ -444,11 +444,10 @@ impl Render for CalendarPage {
             ),
         };
         let view_button = |label: &'static str, view: View, cx: &mut Context<Self>| {
-            Button::new(SharedString::from(format!("calendar-view-{label}")))
-                .small()
-                .label(label)
-                .when(self.view == view, |b| b.primary())
-                .when(self.view != view, |b| b.ghost())
+            Button::new(SharedString::from(format!("calendar-view-{label}")), label)
+                .size(ControlSize::Sm)
+                .when(self.view == view, |b| b.variant(ButtonVariant::Primary))
+                .when(self.view != view, |b| b.variant(ButtonVariant::Ghost))
                 .on_click(cx.listener(move |page, _, _, cx| page.set_view(view, cx)))
         };
         let header = div()
@@ -471,26 +470,23 @@ impl Render for CalendarPage {
                     .items_center()
                     .gap_1()
                     .child(
-                        Button::new("calendar-prev")
-                            .small()
-                            .ghost()
-                            .label("‹")
+                        Button::new("calendar-prev", "‹")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|page, _, _, cx| page.shift_page(false, cx))),
                     )
                     .child(
-                        Button::new("calendar-today")
-                            .small()
-                            .ghost()
-                            .label("Today")
+                        Button::new("calendar-today", "Today")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.select(Local::now().date_naive(), cx)
                             })),
                     )
                     .child(
-                        Button::new("calendar-next")
-                            .small()
-                            .ghost()
-                            .label("›")
+                        Button::new("calendar-next", "›")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|page, _, _, cx| page.shift_page(true, cx))),
                     ),
             )
@@ -510,20 +506,22 @@ impl Render for CalendarPage {
             )
             .when(self.undo_time.is_some(), |header| {
                 header.child(
-                    Button::new("calendar-undo-time")
-                        .small()
-                        .ghost()
-                        .label("Undo time change · ⌘Z")
+                    Button::new("calendar-undo-time", "Undo time change · ⌘Z")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .disabled(self.changing_time)
                         .on_click(cx.listener(|page, _, _, cx| page.undo_time(cx))),
                 )
             })
             .child(
-                Button::new("calendar-availability")
-                    .small()
-                    .label("Free time")
-                    .when(self.show_availability, |button| button.primary())
-                    .when(!self.show_availability, |button| button.ghost())
+                Button::new("calendar-availability", "Free time")
+                    .size(ControlSize::Sm)
+                    .when(self.show_availability, |button| {
+                        button.variant(ButtonVariant::Primary)
+                    })
+                    .when(!self.show_availability, |button| {
+                        button.variant(ButtonVariant::Ghost)
+                    })
                     .on_click(cx.listener(|page, _, _, cx| {
                         page.show_availability = !page.show_availability;
                         if page.show_availability && page.view == View::Month {
@@ -533,24 +531,25 @@ impl Render for CalendarPage {
                     })),
             )
             .child(
-                Button::new("calendar-proposal-review")
-                    .small()
-                    .ghost()
-                    .label(if self.reviewing_proposals {
+                Button::new(
+                    "calendar-proposal-review",
+                    if self.reviewing_proposals {
                         "Back to calendar".to_owned()
                     } else {
                         format!(
                             "Review · {}",
                             self.proposals.value.as_ref().map_or(0, Vec::len)
                         )
-                    })
-                    .on_click(cx.listener(|page, _, _, cx| page.toggle_proposals(cx))),
+                    },
+                )
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
+                .on_click(cx.listener(|page, _, _, cx| page.toggle_proposals(cx))),
             )
             .child(
-                Button::new("calendar-new")
-                    .small()
-                    .primary()
-                    .label("+ New entry · N")
+                Button::new("calendar-new", "+ New entry · N")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Primary)
                     .on_click(cx.listener(|page, _, window, cx| page.open_form(window, cx))),
             );
 

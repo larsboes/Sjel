@@ -1,103 +1,65 @@
-//! Popover menu for slash commands and block-type switching.
+//! Sjel block choices presented at the current caret without moving editor focus.
 
-use gpui_kit::prelude::*;
-use gpui_kit::{
-    anchored, deferred, div, px, rgb, rgba, AnyElement, Context, FontWeight, MouseButton,
-};
+use gpui_kit::{component::input::TextareaState, AnyElement, Context, IntoElement, WeakEntity};
+use sjel_gpui_core::blocks::Kind;
 
-use super::types::Menu;
-use super::NoteEditor;
-use crate::theme::Palette;
+use super::{types::Menu, NoteEditor};
+use crate::ely::{forms::Choice, menus::CaretMenu, primitives::IconName};
 
 pub(crate) fn render_menu(
     menu: &Menu,
-    palette: Palette,
+    input: WeakEntity<TextareaState>,
     cx: &mut Context<NoteEditor>,
 ) -> AnyElement {
     let index = menu.block;
-    let items = menu.choices().into_iter().enumerate().map(|(at, choice)| {
-        let kind = choice.kind;
-        div()
-            .id(("choice", at))
-            .px_2()
-            .py(px(5.))
-            .rounded(px(6.))
-            .text_sm()
-            .cursor_pointer()
-            .flex()
-            .items_center()
-            .justify_between()
-            .gap_2()
-            .when(at == menu.selected, |item| item.bg(rgba(palette.raised)))
-            .hover(move |style| style.bg(rgba(palette.raised)))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |editor, _, window, cx| {
-                    editor.apply(index, kind, window, cx);
-                    cx.stop_propagation();
-                }),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        div()
-                            .w(px(24.))
-                            .h(px(20.))
-                            .rounded(px(4.))
-                            .bg(rgba(palette.surface))
-                            .border_1()
-                            .border_color(rgba(palette.border))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_xs()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(rgb(palette.muted))
-                            .child(choice.icon),
-                    )
-                    .child(choice.label),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .opacity(0.7)
-                    .child(choice.shortcut),
-            )
+    let choices = menu.choices();
+    let kinds: Vec<_> = choices.iter().map(|choice| choice.kind).collect();
+    let rows = choices.iter().map(|choice| {
+        let icon = match choice.kind {
+            Kind::Heading(1) => IconName::Heading1,
+            Kind::Heading(2) => IconName::Heading2,
+            Kind::Heading(3) => IconName::Heading3,
+            Kind::Heading(_) => IconName::Heading,
+            Kind::Bullet => IconName::List,
+            Kind::Numbered => IconName::ListOrdered,
+            Kind::Todo(_) => IconName::ListTodo,
+            Kind::Quote => IconName::Quote,
+            Kind::Code => IconName::Code,
+            _ => IconName::FileText,
+        };
+        Choice::new(choice.label, choice.label)
+            .icon(icon)
+            .note(choice.shortcut)
     });
-    let title = if menu.query.is_some() {
-        "Insert Block"
-    } else {
-        "Turn into"
-    };
-    deferred(
-        anchored().snap_to_window_with_margin(px(8.)).child(
-            div()
-                .mt_1()
-                .w(px(250.))
-                .p_1()
-                .flex()
-                .flex_col()
-                .rounded(px(10.))
-                .bg(rgba(palette.surface | 0xff))
-                .border_1()
-                .border_color(rgba(palette.border))
-                .shadow_lg()
-                .child(
-                    div()
-                        .px_3()
-                        .py_1()
-                        .text_xs()
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(rgb(palette.muted))
-                        .child(title),
-                )
-                .children(items),
-        ),
+    let owner = cx.entity().downgrade();
+    let dismiss = owner.clone();
+    CaretMenu::new(
+        ("editor-caret-menu", index),
+        rows,
+        move |_, cx| {
+            let input = input.upgrade()?;
+            let geometry = input.read(cx).prepaint_caret_geometry()?;
+            let mut bounds = geometry.cursor_bounds();
+            bounds.origin.y += geometry.scroll_offset().y;
+            bounds.size.height = geometry.line_height();
+            Some(bounds)
+        },
+        move |at, window, cx| {
+            if let (Some(owner), Some(&kind)) = (owner.upgrade(), kinds.get(at)) {
+                owner.update(cx, |editor, cx| editor.apply(index, kind, window, cx));
+            }
+        },
+        move |_, cx| {
+            if let Some(owner) = dismiss.upgrade() {
+                owner.update(cx, |editor, cx| {
+                    if editor.menu.as_ref().is_some_and(|menu| menu.block == index) {
+                        editor.menu = None;
+                        cx.notify();
+                    }
+                });
+            }
+        },
     )
-    .with_priority(1)
+    .selected(Some(menu.selected))
     .into_any_element()
 }

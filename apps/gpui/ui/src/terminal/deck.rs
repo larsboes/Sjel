@@ -131,6 +131,7 @@ impl TerminalDeck {
         let subscription = cx.subscribe(&view, |_, _, event: &TerminalEvent, cx| match event {
             TerminalEvent::Editing(open) => cx.emit(TerminalEvent::Editing(*open)),
             TerminalEvent::Zoom(steps) => cx.emit(TerminalEvent::Zoom(*steps)),
+            TerminalEvent::Find => cx.emit(TerminalEvent::Find),
         });
         self.tabs.push((view, subscription));
         self.active = self.tabs.len() - 1;

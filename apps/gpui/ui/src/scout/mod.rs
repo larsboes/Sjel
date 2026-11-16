@@ -8,10 +8,10 @@ pub use types::*;
 
 use std::collections::HashMap;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, point, prelude::*, px, rgb, rgba, Context, Entity, FontWeight, IntoElement, Render,
     ScrollHandle, SharedString, Subscription, Window,
@@ -42,8 +42,8 @@ pub struct ScoutingPage {
     pub(crate) verdict_request: u64,
     pub status_filter: StatusFilter,
     pub shown: usize,
-    pub(crate) location: Option<(Entity<InputState>, Subscription)>,
-    pub(crate) query: Option<(Entity<InputState>, Subscription)>,
+    pub(crate) location: Option<(Entity<TextInput>, Subscription)>,
+    pub(crate) query: Option<(Entity<TextInput>, Subscription)>,
     pub(crate) promotion: Option<PromotionForm>,
     pub(crate) scroll: ScrollHandle,
 }
@@ -170,19 +170,15 @@ impl ScoutingPage {
         .detach();
     }
 
-    fn location_input(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    fn location_input(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
         if let Some((input, _)) = &self.location {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Berlin"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Berlin"));
         let subscription = cx.subscribe_in(&input, window, |page, _, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
+            if matches!(event, InputEvent::Changed) {
                 cx.notify();
-            } else if matches!(event, InputEvent::PressEnter { .. }) {
+            } else if matches!(event, InputEvent::Submit) {
                 page.scan(cx);
             }
         });
@@ -190,15 +186,15 @@ impl ScoutingPage {
         input
     }
 
-    fn query_input(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    fn query_input(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
         if let Some((input, _)) = &self.query {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("AI, Security, Mobility…"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("AI, Security, Mobility…"));
         let subscription = cx.subscribe_in(&input, window, |page, _, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
+            if matches!(event, InputEvent::Changed) {
                 cx.notify();
-            } else if matches!(event, InputEvent::PressEnter { .. }) {
+            } else if matches!(event, InputEvent::Submit) {
                 page.scan(cx);
             }
         });
@@ -267,12 +263,12 @@ impl ScoutingPage {
         let location = self
             .location
             .as_ref()
-            .map(|(input, _)| input.read(cx).value().trim().to_owned())
+            .map(|(input, _)| input.read(cx).text().trim().to_owned())
             .filter(|value| !value.is_empty());
         let query = self
             .query
             .as_ref()
-            .map(|(input, _)| input.read(cx).value().trim().to_owned())
+            .map(|(input, _)| input.read(cx).text().trim().to_owned())
             .filter(|value| !value.is_empty());
         self.scanning = true;
         self.error = None;
@@ -326,16 +322,18 @@ impl Render for ScoutingPage {
             let source_id = source.id.clone();
             let active = selected.as_deref() == Some(source_id.as_str());
             source_picker = source_picker.child(
-                Button::new(SharedString::from(format!("scout-source-{source_id}")))
-                    .small()
-                    .label(source_label(source))
-                    .when(active, |button| button.primary())
-                    .when(!active, |button| button.ghost())
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        page.adapter = Some(source_id.clone());
-                        page.scan = None;
-                        cx.notify();
-                    })),
+                Button::new(
+                    SharedString::from(format!("scout-source-{source_id}")),
+                    source_label(source),
+                )
+                .size(ControlSize::Sm)
+                .when(active, |button| button.variant(ButtonVariant::Primary))
+                .when(!active, |button| button.variant(ButtonVariant::Ghost))
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    page.adapter = Some(source_id.clone());
+                    page.scan = None;
+                    cx.notify();
+                })),
             );
         }
 
@@ -378,10 +376,9 @@ impl Render for ScoutingPage {
                             .child("Discover"),
                     )
                     .child(
-                        Button::new("scout-refresh")
-                            .small()
-                            .ghost()
-                            .label("↻ Refresh")
+                        Button::new("scout-refresh", "↻ Refresh")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .disabled(loading || scanning)
                             .on_click(cx.listener(|page, _, _, cx| page.load(cx))),
                     ),
@@ -399,7 +396,7 @@ impl Render for ScoutingPage {
                             .flex_col()
                             .gap_1()
                             .child(muted("Location · optional", palette))
-                            .child(Input::new(&location).small()),
+                            .child(Input::new(&location).size(ControlSize::Sm)),
                     )
                     .child(
                         div()
@@ -408,19 +405,21 @@ impl Render for ScoutingPage {
                             .flex_col()
                             .gap_1()
                             .child(muted("Search term · optional", palette))
-                            .child(Input::new(&query).small()),
+                            .child(Input::new(&query).size(ControlSize::Sm)),
                     )
                     .child(
-                        Button::new("scout-run")
-                            .small()
-                            .primary()
-                            .label(if scanning {
+                        Button::new(
+                            "scout-run",
+                            if scanning {
                                 "Scanning…"
                             } else {
                                 "Scan source"
-                            })
-                            .disabled(scanning || loading || self.adapter.is_none())
-                            .on_click(cx.listener(|page, _, _, cx| page.scan(cx))),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Primary)
+                        .disabled(scanning || loading || self.adapter.is_none())
+                        .on_click(cx.listener(|page, _, _, cx| page.scan(cx))),
                     ),
             );
 
@@ -455,17 +454,19 @@ impl Render for ScoutingPage {
             |row, filter| {
                 let active = self.status_filter == filter;
                 row.child(
-                    Button::new(SharedString::from(format!("scout-filter-{:?}", filter)))
-                        .small()
-                        .label(format!("{} · {}", filter.label(), self.count(filter)))
-                        .when(active, |button| button.primary())
-                        .when(!active, |button| button.ghost())
-                        .on_click(cx.listener(move |page, _, _, cx| {
-                            page.status_filter = filter;
-                            page.shown = PAGE_SIZE;
-                            page.scroll.set_offset(point(px(0.), px(0.)));
-                            cx.notify();
-                        })),
+                    Button::new(
+                        SharedString::from(format!("scout-filter-{:?}", filter)),
+                        format!("{} · {}", filter.label(), self.count(filter)),
+                    )
+                    .size(ControlSize::Sm)
+                    .when(active, |button| button.variant(ButtonVariant::Primary))
+                    .when(!active, |button| button.variant(ButtonVariant::Ghost))
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        page.status_filter = filter;
+                        page.shown = PAGE_SIZE;
+                        page.scroll.set_offset(point(px(0.), px(0.)));
+                        cx.notify();
+                    })),
                 )
             },
         );
@@ -511,17 +512,16 @@ impl Render for ScoutingPage {
             );
             if visible_count < total_visible {
                 content = content.child(
-                    Button::new("scout-show-more")
-                        .small()
-                        .ghost()
-                        .label(format!(
-                            "Show more ({} remaining)",
-                            total_visible - visible_count
-                        ))
-                        .on_click(cx.listener(|page, _, _, cx| {
-                            page.shown = page.shown.saturating_add(PAGE_SIZE);
-                            cx.notify();
-                        })),
+                    Button::new(
+                        "scout-show-more",
+                        format!("Show more ({} remaining)", total_visible - visible_count),
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
+                    .on_click(cx.listener(|page, _, _, cx| {
+                        page.shown = page.shown.saturating_add(PAGE_SIZE);
+                        cx.notify();
+                    })),
                 );
             }
         }

@@ -1,4 +1,4 @@
-use gpui_kit::component::input::InputState;
+use crate::ely::forms::TextInput;
 use gpui_kit::Entity;
 
 pub use sjel_gpui_core::route::FeedTab as Tab;
@@ -29,13 +29,13 @@ impl Filter {
 
 pub(crate) struct CalendarEditForm {
     pub(crate) id: String,
-    pub(crate) title: Entity<InputState>,
-    pub(crate) start_date: Entity<InputState>,
-    pub(crate) end_date: Entity<InputState>,
-    pub(crate) start_time: Entity<InputState>,
-    pub(crate) end_time: Entity<InputState>,
-    pub(crate) location: Entity<InputState>,
-    pub(crate) notes: Entity<InputState>,
+    pub(crate) title: Entity<TextInput>,
+    pub(crate) start_date: Entity<TextInput>,
+    pub(crate) end_date: Entity<TextInput>,
+    pub(crate) start_time: Entity<TextInput>,
+    pub(crate) end_time: Entity<TextInput>,
+    pub(crate) location: Entity<TextInput>,
+    pub(crate) notes: Entity<TextInput>,
     pub(crate) all_day: bool,
     pub(crate) kind: String,
     pub(crate) commitment: String,
@@ -45,7 +45,7 @@ pub(crate) struct CalendarEditForm {
 
 pub(crate) struct DataClassForm {
     pub(crate) target: &'static str,
-    pub(crate) rationale: Entity<InputState>,
+    pub(crate) rationale: Entity<TextInput>,
     pub(crate) error: Option<String>,
 }
 

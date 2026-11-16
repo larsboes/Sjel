@@ -1,10 +1,10 @@
 //! Investment ideas: a list, one idea's thesis, price levels, notes and history, and a form for
 //! a new one. Plan: `docs/plans/finance.md`, section 6.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputState, Textarea, TextareaState};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString, Window,
 };
@@ -19,12 +19,12 @@ use super::FinancePage;
 const STANCES: [&str; 4] = ["hold", "watch", "enter", "exit"];
 
 pub(crate) struct IdeaInputs {
-    new_label: Entity<InputState>,
-    new_ticker: Entity<InputState>,
-    thesis: Entity<TextareaState>,
-    level_price: Entity<InputState>,
-    level_currency: Entity<InputState>,
-    note: Entity<InputState>,
+    new_label: Entity<TextInput>,
+    new_ticker: Entity<TextInput>,
+    thesis: Entity<TextInput>,
+    level_price: Entity<TextInput>,
+    level_currency: Entity<TextInput>,
+    note: Entity<TextInput>,
 }
 
 /// A typed level as the server accepts it: digits with an optional point. A comma is read as
@@ -145,20 +145,20 @@ impl FinancePage {
         self.save_idea(Some(id), draft, cx);
     }
 
-    fn create_idea(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn create_idea(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let Some(inputs) = self.idea_inputs.as_ref() else {
             return;
         };
-        let label = inputs.new_label.read(cx).value().trim().to_string();
+        let label = inputs.new_label.read(cx).text().trim().to_string();
         if label.is_empty() {
             self.notice = Some("A new idea needs a name.".into());
             cx.notify();
             return;
         }
-        let ticker = inputs.new_ticker.read(cx).value().trim().to_string();
+        let ticker = inputs.new_ticker.read(cx).text().trim().to_string();
         let (new_label, new_ticker) = (inputs.new_label.clone(), inputs.new_ticker.clone());
-        new_label.update(cx, |input, cx| input.set_value("", window, cx));
-        new_ticker.update(cx, |input, cx| input.set_value("", window, cx));
+        new_label.update(cx, |input, cx| input.set_text("", cx));
+        new_ticker.update(cx, |input, cx| input.set_text("", cx));
         let draft = FinanceIdeaDraft {
             label,
             ticker,
@@ -173,15 +173,15 @@ impl FinancePage {
         let Some(inputs) = self.idea_inputs.as_ref() else {
             return;
         };
-        let thesis = inputs.thesis.read(cx).value().trim().to_string();
+        let thesis = inputs.thesis.read(cx).text().trim().to_string();
         self.edit_selected(cx, |draft| draft.thesis = thesis);
     }
 
-    fn add_level(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn add_level(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let Some(inputs) = self.idea_inputs.as_ref() else {
             return;
         };
-        let typed = inputs.level_price.read(cx).value().to_string();
+        let typed = inputs.level_price.read(cx).text().to_string();
         let Some(price) = normalize_level(&typed) else {
             self.notice = Some(format!("{typed:?} is not a price such as 1200.50."));
             cx.notify();
@@ -190,7 +190,7 @@ impl FinancePage {
         let currency = inputs
             .level_currency
             .read(cx)
-            .value()
+            .text()
             .trim()
             .to_ascii_uppercase();
         let currency = if currency.is_empty() {
@@ -201,7 +201,7 @@ impl FinancePage {
             currency
         };
         let level_price = inputs.level_price.clone();
-        level_price.update(cx, |input, cx| input.set_value("", window, cx));
+        level_price.update(cx, |input, cx| input.set_text("", cx));
         let direction = self.level_direction.to_string();
         self.edit_selected(cx, |draft| {
             draft.triggers.push(FinanceIdeaTrigger {
@@ -212,17 +212,17 @@ impl FinancePage {
         });
     }
 
-    fn add_note(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn add_note(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let (Some(inputs), Some(id)) = (self.idea_inputs.as_ref(), self.selected_idea.clone())
         else {
             return;
         };
-        let text = inputs.note.read(cx).value().trim().to_string();
+        let text = inputs.note.read(cx).text().trim().to_string();
         if text.is_empty() {
             return;
         }
         let note = inputs.note.clone();
-        note.update(cx, |input, cx| input.set_value("", window, cx));
+        note.update(cx, |input, cx| input.set_text("", cx));
         let Ok(shell) = self.repo.shell() else {
             return;
         };
@@ -284,12 +284,12 @@ impl FinancePage {
     fn ensure_idea_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.idea_inputs.is_none() {
             let input = |placeholder: &'static str, window: &mut Window, cx: &mut Context<Self>| {
-                cx.new(|cx| InputState::new(window, cx).placeholder(placeholder))
+                cx.new(|cx| TextInput::new(window, cx).placeholder(placeholder))
             };
             self.idea_inputs = Some(IdeaInputs {
                 new_label: input("Name, e.g. Singapore Exchange", window, cx),
                 new_ticker: input("Ticker, e.g. S68.SI", window, cx),
-                thesis: cx.new(|cx| TextareaState::new(window, cx).auto_grow(3, 12)),
+                thesis: cx.new(|cx| TextInput::new(window, cx).multi_line(3, 12)),
                 level_price: input("Price", window, cx),
                 level_currency: input("EUR", window, cx),
                 note: input("Add a note", window, cx),
@@ -304,7 +304,7 @@ impl FinancePage {
             if let Some(inputs) = self.idea_inputs.as_ref() {
                 inputs
                     .thesis
-                    .update(cx, |input, cx| input.set_value(thesis, window, cx));
+                    .update(cx, |input, cx| input.set_text(thesis, cx));
             }
             self.thesis_for = self.selected_idea.clone();
         }
@@ -330,11 +330,12 @@ impl FinancePage {
              cx: &mut Context<Self>,
              on_pick: fn(&mut FinancePage, &'static str, &mut Context<FinancePage>)| {
                 div().flex().gap_1().children(STANCES.iter().map(|stance| {
-                    Button::new(SharedString::from(format!("{id_prefix}-{stance}")))
-                        .xsmall()
-                        .label(*stance)
+                    Button::new(SharedString::from(format!("{id_prefix}-{stance}")), *stance)
+                        .size(ControlSize::Sm)
                         .when(current == *stance, |button| button.primary())
-                        .when(current != *stance, |button| button.ghost())
+                        .when(current != *stance, |button| {
+                            button.variant(ButtonVariant::Ghost)
+                        })
                         .on_click(cx.listener(move |page, _, _, cx| on_pick(page, stance, cx)))
                 }))
             };
@@ -349,8 +350,8 @@ impl FinancePage {
             .border_color(rgba(palette.border))
             .bg(rgba(palette.surface))
             .child(title("NEW IDEA", palette))
-            .child(Input::new(&inputs.new_label).small())
-            .child(Input::new(&inputs.new_ticker).small())
+            .child(Input::new(&inputs.new_label).size(ControlSize::Sm))
+            .child(Input::new(&inputs.new_ticker).size(ControlSize::Sm))
             .child(stance_pills(
                 "idea-new-stance",
                 self.new_idea_stance,
@@ -361,10 +362,9 @@ impl FinancePage {
                 },
             ))
             .child(
-                Button::new("idea-create")
-                    .small()
+                Button::new("idea-create", "Create")
+                    .size(ControlSize::Sm)
                     .primary()
-                    .label("Create")
                     .on_click(cx.listener(|page, _, window, cx| page.create_idea(window, cx))),
             );
 
@@ -496,23 +496,23 @@ impl FinancePage {
                 .bg(rgba(palette.surface))
         };
 
-        let header =
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap_3()
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .child(
-                            div()
-                                .text_lg()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(idea.current.label.clone()),
-                        )
-                        .child(div().text_xs().text_color(rgb(palette.muted)).child(
+        let header = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap_3()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(idea.current.label.clone()),
+                    )
+                    .child(
+                        div().text_xs().text_color(rgb(palette.muted)).child(
                             match price_text(&idea) {
                                 Some(price) => format!("{} · last {price}", idea.current.ticker),
                                 None if idea.current.ticker.is_empty() => {
@@ -523,45 +523,43 @@ impl FinancePage {
                                     idea.current.ticker
                                 ),
                             },
-                        )),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(div().flex().gap_1().children(STANCES.iter().map(|stance| {
-                            let current = idea.current.stance == *stance;
-                            Button::new(SharedString::from(format!("idea-stance-{stance}")))
-                                .xsmall()
-                                .label(*stance)
-                                .when(current, |button| button.primary())
-                                .when(!current, |button| button.ghost())
-                                .on_click(cx.listener(move |page, _, _, cx| {
-                                    page.edit_selected(cx, |draft| draft.stance = (*stance).into())
-                                }))
-                        })))
-                        .child(
-                            Button::new("idea-close")
-                                .xsmall()
-                                .ghost()
-                                .label(if open { "Close" } else { "Reopen" })
-                                .on_click(cx.listener(move |page, _, _, cx| {
-                                    page.edit_selected(cx, |draft| {
-                                        draft.status = if open { "closed" } else { "open" }.into()
-                                    })
-                                })),
                         ),
-                );
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(div().flex().gap_1().children(STANCES.iter().map(|stance| {
+                        let current = idea.current.stance == *stance;
+                        Button::new(SharedString::from(format!("idea-stance-{stance}")), *stance)
+                            .size(ControlSize::Sm)
+                            .when(current, |button| button.primary())
+                            .when(!current, |button| button.variant(ButtonVariant::Ghost))
+                            .on_click(cx.listener(move |page, _, _, cx| {
+                                page.edit_selected(cx, |draft| draft.stance = (*stance).into())
+                            }))
+                    })))
+                    .child(
+                        Button::new("idea-close", if open { "Close" } else { "Reopen" })
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
+                            .on_click(cx.listener(move |page, _, _, cx| {
+                                page.edit_selected(cx, |draft| {
+                                    draft.status = if open { "closed" } else { "open" }.into()
+                                })
+                            })),
+                    ),
+            );
 
         let thesis = panel()
             .child(title("THESIS", palette))
-            .child(Textarea::new(&inputs.thesis))
+            .child(Input::new(&inputs.thesis))
             .child(
                 div().flex().justify_end().child(
-                    Button::new("idea-save-thesis")
-                        .small()
-                        .label("Save thesis")
+                    Button::new("idea-save-thesis", "Save thesis")
+                        .size(ControlSize::Sm)
                         .on_click(cx.listener(|page, _, _, cx| page.save_thesis(cx))),
                 ),
             );
@@ -591,30 +589,38 @@ impl FinancePage {
                             .gap_2()
                             .child(div().text_xs().text_color(rgb(palette.muted)).child(gap))
                             .child(
-                                Button::new(SharedString::from(format!("idea-level-x-{index}")))
-                                    .xsmall()
-                                    .ghost()
-                                    .label("Remove")
-                                    .on_click(cx.listener(move |page, _, _, cx| {
+                                Button::new(
+                                    SharedString::from(format!("idea-level-x-{index}")),
+                                    "Remove",
+                                )
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(
+                                    move |page, _, _, cx| {
                                         page.edit_selected(cx, |draft| {
                                             if index < draft.triggers.len() {
                                                 draft.triggers.remove(index);
                                             }
                                         })
-                                    })),
+                                    },
+                                )),
                             ),
                     )
             });
         let direction_pill = |direction: &'static str, cx: &mut Context<Self>| {
-            Button::new(SharedString::from(format!("idea-level-{direction}")))
-                .xsmall()
-                .label(direction)
-                .when(self.level_direction == direction, |button| button.primary())
-                .when(self.level_direction != direction, |button| button.ghost())
-                .on_click(cx.listener(move |page, _, _, cx| {
-                    page.level_direction = direction;
-                    cx.notify();
-                }))
+            Button::new(
+                SharedString::from(format!("idea-level-{direction}")),
+                direction,
+            )
+            .size(ControlSize::Sm)
+            .when(self.level_direction == direction, |button| button.primary())
+            .when(self.level_direction != direction, |button| {
+                button.variant(ButtonVariant::Ghost)
+            })
+            .on_click(cx.listener(move |page, _, _, cx| {
+                page.level_direction = direction;
+                cx.notify();
+            }))
         };
         let levels = panel()
             .child(title("PRICE LEVELS", palette))
@@ -632,12 +638,11 @@ impl FinancePage {
                     .gap_2()
                     .child(direction_pill("above", cx))
                     .child(direction_pill("below", cx))
-                    .child(div().w(px(110.)).child(Input::new(&inputs.level_price).small()))
-                    .child(div().w(px(64.)).child(Input::new(&inputs.level_currency).small()))
+                    .child(div().w(px(110.)).child(Input::new(&inputs.level_price).size(ControlSize::Sm)))
+                    .child(div().w(px(64.)).child(Input::new(&inputs.level_currency).size(ControlSize::Sm)))
                     .child(
-                        Button::new("idea-level-add")
-                            .small()
-                            .label("Add level")
+                        Button::new("idea-level-add", "Add level")
+                            .size(ControlSize::Sm)
                             .on_click(cx.listener(|page, _, window, cx| page.add_level(window, cx))),
                     ),
             );
@@ -663,11 +668,14 @@ impl FinancePage {
                 div()
                     .flex()
                     .gap_2()
-                    .child(div().flex_1().child(Input::new(&inputs.note).small()))
                     .child(
-                        Button::new("idea-note-add")
-                            .small()
-                            .label("Add note")
+                        div()
+                            .flex_1()
+                            .child(Input::new(&inputs.note).size(ControlSize::Sm)),
+                    )
+                    .child(
+                        Button::new("idea-note-add", "Add note")
+                            .size(ControlSize::Sm)
                             .on_click(cx.listener(|page, _, window, cx| page.add_note(window, cx))),
                     ),
             );
@@ -798,15 +806,17 @@ impl FinancePage {
                         },
                     ))
                     .child(
-                        Button::new("idea-review-now")
-                            .xsmall()
-                            .label(if self.reviewing {
+                        Button::new(
+                            "idea-review-now",
+                            if self.reviewing {
                                 "Reviewing…"
                             } else {
                                 "Review now"
-                            })
-                            .disabled(self.reviewing || idea.current.status != "open")
-                            .on_click(cx.listener(|page, _, _, cx| page.review_now(cx))),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .disabled(self.reviewing || idea.current.status != "open")
+                        .on_click(cx.listener(|page, _, _, cx| page.review_now(cx))),
                     ),
             );
         let mut panel = div()
@@ -898,18 +908,16 @@ impl FinancePage {
                     .flex()
                     .gap_2()
                     .child(
-                        Button::new("idea-review-accept")
-                            .xsmall()
-                            .label("Accept")
+                        Button::new("idea-review-accept", "Accept")
+                            .size(ControlSize::Sm)
                             .on_click(cx.listener(move |page, _, _, cx| {
                                 page.judge_review(review_id, "accepted", cx)
                             })),
                     )
                     .child(
-                        Button::new("idea-review-reject")
-                            .xsmall()
-                            .ghost()
-                            .label("Reject")
+                        Button::new("idea-review-reject", "Reject")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(move |page, _, _, cx| {
                                 page.judge_review(review_id, "rejected", cx)
                             })),

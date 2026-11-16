@@ -1,9 +1,9 @@
 //! Financial overview, net worth, assets/liabilities balance snapshots.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString, Window,
 };
@@ -23,8 +23,8 @@ use super::{FinancePage, View};
 
 pub(crate) struct BalanceDraft {
     pub(super) id: String,
-    pub(super) label: Entity<InputState>,
-    pub(super) amount: Entity<InputState>,
+    pub(super) label: Entity<TextInput>,
+    pub(super) amount: Entity<TextInput>,
     pub(super) kind: BalanceKind,
 }
 
@@ -38,13 +38,13 @@ impl FinancePage {
         cx: &mut Context<Self>,
     ) -> BalanceDraft {
         let label = cx.new(|cx| {
-            let mut input = InputState::new(window, cx).placeholder("Account label");
-            input.set_value(label, window, cx);
+            let mut input = TextInput::new(window, cx).placeholder("Account label");
+            input.set_text(label, cx);
             input
         });
         let amount = cx.new(|cx| {
-            let mut input = InputState::new(window, cx).placeholder("0,00");
-            input.set_value(amount, window, cx);
+            let mut input = TextInput::new(window, cx).placeholder("0,00");
+            input.set_text(amount, cx);
             input
         });
         BalanceDraft {
@@ -86,26 +86,26 @@ impl FinancePage {
             self.balance_coverage = BalanceCoverage::Partial;
         }
         let date = cx.new(|cx| {
-            let mut input = InputState::new(window, cx).placeholder("YYYY-MM-DD");
-            input.set_value(self.balance_as_of.clone(), window, cx);
+            let mut input = TextInput::new(window, cx).placeholder("YYYY-MM-DD");
+            input.set_text(self.balance_as_of.clone(), cx);
             input
         });
         let subscription = cx.subscribe_in(&date, window, |page, input, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
-                page.balance_as_of = input.read(cx).value().to_string();
+            if matches!(event, InputEvent::Changed) {
+                page.balance_as_of = input.read(cx).text().to_string();
                 cx.notify();
             }
         });
         self.balance_date_input = Some((date, subscription));
         let currency = cx.new(|cx| {
-            let mut input = InputState::new(window, cx).placeholder("EUR");
-            input.set_value(self.balance_currency.clone(), window, cx);
+            let mut input = TextInput::new(window, cx).placeholder("EUR");
+            input.set_text(self.balance_currency.clone(), cx);
             input
         });
         let currency_subscription =
             cx.subscribe_in(&currency, window, |page, input, event, _, cx| {
-                if matches!(event, InputEvent::Change) {
-                    page.balance_currency = input.read(cx).value().trim().to_ascii_uppercase();
+                if matches!(event, InputEvent::Changed) {
+                    page.balance_currency = input.read(cx).text().trim().to_ascii_uppercase();
                     cx.notify();
                 }
             });
@@ -135,9 +135,8 @@ impl FinancePage {
     pub(super) fn save_balance_snapshot(&mut self, cx: &mut Context<Self>) {
         let mut balances = Vec::with_capacity(self.balance_fields.len());
         for draft in &self.balance_fields {
-            let label = draft.label.read(cx).value().trim().to_string();
-            let Some(amount_cents) = parse_personal_cents(draft.amount.read(cx).value().as_ref())
-            else {
+            let label = draft.label.read(cx).text().trim().to_string();
+            let Some(amount_cents) = parse_personal_cents(draft.amount.read(cx).text()) else {
                 self.notice =
                     Some("Enter non-negative amounts with at most two decimal places.".into());
                 cx.notify();
@@ -349,10 +348,9 @@ impl FinancePage {
                             .child("RECENT TRANSACTIONS"),
                     )
                     .child(
-                        Button::new("goto-transactions")
-                            .xsmall()
-                            .ghost()
-                            .label("View all →")
+                        Button::new("goto-transactions", "View all →")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.set_view(View::Transactions, cx);
                             })),
@@ -465,10 +463,9 @@ impl FinancePage {
                     div().into_any_element()
                 })
                 .child(
-                    Button::new("finance-edit-balances")
-                        .small()
-                        .ghost()
-                        .label("Edit balances")
+                    Button::new("finance-edit-balances", "Edit balances")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(
                             cx.listener(|page, _, window, cx| page.open_balance_editor(window, cx)),
                         ),
@@ -485,10 +482,9 @@ impl FinancePage {
                 .text_color(rgb(palette.muted))
                 .child("No manual balance snapshot configured.")
                 .child(
-                    Button::new("finance-add-balances")
-                        .small()
-                        .ghost()
-                        .label("Add balances")
+                    Button::new("finance-add-balances", "Add balances")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(
                             cx.listener(|page, _, window, cx| page.open_balance_editor(window, cx)),
                         ),
@@ -539,14 +535,23 @@ impl FinancePage {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(div().w(px(170.)).child(Input::new(&draft.label).small()))
-                    .child(div().w(px(100.)).child(Input::new(&draft.amount).small()))
                     .child(
-                        Button::new(SharedString::from(format!("balance-asset-{id}")))
-                            .xsmall()
-                            .label("Asset")
+                        div()
+                            .w(px(170.))
+                            .child(Input::new(&draft.label).size(ControlSize::Sm)),
+                    )
+                    .child(
+                        div()
+                            .w(px(100.))
+                            .child(Input::new(&draft.amount).size(ControlSize::Sm)),
+                    )
+                    .child(
+                        Button::new(SharedString::from(format!("balance-asset-{id}")), "Asset")
+                            .size(ControlSize::Sm)
                             .when(draft.kind == BalanceKind::Asset, |button| button.primary())
-                            .when(draft.kind != BalanceKind::Asset, |button| button.ghost())
+                            .when(draft.kind != BalanceKind::Asset, |button| {
+                                button.variant(ButtonVariant::Ghost)
+                            })
                             .on_click(cx.listener(move |page, _, _, cx| {
                                 if let Some(balance) = page
                                     .balance_fields
@@ -559,31 +564,32 @@ impl FinancePage {
                             })),
                     )
                     .child(
-                        Button::new(SharedString::from(format!("balance-liability-{id}")))
-                            .xsmall()
-                            .label("Liability")
-                            .when(draft.kind == BalanceKind::Liability, |button| {
-                                button.primary()
-                            })
-                            .when(draft.kind != BalanceKind::Liability, |button| {
-                                button.ghost()
-                            })
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                if let Some(balance) = page
-                                    .balance_fields
-                                    .iter_mut()
-                                    .find(|balance| balance.id == liability_id)
-                                {
-                                    balance.kind = BalanceKind::Liability;
-                                }
-                                cx.notify();
-                            })),
+                        Button::new(
+                            SharedString::from(format!("balance-liability-{id}")),
+                            "Liability",
+                        )
+                        .size(ControlSize::Sm)
+                        .when(draft.kind == BalanceKind::Liability, |button| {
+                            button.primary()
+                        })
+                        .when(draft.kind != BalanceKind::Liability, |button| {
+                            button.variant(ButtonVariant::Ghost)
+                        })
+                        .on_click(cx.listener(move |page, _, _, cx| {
+                            if let Some(balance) = page
+                                .balance_fields
+                                .iter_mut()
+                                .find(|balance| balance.id == liability_id)
+                            {
+                                balance.kind = BalanceKind::Liability;
+                            }
+                            cx.notify();
+                        })),
                     )
                     .child(
-                        Button::new(SharedString::from(format!("balance-remove-{id}")))
-                            .xsmall()
-                            .ghost()
-                            .label("Remove")
+                        Button::new(SharedString::from(format!("balance-remove-{id}")), "Remove")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(move |page, _, _, cx| {
                                 page.balance_fields
                                     .retain(|balance| balance.id != remove_id);
@@ -625,8 +631,16 @@ impl FinancePage {
                             .text_color(rgb(palette.muted))
                             .child("As of"),
                     )
-                    .child(div().w(px(150.)).child(Input::new(date).small()))
-                    .child(div().w(px(90.)).child(Input::new(currency).small())),
+                    .child(
+                        div()
+                            .w(px(150.))
+                            .child(Input::new(date).size(ControlSize::Sm)),
+                    )
+                    .child(
+                        div()
+                            .w(px(90.))
+                            .child(Input::new(currency).size(ControlSize::Sm)),
+                    ),
             )
             .child(rows)
             .child(
@@ -635,25 +649,23 @@ impl FinancePage {
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("balance-add-row")
-                            .small()
-                            .ghost()
-                            .label("Add balance")
+                        Button::new("balance-add-row", "Add balance")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(
                                 cx.listener(|page, _, window, cx| page.add_balance(window, cx)),
                             ),
                     )
                     .child(
-                        Button::new("balance-coverage-partial")
-                            .small()
-                            .label("Incomplete")
+                        Button::new("balance-coverage-partial", "Incomplete")
+                            .size(ControlSize::Sm)
                             .when(
                                 self.balance_coverage == BalanceCoverage::Partial,
                                 |button| button.primary(),
                             )
                             .when(
                                 self.balance_coverage != BalanceCoverage::Partial,
-                                |button| button.ghost(),
+                                |button| button.variant(ButtonVariant::Ghost),
                             )
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.balance_coverage = BalanceCoverage::Partial;
@@ -661,16 +673,15 @@ impl FinancePage {
                             })),
                     )
                     .child(
-                        Button::new("balance-coverage-complete")
-                            .small()
-                            .label("Complete")
+                        Button::new("balance-coverage-complete", "Complete")
+                            .size(ControlSize::Sm)
                             .when(
                                 self.balance_coverage == BalanceCoverage::Complete,
                                 |button| button.primary(),
                             )
                             .when(
                                 self.balance_coverage != BalanceCoverage::Complete,
-                                |button| button.ghost(),
+                                |button| button.variant(ButtonVariant::Ghost),
                             )
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.balance_coverage = BalanceCoverage::Complete;
@@ -678,20 +689,18 @@ impl FinancePage {
                             })),
                     )
                     .child(
-                        Button::new("balance-save")
-                            .small()
+                        Button::new("balance-save", "Save snapshot")
+                            .size(ControlSize::Sm)
                             .primary()
-                            .label("Save snapshot")
                             .when(self.balance_fields.is_empty(), |button| {
                                 button.disabled(true)
                             })
                             .on_click(cx.listener(|page, _, _, cx| page.save_balance_snapshot(cx))),
                     )
                     .child(
-                        Button::new("balance-cancel")
-                            .small()
-                            .ghost()
-                            .label("Cancel")
+                        Button::new("balance-cancel", "Cancel")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.balance_editor_open = false;
                                 cx.notify();
@@ -982,6 +991,41 @@ fn render_holdings(portfolio: &FinancePortfolio, palette: Palette) -> AnyElement
 mod overview_tests {
     use super::*;
     use gpui_kit::{Render, TestAppContext};
+
+    #[gpui_kit::test]
+    fn balance_editor_reads_ely_input_events_and_keeps_invalid_amounts(cx: &mut TestAppContext) {
+        use gpui_kit::Focusable;
+
+        let (page, cx) = crate::test_support::mount_root(cx, None, |window, cx| {
+            let mut page = FinancePage::new(crate::data::Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.open_balance_editor(window, cx);
+            page.add_balance(window, cx);
+            page
+        });
+        cx.update(|window, cx| {
+            let input = &page.read(cx).balance_currency_input.as_ref().unwrap().0;
+            input.read(cx).focus_handle(cx).focus(window, cx);
+        });
+        cx.simulate_keystrokes("cmd-a");
+        cx.simulate_input("usd");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert_eq!(page.balance_currency, "USD"));
+        cx.update(|window, cx| {
+            let input = &page.read(cx).balance_fields[0].amount;
+            input.read(cx).focus_handle(cx).focus(window, cx);
+        });
+        cx.simulate_keystrokes("cmd-a");
+        cx.simulate_input("12,345");
+        page.update(cx, |page, cx| page.save_balance_snapshot(cx));
+        page.read_with(cx, |page, cx| {
+            assert!(page.balance_editor_open);
+            assert_eq!(page.balance_fields[0].amount.read(cx).text(), "12,345");
+            assert_eq!(
+                page.notice.as_deref(),
+                Some("Enter non-negative amounts with at most two decimal places.")
+            );
+        });
+    }
 
     struct TrendPreview(Vec<FinanceTrendPoint>);
 

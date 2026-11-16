@@ -8,9 +8,7 @@ pub mod focus_tasks;
 pub mod needs_you;
 pub mod prefs;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
-use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, IntoElement, SharedString,
     Window,
@@ -18,7 +16,10 @@ use gpui_kit::{
 
 use crate::route::Page;
 use crate::workspace::Workspace;
-use sjel_gpui_ui::ely::{feedback::Toast, primitives::Severity};
+use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
+use sjel_gpui_ui::ely::feedback::Toast;
+use sjel_gpui_ui::ely::primitives::{Severity, Tooltip};
+use sjel_gpui_ui::ely::theme::ControlSize;
 use sjel_gpui_ui::feedback::WindowToastExt;
 use sjel_gpui_ui::sidebar::Seat;
 use sjel_gpui_ui::theme::{tint, Palette};
@@ -147,16 +148,25 @@ fn customize_panel(
     let mut mode_row = div().flex().flex_wrap().items_center().gap_2();
     for mode in HomeMode::ALL {
         let active = prefs.mode == mode;
-        let btn = Button::new(SharedString::from(format!("home-mode-{}", mode.label())))
-            .xsmall()
-            .label(mode.label())
-            .tooltip(mode.description());
-        let btn = if active { btn.primary() } else { btn.ghost() };
-        mode_row = mode_row.child(btn.on_click(cx.listener(move |view, _, window, cx| {
-            view.home_prefs.mode = mode;
-            save_preferences(view, window, cx);
-            cx.notify();
-        })));
+        let label = mode.label();
+        let btn = Button::new(SharedString::from(format!("home-mode-{label}")), label)
+            .size(ControlSize::Sm)
+            .variant(if active {
+                ButtonVariant::Primary
+            } else {
+                ButtonVariant::Ghost
+            })
+            .on_click(cx.listener(move |view, _, window, cx| {
+                view.home_prefs.mode = mode;
+                save_preferences(view, window, cx);
+                cx.notify();
+            }));
+        mode_row = mode_row.child(
+            div()
+                .id(SharedString::from(format!("home-mode-tip-{label}")))
+                .tooltip(Tooltip::text(mode.description()))
+                .child(btn),
+        );
     }
 
     let toggle = |id: &'static str,
@@ -219,10 +229,9 @@ fn customize_panel(
                             .items_center()
                             .gap_1()
                             .child(
-                                Button::new("home-customize-reset")
-                                    .xsmall()
-                                    .ghost()
-                                    .label("Reset")
+                                Button::new("home-customize-reset", "Reset")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
                                     .on_click(cx.listener(|view, _, window, cx| {
                                         view.home_prefs = HomePreferences::default();
                                         save_preferences(view, window, cx);
@@ -230,10 +239,9 @@ fn customize_panel(
                                     })),
                             )
                             .child(
-                                Button::new("home-customize-done")
-                                    .xsmall()
-                                    .ghost()
-                                    .label("Done")
+                                Button::new("home-customize-done", "Done")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
                                     .on_click(cx.listener(|view, _, _, cx| {
                                         view.home_customize_open = false;
                                         cx.notify();

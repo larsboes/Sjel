@@ -1,7 +1,8 @@
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::popover::Popover;
-use gpui_kit::component::{Disableable, IconName, Sizable};
-use gpui_kit::{div, prelude::*, px, rgb, Anchor, Entity, FontWeight, IntoElement};
+use gpui_kit::{div, prelude::*, px, rgb, Entity, FontWeight, IntoElement};
+use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
+use sjel_gpui_ui::ely::overlays::Popover;
+use sjel_gpui_ui::ely::primitives::Tooltip;
+use sjel_gpui_ui::ely::theme::ControlSize;
 
 use crate::settings::Section;
 use crate::workspace::Workspace;
@@ -20,23 +21,28 @@ pub fn header_pill(
     let label = if building {
         "Building…".to_owned()
     } else {
-        format!("{} new", info.commits_behind)
+        format!("↑ {} new", info.commits_behind)
     };
     let info = info.clone();
-    Popover::new("update-popover")
-        .anchor(Anchor::TopRight)
-        .trigger(
-            Button::new("update-pill")
-                .small()
-                .outline()
-                .icon(IconName::ArrowUp)
-                .loading(building)
-                .label(label)
-                .tooltip("Sjel Desktop update"),
-        )
-        .content(move |_, _, cx| {
+    Popover::with_opener(
+        "update-popover",
+        move |toggle| {
+            div()
+                .id("update-pill-tip")
+                .tooltip(Tooltip::text("Sjel Desktop update"))
+                .child(
+                    Button::new("update-pill", label)
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Outline)
+                        .loading(building)
+                        .on_click(move |_, window, cx| toggle(window, cx)),
+                )
+        },
+        move |close, _, _cx| {
             let details = workspace.clone();
             let rebuild = workspace.clone();
+            let details_close = close.clone();
+            let rebuild_close = close;
             let behind = info.commits_behind;
             div()
                 .w(px(320.))
@@ -90,29 +96,36 @@ pub fn header_pill(
                         .justify_end()
                         .gap_2()
                         .child(
-                            Button::new("update-details")
-                                .ghost()
-                                .small()
-                                .label("Details")
-                                .on_click(cx.listener(move |state, _, window, cx| {
-                                    state.dismiss(window, cx);
+                            Button::new("update-details", "Details")
+                                .variant(ButtonVariant::Ghost)
+                                .size(ControlSize::Sm)
+                                .on_click(move |_, window, cx| {
+                                    details_close(window, cx);
                                     details.update(cx, |view, cx| {
                                         view.open_settings(Some(Section::General), cx)
                                     });
-                                })),
+                                }),
                         )
                         .child(
-                            Button::new("update-rebuild")
-                                .primary()
-                                .small()
-                                .label("Rebuild")
-                                .disabled(building)
-                                .tooltip("Builds, installs, and restarts Sjel Desktop")
-                                .on_click(cx.listener(move |state, _, window, cx| {
-                                    state.dismiss(window, cx);
-                                    rebuild.update(cx, |view, cx| view.trigger_rebuild(window, cx));
-                                })),
+                            div()
+                                .id("update-rebuild-tip")
+                                .tooltip(Tooltip::text(
+                                    "Builds, installs, and restarts Sjel Desktop",
+                                ))
+                                .child(
+                                    Button::new("update-rebuild", "Rebuild")
+                                        .variant(ButtonVariant::Primary)
+                                        .size(ControlSize::Sm)
+                                        .disabled(building)
+                                        .on_click(move |_, window, cx| {
+                                            rebuild_close(window, cx);
+                                            rebuild.update(cx, |view, cx| {
+                                                view.trigger_rebuild(window, cx)
+                                            });
+                                        }),
+                                ),
                         ),
                 )
-        })
+        },
+    )
 }

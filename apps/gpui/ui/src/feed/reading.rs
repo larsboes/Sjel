@@ -1,7 +1,7 @@
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::Input;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::Input;
+use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString, Window,
 };
@@ -28,11 +28,13 @@ impl Feed {
         };
         let stream_button =
             |label: &'static str, stream: Option<&'static str>, cx: &mut Context<Self>| {
-                Button::new(SharedString::from(format!("feed-stream-{label}")))
-                    .small()
-                    .label(label)
-                    .when(self.stream == stream, |b| b.primary())
-                    .when(self.stream != stream, |b| b.ghost())
+                Button::new(SharedString::from(format!("feed-stream-{label}")), label)
+                    .size(ControlSize::Sm)
+                    .variant(if self.stream == stream {
+                        ButtonVariant::Primary
+                    } else {
+                        ButtonVariant::Ghost
+                    })
                     .on_click(cx.listener(move |view, _, _, cx| view.set_stream(stream, cx)))
             };
         let toolbar = div()
@@ -259,15 +261,17 @@ impl Feed {
         if let Some(source) = self.content_source {
             return self.source_reader(source, palette, window, cx);
         }
-        let back = Button::new("feed-back")
-            .small()
-            .ghost()
-            .label(match self.tab {
+        let back = Button::new(
+            "feed-back",
+            match self.tab {
                 Tab::Review => "← Review",
                 Tab::Library => "← Library",
                 _ => "← Feed",
-            })
-            .on_click(cx.listener(|view, _, window, cx| view.on_back(&Back, window, cx)));
+            },
+        )
+        .size(ControlSize::Sm)
+        .variant(ButtonVariant::Ghost)
+        .on_click(cx.listener(|view, _, window, cx| view.on_back(&Back, window, cx)));
         let Some(detail) = &self.detail.value else {
             let state = match &self.detail.error {
                 Some(error) => div()
@@ -291,24 +295,21 @@ impl Feed {
             .child(back)
             .child(div().flex_1())
             .child(
-                Button::new("feed-keep")
-                    .small()
-                    .label(if kept { "Kept · S" } else { "Keep · S" })
-                    .when(kept, |b| b.primary())
+                Button::new("feed-keep", if kept { "Kept · S" } else { "Keep · S" })
+                    .size(ControlSize::Sm)
+                    .when(kept, |b| b.variant(ButtonVariant::Primary))
                     .on_click(cx.listener(|view, _, window, cx| view.on_keep(&Keep, window, cx))),
             )
             .child(
-                Button::new("feed-dismiss")
-                    .small()
-                    .label("Dismiss · D")
+                Button::new("feed-dismiss", "Dismiss · D")
+                    .size(ControlSize::Sm)
                     .on_click(
                         cx.listener(|view, _, window, cx| view.on_dismiss(&Dismiss, window, cx)),
                     ),
             )
             .child(
-                Button::new("feed-original")
-                    .small()
-                    .label("Open original · ⇧O")
+                Button::new("feed-original", "Open original · ⇧O")
+                    .size(ControlSize::Sm)
                     .on_click(cx.listener(|view, _, window, cx| {
                         view.on_open_original(&OpenOriginal, window, cx)
                     })),
@@ -398,11 +399,13 @@ impl Feed {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let mail = source == "mail";
-        let back = Button::new("source-content-back")
-            .small()
-            .ghost()
-            .label(if mail { "← Mail" } else { "← Feed" })
-            .on_click(cx.listener(|view, _, window, cx| view.on_back(&Back, window, cx)));
+        let back = Button::new(
+            "source-content-back",
+            if mail { "← Mail" } else { "← Feed" },
+        )
+        .size(ControlSize::Sm)
+        .variant(ButtonVariant::Ghost)
+        .on_click(cx.listener(|view, _, window, cx| view.on_back(&Back, window, cx)));
         let Some(item) = self.content_detail.value.as_ref() else {
             let state = match &self.content_detail.error {
                 Some(error) => div()
@@ -420,33 +423,37 @@ impl Feed {
                 .into_any_element();
         };
 
-        let open = Button::new("source-content-original")
-            .small()
-            .label(if mail {
+        let open = Button::new(
+            "source-content-original",
+            if mail {
                 "Open in Gmail ↗"
             } else {
                 "Open in Calendar ↗"
-            })
-            .on_click(
-                cx.listener(|view, _, window, cx| view.on_open_original(&OpenOriginal, window, cx)),
-            );
+            },
+        )
+        .size(ControlSize::Sm)
+        .on_click(
+            cx.listener(|view, _, window, cx| view.on_open_original(&OpenOriginal, window, cx)),
+        );
         let edit = (!mail).then(|| {
-            Button::new("calendar-edit")
-                .small()
-                .label(if self.calendar_edit.is_some() {
+            Button::new(
+                "calendar-edit",
+                if self.calendar_edit.is_some() {
                     "Editing…"
                 } else {
                     "Edit"
-                })
-                .disabled(self.calendar_edit.as_ref().is_some_and(|form| form.saving))
-                .on_click(cx.listener(|view, _, window, cx| {
-                    if view.calendar_edit.is_some() {
-                        view.calendar_edit = None;
-                        cx.notify();
-                    } else {
-                        view.open_calendar_edit(window, cx);
-                    }
-                }))
+                },
+            )
+            .size(ControlSize::Sm)
+            .disabled(self.calendar_edit.as_ref().is_some_and(|form| form.saving))
+            .on_click(cx.listener(|view, _, window, cx| {
+                if view.calendar_edit.is_some() {
+                    view.calendar_edit = None;
+                    cx.notify();
+                } else {
+                    view.open_calendar_edit(window, cx);
+                }
+            }))
         });
         let actions = div()
             .flex()
@@ -518,40 +525,47 @@ impl Feed {
                 .as_ref()
                 .is_some_and(|entries| entries.iter().any(|entry| entry.entry_id == item.id));
             let export_id = item.id.clone();
-            let export_button = Button::new("calendar-google-export-opt-in")
-                .small()
-                .when(exported, |button| button.ghost())
-                .when(!exported, |button| button.primary())
-                .label(if self.calendar_export_busy {
+            let export_button = Button::new(
+                "calendar-google-export-opt-in",
+                if self.calendar_export_busy {
                     "Saving…"
                 } else if exported {
                     "Remove Google export opt-in"
                 } else {
                     "Allow Google export"
-                })
-                .disabled(
-                    self.calendar_export_busy
-                        || export_blocked.is_some()
-                        || self.calendar_exports.value.is_none(),
-                )
-                .on_click(cx.listener(move |view, _, _, cx| {
-                    view.set_calendar_export(export_id.clone(), !exported, cx)
-                }));
+                },
+            )
+            .size(ControlSize::Sm)
+            .variant(if exported {
+                ButtonVariant::Ghost
+            } else {
+                ButtonVariant::Primary
+            })
+            .disabled(
+                self.calendar_export_busy
+                    || export_blocked.is_some()
+                    || self.calendar_exports.value.is_none(),
+            )
+            .on_click(cx.listener(move |view, _, _, cx| {
+                view.set_calendar_export(export_id.clone(), !exported, cx)
+            }));
             let can_preview = self
                 .calendar_exports
                 .value
                 .as_ref()
                 .is_some_and(|entries| !entries.is_empty());
-            let preview_button = Button::new("calendar-google-export-preview")
-                .small()
-                .ghost()
-                .label(if self.calendar_export_report.loading {
+            let preview_button = Button::new(
+                "calendar-google-export-preview",
+                if self.calendar_export_report.loading {
                     "Building preview…"
                 } else {
                     "Preview approved exports"
-                })
-                .disabled(self.calendar_export_busy || !can_preview)
-                .on_click(cx.listener(|view, _, _, cx| view.preview_calendar_export(cx)));
+                },
+            )
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
+            .disabled(self.calendar_export_busy || !can_preview)
+            .on_click(cx.listener(|view, _, _, cx| view.preview_calendar_export(cx)));
             reader = reader.child(
                 div()
                     .flex()
@@ -597,16 +611,18 @@ impl Feed {
                                 && !report.pushed.is_empty(),
                             |panel| {
                             panel.child(
-                                Button::new("calendar-google-export-run")
-                                    .small()
-                                    .primary()
-                                    .label(if self.calendar_export_busy {
+                                Button::new(
+                                    "calendar-google-export-run",
+                                    if self.calendar_export_busy {
                                         "Sending…".to_owned()
                                     } else {
                                         format!("Send {} approved entries to Google", report.pushed.len())
-                                    })
-                                    .disabled(self.calendar_export_busy)
-                                    .on_click(cx.listener(|view, _, _, cx| view.request_calendar_export(cx))),
+                                    },
+                                )
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Primary)
+                                .disabled(self.calendar_export_busy)
+                                .on_click(cx.listener(|view, _, _, cx| view.request_calendar_export(cx))),
                             )
                         })
                         .when(
@@ -623,24 +639,25 @@ impl Feed {
                                         .flex()
                                         .gap_2()
                                         .child(
-                                            Button::new("calendar-google-export-cancel")
-                                                .small()
-                                                .ghost()
-                                                .label("Cancel")
+                                            Button::new("calendar-google-export-cancel", "Cancel")
+                                                .size(ControlSize::Sm)
+                                                .variant(ButtonVariant::Ghost)
                                                 .on_click(cx.listener(|view, _, _, cx| {
                                                     view.calendar_export_confirm = false;
                                                     cx.notify();
                                                 })),
                                         )
                                         .child(
-                                            Button::new("calendar-google-export-confirm")
-                                                .small()
-                                                .primary()
-                                                .label(format!("Confirm send · {} entries", report.pushed.len()))
-                                                .disabled(self.calendar_export_busy)
-                                                .on_click(cx.listener(|view, _, _, cx| {
-                                                    view.run_calendar_export(cx)
-                                                })),
+                                            Button::new(
+                                                "calendar-google-export-confirm",
+                                                format!("Confirm send · {} entries", report.pushed.len()),
+                                            )
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Primary)
+                                            .disabled(self.calendar_export_busy)
+                                            .on_click(cx.listener(|view, _, _, cx| {
+                                                view.run_calendar_export(cx)
+                                            })),
                                         ),
                                 )
                             },
@@ -721,17 +738,19 @@ impl Feed {
             "stale" => "Review again",
             _ => "Not prepared",
         };
-        let preview_button = Button::new("feed-cloud-preview")
-            .small()
-            .label(if self.cloud_preview_busy {
+        let preview_button = Button::new(
+            "feed-cloud-preview",
+            if self.cloud_preview_busy {
                 "Preparing locally…"
             } else if item.cloud_processing.status == "staged" {
                 "Review a fresh copy"
             } else {
                 "Preview cloud-ready copy"
-            })
-            .disabled(self.cloud_preview_busy || self.cloud_approval_busy)
-            .on_click(cx.listener(|view, _, _, cx| view.prepare_cloud_preview(cx)));
+            },
+        )
+        .size(ControlSize::Sm)
+        .disabled(self.cloud_preview_busy || self.cloud_approval_busy)
+        .on_click(cx.listener(|view, _, _, cx| view.prepare_cloud_preview(cx)));
         let mut panel = div()
             .p_3()
             .rounded(px(8.))
@@ -876,24 +895,25 @@ impl Feed {
                         .justify_end()
                         .gap_2()
                         .child(
-                            Button::new("feed-cloud-preview-cancel")
-                                .small()
-                                .ghost()
-                                .label("Cancel")
+                            Button::new("feed-cloud-preview-cancel", "Cancel")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .disabled(self.cloud_approval_busy)
                                 .on_click(cx.listener(|view, _, _, cx| view.close_cloud_preview(cx))),
                         )
                         .child(
-                            Button::new("feed-cloud-preview-approve")
-                                .small()
-                                .primary()
-                                .label(if self.cloud_approval_busy {
+                            Button::new(
+                                "feed-cloud-preview-approve",
+                                if self.cloud_approval_busy {
                                     "Staging…"
                                 } else {
                                     "Approve cloud-ready copy"
-                                })
-                                .disabled(!can_approve || self.cloud_approval_busy)
-                                .on_click(cx.listener(|view, _, _, cx| view.approve_cloud_preview(cx))),
+                                },
+                            )
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Primary)
+                            .disabled(!can_approve || self.cloud_approval_busy)
+                            .on_click(cx.listener(|view, _, _, cx| view.approve_cloud_preview(cx))),
                         ),
                 );
             panel = panel.child(review);
@@ -973,13 +993,17 @@ impl Feed {
                             )
                         };
                         role_buttons = role_buttons.child(
-                            Button::new(SharedString::from(format!("feed-cloud-queue-{role}")))
-                                .small()
-                                .label(label)
-                                .disabled(!provider.available || self.cloud_job_busy)
-                                .on_click(cx.listener(move |view, _, _, cx| {
+                            Button::new(
+                                SharedString::from(format!("feed-cloud-queue-{role}")),
+                                label,
+                            )
+                            .size(ControlSize::Sm)
+                            .disabled(!provider.available || self.cloud_job_busy)
+                            .on_click(cx.listener(
+                                move |view, _, _, cx| {
                                     view.queue_cloud_job(role.clone(), cx);
-                                })),
+                                },
+                            )),
                         );
                     }
                     job_box = job_box.child(role_buttons);
@@ -991,16 +1015,18 @@ impl Feed {
             {
                 job_box = job_box.child(
                     div().flex().child(
-                        Button::new("feed-cloud-job-run")
-                            .small()
-                            .primary()
-                            .label(if self.cloud_job_busy {
+                        Button::new(
+                            "feed-cloud-job-run",
+                            if self.cloud_job_busy {
                                 "Running cloud job…"
                             } else {
                                 "Run cloud job"
-                            })
-                            .disabled(self.cloud_job_busy)
-                            .on_click(cx.listener(|view, _, _, cx| view.run_cloud_job(cx))),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Primary)
+                        .disabled(self.cloud_job_busy)
+                        .on_click(cx.listener(|view, _, _, cx| view.run_cloud_job(cx))),
                     ),
                 );
             }
@@ -1064,11 +1090,13 @@ impl Feed {
             .gap_1()
             .children(classes.iter().map(|&(code, label)| {
                 let selected = current_class == code;
-                Button::new(SharedString::from(format!("feed-data-class-{code}")))
-                    .xsmall()
-                    .label(label)
-                    .when(selected, |b| b.primary())
-                    .when(!selected, |b| b.ghost())
+                Button::new(SharedString::from(format!("feed-data-class-{code}")), label)
+                    .size(ControlSize::Sm)
+                    .variant(if selected {
+                        ButtonVariant::Primary
+                    } else {
+                        ButtonVariant::Ghost
+                    })
                     .disabled(self.data_class_busy)
                     .on_click(cx.listener(move |view, _, window, cx| {
                         view.select_data_class(code, window, cx);
@@ -1120,7 +1148,7 @@ impl Feed {
                         ),
                         palette,
                     ))
-                    .child(Input::new(&form.rationale).small())
+                    .child(Input::new(&form.rationale).size(ControlSize::Sm))
                     .when_some(form.error.as_deref(), |el, err| {
                         el.child(
                             div()
@@ -1135,10 +1163,9 @@ impl Feed {
                             .justify_end()
                             .gap_2()
                             .child(
-                                Button::new("feed-data-class-cancel")
-                                    .small()
-                                    .ghost()
-                                    .label("Cancel")
+                                Button::new("feed-data-class-cancel", "Cancel")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
                                     .disabled(self.data_class_busy)
                                     .on_click(cx.listener(|view, _, _, cx| {
                                         view.data_class_form = None;
@@ -1146,18 +1173,22 @@ impl Feed {
                                     })),
                             )
                             .child(
-                                Button::new("feed-data-class-confirm")
-                                    .small()
-                                    .primary()
-                                    .label(if self.data_class_busy {
+                                Button::new(
+                                    "feed-data-class-confirm",
+                                    if self.data_class_busy {
                                         "Saving…"
                                     } else {
                                         "Confirm lower class"
-                                    })
-                                    .disabled(self.data_class_busy)
-                                    .on_click(cx.listener(|view, _, _, cx| {
+                                    },
+                                )
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Primary)
+                                .disabled(self.data_class_busy)
+                                .on_click(cx.listener(
+                                    |view, _, _, cx| {
                                         view.confirm_data_class_lowering(cx);
-                                    })),
+                                    },
+                                )),
                             ),
                     ),
             );
@@ -1187,26 +1218,42 @@ impl Feed {
             .flex()
             .flex_col()
             .gap_2()
-            .child(Input::new(&form.title).small())
+            .child(Input::new(&form.title).size(ControlSize::Sm))
             .child(
                 div()
                     .flex()
                     .gap_2()
-                    .child(div().flex_1().child(Input::new(&form.start_date).small()))
-                    .child(div().flex_1().child(Input::new(&form.end_date).small())),
+                    .child(
+                        div()
+                            .flex_1()
+                            .child(Input::new(&form.start_date).size(ControlSize::Sm)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .child(Input::new(&form.end_date).size(ControlSize::Sm)),
+                    ),
             );
         if !form.all_day {
             fields = fields.child(
                 div()
                     .flex()
                     .gap_2()
-                    .child(div().flex_1().child(Input::new(&form.start_time).small()))
-                    .child(div().flex_1().child(Input::new(&form.end_time).small())),
+                    .child(
+                        div()
+                            .flex_1()
+                            .child(Input::new(&form.start_time).size(ControlSize::Sm)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .child(Input::new(&form.end_time).size(ControlSize::Sm)),
+                    ),
             );
         }
         fields = fields
-            .child(Input::new(&form.location).small())
-            .child(Input::new(&form.notes).small());
+            .child(Input::new(&form.location).size(ControlSize::Sm))
+            .child(Input::new(&form.notes).size(ControlSize::Sm));
 
         if let Some(error) = &form.error {
             fields = fields.child(
@@ -1240,28 +1287,27 @@ impl Feed {
                         .justify_end()
                         .gap_2()
                         .child(
-                            Button::new("calendar-edit-cancel")
-                                .small()
-                                .ghost()
-                                .label("Cancel")
+                            Button::new("calendar-edit-cancel", "Cancel")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.calendar_edit = None;
                                     cx.notify();
                                 })),
                         )
                         .child(
-                            Button::new("calendar-edit-save")
-                                .small()
-                                .primary()
-                                .label(if form.saving {
+                            Button::new(
+                                "calendar-edit-save",
+                                if form.saving {
                                     "Saving…"
                                 } else {
                                     "Save changes"
-                                })
-                                .disabled(form.saving)
-                                .on_click(
-                                    cx.listener(|view, _, _, cx| view.save_calendar_edit(cx)),
-                                ),
+                                },
+                            )
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Primary)
+                            .disabled(form.saving)
+                            .on_click(cx.listener(|view, _, _, cx| view.save_calendar_edit(cx))),
                         ),
                 )
                 .into_any_element(),

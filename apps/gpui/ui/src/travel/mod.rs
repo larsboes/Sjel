@@ -7,7 +7,6 @@ use gpui::{
     point, prelude::*, px, AnyElement, Context, EventEmitter, FocusHandle, Point, Render,
     ScrollHandle, Window,
 };
-use gpui_kit::component::button::Button;
 use sjel_gpui_core::{
     calendar::{TripDraft, TripDrafts, TripMaterialization},
     shell::{self, ShellError},
@@ -256,8 +255,18 @@ impl Travel {
         }
     }
 
-    fn button(&self, id: impl Into<gpui::ElementId>) -> Button {
-        Button::new(id).min_h(self.density.min_touch_target())
+    fn button(
+        &self,
+        id: impl Into<gpui::ElementId>,
+        label: impl Into<gpui::SharedString>,
+    ) -> crate::ely::buttons::Button {
+        let size = match self.density {
+            Density::Compact => crate::ely::theme::ControlSize::Sm,
+            Density::Desktop | Density::Comfortable | Density::Mobile => {
+                crate::ely::theme::ControlSize::Md
+            }
+        };
+        crate::ely::buttons::Button::new(id, label).size(size)
     }
 
     pub fn activate(&mut self, cx: &mut Context<Self>) {

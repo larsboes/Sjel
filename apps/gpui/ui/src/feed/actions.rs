@@ -1,6 +1,6 @@
+use crate::ely::forms::TextInput;
 use chrono::{Duration, NaiveDate};
 use gpui::AppContext;
-use gpui_kit::component::input::InputState;
 use gpui_kit::{actions, App, Context, KeyBinding, Window};
 use sjel_gpui_core::shell::{self, FeedEntry, FeedSurface, ShellError};
 
@@ -741,7 +741,7 @@ impl Feed {
         }
         if shell::data_class_lowering_needs_rationale(current, target) {
             let rationale = cx.new(|cx| {
-                InputState::new(window, cx)
+                TextInput::new(window, cx)
                     .placeholder("Rationale required to lower the data class…")
             });
             self.data_class_form = Some(DataClassForm {
@@ -764,7 +764,7 @@ impl Feed {
         let Some(form) = self.data_class_form.as_mut() else {
             return;
         };
-        let rationale = form.rationale.read(cx).value().trim().to_owned();
+        let rationale = form.rationale.read(cx).text().trim().to_owned();
         if rationale.is_empty() {
             form.error = Some("Lowering a data class requires a rationale.".to_owned());
             cx.notify();
@@ -841,8 +841,8 @@ impl Feed {
                           window: &mut Window,
                           cx: &mut Context<Self>| {
             cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder(placeholder);
-                input.set_value(value, window, cx);
+                let mut input = TextInput::new(window, cx).placeholder(placeholder);
+                input.set_text(value, cx);
                 input
             })
         };
@@ -883,13 +883,13 @@ impl Feed {
         if form.saving {
             return;
         }
-        let title = form.title.read(cx).value().to_string();
-        let start_date = form.start_date.read(cx).value().to_string();
-        let end_date = form.end_date.read(cx).value().to_string();
-        let start_time = form.start_time.read(cx).value().to_string();
-        let end_time = form.end_time.read(cx).value().to_string();
-        let location = form.location.read(cx).value().to_string();
-        let notes = form.notes.read(cx).value().to_string();
+        let title = form.title.read(cx).text().to_owned();
+        let start_date = form.start_date.read(cx).text().to_owned();
+        let end_date = form.end_date.read(cx).text().to_owned();
+        let start_time = form.start_time.read(cx).text().to_owned();
+        let end_time = form.end_time.read(cx).text().to_owned();
+        let location = form.location.read(cx).text().to_owned();
+        let notes = form.notes.read(cx).text().to_owned();
         let patch =
             sjel_gpui_core::calendar::entry_edit_patch(&sjel_gpui_core::calendar::EntryEdit {
                 title: &title,

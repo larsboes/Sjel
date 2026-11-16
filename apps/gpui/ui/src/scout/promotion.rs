@@ -1,7 +1,8 @@
 //! Calendar promotion form management and modal view.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
+use gpui::Focusable;
 use gpui_kit::{
     div, point, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString, Window,
 };
@@ -36,12 +37,12 @@ impl ScoutingPage {
         let mut subscriptions = Vec::new();
         let mut field = |key: &str, value: String, placeholder: &str| {
             let input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder(placeholder.to_owned());
-                input.set_value(value, window, cx);
+                let mut input = TextInput::new(window, cx).placeholder(placeholder.to_owned());
+                input.set_text(value, cx);
                 input
             });
             subscriptions.push(cx.subscribe_in(&input, window, |page, _, event, _, cx| {
-                if matches!(event, InputEvent::PressEnter { .. }) {
+                if matches!(event, InputEvent::Submit) {
                     page.save_promotion(cx);
                 }
             }));
@@ -62,7 +63,7 @@ impl ScoutingPage {
             ),
         ];
         if let Some((_, _, first)) = fields.first() {
-            first.update(cx, |input, cx| input.focus(window, cx));
+            first.read(cx).focus_handle(cx).focus(window, cx);
         }
         self.promotion = Some(PromotionForm {
             opportunity,
@@ -168,7 +169,7 @@ impl ScoutingPage {
                             .text_color(rgb(palette.muted))
                             .child(label.clone()),
                     )
-                    .child(Input::new(input).small())
+                    .child(Input::new(input).size(ControlSize::Sm))
                     .id(SharedString::from(format!("scout-calendar-{key}"))),
             );
         }
@@ -203,10 +204,9 @@ impl ScoutingPage {
                                 .child("Review Calendar entry"),
                         )
                         .child(
-                            Button::new("scout-calendar-cancel")
-                                .small()
-                                .ghost()
-                                .label("Cancel")
+                            Button::new("scout-calendar-cancel", "Cancel")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .disabled(saving)
                                 .on_click(cx.listener(|page, _, _, cx| page.close_promotion(cx))),
                         ),
@@ -218,16 +218,18 @@ impl ScoutingPage {
                 .child(fields)
                 .child(
                     div().flex().justify_end().child(
-                        Button::new("scout-calendar-save")
-                            .small()
-                            .primary()
-                            .label(if saving {
+                        Button::new(
+                            "scout-calendar-save",
+                            if saving {
                                 "Saving…"
                             } else {
                                 "Add to Calendar"
-                            })
-                            .disabled(saving)
-                            .on_click(cx.listener(|page, _, _, cx| page.save_promotion(cx))),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Primary)
+                        .disabled(saving)
+                        .on_click(cx.listener(|page, _, _, cx| page.save_promotion(cx))),
                     ),
                 )
                 .into_any_element(),

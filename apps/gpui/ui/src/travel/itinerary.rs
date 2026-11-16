@@ -2,9 +2,8 @@
 use super::forms::{FormKind, Remove};
 use super::overview::{calendar_agenda, calendar_event_when};
 use super::Travel;
+use crate::ely::buttons::ButtonVariant;
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context};
-use gpui_kit::component::button::ButtonVariants;
-use gpui_kit::component::Disableable;
 use sjel_gpui_core::{
     record::Link,
     shell::CalendarEntry,
@@ -1100,30 +1099,34 @@ impl Travel {
         let mut actions = div().flex().flex_wrap().items_center().gap_2();
 
         actions = actions.child(
-            self.button(gpui::SharedString::from(format!("train-conn-{}", leg.key)))
-                .ghost()
-                .label("⇄ Check connections & delays")
-                .on_click(cx.listener(move |view, _, window, cx| {
-                    view.find_stage_connection(
-                        origin_name.clone(),
-                        dest_name.clone(),
-                        stage_date.clone(),
-                        window,
-                        cx,
-                    );
-                })),
+            self.button(
+                gpui::SharedString::from(format!("train-conn-{}", leg.key)),
+                "⇄ Check connections & delays",
+            )
+            .variant(ButtonVariant::Ghost)
+            .on_click(cx.listener(move |view, _, window, cx| {
+                view.find_stage_connection(
+                    origin_name.clone(),
+                    dest_name.clone(),
+                    stage_date.clone(),
+                    window,
+                    cx,
+                );
+            })),
         );
 
         if let Some(dest_place) = leg.destination_place.clone() {
             let has_coord = dest_place.coordinate().is_some();
             actions = actions.child(
-                self.button(gpui::SharedString::from(format!("train-map-{}", leg.key)))
-                    .ghost()
-                    .label("📍 Station on map")
-                    .disabled(!has_coord)
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.show_stop(dest_place.clone(), cx);
-                    })),
+                self.button(
+                    gpui::SharedString::from(format!("train-map-{}", leg.key)),
+                    "📍 Station on map",
+                )
+                .variant(ButtonVariant::Ghost)
+                .disabled(!has_coord)
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.show_stop(dest_place.clone(), cx);
+                })),
             );
         }
 
@@ -1251,12 +1254,11 @@ impl Travel {
         if let Some(place) = office.place.clone() {
             let has_coord = place.coordinate().is_some();
             actions = actions.child(
-                self.button(gpui::SharedString::from(format!(
-                    "office-map-{}",
-                    office.key
-                )))
-                .ghost()
-                .label("📍 Show on map")
+                self.button(
+                    gpui::SharedString::from(format!("office-map-{}", office.key)),
+                    "📍 Show on map",
+                )
+                .variant(ButtonVariant::Ghost)
                 .disabled(!has_coord)
                 .on_click(cx.listener(move |view, _, _, cx| {
                     view.show_stop(place.clone(), cx);

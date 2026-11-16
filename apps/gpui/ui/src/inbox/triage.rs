@@ -2,9 +2,10 @@
 //! sheet or the field on this page. Rules suggest where an item goes; nothing moves until it is
 //! pressed. The web page is `dashboard/src/routes/inbox/+page.svelte`.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
+use gpui::Focusable;
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, EventEmitter,
     FocusHandle, FontWeight, KeyBinding, SharedString, Subscription, Window,
@@ -98,9 +99,9 @@ pub struct Inbox {
     busy: Vec<String>,
     /// The last write that failed.
     pub write_error: Option<ShellError>,
-    input: Option<(Entity<InputState>, Subscription)>,
+    input: Option<(Entity<TextInput>, Subscription)>,
     /// The capture whose text is open for editing, with its field.
-    pub editing: Option<(String, Entity<InputState>, Subscription)>,
+    pub editing: Option<(String, Entity<TextInput>, Subscription)>,
     list_focus: FocusHandle,
     focus_list_next: bool,
 }
@@ -330,8 +331,8 @@ impl Inbox {
     fn edit_text(&mut self, capture: &Capture, window: &mut Window, cx: &mut Context<Self>) {
         let text = capture.text.clone().unwrap_or_default();
         let input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx);
-            state.set_value(text, window, cx);
+            let mut state = TextInput::new(window, cx);
+            state.set_text(text, cx);
             state
         });
         let id = capture.id.clone();
@@ -339,8 +340,8 @@ impl Inbox {
             &input,
             window,
             move |view, input, event, window, cx| match event {
-                InputEvent::PressEnter { .. } => {
-                    let text = input.read(cx).value().trim().to_owned();
+                InputEvent::Submit => {
+                    let text = input.read(cx).text().trim().to_owned();
                     view.editing = None;
                     window.focus(&view.list_focus, cx);
                     view.patch(id.clone(), serde_json::json!({ "text": text }), cx);
@@ -352,26 +353,26 @@ impl Inbox {
                 _ => {}
             },
         );
-        input.update(cx, |input, cx| input.focus(window, cx));
+        input.read(cx).focus_handle(cx).focus(window, cx);
         self.editing = Some((capture.id.clone(), input, subscription));
         cx.notify();
     }
 
-    fn capture_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    fn capture_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
         if let Some((input, _)) = &self.input {
             return input.clone();
         }
         let input = cx.new(|cx| {
-            InputState::new(window, cx)
+            TextInput::new(window, cx)
                 .placeholder("A link or a thought. #buy #look #go #learn sort it.")
         });
-        let subscription = cx.subscribe_in(&input, window, |view, input, event, window, cx| {
-            if let InputEvent::PressEnter { .. } = event {
-                let text = input.read(cx).value().trim().to_owned();
+        let subscription = cx.subscribe_in(&input, window, |view, input, event, _window, cx| {
+            if let InputEvent::Submit = event {
+                let text = input.read(cx).text().trim().to_owned();
                 if text.is_empty() {
                     return;
                 }
-                input.update(cx, |input, cx| input.set_value("", window, cx));
+                input.update(cx, |input, cx| input.set_text("", cx));
                 view.add(text, cx);
             }
         });
@@ -442,7 +443,7 @@ impl Inbox {
 
     fn on_new_capture(&mut self, _: &NewCapture, window: &mut Window, cx: &mut Context<Self>) {
         let input = self.capture_field(window, cx);
-        input.update(cx, |input, cx| input.focus(window, cx));
+        input.read(cx).focus_handle(cx).focus(window, cx);
     }
 }
 
@@ -475,9 +476,8 @@ impl Render for Inbox {
             .child(div().flex_1())
             .when(routable > 0, |el| {
                 el.child(
-                    Button::new("inbox-apply-all")
-                        .small()
-                        .label(format!("Apply {routable} suggestions"))
+                    Button::new("inbox-apply-all", format!("Apply {routable} suggestions"))
+                        .size(ControlSize::Sm)
                         .on_click(cx.listener(|view, _, _, cx| view.apply_all(cx))),
                 )
             });
@@ -596,9 +596,8 @@ impl Inbox {
             if capture.url.as_deref().is_some_and(is_youtube_url) {
                 let url = capture.url.clone().unwrap_or_default();
                 actions = actions.child(
-                    Button::new(SharedString::from(format!("inbox-music-{i}")))
-                        .small()
-                        .label("Open music")
+                    Button::new(SharedString::from(format!("inbox-music-{i}")), "Open music")
+                        .size(ControlSize::Sm)
                         .disabled(busy)
                         .on_click(cx.listener(move |_, _, _, cx| {
                             cx.emit(InboxEvent::OpenMusic(url.clone()))
@@ -608,9 +607,8 @@ impl Inbox {
             if let Some(to) = route {
                 let capture = capture.clone();
                 actions = actions.child(
-                    Button::new(SharedString::from(format!("inbox-route-{i}")))
-                        .small()
-                        .label(to.label())
+                    Button::new(SharedString::from(format!("inbox-route-{i}")), to.label())
+                        .size(ControlSize::Sm)
                         .disabled(busy)
                         .on_click(
                             cx.listener(move |view, _, _, cx| view.apply(capture.clone(), cx)),
@@ -621,20 +619,18 @@ impl Inbox {
             let dismiss = id.clone();
             actions = actions
                 .child(
-                    Button::new(SharedString::from(format!("inbox-done-{i}")))
-                        .small()
-                        .ghost()
-                        .label("Done")
+                    Button::new(SharedString::from(format!("inbox-done-{i}")), "Done")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .disabled(busy)
                         .on_click(cx.listener(move |view, _, _, cx| {
                             view.set_status(done.clone(), "done", cx)
                         })),
                 )
                 .child(
-                    Button::new(SharedString::from(format!("inbox-dismiss-{i}")))
-                        .small()
-                        .ghost()
-                        .label("Dismiss")
+                    Button::new(SharedString::from(format!("inbox-dismiss-{i}")), "Dismiss")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .disabled(busy)
                         .on_click(cx.listener(move |view, _, _, cx| {
                             view.set_status(dismiss.clone(), "dismissed", cx)
@@ -643,10 +639,9 @@ impl Inbox {
         } else {
             let restore = id.clone();
             actions = actions.child(
-                Button::new(SharedString::from(format!("inbox-restore-{i}")))
-                    .small()
-                    .ghost()
-                    .label("Restore")
+                Button::new(SharedString::from(format!("inbox-restore-{i}")), "Restore")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .disabled(busy)
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.set_status(restore.clone(), "new", cx)
@@ -657,10 +652,9 @@ impl Inbox {
             let capture = capture.clone();
             actions =
                 actions.child(
-                    Button::new(SharedString::from(format!("inbox-edit-{i}")))
-                        .small()
-                        .ghost()
-                        .label("Edit")
+                    Button::new(SharedString::from(format!("inbox-edit-{i}")), "Edit")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .disabled(busy)
                         .on_click(cx.listener(move |view, _, window, cx| {
                             view.edit_text(&capture, window, cx)
@@ -677,15 +671,20 @@ impl Inbox {
             div().flex().gap_1().children(TAGS.iter().map(|tag| {
                 let id = id.clone();
                 let on = capture.tag.as_deref() == Some(*tag);
-                Button::new(SharedString::from(format!("inbox-tag-{i}-{tag}")))
-                    .xsmall()
-                    .label(format!("#{tag}"))
-                    .when(on, |b| b.primary())
-                    .when(!on, |b| b.ghost())
-                    .disabled(busy)
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.set_tag(id.clone(), (!on).then_some(*tag), cx)
-                    }))
+                Button::new(
+                    SharedString::from(format!("inbox-tag-{i}-{tag}")),
+                    format!("#{tag}"),
+                )
+                .size(ControlSize::Sm)
+                .variant(if on {
+                    ButtonVariant::Primary
+                } else {
+                    ButtonVariant::Ghost
+                })
+                .disabled(busy)
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.set_tag(id.clone(), (!on).then_some(*tag), cx)
+                }))
             }))
         });
 
@@ -714,7 +713,7 @@ impl Inbox {
                         Some(input) => div()
                             .flex_1()
                             .min_w_0()
-                            .child(Input::new(&input).small())
+                            .child(Input::new(&input).size(ControlSize::Sm))
                             .into_any_element(),
                         None => div()
                             .flex_1()

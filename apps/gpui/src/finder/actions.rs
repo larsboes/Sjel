@@ -1,7 +1,7 @@
 //! Keyboard actions, input bindings, navigation, and confirmation.
-use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::{actions, AppContext, Context, Entity, Window};
+use gpui_kit::{actions, AppContext, Context, Entity, Focusable, Window};
 use sjel_gpui_core::search::Mode;
+use sjel_gpui_ui::ely::forms::{InputEvent, TextInput};
 
 use super::types::FinderEvent;
 use super::Finder;
@@ -13,27 +13,27 @@ impl Finder {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         let input = match &self.input {
             Some((input, _)) => input.clone(),
             None => {
                 let input = cx.new(|cx| {
-                    InputState::new(window, cx)
+                    TextInput::new(window, cx)
                         .placeholder("Search Sjel, ask it something, or start a task…")
                 });
                 let subscription = cx.subscribe_in(
                     &input,
                     window,
-                    |view, input, event, window, cx| match event {
-                        InputEvent::Change => {
-                            view.query = input.read(cx).value().to_string();
+                    |view, input, event, _window, cx| match event {
+                        InputEvent::Changed => {
+                            view.query = input.read(cx).text().to_owned();
                             view.cursor = 0;
                             view.picked = false;
                             view.search_server_soon(cx);
                             cx.notify();
                         }
-                        InputEvent::PressEnter { secondary, .. } => {
-                            view.confirm(*secondary, window, cx);
+                        InputEvent::Submit => {
+                            view.confirm(false, cx);
                         }
                         _ => {}
                     },
@@ -45,11 +45,11 @@ impl Finder {
         if std::mem::take(&mut self.focus_next) {
             let empty = self.query.is_empty();
             input.update(cx, |input, cx| {
-                if empty && !input.value().is_empty() {
-                    input.set_value("", window, cx);
+                if empty && !input.text().is_empty() {
+                    input.set_text("", cx);
                 }
-                input.focus(window, cx);
             });
+            input.read(cx).focus_handle(cx).focus(window, cx);
         }
         input
     }
@@ -58,7 +58,7 @@ impl Finder {
     ///
     /// In *Auto* a search that finds nothing asks instead: an empty list is never the answer to a
     /// text someone pressed Enter on.
-    pub(super) fn confirm(&mut self, other_way: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn confirm(&mut self, other_way: bool, cx: &mut Context<Self>) {
         let text = self.query.trim().to_owned();
         // Under an answer an empty Enter is not a request to open the first page.
         if text.is_empty() && self.asked {
@@ -71,7 +71,7 @@ impl Finder {
             }
             self.query.clear();
             if let Some((input, _)) = &self.input {
-                input.update(cx, |input, cx| input.set_value("", window, cx));
+                input.update(cx, |input, cx| input.set_text("", cx));
             }
             self.agent.update(cx, |seat, cx| seat.submit(text, cx));
             return;
@@ -93,7 +93,7 @@ impl Finder {
             self.thread_scroll.scroll_to_bottom();
             self.query.clear();
             if let Some((input, _)) = &self.input {
-                input.update(cx, |input, cx| input.set_value("", window, cx));
+                input.update(cx, |input, cx| input.set_text("", cx));
             }
             cx.notify();
             return;

@@ -6,7 +6,7 @@ pub mod applications;
 pub mod builder;
 pub mod form;
 
-use gpui_kit::component::input::InputState;
+use crate::ely::forms::TextInput;
 use gpui_kit::{div, prelude::*, px, Context, Entity, IntoElement, Render, Subscription, Window};
 
 use crate::data::{self, Busy, Remote, Repo};
@@ -26,9 +26,9 @@ pub struct CvPage {
     pub selected_lang: String,
     pub filter_status: String,
 
-    pub(crate) company_input: Option<(Entity<InputState>, Subscription)>,
-    pub(crate) role_input: Option<(Entity<InputState>, Subscription)>,
-    pub(crate) url_input: Option<(Entity<InputState>, Subscription)>,
+    pub(crate) company_input: Option<(Entity<TextInput>, Subscription)>,
+    pub(crate) role_input: Option<(Entity<TextInput>, Subscription)>,
+    pub(crate) url_input: Option<(Entity<TextInput>, Subscription)>,
     pub draft_profile: String,
     pub draft_lang: String,
 }
@@ -90,9 +90,22 @@ impl CvPage {
             &repo,
             data::Press::once(|s| &mut s.busy, key, "Executing CV action…"),
             move |shell| async move { shell.write_cv(&req_clone).await },
-            |this, result, cx| {
+            move |this, result, cx| {
                 match result {
                     Some(res) => {
+                        if req.action == "app-new" {
+                            for (field, captured) in [
+                                (&this.company_input, req.company.as_str()),
+                                (&this.role_input, req.role.as_str()),
+                                (&this.url_input, req.url.as_str()),
+                            ] {
+                                if let Some((field, _)) = field {
+                                    if field.read(cx).text().trim() == captured {
+                                        field.update(cx, |input, cx| input.set_text("", cx));
+                                    }
+                                }
+                            }
+                        }
                         let combined = format!("{}\n\n{}", res.detail, res.warnings)
                             .trim()
                             .to_string();
@@ -144,6 +157,9 @@ impl Render for CvPage {
         panels.push(self.render_pdfs_list(&view, palette));
 
         div()
+            .id("cv")
+            .size_full()
+            .overflow_y_scroll()
             .flex()
             .flex_col()
             .gap(px(16.0))

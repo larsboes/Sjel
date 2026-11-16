@@ -2,9 +2,9 @@
 
 use std::rc::Rc;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{
     div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString,
     Window,
@@ -166,23 +166,23 @@ impl FinancePage {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.reclass_input {
             return input.clone();
         }
         let input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("expenses:category:merchant"));
+            cx.new(|cx| TextInput::new(window, cx).placeholder("expenses:category:merchant"));
         let subscription =
             cx.subscribe_in(
                 &input,
                 window,
                 |page, input, event, window, cx| match event {
-                    InputEvent::Change => {
-                        page.reclass_account = input.read(cx).value().to_string();
+                    InputEvent::Changed => {
+                        page.reclass_account = input.read(cx).text().to_string();
                         page.reclass_highlight = 0;
                         cx.notify();
                     }
-                    InputEvent::PressEnter { .. } => page.apply_reclass(None, window, cx),
+                    InputEvent::Submit => page.apply_reclass(None, window, cx),
                     _ => {}
                 },
             );
@@ -194,14 +194,14 @@ impl FinancePage {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.personal_input {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("0,00"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("0,00"));
         let subscription = cx.subscribe_in(&input, window, |page, input, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
-                page.personal_amount = input.read(cx).value().to_string();
+            if matches!(event, InputEvent::Changed) {
+                page.personal_amount = input.read(cx).text().to_string();
                 cx.notify();
             }
         });
@@ -242,7 +242,7 @@ impl FinancePage {
     pub(super) fn apply_reclass(
         &mut self,
         account: Option<String>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let account = account
@@ -262,7 +262,7 @@ impl FinancePage {
             return;
         };
         if let Some((input, _)) = &self.reclass_input {
-            input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
+            input.update(cx, |state, cx| state.set_text(String::new(), cx));
         }
         self.reclass_highlight = 0;
         self.reclassify(id, account, cx);
@@ -326,13 +326,13 @@ impl FinancePage {
     pub(super) fn select_reclass_candidate(
         &mut self,
         id: String,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.selected_reclass_candidate = Some(id);
         self.reclass_account.clear();
         if let Some((input, _)) = &self.reclass_input {
-            input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
+            input.update(cx, |state, cx| state.set_text(String::new(), cx));
         }
         cx.notify();
     }
@@ -340,7 +340,7 @@ impl FinancePage {
     pub(super) fn select_expense(
         &mut self,
         entry: &ExpenseReview,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.selected_expense = Some(entry.candidate.id.clone());
@@ -354,7 +354,7 @@ impl FinancePage {
             format!("{},{:02}", initial_share / 100, (initial_share % 100).abs());
         if let Some((input, _)) = &self.personal_input {
             input.update(cx, |state, cx| {
-                state.set_value(self.personal_amount.clone(), window, cx)
+                state.set_text(self.personal_amount.clone(), cx)
             });
         }
         if let Some(transaction) = &entry.transaction {
@@ -373,7 +373,7 @@ impl FinancePage {
     pub(super) fn set_personal_share(
         &mut self,
         percent: u32,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let Some(id) = self.selected_expense.as_deref() else {
@@ -391,7 +391,7 @@ impl FinancePage {
         self.personal_amount = format!("{},{:02}", cents / 100, (cents % 100).abs());
         if let Some((input, _)) = &self.personal_input {
             input.update(cx, |state, cx| {
-                state.set_value(self.personal_amount.clone(), window, cx)
+                state.set_text(self.personal_amount.clone(), cx)
             });
         }
         cx.notify();
@@ -549,7 +549,7 @@ impl FinancePage {
 
         let search_box = div()
             .w(px(280.))
-            .child(Input::new(&self.search_field(window, cx)).small());
+            .child(Input::new(&self.search_field(window, cx)).size(ControlSize::Sm));
 
         let categories = self
             .dashboard
@@ -572,11 +572,12 @@ impl FinancePage {
                     .items_center()
                     .gap_1()
                     .child(
-                        Button::new("cat-all")
-                            .xsmall()
-                            .label("All")
+                        Button::new("cat-all", "All")
+                            .size(ControlSize::Sm)
                             .when(self.selected_category.is_none(), |b| b.primary())
-                            .when(self.selected_category.is_some(), |b| b.ghost())
+                            .when(self.selected_category.is_some(), |b| {
+                                b.variant(ButtonVariant::Ghost)
+                            })
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.selected_category = None;
                                 page.filter_rev = page.filter_rev.wrapping_add(1);
@@ -585,11 +586,10 @@ impl FinancePage {
                     )
                     .children(categories.into_iter().map(|cat| {
                         let active = self.selected_category.as_ref() == Some(&cat);
-                        Button::new(SharedString::from(format!("cat-{cat}")))
-                            .xsmall()
-                            .label(cat.clone())
+                        Button::new(SharedString::from(format!("cat-{cat}")), cat.clone())
+                            .size(ControlSize::Sm)
                             .when(active, |b| b.primary())
-                            .when(!active, |b| b.ghost())
+                            .when(!active, |b| b.variant(ButtonVariant::Ghost))
                             .on_click(cx.listener(move |page, _, _, cx| {
                                 page.selected_category =
                                     if active { None } else { Some(cat.clone()) };
@@ -614,6 +614,7 @@ impl FinancePage {
             .child(
                 div().flex_1().min_h_0().pb_6().child(
                     DataTable::new("finance-transactions", tx_columns())
+                        .label("Transactions")
                         .rows(rows)
                         .sorts([SortKey {
                             column: "date".into(),

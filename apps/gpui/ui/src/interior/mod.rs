@@ -1,7 +1,7 @@
 //! Shared scan history and review for the Mac capability and paired iPhone.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, rgb, rgba, Context, Render, Window};
 
 use sjel_gpui_core::interior::{
@@ -408,10 +408,9 @@ impl Render for RoomPlanHistory {
                             .items_center()
                             .gap_2()
                             .children(self.import_handler.map(|_| {
-                                Button::new("roomplan-import-legacy")
-                                    .small()
-                                    .ghost()
-                                    .label("Import from Files")
+                                Button::new("roomplan-import-legacy", "Import from Files")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
                                     .on_click(cx.listener(|page, _, _, _| {
                                         if let Some(import) = page.import_handler {
                                             import();
@@ -420,16 +419,18 @@ impl Render for RoomPlanHistory {
                                     .into_any_element()
                             }))
                             .child(
-                                Button::new("roomplan-history-refresh")
-                                    .small()
-                                    .ghost()
-                                    .label(if self.revisions.loading {
+                                Button::new(
+                                    "roomplan-history-refresh",
+                                    if self.revisions.loading {
                                         "Loading…"
                                     } else {
                                         "Refresh"
-                                    })
-                                    .disabled(self.revisions.loading)
-                                    .on_click(cx.listener(|page, _, _, cx| page.refresh(cx))),
+                                    },
+                                )
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .disabled(self.revisions.loading)
+                                .on_click(cx.listener(|page, _, _, cx| page.refresh(cx))),
                             ),
                     ),
             )

@@ -3,15 +3,15 @@
 use std::sync::Arc;
 
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, Window};
-use gpui_kit::component::button::Button;
-use gpui_kit::component::input::Input;
-use gpui_kit::component::Sizable;
 use sjel_gpui_core::shell::{
     self, DuplicateCandidate, DuplicateCandidateKind, DuplicateDecision, DuplicateDecisionAction,
     DuplicatePageRange, ShellError,
 };
 
 use crate::data::Remote;
+use crate::ely::buttons::Button;
+use crate::ely::forms::Input;
+use crate::ely::theme::ControlSize;
 use crate::theme::Palette;
 
 use super::viewer::{reader_page_element, Reader};
@@ -23,15 +23,17 @@ fn duplicate_filter_button(
     selected: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
 ) -> AnyElement {
-    Button::new(id)
-        .small()
-        .label(if selected {
+    Button::new(
+        id,
+        if selected {
             format!("✓ {label}")
         } else {
             label.to_owned()
-        })
-        .on_click(on_click)
-        .into_any_element()
+        },
+    )
+    .size(ControlSize::Sm)
+    .on_click(on_click)
+    .into_any_element()
 }
 
 pub(super) fn parse_page_ranges(value: &str) -> Result<Vec<DuplicatePageRange>, String> {
@@ -413,13 +415,19 @@ impl Documents {
                             )
                             .when_some(id.clone(), |bar, id| {
                                 bar.child(
-                                    Button::new(format!("duplicate-prefer-{side}"))
-                                        .small()
-                                        .label(if chosen { "Preferred" } else { "Prefer" })
-                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                    Button::new(
+                                        gpui::SharedString::from(format!(
+                                            "duplicate-prefer-{side}"
+                                        )),
+                                        if chosen { "Preferred" } else { "Prefer" },
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .on_click(cx.listener(
+                                        move |view, _, _, cx| {
                                             view.preferred_id = Some(id.clone());
                                             cx.notify();
-                                        })),
+                                        },
+                                    )),
                                 )
                             }),
                     )
@@ -429,12 +437,14 @@ impl Documents {
                             .items_center()
                             .gap_2()
                             .child(
-                                Button::new(format!("duplicate-prev-{side}"))
-                                    .small()
-                                    .label("‹")
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.move_compare_page(side, -1, cx)
-                                    })),
+                                Button::new(
+                                    gpui::SharedString::from(format!("duplicate-prev-{side}")),
+                                    "‹",
+                                )
+                                .size(ControlSize::Sm)
+                                .on_click(cx.listener(
+                                    move |view, _, _, cx| view.move_compare_page(side, -1, cx),
+                                )),
                             )
                             .child(
                                 div()
@@ -448,12 +458,14 @@ impl Documents {
                                     }),
                             )
                             .child(
-                                Button::new(format!("duplicate-next-{side}"))
-                                    .small()
-                                    .label("›")
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.move_compare_page(side, 1, cx)
-                                    })),
+                                Button::new(
+                                    gpui::SharedString::from(format!("duplicate-next-{side}")),
+                                    "›",
+                                )
+                                .size(ControlSize::Sm)
+                                .on_click(cx.listener(
+                                    move |view, _, _, cx| view.move_compare_page(side, 1, cx),
+                                )),
                             ),
                     )
                     .child(reader_page_element(reader, palette));
@@ -501,17 +513,19 @@ impl Documents {
                     let preferred = self.preferred_id.as_ref() == Some(id);
                     let id = id.clone();
                     members = members.child(
-                        Button::new(format!("duplicate-member-{index}"))
-                            .small()
-                            .label(if preferred {
+                        Button::new(
+                            gpui::SharedString::from(format!("duplicate-member-{index}")),
+                            if preferred {
                                 format!("✓ {filename}")
                             } else {
                                 filename
-                            })
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.preferred_id = Some(id.clone());
-                                cx.notify();
-                            })),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.preferred_id = Some(id.clone());
+                            cx.notify();
+                        })),
                     );
                 }
                 body = body.child(members);
@@ -538,15 +552,18 @@ impl Documents {
                         .child(format!(
                             "Split page ranges · parent has {parent_pages} pages"
                         ))
-                        .child(div().w(px(220.)).child(Input::new(&input).small()))
+                        .child(
+                            div()
+                                .w(px(220.))
+                                .child(Input::new(&input).size(ControlSize::Sm)),
+                        )
                         .when(parent_pages > 0, |bar| {
                             let parent_id = parent
                                 .map(|part| part.parent_id.clone())
                                 .unwrap_or_default();
                             bar.child(
-                                Button::new("duplicate-record-split")
-                                    .small()
-                                    .label("Record split relationship")
+                                Button::new("duplicate-record-split", "Record split relationship")
+                                    .size(ControlSize::Sm)
                                     .on_click(cx.listener(move |view, _, _, cx| {
                                         match parse_page_ranges(&view.split_ranges) {
                                             Ok(ranges) => view.record_duplicate_decision(
@@ -567,9 +584,8 @@ impl Documents {
                             )
                         })
                         .child(
-                            Button::new("duplicate-keep-separate")
-                                .small()
-                                .label("Keep separate")
+                            Button::new("duplicate-keep-separate", "Keep separate")
+                                .size(ControlSize::Sm)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.record_duplicate_decision(
                                         DuplicateDecisionAction::Dismiss,
@@ -586,9 +602,8 @@ impl Documents {
                         .gap_2()
                         .when(self.preferred_id.is_some(), |bar| {
                             bar.child(
-                                Button::new("duplicate-confirm-group")
-                                    .small()
-                                    .label("Confirm group")
+                                Button::new("duplicate-confirm-group", "Confirm group")
+                                    .size(ControlSize::Sm)
                                     .on_click(cx.listener(|view, _, _, cx| {
                                         if let Some(survivor_id) = view.preferred_id.clone() {
                                             view.record_duplicate_decision(
@@ -602,9 +617,8 @@ impl Documents {
                             )
                         })
                         .child(
-                            Button::new("duplicate-keep-separate")
-                                .small()
-                                .label("Keep separate")
+                            Button::new("duplicate-keep-separate", "Keep separate")
+                                .size(ControlSize::Sm)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.record_duplicate_decision(
                                         DuplicateDecisionAction::Dismiss,
@@ -620,9 +634,8 @@ impl Documents {
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("duplicate-back-queue")
-                            .small()
-                            .label("Back to candidates")
+                        Button::new("duplicate-back-queue", "Back to candidates")
+                            .size(ControlSize::Sm)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.duplicate_selection = None;
                                 view.compare_readers = [Reader::default(), Reader::default()];
@@ -704,12 +717,18 @@ impl Documents {
                         .py_2()
                         .rounded(px(5.))
                         .child(
-                            Button::new(format!("duplicate-candidate-{candidate_index}"))
-                                .small()
-                                .label(names.join("  ↔  "))
-                                .on_click(cx.listener(move |view, _, _, cx| {
+                            Button::new(
+                                gpui::SharedString::from(format!(
+                                    "duplicate-candidate-{candidate_index}"
+                                )),
+                                names.join("  ↔  "),
+                            )
+                            .size(ControlSize::Sm)
+                            .on_click(cx.listener(
+                                move |view, _, _, cx| {
                                     view.open_duplicate_candidate(candidate_for_click.clone(), cx)
-                                })),
+                                },
+                            )),
                         )
                         .child(
                             div()
@@ -748,9 +767,8 @@ impl Documents {
                     .pt_2()
                     .when(offset > 0, |bar| {
                         bar.child(
-                            Button::new("duplicate-prev-batch")
-                                .small()
-                                .label("Previous")
+                            Button::new("duplicate-prev-batch", "Previous")
+                                .size(ControlSize::Sm)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.duplicate_offset =
                                         view.duplicate_offset.saturating_sub(50);
@@ -771,9 +789,8 @@ impl Documents {
                     )
                     .when(offset + limit < total, |bar| {
                         bar.child(
-                            Button::new("duplicate-next-batch")
-                                .small()
-                                .label("Next")
+                            Button::new("duplicate-next-batch", "Next")
+                                .size(ControlSize::Sm)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.duplicate_offset += 50;
                                     view.load_duplicate_candidates(cx);

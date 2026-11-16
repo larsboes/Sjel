@@ -1,8 +1,9 @@
 //! Context cards, day navigation header, and filter summary action bars.
 
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::primitives::Tooltip;
+use crate::ely::theme::ControlSize;
 use chrono::{Duration, Local, NaiveDate};
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight};
 use sjel_gpui_core::context::{
     format_day_header, format_money, needs_attention, ContextDay, TimelineKind,
@@ -59,44 +60,54 @@ pub fn render_day_header(
                 .items_center()
                 .gap_1()
                 .child(
-                    Button::new("context-prev")
-                        .small()
-                        .ghost()
-                        .label("‹")
-                        .tooltip("Previous day ([)")
-                        .on_click(cx.listener(move |page, _, _, cx| {
-                            page.select(page.day - Duration::days(1), cx)
-                        })),
-                )
-                .child(
-                    Button::new("context-today")
-                        .small()
-                        .ghost()
-                        .label("Today")
-                        .tooltip("Jump to today (t)")
-                        .on_click(
-                            cx.listener(|page, _, _, cx| {
-                                page.select(Local::now().date_naive(), cx)
-                            }),
+                    div()
+                        .id("context-prev-tip")
+                        .tooltip(Tooltip::text("Previous day ([)"))
+                        .child(
+                            Button::new("context-prev", "‹")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(move |page, _, _, cx| {
+                                    page.select(page.day - Duration::days(1), cx)
+                                })),
                         ),
                 )
                 .child(
-                    Button::new("context-next")
-                        .small()
-                        .ghost()
-                        .label("›")
-                        .tooltip("Next day (])")
-                        .on_click(cx.listener(move |page, _, _, cx| {
-                            page.select(page.day + Duration::days(1), cx)
-                        })),
+                    div()
+                        .id("context-today-tip")
+                        .tooltip(Tooltip::text("Jump to today (t)"))
+                        .child(
+                            Button::new("context-today", "Today")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(|page, _, _, cx| {
+                                    page.select(Local::now().date_naive(), cx)
+                                })),
+                        ),
                 )
                 .child(
-                    Button::new("context-refresh")
-                        .small()
-                        .ghost()
-                        .label("↻")
-                        .tooltip("Refresh (⌘R)")
-                        .on_click(cx.listener(|page, _, _, cx| page.refresh(cx))),
+                    div()
+                        .id("context-next-tip")
+                        .tooltip(Tooltip::text("Next day (])"))
+                        .child(
+                            Button::new("context-next", "›")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(move |page, _, _, cx| {
+                                    page.select(page.day + Duration::days(1), cx)
+                                })),
+                        ),
+                )
+                .child(
+                    div()
+                        .id("context-refresh-tip")
+                        .tooltip(Tooltip::text("Refresh (⌘R)"))
+                        .child(
+                            Button::new("context-refresh", "↻")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(|page, _, _, cx| page.refresh(cx))),
+                        ),
                 ),
         )
         .into_any_element()
@@ -197,10 +208,9 @@ pub fn render_filter_action(
 ) -> Option<AnyElement> {
     match filter_kind {
         Some(TimelineKind::Event) => Some(
-            Button::new("context-open-calendar")
-                .xsmall()
-                .ghost()
-                .label("Open Calendar →")
+            Button::new("context-open-calendar", "Open Calendar →")
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
                 .on_click(cx.listener(move |_, _, _, cx| {
                     cx.emit(ContextEvent::OpenCalendar {
                         day,
@@ -210,20 +220,18 @@ pub fn render_filter_action(
                 .into_any_element(),
         ),
         Some(TimelineKind::Task) => Some(
-            Button::new("context-open-projects")
-                .xsmall()
-                .ghost()
-                .label("Open Projects →")
+            Button::new("context-open-projects", "Open Projects →")
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
                 .on_click(cx.listener(|_, _, _, cx| {
                     cx.emit(ContextEvent::OpenProject(String::new()));
                 }))
                 .into_any_element(),
         ),
         Some(TimelineKind::Spend) => Some(
-            Button::new("context-open-finance")
-                .xsmall()
-                .ghost()
-                .label("Open Finance →")
+            Button::new("context-open-finance", "Open Finance →")
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
                 .on_click(cx.listener(move |_, _, _, cx| {
                     cx.emit(ContextEvent::OpenFinance { day });
                 }))

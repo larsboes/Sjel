@@ -12,7 +12,7 @@ pub mod provider_keys;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use gpui_kit::component::input::InputState;
+use crate::ely::forms::TextInput;
 use gpui_kit::{div, prelude::*, AnyElement, Context, Entity, Subscription, Window};
 
 use crate::data::{self, Remote, Repo};
@@ -35,7 +35,7 @@ pub struct Accounts {
     /// The last outcome per credential ID: success, and the line shown.
     pub(crate) outcome: HashMap<String, (bool, String)>,
     pub(crate) key_provider: String,
-    pub(crate) key_input: Option<(Entity<InputState>, Subscription)>,
+    pub(crate) key_input: Option<(Entity<TextInput>, Subscription)>,
     pub(crate) key_status: Option<String>,
     pub(crate) confirm_key_removal: bool,
     pub(crate) key_presence: Remote<HashMap<String, bool>>,

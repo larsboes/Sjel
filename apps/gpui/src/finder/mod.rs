@@ -13,7 +13,6 @@ mod types;
 
 use std::time::Instant;
 
-use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, App, Context, Entity, EventEmitter, FocusHandle, Focusable,
     IntoElement, MouseButton, Render, SharedString, Subscription, Window,
@@ -21,6 +20,7 @@ use gpui_kit::{
 use sjel_gpui_core::search::Mode;
 use sjel_gpui_ui::agent_seat::{AgentSeat, AgentSeatEvent, Host};
 use sjel_gpui_ui::ask::{Ask, Model};
+use sjel_gpui_ui::ely::forms::{Input, TextInput};
 use sjel_gpui_ui::theme::{tint, ThemeContext};
 
 use crate::data::Repo;
@@ -41,7 +41,7 @@ pub struct Finder {
     pub(super) server_query: String,
     /// The text a server request is running for, if one is.
     pub(super) searching: Option<String>,
-    pub(super) input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) input: Option<(Entity<TextInput>, Subscription)>,
     pub(super) query: String,
     pub(super) mode: Mode,
     pub(super) cursor: usize,
@@ -496,7 +496,7 @@ impl Render for Finder {
                     .py_2()
                     .border_b_1()
                     .border_color(rgba(palette.border))
-                    .child(div().flex_1().child(Input::new(&input).appearance(false)))
+                    .child(div().flex_1().child(Input::new(&input)))
                     .children(decision)
                     .child(modes),
             )

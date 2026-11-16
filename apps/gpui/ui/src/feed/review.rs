@@ -1,5 +1,5 @@
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight};
 use sjel_gpui_core::shell::FeedQualityFlag;
 
@@ -27,15 +27,17 @@ impl Feed {
                     }),
             )
             .child(
-                Button::new("feed-review-refresh")
-                    .small()
-                    .label(if self.refreshing {
+                Button::new(
+                    "feed-review-refresh",
+                    if self.refreshing {
                         "Computing…"
                     } else {
                         "Recompute flags"
-                    })
-                    .disabled(self.refreshing)
-                    .on_click(cx.listener(|view, _, _, cx| view.refresh_review(cx))),
+                    },
+                )
+                .size(ControlSize::Sm)
+                .disabled(self.refreshing)
+                .on_click(cx.listener(|view, _, _, cx| view.refresh_review(cx))),
             );
         let mut list = div().flex().flex_col().gap_3();
         if let Some(r) = &self.review_refresh {
@@ -94,10 +96,9 @@ impl Feed {
                                 .child(title(first.title.as_deref(), &first.url)),
                         )
                         .child(
-                            Button::new(("feed-review-original", i))
-                                .small()
-                                .ghost()
-                                .label("Original ↗")
+                            Button::new(("feed-review-original", i), "Original ↗")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(move |_, _, cx| cx.open_url(&url)),
                         ),
                 )

@@ -2,9 +2,11 @@
 
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, App, FontWeight, SharedString, Window};
 
-use super::tokens::{dot, RADIUS_SM};
+use super::tokens::RADIUS_SM;
 use crate::ely::{
     buttons::{ToggleButton, ToggleItem},
+    feedback::InlineMessage,
+    primitives::Severity,
     theme::ControlSize,
 };
 use crate::theme::{tint, Palette};
@@ -175,32 +177,15 @@ pub fn due_badge(due: Option<&str>, done: bool, today: &str, palette: Palette) -
 }
 
 /// Badge showing sync and offline mutation queue status.
-pub fn sync_status_badge(pending: usize, syncing: bool, palette: Palette) -> AnyElement {
-    let (text, color, bg) = if syncing {
-        ("Syncing…", palette.accent, tint(palette.accent, 0x20))
+pub fn sync_status_badge(pending: usize, syncing: bool, _palette: Palette) -> AnyElement {
+    let (text, severity) = if syncing {
+        ("Syncing…".to_owned(), Severity::Info)
     } else if pending > 0 {
-        ("Offline queue", palette.amber, tint(palette.amber, 0x20))
+        (format!("Offline queue ({pending})"), Severity::Warning)
     } else {
-        ("Synced", palette.green, tint(palette.green, 0x20))
+        ("Synced".to_owned(), Severity::Success)
     };
-    div()
-        .flex()
-        .items_center()
-        .gap_1()
-        .px_2()
-        .py(px(2.))
-        .rounded(RADIUS_SM)
-        .bg(rgba(bg))
-        .text_xs()
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(rgb(color))
-        .child(dot(color))
-        .child(if pending > 0 && !syncing {
-            format!("{text} ({pending})")
-        } else {
-            text.to_string()
-        })
-        .into_any_element()
+    InlineMessage::new(severity, text).into_any_element()
 }
 
 /// Semantic tone chip (`text` on `tint(tone, 0x20)` background with `tint(tone, 0x38)` border).

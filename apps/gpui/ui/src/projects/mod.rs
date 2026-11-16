@@ -2186,52 +2186,26 @@ impl Projects {
                 .mb_2()
                 .child(
                     div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(
-                            div()
-                                .id("back-to-projects-btn")
-                                .cursor_pointer()
-                                .flex()
-                                .items_center()
-                                .gap_1()
-                                .px_2()
-                                .py(px(3.))
-                                .rounded(px(5.))
-                                .hover(move |s| s.bg(rgba(tint(palette.raised, 0x66))))
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.put_away_editor(cx);
-                                    view.project = None;
-                                    cx.notify();
-                                }))
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(rgb(palette.muted))
-                                        .child("‹ Projects"),
-                                )
-                                .child(
-                                    div()
-                                        .px_1()
-                                        .py(px(0.5))
-                                        .rounded(px(3.))
-                                        .bg(rgba(palette.border))
-                                        .text_size(px(9.))
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(rgb(palette.muted))
-                                        .child("Esc"),
-                                ),
-                        )
-                        .child(div().text_xs().text_color(rgb(palette.muted)).child("/"))
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(rgb(palette.text))
-                                .child(project_name.clone()),
-                        ),
+                        .id("project-breadcrumb-host")
+                        .debug_selector(|| "project-breadcrumb-host".to_owned())
+                        .child({
+                            let owner = cx.entity();
+                            crate::ely::navigation::Breadcrumb::new(
+                                "project-breadcrumb",
+                                [
+                                    crate::ely::navigation::Crumb::new("projects", "Projects"),
+                                    crate::ely::navigation::Crumb::new(
+                                        "current",
+                                        project_name.clone(),
+                                    ),
+                                ],
+                            )
+                            .on_select(move |level, _, _, cx| {
+                                if level == 0 {
+                                    owner.update(cx, |view, cx| view.close_project(cx));
+                                }
+                            })
+                        }),
                 )
                 .child(
                     div()
@@ -3135,6 +3109,52 @@ mod tests {
             gpui_kit::component::Root::new(view, window, cx)
         });
         cx.run_until_parked();
+    }
+
+    #[gpui::test]
+    fn ely_breadcrumb_closes_the_project_by_pointer_and_keyboard(cx: &mut TestAppContext) {
+        for pointer in [true, false] {
+            let (page, cx) = crate::test_support::mount_root(cx, None, |_, cx| {
+                let mut page = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
+                page.project = Some((
+                    "P".into(),
+                    Remote {
+                        value: Some(vec![record()]),
+                        ..Remote::default()
+                    },
+                ));
+                page.project_section = ProjectSection::Tasks;
+                page.selected_task_path = Some("P/Plan.md".into());
+                page
+            });
+            if pointer {
+                let bounds = cx
+                    .debug_bounds("project-breadcrumb-host")
+                    .expect("breadcrumb renders");
+                cx.simulate_click(
+                    bounds.origin + gpui::point(px(8.), px(8.)),
+                    gpui::Modifiers::none(),
+                );
+            } else {
+                cx.update(|window, cx| {
+                    window.blur(cx);
+                    window.focus_next(cx);
+                });
+                cx.simulate_keystrokes("enter");
+                cx.run_until_parked();
+                cx.simulate_event(gpui::KeyUpEvent {
+                    keystroke: gpui::Keystroke::parse("enter").unwrap(),
+                });
+            }
+            cx.run_until_parked();
+            page.read_with(cx, |page, _| {
+                assert!(page.project.is_none(), "pointer={pointer}");
+                assert!(
+                    page.selected_task_path.is_none(),
+                    "close clears project selection"
+                );
+            });
+        }
     }
 
     #[gpui::test]

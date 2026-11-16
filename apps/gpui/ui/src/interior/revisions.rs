@@ -1,8 +1,8 @@
 //! RoomPlan revisions timeline, draft comparison, and decision reviews.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::Input;
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::Input;
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::interior::{
     RoomPlanDecision, RoomPlanDraft, RoomPlanReconciliationResponse, RoomPlanSpaceEntry,
@@ -231,10 +231,9 @@ impl RoomPlanHistory {
                         .text_color(rgb(palette.red))
                         .child(error.to_string())
                         .child(
-                            Button::new("roomplan-history-retry")
-                                .small()
-                                .ghost()
-                                .label("Retry")
+                            Button::new("roomplan-history-retry", "Retry")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|page, _, _, cx| page.refresh(cx))),
                         )
                         .into_any_element();
@@ -323,10 +322,9 @@ impl RoomPlanHistory {
         });
         let preview_action = if has_local_asset {
             self.preview_handler.map(|_| {
-                Button::new("roomplan-preview-usdz")
-                    .small()
-                    .ghost()
-                    .label("View 3D scan")
+                Button::new("roomplan-preview-usdz", "View 3D scan")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(move |page, _, _, _| {
                         if let Some(preview) = page.preview_handler {
                             preview(&preview_id);
@@ -336,19 +334,21 @@ impl RoomPlanHistory {
             })
         } else if remote_available {
             self.cache_preview_handler.map(|_| {
-                Button::new("roomplan-download-preview-usdz")
-                    .small()
-                    .ghost()
-                    .label(if self.preview_busy.as_deref() == Some(id) {
+                Button::new(
+                    "roomplan-download-preview-usdz",
+                    if self.preview_busy.as_deref() == Some(id) {
                         "Downloading scan…"
                     } else {
                         "Download and view 3D scan"
-                    })
-                    .disabled(self.preview_busy.is_some())
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        page.preview_remote(preview_id.clone(), cx);
-                    }))
-                    .into_any_element()
+                    },
+                )
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
+                .disabled(self.preview_busy.is_some())
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    page.preview_remote(preview_id.clone(), cx);
+                }))
+                .into_any_element()
             })
         } else {
             None
@@ -380,23 +380,24 @@ impl RoomPlanHistory {
                 .flex()
                 .gap_2()
                 .child(
-                    Button::new("roomplan-accept")
-                        .small()
-                        .label(if self.review_busy.as_deref() == Some(id) {
+                    Button::new(
+                        "roomplan-accept",
+                        if self.review_busy.as_deref() == Some(id) {
                             "Saving…"
                         } else {
                             "Accept scan"
-                        })
-                        .disabled(self.review_busy.is_some())
-                        .on_click(
-                            cx.listener(|page, _, _, cx| page.review(RoomPlanDecision::Accept, cx)),
-                        ),
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .disabled(self.review_busy.is_some())
+                    .on_click(
+                        cx.listener(|page, _, _, cx| page.review(RoomPlanDecision::Accept, cx)),
+                    ),
                 )
                 .child(
-                    Button::new("roomplan-reject")
-                        .small()
-                        .ghost()
-                        .label("Reject")
+                    Button::new("roomplan-reject", "Reject")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .disabled(self.review_busy.is_some())
                         .on_click(
                             cx.listener(|page, _, _, cx| page.review(RoomPlanDecision::Reject, cx)),
@@ -410,16 +411,18 @@ impl RoomPlanHistory {
                 .flex_col()
                 .gap_2()
                 .child(
-                    Button::new("roomplan-compare-prior")
-                        .small()
-                        .ghost()
-                        .label(if self.comparison.loading {
+                    Button::new(
+                        "roomplan-compare-prior",
+                        if self.comparison.loading {
                             "Comparing scans…"
                         } else {
                             "Compare with previous scan"
-                        })
-                        .disabled(self.comparison.loading)
-                        .on_click(cx.listener(|page, _, _, cx| page.compare_previous(cx))),
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
+                    .disabled(self.comparison.loading)
+                    .on_click(cx.listener(|page, _, _, cx| page.compare_previous(cx))),
                 )
                 .child(
                     div()
@@ -504,17 +507,24 @@ impl RoomPlanHistory {
                             let space_id = entry.space.space_id.clone();
                             div()
                                 .child(
-                                    Button::new(gpui_kit::SharedString::from(format!(
-                                        "roomplan-add-space-{}",
-                                        space_id
-                                    )))
-                                    .small()
-                                    .ghost()
-                                    .label(format!("Add to {}", entry.space.label))
+                                    Button::new(
+                                        gpui_kit::SharedString::from(format!(
+                                            "roomplan-add-space-{}",
+                                            space_id
+                                        )),
+                                        format!("Add to {}", entry.space.label),
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
                                     .disabled(self.space_busy.is_some())
-                                    .on_click(cx.listener(move |page, _, _, cx| {
-                                        page.assign_selected_to_space(Some(space_id.clone()), cx)
-                                    })),
+                                    .on_click(cx.listener(
+                                        move |page, _, _, cx| {
+                                            page.assign_selected_to_space(
+                                                Some(space_id.clone()),
+                                                cx,
+                                            )
+                                        },
+                                    )),
                                 )
                                 .into_any_element()
                         })
@@ -522,16 +532,18 @@ impl RoomPlanHistory {
                 })
                 .unwrap_or_default();
             actions.push(
-                Button::new("roomplan-create-space")
-                    .small()
-                    .label(if self.space_busy.as_deref() == Some(id) {
+                Button::new(
+                    "roomplan-create-space",
+                    if self.space_busy.as_deref() == Some(id) {
                         "Saving room…"
                     } else {
                         "Start room history"
-                    })
-                    .disabled(self.space_busy.is_some() || self.spaces.loading)
-                    .on_click(cx.listener(|page, _, _, cx| page.assign_selected_to_space(None, cx)))
-                    .into_any_element(),
+                    },
+                )
+                .size(ControlSize::Sm)
+                .disabled(self.space_busy.is_some() || self.spaces.loading)
+                .on_click(cx.listener(|page, _, _, cx| page.assign_selected_to_space(None, cx)))
+                .into_any_element(),
             );
             div()
                 .flex()
@@ -650,13 +662,15 @@ impl RoomPlanHistory {
                         let revision_id = response.after_revision_id.clone();
                         let observation_id = candidate.after_observation_id.clone();
                         row = row.child(
-                            Button::new(gpui_kit::SharedString::from(format!(
-                                "roomplan-carry-link-{}",
-                                observation_id
-                            )))
-                            .small()
-                            .ghost()
-                            .label("Confirm this match")
+                            Button::new(
+                                gpui_kit::SharedString::from(format!(
+                                    "roomplan-carry-link-{}",
+                                    observation_id
+                                )),
+                                "Confirm this match",
+                            )
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .disabled(self.link_busy.is_some())
                             .on_click(cx.listener(
                                 move |page, _, _, cx| {
@@ -726,17 +740,19 @@ impl RoomPlanHistory {
                 let placement_item_id = linked_item_id.clone();
                 if candidate.suggestion == "possible_movement" {
                     row = row.child(
-                        Button::new(gpui_kit::SharedString::from(format!(
-                            "roomplan-edit-placement-{}",
-                            candidate.after_observation_id
-                        )))
-                        .small()
-                        .ghost()
-                        .label(if editor_open {
-                            "Close position editor"
-                        } else {
-                            "Review placement"
-                        })
+                        Button::new(
+                            gpui_kit::SharedString::from(format!(
+                                "roomplan-edit-placement-{}",
+                                candidate.after_observation_id
+                            )),
+                            if editor_open {
+                                "Close position editor"
+                            } else {
+                                "Review placement"
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .disabled(
                             self.placements.loading
                                 || self.placements.value.is_none()
@@ -797,14 +813,16 @@ impl RoomPlanHistory {
                                         )),
                                 )
                                 .child(
-                                    Button::new("roomplan-use-scan-position")
-                                        .small()
-                                        .ghost()
-                                        .label("Use scan estimate in review")
-                                        .disabled(self.placement_busy.is_some())
-                                        .on_click(cx.listener(|page, _, window, cx| {
-                                            page.use_scan_position(window, cx)
-                                        })),
+                                    Button::new(
+                                        "roomplan-use-scan-position",
+                                        "Use scan estimate in review",
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .disabled(self.placement_busy.is_some())
+                                    .on_click(cx.listener(|page, _, window, cx| {
+                                        page.use_scan_position(window, cx)
+                                    })),
                                 )
                                 .into_any_element()
                         } else {
@@ -833,22 +851,24 @@ impl RoomPlanHistory {
                                     div()
                                         .flex()
                                         .gap_2()
-                                        .child(div().w(gpui::px(100.)).child(Input::new(&editor.x).small()))
-                                        .child(div().w(gpui::px(100.)).child(Input::new(&editor.y).small()))
-                                        .child(div().w(gpui::px(140.)).child(Input::new(&editor.rot).small())),
+                                        .child(div().w(gpui::px(100.)).child(Input::new(&editor.x).size(ControlSize::Sm)))
+                                        .child(div().w(gpui::px(100.)).child(Input::new(&editor.y).size(ControlSize::Sm)))
+                                        .child(div().w(gpui::px(140.)).child(Input::new(&editor.rot).size(ControlSize::Sm))),
                                 )
                                 .child(
-                                    Button::new("roomplan-commit-placement")
-                                        .small()
-                                        .label(if self.placement_busy.as_deref() == Some(&editor.item_id) {
+                                    Button::new(
+                                        "roomplan-commit-placement",
+                                        if self.placement_busy.as_deref() == Some(&editor.item_id) {
                                             "Checking…"
                                         } else {
                                             "Save reviewed position"
-                                        })
-                                        .disabled(self.placement_busy.is_some())
-                                        .on_click(cx.listener(|page, _, _, cx| {
-                                            page.commit_reviewed_placement(cx)
-                                        })),
+                                        },
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .disabled(self.placement_busy.is_some())
+                                    .on_click(cx.listener(|page, _, _, cx| {
+                                        page.commit_reviewed_placement(cx)
+                                    })),
                                 ),
                         );
                     }
@@ -858,17 +878,19 @@ impl RoomPlanHistory {
                 let observation_id = candidate.after_observation_id.clone();
                 let is_open = self.linking_observation.as_deref() == Some(&observation_id);
                 row = row.child(
-                    Button::new(gpui_kit::SharedString::from(format!(
-                        "roomplan-link-observation-{}",
-                        observation_id
-                    )))
-                    .small()
-                    .ghost()
-                    .label(if existing_link.is_some() {
-                        "Change inventory match"
-                    } else {
-                        "Confirm inventory match"
-                    })
+                    Button::new(
+                        gpui_kit::SharedString::from(format!(
+                            "roomplan-link-observation-{}",
+                            observation_id
+                        )),
+                        if existing_link.is_some() {
+                            "Change inventory match"
+                        } else {
+                            "Confirm inventory match"
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .disabled(self.link_busy.is_some())
                     .on_click(cx.listener(move |page, _, _, cx| {
                         page.toggle_link_options(observation_id.clone(), cx)
@@ -893,23 +915,27 @@ impl RoomPlanHistory {
                                     let observation_id = candidate.after_observation_id.clone();
                                     div()
                                         .child(
-                                            Button::new(gpui_kit::SharedString::from(format!(
-                                                "roomplan-link-item-{}-{}",
-                                                observation_id, item_id
-                                            )))
-                                            .small()
-                                            .ghost()
-                                            .label(label)
+                                            Button::new(
+                                                gpui_kit::SharedString::from(format!(
+                                                    "roomplan-link-item-{}-{}",
+                                                    observation_id, item_id
+                                                )),
+                                                label,
+                                            )
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Ghost)
                                             .disabled(self.link_busy.is_some())
-                                            .on_click(cx.listener(move |page, _, _, cx| {
-                                                page.link_observation(
-                                                    selected_space.clone(),
-                                                    revision_id.clone(),
-                                                    observation_id.clone(),
-                                                    item_id.clone(),
-                                                    cx,
-                                                )
-                                            })),
+                                            .on_click(
+                                                cx.listener(move |page, _, _, cx| {
+                                                    page.link_observation(
+                                                        selected_space.clone(),
+                                                        revision_id.clone(),
+                                                        observation_id.clone(),
+                                                        item_id.clone(),
+                                                        cx,
+                                                    )
+                                                }),
+                                            ),
                                         )
                                         .into_any_element()
                                 })

@@ -1,9 +1,10 @@
 //! System and connectivity settings: Shell connection, macOS permissions, and app updates/rebuilding.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, IconName, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, IntoElement};
+use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
+use sjel_gpui_ui::ely::primitives::Tooltip;
+use sjel_gpui_ui::ely::theme::ControlSize;
 use sjel_gpui_ui::theme::{tint, Palette};
 
 use super::{dot_value, group, row, value, BUILD_TIME, RUNNING_COMMIT};
@@ -51,15 +52,17 @@ pub(super) fn connection(
                     } else {
                         "Open the app on the seeded demo node (sjel demo up)."
                     }),
-                    Button::new("switch-node")
-                        .small()
-                        .label(if dev {
+                    Button::new(
+                        "switch-node",
+                        if dev {
                             "Back to live"
                         } else {
                             "Open on dev node"
-                        })
-                        .loading(view.busy.contains("switch-node"))
-                        .on_click(cx.listener(|view, _, window, cx| view.switch_node(window, cx))),
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .loading(view.busy.contains("switch-node"))
+                    .on_click(cx.listener(|view, _, window, cx| view.switch_node(window, cx))),
                     palette,
                 ),
                 row("Status", None, dot_value(status, status_color), palette),
@@ -72,10 +75,9 @@ pub(super) fn connection(
                         .gap_2()
                         .child(value(capabilities.into(), palette.text))
                         .child(
-                            Button::new("show-capabilities")
-                                .ghost()
-                                .small()
-                                .label("Show")
+                            Button::new("show-capabilities", "Show")
+                                .variant(ButtonVariant::Ghost)
+                                .size(ControlSize::Sm)
                                 .on_click(
                                     cx.listener(|view, _, _, cx| view.go(Page::Capabilities, cx)),
                                 ),
@@ -99,10 +101,9 @@ pub(super) fn connection(
                     "A paired iPhone keeps its own copy and queues writes offline. It syncs \
                      when it finds this Mac on the network; its queue lives on the phone.",
                 ),
-                Button::new("open-setup")
-                    .outline()
-                    .small()
-                    .label("Pairing")
+                Button::new("open-setup", "Pairing")
+                    .variant(ButtonVariant::Outline)
+                    .size(ControlSize::Sm)
                     .on_click(cx.listener(|view, _, _, cx| view.go(Page::Setup, cx))),
                 palette,
             )],
@@ -128,18 +129,16 @@ pub(super) fn permissions(palette: Palette) -> Vec<AnyElement> {
             let mut control = div().flex().items_center().gap_2().child(state);
             if let Some(path) = binary {
                 control = control.child(
-                    Button::new(("reveal", index))
-                        .ghost()
-                        .small()
-                        .label("Show in Finder")
+                    Button::new(("reveal", index), "Show in Finder")
+                        .variant(ButtonVariant::Ghost)
+                        .size(ControlSize::Sm)
                         .on_click(move |_, _, _| reveal(&path)),
                 );
             }
             control = control.child(
-                Button::new(("open-pane", index))
-                    .primary()
-                    .small()
-                    .label("Open System Settings")
+                Button::new(("open-pane", index), "Open System Settings")
+                    .variant(ButtonVariant::Primary)
+                    .size(ControlSize::Sm)
                     .on_click(move |_, _, _| open_pane(&GRANTS[index])),
             );
             row(grant.title, Some(grant.why), control, palette)
@@ -191,19 +190,23 @@ pub(super) fn updates(
         .as_ref()
         .is_some_and(|info| info.commits_behind > 0);
     let version_action = if behind {
-        Button::new("update-now")
-            .primary()
-            .label("Update")
-            .loading(building)
-            .disabled(building)
-            .tooltip("Builds, installs, and restarts Sjel Desktop")
-            .on_click(cx.listener(|view, _, window, cx| view.trigger_rebuild(window, cx)))
+        div()
+            .id("update-now-tip")
+            .tooltip(Tooltip::text("Builds, installs, and restarts Sjel Desktop"))
+            .child(
+                Button::new("update-now", "Update")
+                    .variant(ButtonVariant::Primary)
+                    .loading(building)
+                    .disabled(building)
+                    .on_click(cx.listener(|view, _, window, cx| view.trigger_rebuild(window, cx))),
+            )
+            .into_any_element()
     } else {
-        Button::new("check-updates")
-            .outline()
-            .label("Check for updates")
+        Button::new("check-updates", "Check for updates")
+            .variant(ButtonVariant::Outline)
             .loading(view.update_info.is_none())
             .on_click(cx.listener(|view, _, _, cx| view.check_updates(cx)))
+            .into_any_element()
     };
     let mut rows = vec![
         div()
@@ -240,22 +243,24 @@ pub(super) fn updates(
                 .items_center()
                 .gap_1()
                 .child(
-                    Button::new("copy-install")
-                        .ghost()
-                        .small()
-                        .icon(IconName::Copy)
-                        .tooltip("Copy the command")
-                        .on_click(|_, _, cx| {
-                            cx.write_to_clipboard(ClipboardItem::new_string(
-                                "apps/gpui/install".to_owned(),
-                            ));
-                        }),
+                    div()
+                        .id("copy-install-tip")
+                        .tooltip(Tooltip::text("Copy the command"))
+                        .child(
+                            Button::new("copy-install", "Copy")
+                                .variant(ButtonVariant::Ghost)
+                                .size(ControlSize::Sm)
+                                .on_click(|_, _, cx| {
+                                    cx.write_to_clipboard(ClipboardItem::new_string(
+                                        "apps/gpui/install".to_owned(),
+                                    ));
+                                }),
+                        ),
                 )
                 .child(
-                    Button::new("rebuild")
-                        .primary()
-                        .small()
-                        .label("Rebuild")
+                    Button::new("rebuild", "Rebuild")
+                        .variant(ButtonVariant::Primary)
+                        .size(ControlSize::Sm)
                         .loading(building)
                         .disabled(building)
                         .on_click(
@@ -288,33 +293,39 @@ pub(super) fn updates(
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("rebuild-log")
-                            .ghost()
-                            .small()
-                            .label(if view.show_rebuild_log {
+                        Button::new(
+                            "rebuild-log",
+                            if view.show_rebuild_log {
                                 "Hide full log"
                             } else {
                                 "Full log"
-                            })
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.show_rebuild_log = !view.show_rebuild_log;
-                                cx.notify();
-                            })),
+                            },
+                        )
+                        .variant(ButtonVariant::Ghost)
+                        .size(ControlSize::Sm)
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.show_rebuild_log = !view.show_rebuild_log;
+                            cx.notify();
+                        })),
                     )
                     .child(
-                        Button::new("rebuild-log-copy")
-                            .ghost()
-                            .small()
-                            .icon(IconName::Copy)
-                            .tooltip("Copy the log")
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                let RebuildState::Failed(failure) = &view.rebuild_state else {
-                                    return;
-                                };
-                                cx.write_to_clipboard(ClipboardItem::new_string(
-                                    failure.log.clone(),
-                                ));
-                            })),
+                        div()
+                            .id("rebuild-log-copy-tip")
+                            .tooltip(Tooltip::text("Copy the log"))
+                            .child(
+                                Button::new("rebuild-log-copy", "Copy log")
+                                    .variant(ButtonVariant::Ghost)
+                                    .size(ControlSize::Sm)
+                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                        let RebuildState::Failed(failure) = &view.rebuild_state
+                                        else {
+                                            return;
+                                        };
+                                        cx.write_to_clipboard(ClipboardItem::new_string(
+                                            failure.log.clone(),
+                                        ));
+                                    })),
+                            ),
                     ),
             );
             if view.show_rebuild_log {

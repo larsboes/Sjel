@@ -1,7 +1,7 @@
 //! Table of recent ingest runs and status badges.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 use sjel_gpui_core::media::{run_label, MediaIngestRun};
 
@@ -33,14 +33,15 @@ pub fn render_ingest_runs_table(
                 let label = run_label(run);
                 let finished_str = run.finished.as_deref().unwrap_or("in progress…");
 
-                let inspect_btn =
-                    Button::new(SharedString::from(format!("run-inspect-{}", run_id)))
-                        .small()
-                        .when(!is_selected, |b| b.ghost())
-                        .label(if is_selected { "Close" } else { "Inspect" })
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.select_run(run_id, cx);
-                        }));
+                let inspect_btn = Button::new(
+                    SharedString::from(format!("run-inspect-{}", run_id)),
+                    if is_selected { "Close" } else { "Inspect" },
+                )
+                .size(ControlSize::Sm)
+                .when(!is_selected, |b| b.variant(ButtonVariant::Ghost))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.select_run(run_id, cx);
+                }));
 
                 div()
                     .id(SharedString::from(format!("run-row-{}", idx)))

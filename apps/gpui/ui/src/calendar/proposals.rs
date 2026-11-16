@@ -1,8 +1,8 @@
 //! Mail-detected event proposal review panel and actions.
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use chrono::{Duration, Local};
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::Palette;
@@ -172,67 +172,72 @@ impl CalendarPage {
                     entry.ends_at.get(11..16).unwrap_or("")
                 )
             };
-            panel =
-                panel.child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .py_3()
-                        .border_t_1()
-                        .border_color(rgba(palette.border))
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(entry.title.clone()),
-                        )
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(rgb(palette.muted))
-                                .child(format!(
-                                    "{}{} · {}",
-                                    when,
-                                    entry
-                                        .location
-                                        .as_ref()
-                                        .map(|place| format!(" · {place}"))
-                                        .unwrap_or_default(),
-                                    entry.source
-                                )),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .gap_2()
-                                .child(
-                                    Button::new(SharedString::from(format!("proposal-add-{id}")))
-                                        .small()
-                                        .label(if busy { "Adding…" } else { "Add to Calendar" })
-                                        .disabled(self.proposal_action.is_some())
-                                        .on_click(cx.listener(move |page, _, _, cx| {
-                                            page.review_proposal(id.clone(), false, cx)
-                                        })),
+            panel = panel.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .py_3()
+                    .border_t_1()
+                    .border_color(rgba(palette.border))
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(entry.title.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!(
+                                "{}{} · {}",
+                                when,
+                                entry
+                                    .location
+                                    .as_ref()
+                                    .map(|place| format!(" · {place}"))
+                                    .unwrap_or_default(),
+                                entry.source
+                            )),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .child(
+                                Button::new(
+                                    SharedString::from(format!("proposal-add-{id}")),
+                                    if busy { "Adding…" } else { "Add to Calendar" },
                                 )
-                                .child(
-                                    Button::new(SharedString::from(format!(
-                                        "proposal-remove-{remove_id}"
-                                    )))
-                                    .small()
-                                    .ghost()
-                                    .label(if confirming {
+                                .size(ControlSize::Sm)
+                                .disabled(self.proposal_action.is_some())
+                                .on_click(cx.listener(
+                                    move |page, _, _, cx| {
+                                        page.review_proposal(id.clone(), false, cx)
+                                    },
+                                )),
+                            )
+                            .child(
+                                Button::new(
+                                    SharedString::from(format!("proposal-remove-{remove_id}")),
+                                    if confirming {
                                         "Confirm remove"
                                     } else {
                                         "Remove"
-                                    })
-                                    .disabled(self.proposal_action.is_some())
-                                    .on_click(cx.listener(move |page, _, _, cx| {
+                                    },
+                                )
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .disabled(self.proposal_action.is_some())
+                                .on_click(cx.listener(
+                                    move |page, _, _, cx| {
                                         page.review_proposal(remove_id.clone(), true, cx)
-                                    })),
-                                ),
-                        ),
-                );
+                                    },
+                                )),
+                            ),
+                    ),
+            );
         }
         panel.into_any_element()
     }

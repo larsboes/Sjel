@@ -4,8 +4,8 @@
 //! The rules live in `sjel_gpui_core::inventory::compare`. This file draws. Each candidate keeps
 //! one colour across the scatter, the history and the table, so the table is the legend.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{
     canvas, div, point, prelude::*, px, rgb, rgba, AnyElement, Context, PathBuilder, Pixels,
 };
@@ -127,9 +127,8 @@ impl InventoryPage {
                     .child(div().flex().gap_1().children(axes.iter().map(|key| {
                         let chosen = axis.as_deref() == Some(key.as_str());
                         let pick = key.clone();
-                        let button = Button::new(format!("compare-axis-{key}"))
-                            .small()
-                            .label(key.clone())
+                        let button = Button::new(format!("compare-axis-{key}"), key.clone())
+                            .size(ControlSize::Sm)
                             .on_click(cx.listener(move |page, _, _, cx| {
                                 page.compare_axis = Some(pick.clone());
                                 cx.notify();
@@ -137,7 +136,7 @@ impl InventoryPage {
                         if chosen {
                             button.primary()
                         } else {
-                            button.ghost()
+                            button.variant(ButtonVariant::Ghost)
                         }
                     }))),
             );

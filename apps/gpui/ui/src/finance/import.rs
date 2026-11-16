@@ -3,10 +3,10 @@
 use std::rc::Rc;
 use std::time::Instant;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, prelude::*, px, rems, rgb, rgba, AnyElement, ClickEvent, Context, Entity, FontWeight,
     PathPromptOptions, SharedString, Subscription, Window,
@@ -103,7 +103,7 @@ fn candidate_row(c: &FinanceCandidate, mail_source: Option<&str>) -> Row {
 
 pub(crate) struct CsvMappingField {
     pub(super) label: &'static str,
-    pub(super) input: Entity<InputState>,
+    pub(super) input: Entity<TextInput>,
     pub(super) _subscription: Subscription,
 }
 
@@ -328,14 +328,14 @@ impl FinancePage {
                         .unwrap_or_default()
                         .to_owned();
                     let input = cx.new(|cx| {
-                        let mut state = InputState::new(window, cx).placeholder(label);
-                        state.set_value(initial, window, cx);
+                        let mut state = TextInput::new(window, cx).placeholder(label);
+                        state.set_text(initial, cx);
                         state
                     });
                     let subscription =
                         cx.subscribe_in(&input, window, move |page, input, event, _, cx| {
-                            if matches!(event, InputEvent::Change) {
-                                let value = input.read(cx).value().to_string();
+                            if matches!(event, InputEvent::Changed) {
+                                let value = input.read(cx).text().to_string();
                                 if let Some(object) = page.manual_csv_mapping.as_object_mut() {
                                     object.insert(
                                         key.to_owned(),
@@ -538,6 +538,7 @@ impl FinancePage {
             .gap_1p5()
             .child(
                 DataTable::new("finance-candidates", candidate_columns())
+                    .label("Import candidates")
                     .rows(rows)
                     .density(Density::Comfortable)
                     .sorts([SortKey {
@@ -550,10 +551,9 @@ impl FinancePage {
                     .empty("No pending import candidates to review."),
             )
             .children((pending_count > self.pending_limit).then(|| {
-                Button::new("finance-pending-more")
-                    .small()
-                    .ghost()
-                    .label("Show 24 more candidates")
+                Button::new("finance-pending-more", "Show 24 more candidates")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|page, _, _, cx| {
                         page.pending_limit += 24;
                         cx.notify();
@@ -598,19 +598,16 @@ impl FinancePage {
                         palette.red,
                     ))
                     .child(
-                        Button::new(SharedString::from(format!(
-                            "finance-select-category-{}",
-                            candidate.id
-                        )))
-                        .small()
-                        .ghost()
-                        .label(
+                        Button::new(
+                            SharedString::from(format!("finance-select-category-{}", candidate.id)),
                             if self.selected_reclass_candidate.as_deref() == Some(&candidate.id) {
                                 "Selected"
                             } else {
                                 "Choose"
                             },
                         )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(
                             move |page, _, window, cx| {
                                 page.select_reclass_candidate(candidate_id.clone(), window, cx)
@@ -629,7 +626,7 @@ impl FinancePage {
                 }
                 cx.stop_propagation();
             }))
-            .child(Input::new(&self.reclass_field(window, cx)).small());
+            .child(Input::new(&self.reclass_field(window, cx)).size(ControlSize::Sm));
         let suggestions = self.reclass_suggestions();
         let suggestion_row = div()
             .flex()
@@ -638,13 +635,15 @@ impl FinancePage {
             .gap_1()
             .children(suggestions.into_iter().enumerate().map(|(index, account)| {
                 let chosen = account.clone();
-                Button::new(SharedString::from(format!(
-                    "finance-category-suggestion-{index}"
-                )))
-                .xsmall()
-                .label(account.trim_start_matches("expenses:").to_string())
+                Button::new(
+                    SharedString::from(format!("finance-category-suggestion-{index}")),
+                    account.trim_start_matches("expenses:").to_string(),
+                )
+                .size(ControlSize::Sm)
                 .when(index == self.reclass_highlight, |button| button.primary())
-                .when(index != self.reclass_highlight, |button| button.ghost())
+                .when(index != self.reclass_highlight, |button| {
+                    button.variant(ButtonVariant::Ghost)
+                })
                 .on_click(cx.listener(move |page, _, window, cx| {
                     page.apply_reclass(Some(chosen.clone()), window, cx)
                 }))
@@ -688,10 +687,9 @@ impl FinancePage {
                     .gap_2()
                     .child(category_input)
                     .child(
-                        Button::new("finance-reclassify-selected")
-                            .small()
+                        Button::new("finance-reclassify-selected", "Reclassify selected")
+                            .size(ControlSize::Sm)
                             .primary()
-                            .label("Reclassify selected")
                             .when(
                                 self.selected_reclass_candidate.is_none()
                                     || self.reclass_account.trim().is_empty(),
@@ -703,10 +701,9 @@ impl FinancePage {
             .child(suggestion_row);
         let categorize_panel = if uncategorized_len > self.category_limit {
             categorize_panel.child(
-                Button::new("finance-category-more")
-                    .small()
-                    .ghost()
-                    .label("Show more uncategorized")
+                Button::new("finance-category-more", "Show more uncategorized")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|page, _, _, cx| {
                         page.category_limit += 16;
                         cx.notify();
@@ -729,25 +726,24 @@ impl FinancePage {
             let selected = self.selected_expense.as_deref() == Some(&entry.candidate.id);
             let selected_entry = entry.clone();
             expense_rows = expense_rows.child(
-                Button::new(SharedString::from(format!(
-                    "finance-expense-{}",
-                    entry.candidate.id
-                )))
-                .small()
+                Button::new(
+                    SharedString::from(format!("finance-expense-{}", entry.candidate.id)),
+                    format!(
+                        "{} · {} · {}",
+                        entry.candidate.booked_at,
+                        entry.candidate.description,
+                        format_money(entry.total_cents, &entry.candidate.currency)
+                    ),
+                )
+                .size(ControlSize::Sm)
                 .when(selected, |button| button.primary())
-                .when(!selected, |button| button.ghost())
-                .label(format!(
-                    "{} · {} · {}",
-                    entry.candidate.booked_at,
-                    entry.candidate.description,
-                    format_money(entry.total_cents, &entry.candidate.currency)
-                ))
+                .when(!selected, |button| button.variant(ButtonVariant::Ghost))
                 .on_click(cx.listener(move |page, _, window, cx| {
                     page.select_expense(&selected_entry, window, cx)
                 })),
             );
         }
-        let personal_input = Input::new(&self.personal_field(window, cx)).small();
+        let personal_input = Input::new(&self.personal_field(window, cx)).size(ControlSize::Sm);
         let share_is_valid = self
             .selected_expense
             .as_ref()
@@ -786,14 +782,13 @@ impl FinancePage {
                     .items_center()
                     .gap_1()
                     .child(
-                        Button::new("finance-mode-unreviewed")
-                            .xsmall()
-                            .label("Needs purpose")
+                        Button::new("finance-mode-unreviewed", "Needs purpose")
+                            .size(ControlSize::Sm)
                             .when(self.queue_mode == ReviewQueueMode::Unreviewed, |button| {
                                 button.primary()
                             })
                             .when(self.queue_mode != ReviewQueueMode::Unreviewed, |button| {
-                                button.ghost()
+                                button.variant(ButtonVariant::Ghost)
                             })
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.queue_mode = ReviewQueueMode::Unreviewed;
@@ -802,14 +797,13 @@ impl FinancePage {
                             })),
                     )
                     .child(
-                        Button::new("finance-mode-shared")
-                            .xsmall()
-                            .label("Shared costs")
+                        Button::new("finance-mode-shared", "Shared costs")
+                            .size(ControlSize::Sm)
                             .when(self.queue_mode == ReviewQueueMode::Shared, |button| {
                                 button.primary()
                             })
                             .when(self.queue_mode != ReviewQueueMode::Shared, |button| {
-                                button.ghost()
+                                button.variant(ButtonVariant::Ghost)
                             })
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.queue_mode = ReviewQueueMode::Shared;
@@ -818,14 +812,13 @@ impl FinancePage {
                             })),
                     )
                     .child(
-                        Button::new("finance-mode-all")
-                            .xsmall()
-                            .label("All")
+                        Button::new("finance-mode-all", "All")
+                            .size(ControlSize::Sm)
                             .when(self.queue_mode == ReviewQueueMode::All, |button| {
                                 button.primary()
                             })
                             .when(self.queue_mode != ReviewQueueMode::All, |button| {
-                                button.ghost()
+                                button.variant(ButtonVariant::Ghost)
                             })
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.queue_mode = ReviewQueueMode::All;
@@ -837,11 +830,12 @@ impl FinancePage {
             .child(expense_rows);
         let plans = self.trip_plans.value.as_deref().unwrap_or_default();
         let mut trip_focus = div().flex().items_center().gap_1().child(
-            Button::new("finance-trip-focus-all")
-                .xsmall()
-                .label("Any trip")
+            Button::new("finance-trip-focus-all", "Any trip")
+                .size(ControlSize::Sm)
                 .when(self.review_trip_id.is_empty(), |button| button.primary())
-                .when(!self.review_trip_id.is_empty(), |button| button.ghost())
+                .when(!self.review_trip_id.is_empty(), |button| {
+                    button.variant(ButtonVariant::Ghost)
+                })
                 .on_click(cx.listener(|page, _, _, cx| {
                     page.review_trip_id.clear();
                     page.review_rev = page.review_rev.wrapping_add(1);
@@ -851,14 +845,15 @@ impl FinancePage {
         for plan in plans.iter().filter(|plan| plan.status != "archived") {
             let id = plan.id.clone();
             trip_focus = trip_focus.child(
-                Button::new(SharedString::from(format!(
-                    "finance-trip-focus-{}",
-                    plan.id
-                )))
-                .xsmall()
-                .label(plan.title.clone())
+                Button::new(
+                    SharedString::from(format!("finance-trip-focus-{}", plan.id)),
+                    plan.title.clone(),
+                )
+                .size(ControlSize::Sm)
                 .when(self.review_trip_id == plan.id, |button| button.primary())
-                .when(self.review_trip_id != plan.id, |button| button.ghost())
+                .when(self.review_trip_id != plan.id, |button| {
+                    button.variant(ButtonVariant::Ghost)
+                })
                 .on_click(cx.listener(move |page, _, _, cx| {
                     page.review_trip_id = id.clone();
                     page.review_rev = page.review_rev.wrapping_add(1);
@@ -869,10 +864,9 @@ impl FinancePage {
         allocation = allocation.child(trip_focus);
         if review_queue_len > self.expense_limit {
             allocation = allocation.child(
-                Button::new("finance-expenses-more")
-                    .small()
-                    .ghost()
-                    .label("Show more expenses")
+                Button::new("finance-expenses-more", "Show more expenses")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|page, _, _, cx| {
                         page.expense_limit += 16;
                         cx.notify();
@@ -891,18 +885,22 @@ impl FinancePage {
             for (value, label) in purposes {
                 let value_for_click = value.to_owned();
                 purpose_buttons = purpose_buttons.child(
-                    Button::new(SharedString::from(format!("finance-purpose-{value}")))
-                        .xsmall()
-                        .label(label)
-                        .when(self.allocation_purpose == value, |button| button.primary())
-                        .when(self.allocation_purpose != value, |button| button.ghost())
-                        .on_click(cx.listener(move |page, _, _, cx| {
-                            page.allocation_purpose = value_for_click.clone();
-                            if page.allocation_purpose != "trip" {
-                                page.selected_trip_id.clear();
-                            }
-                            cx.notify();
-                        })),
+                    Button::new(
+                        SharedString::from(format!("finance-purpose-{value}")),
+                        label,
+                    )
+                    .size(ControlSize::Sm)
+                    .when(self.allocation_purpose == value, |button| button.primary())
+                    .when(self.allocation_purpose != value, |button| {
+                        button.variant(ButtonVariant::Ghost)
+                    })
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        page.allocation_purpose = value_for_click.clone();
+                        if page.allocation_purpose != "trip" {
+                            page.selected_trip_id.clear();
+                        }
+                        cx.notify();
+                    })),
                 );
             }
             allocation = allocation
@@ -926,47 +924,42 @@ impl FinancePage {
                         .items_center()
                         .gap_1()
                         .child(
-                            Button::new("finance-share-100")
-                                .xsmall()
-                                .ghost()
-                                .label("All mine")
+                            Button::new("finance-share-100", "All mine")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|page, _, window, cx| {
                                     page.set_personal_share(100, window, cx)
                                 })),
                         )
                         .child(
-                            Button::new("finance-share-50")
-                                .xsmall()
-                                .ghost()
-                                .label("Half")
+                            Button::new("finance-share-50", "Half")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|page, _, window, cx| {
                                     page.set_personal_share(50, window, cx)
                                 })),
                         )
                         .child(
-                            Button::new("finance-share-25")
-                                .xsmall()
-                                .ghost()
-                                .label("Quarter")
+                            Button::new("finance-share-25", "Quarter")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|page, _, window, cx| {
                                     page.set_personal_share(25, window, cx)
                                 })),
                         )
                         .child(
-                            Button::new("finance-share-0")
-                                .xsmall()
-                                .ghost()
-                                .label("Fronted all")
+                            Button::new("finance-share-0", "Fronted all")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|page, _, window, cx| {
                                     page.set_personal_share(0, window, cx)
                                 })),
                         ),
                 )
                 .child(
-                    Button::new("finance-save-allocation")
-                        .small()
+                    Button::new("finance-save-allocation", "Save purpose and share")
+                        .size(ControlSize::Sm)
                         .primary()
-                        .label("Save purpose and share")
                         .when(
                             !share_is_valid
                                 || (self.allocation_purpose == "trip"
@@ -986,15 +979,19 @@ impl FinancePage {
                 for plan in plans.iter().filter(|plan| plan.status != "archived") {
                     let trip_id = plan.id.clone();
                     plan_buttons = plan_buttons.child(
-                        Button::new(SharedString::from(format!("finance-trip-{}", plan.id)))
-                            .xsmall()
-                            .label(plan.title.clone())
-                            .when(self.selected_trip_id == plan.id, |button| button.primary())
-                            .when(self.selected_trip_id != plan.id, |button| button.ghost())
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                page.selected_trip_id = trip_id.clone();
-                                cx.notify();
-                            })),
+                        Button::new(
+                            SharedString::from(format!("finance-trip-{}", plan.id)),
+                            plan.title.clone(),
+                        )
+                        .size(ControlSize::Sm)
+                        .when(self.selected_trip_id == plan.id, |button| button.primary())
+                        .when(self.selected_trip_id != plan.id, |button| {
+                            button.variant(ButtonVariant::Ghost)
+                        })
+                        .on_click(cx.listener(move |page, _, _, cx| {
+                            page.selected_trip_id = trip_id.clone();
+                            cx.notify();
+                        })),
                     );
                 }
                 allocation = allocation.child(plan_buttons);
@@ -1041,33 +1038,34 @@ impl FinancePage {
         for inflow in &inflows_slice {
             let id = inflow.id.clone();
             reimbursement = reimbursement.child(
-                Button::new(SharedString::from(format!("finance-inflow-{}", inflow.id)))
-                    .xsmall()
-                    .label(format!(
+                Button::new(
+                    SharedString::from(format!("finance-inflow-{}", inflow.id)),
+                    format!(
                         "Inflow · {} · {}",
                         inflow.description,
                         format_money(inflow.amount_cents, &inflow.currency)
-                    ))
-                    .when(
-                        self.selected_inflow.as_deref() == Some(&inflow.id),
-                        |button| button.primary(),
-                    )
-                    .when(
-                        self.selected_inflow.as_deref() != Some(&inflow.id),
-                        |button| button.ghost(),
-                    )
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        page.selected_inflow = Some(id.clone());
-                        cx.notify();
-                    })),
+                    ),
+                )
+                .size(ControlSize::Sm)
+                .when(
+                    self.selected_inflow.as_deref() == Some(&inflow.id),
+                    |button| button.primary(),
+                )
+                .when(
+                    self.selected_inflow.as_deref() != Some(&inflow.id),
+                    |button| button.variant(ButtonVariant::Ghost),
+                )
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    page.selected_inflow = Some(id.clone());
+                    cx.notify();
+                })),
             );
         }
         if inflows_len > self.inflow_limit {
             reimbursement = reimbursement.child(
-                Button::new("finance-inflows-more")
-                    .small()
-                    .ghost()
-                    .label("Show more inflows")
+                Button::new("finance-inflows-more", "Show more inflows")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|page, _, _, cx| {
                         page.inflow_limit += 8;
                         cx.notify();
@@ -1077,23 +1075,22 @@ impl FinancePage {
         for expense in open_receivables.iter().take(self.receivable_limit) {
             let id = expense.candidate_id.clone();
             reimbursement = reimbursement.child(
-                Button::new(SharedString::from(format!(
-                    "finance-receivable-{}",
-                    expense.candidate_id
-                )))
-                .xsmall()
-                .label(format!(
-                    "Expense · {} · {} open",
-                    expense.description,
-                    format_money(expense.outstanding_cents, &expense.currency)
-                ))
+                Button::new(
+                    SharedString::from(format!("finance-receivable-{}", expense.candidate_id)),
+                    format!(
+                        "Expense · {} · {} open",
+                        expense.description,
+                        format_money(expense.outstanding_cents, &expense.currency)
+                    ),
+                )
+                .size(ControlSize::Sm)
                 .when(
                     self.reimbursement_target.as_deref() == Some(&expense.candidate_id),
                     |button| button.primary(),
                 )
                 .when(
                     self.reimbursement_target.as_deref() != Some(&expense.candidate_id),
-                    |button| button.ghost(),
+                    |button| button.variant(ButtonVariant::Ghost),
                 )
                 .on_click(cx.listener(move |page, _, _, cx| {
                     page.reimbursement_target = Some(id.clone());
@@ -1103,10 +1100,9 @@ impl FinancePage {
         }
         if open_receivables.len() > self.receivable_limit {
             reimbursement = reimbursement.child(
-                Button::new("finance-receivables-more")
-                    .small()
-                    .ghost()
-                    .label("Show more receivables")
+                Button::new("finance-receivables-more", "Show more receivables")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|page, _, _, cx| {
                         page.receivable_limit += 8;
                         cx.notify();
@@ -1114,10 +1110,9 @@ impl FinancePage {
             );
         }
         reimbursement = reimbursement.child(
-            Button::new("finance-link-reimbursement")
-                .small()
+            Button::new("finance-link-reimbursement", "Link selected inflow")
+                .size(ControlSize::Sm)
                 .primary()
-                .label("Link selected inflow")
                 .when(
                     self.selected_inflow.is_none() || self.reimbursement_target.is_none(),
                     |button| button.disabled(true),
@@ -1185,30 +1180,29 @@ impl FinancePage {
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("finance-choose-csv")
-                            .small()
-                            .ghost()
-                            .label("Choose CSV")
+                        Button::new("finance-choose-csv", "Choose CSV")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(Self::choose_csv)),
                     )
                     .child(
-                        Button::new("finance-mapping-profile")
-                            .small()
-                            .ghost()
-                            .label(format!("Mapping: {profile_name}"))
-                            .on_click(cx.listener(|page, _, _, cx| {
-                                let count =
-                                    page.csv_mappings.value.as_ref().map_or(0, Vec::len) + 1;
-                                page.selected_mapping = (page.selected_mapping + 1) % count;
-                                page.csv_preview = None;
-                                cx.notify();
-                            })),
+                        Button::new(
+                            "finance-mapping-profile",
+                            format!("Mapping: {profile_name}"),
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(cx.listener(|page, _, _, cx| {
+                            let count = page.csv_mappings.value.as_ref().map_or(0, Vec::len) + 1;
+                            page.selected_mapping = (page.selected_mapping + 1) % count;
+                            page.csv_preview = None;
+                            cx.notify();
+                        })),
                     )
                     .child(
-                        Button::new("finance-preview-csv")
-                            .small()
+                        Button::new("finance-preview-csv", "Preview")
+                            .size(ControlSize::Sm)
                             .primary()
-                            .label("Preview")
                             .when(self.csv_file.is_none(), |button| button.disabled(true))
                             .on_click(cx.listener(|page, _, _, cx| page.preview_csv(cx))),
                     ),
@@ -1230,7 +1224,11 @@ impl FinancePage {
                                     .text_color(rgb(palette.muted))
                                     .child(field.label),
                             )
-                            .child(div().w(px(260.)).child(Input::new(&field.input).small())),
+                            .child(
+                                div()
+                                    .w(px(260.))
+                                    .child(Input::new(&field.input).size(ControlSize::Sm)),
+                            ),
                     );
                 }
             }
@@ -1257,10 +1255,9 @@ impl FinancePage {
                                 .child("Date format"),
                         )
                         .child(
-                            Button::new("finance-manual-date-format")
-                                .xsmall()
-                                .ghost()
-                                .label(date_format)
+                            Button::new("finance-manual-date-format", date_format)
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|page, _, _, cx| {
                                     let next = match page.manual_csv_mapping["date_formats"][0]
                                         .as_str()
@@ -1290,10 +1287,9 @@ impl FinancePage {
                                 .child("Amount sign"),
                         )
                         .child(
-                            Button::new("finance-manual-amount-sign")
-                                .xsmall()
-                                .ghost()
-                                .label(amount_sign)
+                            Button::new("finance-manual-amount-sign", amount_sign)
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|page, _, _, cx| {
                                     page.manual_csv_mapping["amount_sign"] = serde_json::json!(
                                         if page.manual_csv_mapping["amount_sign"] == "invert" {
@@ -1320,10 +1316,9 @@ impl FinancePage {
                                 .child("Row policy"),
                         )
                         .child(
-                            Button::new("finance-manual-row-policy")
-                                .xsmall()
-                                .ghost()
-                                .label(row_policy)
+                            Button::new("finance-manual-row-policy", row_policy)
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|page, _, _, cx| {
                                     page.manual_csv_mapping["row_policy"] =
                                         serde_json::json!(if page.manual_csv_mapping["row_policy"]
@@ -1361,10 +1356,9 @@ impl FinancePage {
                         )),
                     )
                     .child(
-                        Button::new("finance-stage-csv")
-                            .small()
+                        Button::new("finance-stage-csv", "Stage preview")
+                            .size(ControlSize::Sm)
                             .primary()
-                            .label("Stage preview")
                             .on_click(cx.listener(|page, _, _, cx| page.stage_csv(cx))),
                     ),
             );
@@ -1439,6 +1433,34 @@ mod tests {
             state: "pending".into(),
             transfer_match_ids: transfers.iter().map(|id| id.to_string()).collect(),
         }
+    }
+
+    #[gpui::test]
+    fn manual_csv_mapping_tracks_typed_values_and_cleared_optional_columns(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use gpui::Focusable;
+
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, cx| {
+            let mut page = FinancePage::new(crate::data::Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.set_view(super::super::View::ImportReview, cx);
+            page
+        });
+        cx.update(|window, cx| {
+            let field = &page.read(cx).csv_mapping_fields.as_ref().unwrap()[5].input;
+            field.read(cx).focus_handle(cx).focus(window, cx);
+        });
+        cx.simulate_input("Reference");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.manual_csv_mapping["reference_column"], "Reference")
+        });
+        cx.simulate_keystrokes("cmd-a");
+        cx.simulate_keystrokes("backspace");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert!(page.manual_csv_mapping["reference_column"].is_null())
+        });
     }
 
     #[test]

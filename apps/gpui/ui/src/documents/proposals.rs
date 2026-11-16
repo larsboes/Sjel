@@ -3,14 +3,14 @@
 use std::collections::BTreeMap;
 
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, Window};
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::shell::{
     self, DocumentDetail, DocumentSplitChildInput, DocumentSplitRequest, ProposalEvidenceSource,
     ProposalOutcome, ProposalReview, ProposalSource, ShellError,
 };
 
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use crate::theme::Palette;
 
 use super::duplicates::parse_page_ranges;
@@ -154,26 +154,24 @@ pub(super) fn proposal_panel(
                 )
                 .child(div().flex_1())
                 .child(
-                    Button::new("document-regenerate-proposals")
-                        .small()
-                        .ghost()
-                        .label(if view.proposal_busy.as_deref() == Some("regenerate") {
+                    Button::new("document-regenerate-proposals", if view.proposal_busy.as_deref() == Some("regenerate") {
                             "Saving…"
                         } else {
                             "Regenerate rules"
                         })
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .disabled(busy)
                         .on_click(cx.listener(|view, _, _, cx| view.regenerate_proposals(cx))),
                 )
                 .child(
-                    Button::new("document-model-proposal")
-                        .small()
-                        .ghost()
-                        .label(if view.proposal_busy.as_deref() == Some("model") {
+                    Button::new("document-model-proposal", if view.proposal_busy.as_deref() == Some("model") {
                             "Asking local model…"
                         } else {
                             "Ask local model"
                         })
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .disabled(busy)
                         .on_click(cx.listener(|view, _, _, cx| view.generate_model_proposal(cx))),
                 ),
@@ -218,15 +216,17 @@ pub(super) fn proposal_panel(
     }
     if older_runs > 0 {
         panel = panel.child(
-            Button::new("document-toggle-proposal-history")
-                .small()
-                .ghost()
-                .label(if view.show_proposal_history {
+            Button::new(
+                "document-toggle-proposal-history",
+                if view.show_proposal_history {
                     "Show latest run only"
                 } else {
                     "Show earlier runs"
-                })
-                .on_click(cx.listener(|view, _, _, cx| view.toggle_proposal_history(cx))),
+                },
+            )
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
+            .on_click(cx.listener(|view, _, _, cx| view.toggle_proposal_history(cx))),
         );
     }
     if visible.is_empty() {
@@ -342,46 +342,67 @@ pub(super) fn proposal_panel(
                         .flex_wrap()
                         .gap_1()
                         .child(
-                            Button::new(format!("document-proposal-agree-{}", record.id))
-                                .xsmall()
-                                .ghost()
-                                .label("Agree")
-                                .disabled(busy)
-                                .on_click(cx.listener(move |view, _, _, cx| {
+                            Button::new(
+                                gpui::SharedString::from(format!(
+                                    "document-proposal-agree-{}",
+                                    record.id
+                                )),
+                                "Agree",
+                            )
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
+                            .disabled(busy)
+                            .on_click(cx.listener(
+                                move |view, _, _, cx| {
                                     view.review_proposal(
                                         proposal_id.clone(),
                                         ProposalReview::Accepted,
                                         cx,
                                     )
-                                })),
+                                },
+                            )),
                         )
                         .child(
-                            Button::new(format!("document-proposal-reject-{}", source_id))
-                                .xsmall()
-                                .ghost()
-                                .label("Reject")
-                                .disabled(busy)
-                                .on_click(cx.listener(move |view, _, _, cx| {
+                            Button::new(
+                                gpui::SharedString::from(format!(
+                                    "document-proposal-reject-{}",
+                                    source_id
+                                )),
+                                "Reject",
+                            )
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
+                            .disabled(busy)
+                            .on_click(cx.listener(
+                                move |view, _, _, cx| {
                                     view.review_proposal(
                                         source_id.clone(),
                                         ProposalReview::Rejected,
                                         cx,
                                     )
-                                })),
+                                },
+                            )),
                         )
                         .child(
-                            Button::new(format!("document-proposal-override-{}", override_id))
-                                .xsmall()
-                                .ghost()
-                                .label("Override")
-                                .disabled(busy)
-                                .on_click(cx.listener(move |view, _, _, cx| {
+                            Button::new(
+                                gpui::SharedString::from(format!(
+                                    "document-proposal-override-{}",
+                                    override_id
+                                )),
+                                "Override",
+                            )
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
+                            .disabled(busy)
+                            .on_click(cx.listener(
+                                move |view, _, _, cx| {
                                     view.review_proposal(
                                         override_id.clone(),
                                         ProposalReview::Overridden,
                                         cx,
                                     )
-                                })),
+                                },
+                            )),
                         ),
                 )
         }))
@@ -391,7 +412,7 @@ pub(super) fn proposal_panel(
 pub(super) fn workflow_panel(
     view: &Documents,
     detail: &DocumentDetail,
-    split_input: &Entity<InputState>,
+    split_input: &Entity<TextInput>,
     palette: Palette,
     cx: &mut Context<Documents>,
 ) -> AnyElement {
@@ -408,16 +429,18 @@ pub(super) fn workflow_panel(
                 .items_center()
                 .gap_2()
                 .child(
-                    Button::new("document-analyze-pages")
-                        .small()
-                        .label(if analyzing {
+                    Button::new(
+                        "document-analyze-pages",
+                        if analyzing {
                             "Analyzing locally…"
                         } else if document.page_count == 0 {
                             "Analyze pages locally"
                         } else {
                             "Refresh page analysis"
-                        })
-                        .on_click(cx.listener(|view, _, _, cx| view.analyze_selected_document(cx))),
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .on_click(cx.listener(|view, _, _, cx| view.analyze_selected_document(cx))),
                 )
                 .child(
                     div()
@@ -469,18 +492,22 @@ pub(super) fn workflow_panel(
                     .items_center()
                     .gap_2()
                     .mt(px(2.))
-                    .child(div().w(px(220.)).child(Input::new(split_input).small()))
                     .child(
-                        Button::new("document-create-split")
-                            .small()
-                            .label(if splitting {
+                        div()
+                            .w(px(220.))
+                            .child(Input::new(split_input).size(ControlSize::Sm)),
+                    )
+                    .child(
+                        Button::new(
+                            "document-create-split",
+                            if splitting {
                                 "Creating children…"
                             } else {
                                 "Split into records"
-                            })
-                            .on_click(
-                                cx.listener(|view, _, _, cx| view.split_selected_document(cx)),
-                            ),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .on_click(cx.listener(|view, _, _, cx| view.split_selected_document(cx))),
                     )
                     .when_else(
                         detail
@@ -489,13 +516,15 @@ pub(super) fn workflow_panel(
                             .is_some_and(|suggestion| !suggestion.ranges.is_empty()),
                         |row| {
                             row.child(
-                                Button::new("document-use-split-suggestions")
-                                    .small()
-                                    .ghost()
-                                    .label("Use page-marker suggestion")
-                                    .on_click(cx.listener(|view, _, window, cx| {
-                                        view.use_split_suggestions(window, cx)
-                                    })),
+                                Button::new(
+                                    "document-use-split-suggestions",
+                                    "Use page-marker suggestion",
+                                )
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(
+                                    cx.listener(|view, _, _, cx| view.use_split_suggestions(cx)),
+                                ),
                             )
                         },
                         |row| row,
@@ -525,10 +554,12 @@ pub(super) fn workflow_panel(
                     |range| format!("Pages {}-{} · {}", range.first, range.last, child.filename),
                 );
                 panel = panel.child(
-                    Button::new(format!("document-child-{}", &child.id[..12]))
-                        .small()
-                        .label(label)
-                        .on_click(cx.listener(move |view, _, _, cx| view.open(id.clone(), cx))),
+                    Button::new(
+                        gpui::SharedString::from(format!("document-child-{}", &child.id[..12])),
+                        label,
+                    )
+                    .size(ControlSize::Sm)
+                    .on_click(cx.listener(move |view, _, _, cx| view.open(id.clone(), cx))),
                 );
             }
         }
@@ -602,14 +633,14 @@ impl Documents {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.split_input {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("1-3, 4-8"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("1-3, 4-8"));
         let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
-                view.split_ranges = input.read(cx).value().trim().to_owned();
+            if matches!(event, InputEvent::Changed) {
+                view.split_ranges = input.read(cx).text().trim().to_owned();
                 cx.notify();
             }
         });
@@ -1003,7 +1034,7 @@ impl Documents {
         .detach();
     }
 
-    pub(super) fn use_split_suggestions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn use_split_suggestions(&mut self, cx: &mut Context<Self>) {
         let Some(detail) = self.detail.value.as_ref() else {
             return;
         };
@@ -1021,7 +1052,7 @@ impl Documents {
             .join(", ");
         self.split_ranges = value.clone();
         if let Some((input, _)) = &self.split_input {
-            input.update(cx, |input, cx| input.set_value(value, window, cx));
+            input.update(cx, |input, cx| input.set_text(value, cx));
         }
         cx.notify();
     }

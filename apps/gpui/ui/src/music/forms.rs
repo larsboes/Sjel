@@ -1,6 +1,7 @@
 //! Inputs, mode-specific form sections, and background job log renderer.
 
-use gpui_kit::component::input::{Input, Textarea};
+use crate::ely::forms::Input;
+use gpui_kit::component::input::Textarea;
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, FontWeight};
 use sjel_gpui_core::shell::MusicJob;
 

@@ -10,20 +10,20 @@ use std::sync::Arc;
 
 use gpui::{
     div, prelude::*, px, rems, rgb, rgba, AnyElement, ClickEvent, Context, Entity, ExternalPaths,
-    FontWeight, PathPromptOptions, Subscription, Window,
+    Focusable, FontWeight, PathPromptOptions, Subscription, Window,
 };
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::shell::{
     self, DocumentDetail, DocumentSummary, DocumentUpload, DuplicateCandidate,
     DuplicateCandidateKind, DuplicateCandidatePage, ShellError,
 };
 
 use crate::data::{Remote, Repo};
+use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::data_display::Tone;
+use crate::ely::forms::{Input, InputEvent, TextInput};
 use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
+use crate::ely::theme::ControlSize;
 use crate::ely::theme::Density as ElyDensity;
 use crate::primitives::{filter_pill, SortOrder};
 use crate::theme::{tint, Density, Palette};
@@ -285,7 +285,7 @@ pub struct Documents {
     pub(super) category_filter: Option<String>,
     pub(super) search_revision: u64,
     pub(super) search_applied: bool,
-    pub(super) search_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) search_input: Option<(Entity<TextInput>, Subscription)>,
     pub(super) sort: (DocSort, SortOrder),
     pub(super) selected: Option<String>,
     pub(super) current: Option<String>,
@@ -301,7 +301,7 @@ pub struct Documents {
     pub(super) text_scroll: gpui::ScrollHandle,
     pub(super) thumb_scroll: gpui::ScrollHandle,
     pub(super) page_search_query: String,
-    pub(super) page_search_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) page_search_input: Option<(Entity<TextInput>, Subscription)>,
     pub(super) reader: Reader,
     pub(super) renderer: Option<Arc<dyn PdfRenderer>>,
     pub(super) renderer_error: Option<String>,
@@ -314,7 +314,7 @@ pub struct Documents {
     pub(super) preferred_id: Option<String>,
     pub(super) split_ranges: String,
     pub(super) duplicate_error: Option<String>,
-    pub(super) split_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) split_input: Option<(Entity<TextInput>, Subscription)>,
     pub(super) proposal_busy: Option<String>,
     pub(super) proposal_error: Option<String>,
     pub(super) proposal_notice: Option<String>,
@@ -684,7 +684,7 @@ impl Documents {
 
     pub fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let field = self.search_field(window, cx);
-        field.update(cx, |input, cx| input.focus(window, cx));
+        window.focus(&field.focus_handle(cx), cx);
     }
 
     pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
@@ -697,22 +697,22 @@ impl Documents {
         cx.notify();
     }
 
-    fn search_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    fn search_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
         if let Some((input, _)) = &self.search_input {
             return input.clone();
         }
         let input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search all document text…"));
+            cx.new(|cx| TextInput::new(window, cx).placeholder("Search all document text…"));
         let subscription =
             cx.subscribe_in(&input, window, |view, input, event, _, cx| match event {
-                InputEvent::Change => {
-                    view.search_query = input.read(cx).value().trim().to_lowercase();
+                InputEvent::Changed => {
+                    view.search_query = input.read(cx).text().trim().to_lowercase();
                     view.search_applied = false;
                     view.page_offset = 0;
                     view.order_rev = view.order_rev.wrapping_add(1);
                     cx.notify();
                 }
-                InputEvent::PressEnter { .. } => view.search_documents(cx),
+                InputEvent::Submit => view.search_documents(cx),
                 _ => {}
             });
         self.search_input = Some((input.clone(), subscription));
@@ -723,21 +723,21 @@ impl Documents {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.page_search_input {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Find in document…"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Find in document…"));
         let subscription =
             cx.subscribe_in(&input, window, |view, input, event, _, cx| match event {
-                InputEvent::Change => {
-                    view.page_search_query = input.read(cx).value().trim().to_owned();
+                InputEvent::Changed => {
+                    view.page_search_query = input.read(cx).text().trim().to_owned();
                     if let Some(first_hit) = view.page_search_hits().first() {
                         view.go_to_page_index(first_hit.page_index, cx);
                     }
                     cx.notify();
                 }
-                InputEvent::PressEnter { .. } => {
+                InputEvent::Submit => {
                     let hits = view.page_search_hits();
                     if !hits.is_empty() {
                         let next_ix = hits
@@ -1137,6 +1137,7 @@ impl Documents {
             .min_h_0()
             .child(
                 DataTable::new("documents", columns)
+                    .label("Documents")
                     .rows(rows)
                     .hidden(hidden)
                     .sorts([SortKey {
@@ -1202,9 +1203,8 @@ impl Render for Documents {
                                 .child("Duplicate review"),
                         )
                         .child(
-                            Button::new("documents-back-library")
-                                .small()
-                                .label("Back to library")
+                            Button::new("documents-back-library", "Back to library")
+                                .size(ControlSize::Sm)
                                 .on_click(
                                     cx.listener(|view, _, _, cx| {
                                         view.set_duplicate_mode(false, cx)
@@ -1270,19 +1270,17 @@ impl Render for Documents {
                             cx.listener(|view, _, _, cx| view.set_filter(Filter::NeedsReview, cx)),
                         ))
                         .child(
-                            Button::new("documents-category-filter")
-                                .small()
-                                .ghost()
-                                .label(category_label)
+                            Button::new("documents-category-filter", category_label)
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(
                                     cx.listener(|view, _, _, cx| view.cycle_category_filter(cx)),
                                 ),
                         )
                         .child(
-                            Button::new("documents-grouping")
-                                .small()
-                                .ghost()
-                                .label(self.grouping.label())
+                            Button::new("documents-grouping", self.grouping.label())
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|view, _, _, cx| view.cycle_grouping(cx))),
                         ),
                 )
@@ -1292,23 +1290,24 @@ impl Render for Documents {
                         .items_center()
                         .gap_2()
                         .child(
-                            Button::new("documents-import")
-                                .small()
-                                .primary()
-                                .label(if uploading > 0 {
+                            Button::new(
+                                "documents-import",
+                                if uploading > 0 {
                                     format!("Importing ({uploading})…")
                                 } else {
                                     "+ Import…".to_owned()
-                                })
-                                .disabled(uploading > 0)
-                                .on_click(cx.listener(Self::prompt_import)),
+                                },
+                            )
+                            .size(ControlSize::Sm)
+                            .primary()
+                            .disabled(uploading > 0)
+                            .on_click(cx.listener(Self::prompt_import)),
                         )
                         .when(!narrow, |actions| {
                             actions.child(
-                                Button::new("documents-duplicate-review")
-                                    .small()
-                                    .ghost()
-                                    .label("Review duplicates")
+                                Button::new("documents-duplicate-review", "Review duplicates")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
                                     .on_click(cx.listener(|view, _, _, cx| {
                                         view.set_duplicate_mode(true, cx)
                                     })),
@@ -1330,34 +1329,39 @@ impl Render for Documents {
                         .items_center()
                         .gap_2()
                         .when(!narrow, |row| {
-                            row.child(div().w(px(240.)).child(Input::new(&search).small()))
-                                .child(
-                                    Button::new("documents-search-text")
-                                        .small()
-                                        .ghost()
-                                        .label("Search")
-                                        .on_click(
-                                            cx.listener(|view, _, _, cx| view.search_documents(cx)),
-                                        ),
-                                )
+                            row.child(
+                                div()
+                                    .w(px(240.))
+                                    .child(Input::new(&search).size(ControlSize::Sm)),
+                            )
+                            .child(
+                                Button::new("documents-search-text", "Search")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(
+                                        cx.listener(|view, _, _, cx| view.search_documents(cx)),
+                                    ),
+                            )
                         })
                         .when(narrow, |row| {
-                            row.child(div().w(px(160.)).child(Input::new(&search).small()))
-                                .child(
-                                    Button::new("documents-search-text-narrow")
-                                        .small()
-                                        .ghost()
-                                        .label("Search")
-                                        .on_click(
-                                            cx.listener(|view, _, _, cx| view.search_documents(cx)),
-                                        ),
-                                )
+                            row.child(
+                                div()
+                                    .w(px(160.))
+                                    .child(Input::new(&search).size(ControlSize::Sm)),
+                            )
+                            .child(
+                                Button::new("documents-search-text-narrow", "Search")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(
+                                        cx.listener(|view, _, _, cx| view.search_documents(cx)),
+                                    ),
+                            )
                         })
                         .child(
-                            Button::new("documents-sort")
-                                .small()
-                                .ghost()
-                                .label(sort_col.button_label(sort_order))
+                            Button::new("documents-sort", sort_col.button_label(sort_order))
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     let next = match view.sort {
                                         (DocSort::Added, SortOrder::Descending) => {
@@ -1390,10 +1394,9 @@ impl Render for Documents {
                                     .items_center()
                                     .gap_1()
                                     .child(
-                                        Button::new("documents-page-prev")
-                                            .xsmall()
-                                            .ghost()
-                                            .label("‹ Prev 500")
+                                        Button::new("documents-page-prev", "‹ Prev 500")
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Ghost)
                                             .disabled(start == 0)
                                             .on_click(
                                                 cx.listener(|view, _, _, cx| view.prev_page(cx)),
@@ -1406,10 +1409,9 @@ impl Render for Documents {
                                             .child(format!("{display_start}–{end} of {total}")),
                                     )
                                     .child(
-                                        Button::new("documents-page-next")
-                                            .xsmall()
-                                            .ghost()
-                                            .label("Next 500 ›")
+                                        Button::new("documents-page-next", "Next 500 ›")
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Ghost)
                                             .disabled(end >= total)
                                             .on_click(
                                                 cx.listener(|view, _, _, cx| view.next_page(cx)),
@@ -1527,14 +1529,16 @@ impl Render for Documents {
                         .gap_2()
                         .child(div().flex_1().min_w_0().child(detail))
                         .child(
-                            Button::new("document-close")
-                                .small()
-                                .label(if mobile {
+                            Button::new(
+                                "document-close",
+                                if mobile {
                                     "← Documents"
                                 } else {
                                     "Close ✕ (Esc)"
-                                })
-                                .on_click(cx.listener(|view, _, _, cx| view.close(cx))),
+                                },
+                            )
+                            .size(ControlSize::Sm)
+                            .on_click(cx.listener(|view, _, _, cx| view.close(cx))),
                         ),
                 )
                 .child(
@@ -1544,16 +1548,20 @@ impl Render for Documents {
                         .items_center()
                         .gap_2()
                         .child(
-                            Button::new("document-page-prev")
-                                .small()
-                                .label("‹ Page")
+                            Button::new("document-page-prev", "‹ Page")
+                                .size(ControlSize::Sm)
                                 .on_click(cx.listener(|view, _, _, cx| view.go_to_page(-1, cx))),
                         )
                         .child(
-                            Button::new("document-page-next")
-                                .small()
-                                .label("Page ›")
-                                .on_click(cx.listener(|view, _, _, cx| view.go_to_page(1, cx))),
+                            div()
+                                .debug_selector(|| "document-page-next-control".into())
+                                .child(
+                                    Button::new("document-page-next", "Page ›")
+                                        .size(ControlSize::Sm)
+                                        .on_click(
+                                            cx.listener(|view, _, _, cx| view.go_to_page(1, cx)),
+                                        ),
+                                ),
                         )
                         .child(
                             div()
@@ -1563,92 +1571,104 @@ impl Render for Documents {
                                 .child(page_label),
                         )
                         .child(
-                            Button::new("document-zoom-out")
-                                .small()
-                                .label("−")
+                            Button::new("document-zoom-out", "−")
+                                .size(ControlSize::Sm)
                                 .disabled(zoom == Zoom::Page)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.zoom_out(cx);
                                 })),
                         )
                         .child(
-                            Button::new("document-zoom")
-                                .small()
-                                .label(zoom.label())
+                            Button::new("document-zoom", zoom.label())
+                                .size(ControlSize::Sm)
                                 .on_click(cx.listener(move |view, _, _, cx| {
                                     view.set_zoom(zoom.other(), cx);
                                 })),
                         )
                         .child(
-                            Button::new("document-zoom-in")
-                                .small()
-                                .label("+")
+                            Button::new("document-zoom-in", "+")
+                                .size(ControlSize::Sm)
                                 .disabled(zoom == Zoom::Close)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.zoom_in(cx);
                                 })),
                         )
                         .child(
-                            Button::new("document-read-text")
-                                .small()
-                                .label(if reading_text { "Pages" } else { "Text" })
-                                .on_click(cx.listener(move |view, _, _, cx| {
+                            Button::new(
+                                "document-read-text",
+                                if reading_text { "Pages" } else { "Text" },
+                            )
+                            .size(ControlSize::Sm)
+                            .on_click(cx.listener(
+                                move |view, _, _, cx| {
                                     view.show_text(!reading_text, cx);
-                                })),
+                                },
+                            )),
                         )
                         .when(!reading_text && pages > 1, |bar| {
                             bar.child(
-                                Button::new("document-toggle-thumbnails")
-                                    .small()
-                                    .label(if show_thumbnails {
+                                Button::new(
+                                    "document-toggle-thumbnails",
+                                    if show_thumbnails {
                                         "Hide thumbs"
                                     } else {
                                         "Thumbnails"
-                                    })
-                                    .on_click(cx.listener(|view, _, _, cx| {
+                                    },
+                                )
+                                .size(ControlSize::Sm)
+                                .on_click(cx.listener(
+                                    |view, _, _, cx| {
                                         view.toggle_thumbnails(cx);
-                                    })),
+                                    },
+                                )),
                             )
                         })
                         .when(has_extracted_pages, |bar| {
-                            bar.child(div().w(px(160.)).child(Input::new(&page_search).small()))
+                            bar.child(
+                                div()
+                                    .w(px(160.))
+                                    .child(Input::new(&page_search).size(ControlSize::Sm)),
+                            )
                         })
                         .when(can_open_externally, |bar| {
                             bar.child(
-                                Button::new("document-open-external")
-                                    .small()
-                                    .label("Open in Preview")
+                                Button::new("document-open-external", "Open in Preview")
+                                    .size(ControlSize::Sm)
                                     .on_click(cx.listener(|view, _, _, _| view.open_externally())),
                             )
                         })
                         .when(!mobile, |bar| {
                             bar.child(
-                                Button::new("document-compare-btn")
-                                    .small()
-                                    .label(if self.filing_compare_id.is_some() {
+                                Button::new(
+                                    "document-compare-btn",
+                                    if self.filing_compare_id.is_some() {
                                         "Close compare ✕"
                                     } else {
                                         "Compare ⧉"
-                                    })
-                                    .on_click(cx.listener(|view, _, _, cx| {
+                                    },
+                                )
+                                .size(ControlSize::Sm)
+                                .on_click(cx.listener(
+                                    |view, _, _, cx| {
                                         if view.filing_compare_id.is_some() {
                                             view.close_compare(cx);
                                         } else {
                                             view.show_compare_picker = !view.show_compare_picker;
                                             cx.notify();
                                         }
-                                    })),
+                                    },
+                                )),
                             )
                         })
                         .child(div().flex_1())
                         .when_some(suggestion, |bar, category| {
                             bar.child(
-                                Button::new("document-file-suggestion")
-                                    .small()
-                                    .label(format!("File as {category}"))
-                                    .on_click(
-                                        cx.listener(|view, _, _, cx| view.file_suggestion(cx)),
-                                    ),
+                                Button::new(
+                                    "document-file-suggestion",
+                                    format!("File as {category}"),
+                                )
+                                .size(ControlSize::Sm)
+                                .on_click(cx.listener(|view, _, _, cx| view.file_suggestion(cx))),
                             )
                         }),
                 )
@@ -1691,13 +1711,17 @@ impl Render for Documents {
                                 other_title.to_owned()
                             };
                             picker = picker.child(
-                                Button::new(format!("compare-pick-{}", other.id))
-                                    .xsmall()
-                                    .ghost()
-                                    .label(title_trunc)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                Button::new(
+                                    gpui::SharedString::from(format!("compare-pick-{}", other.id)),
+                                    title_trunc,
+                                )
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(
+                                    move |view, _, _, cx| {
                                         view.open_compare_document(other_id.clone(), cx);
-                                    })),
+                                    },
+                                )),
                             );
                         }
                         el.child(picker)
@@ -1757,20 +1781,18 @@ impl Render for Documents {
                                 .gap_2()
                                 .when(can_adopt, |el| {
                                     el.child(
-                                        Button::new("adopt-compare-cat")
-                                            .xsmall()
+                                        Button::new("adopt-compare-cat", adopt_label)
+                                            .size(ControlSize::Sm)
                                             .primary()
-                                            .label(adopt_label)
                                             .on_click(cx.listener(|view, _, _, cx| {
                                                 view.adopt_compare_category(cx)
                                             })),
                                     )
                                 })
                                 .child(
-                                    Button::new("exit-compare")
-                                        .xsmall()
-                                        .ghost()
-                                        .label("Close ✕")
+                                    Button::new("exit-compare", "Close ✕")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
                                         .on_click(
                                             cx.listener(|view, _, _, cx| view.close_compare(cx)),
                                         ),
@@ -1791,13 +1813,19 @@ impl Render for Documents {
                         .flex()
                         .items_center()
                         .gap_1()
-                        .child(Button::new("cmp-page-prev").xsmall().label("‹").on_click(
-                            cx.listener(|view, _, _, cx| view.go_to_compare_page(-1, cx)),
-                        ))
                         .child(
-                            Button::new("cmp-page-next").xsmall().label("›").on_click(
-                                cx.listener(|view, _, _, cx| view.go_to_compare_page(1, cx)),
-                            ),
+                            Button::new("cmp-page-prev", "‹")
+                                .size(ControlSize::Sm)
+                                .on_click(
+                                    cx.listener(|view, _, _, cx| view.go_to_compare_page(-1, cx)),
+                                ),
+                        )
+                        .child(
+                            Button::new("cmp-page-next", "›")
+                                .size(ControlSize::Sm)
+                                .on_click(
+                                    cx.listener(|view, _, _, cx| view.go_to_compare_page(1, cx)),
+                                ),
                         )
                         .child(
                             div()
@@ -1806,29 +1834,32 @@ impl Render for Documents {
                                 .child(compare_page_label),
                         )
                         .child(
-                            Button::new("cmp-zoom")
-                                .xsmall()
-                                .label(self.filing_compare_reader.zoom.label())
+                            Button::new("cmp-zoom", self.filing_compare_reader.zoom.label())
+                                .size(ControlSize::Sm)
                                 .on_click(
                                     cx.listener(|view, _, _, cx| view.toggle_compare_zoom(cx)),
                                 ),
                         )
                         .child(
-                            Button::new("cmp-text")
-                                .xsmall()
-                                .label(if self.filing_compare_reader.reading_text {
+                            Button::new(
+                                "cmp-text",
+                                if self.filing_compare_reader.reading_text {
                                     "Pages"
                                 } else {
                                     "Text"
-                                })
-                                .on_click(
-                                    cx.listener(|view, _, _, cx| view.toggle_compare_text(cx)),
-                                ),
+                                },
+                            )
+                            .size(ControlSize::Sm)
+                            .on_click(cx.listener(|view, _, _, cx| view.toggle_compare_text(cx))),
                         )
                         .when(self.filing_compare_reader.pages > 1, |el| {
-                            el.child(Button::new("cmp-thumbs").xsmall().label("Thumbs").on_click(
-                                cx.listener(|view, _, _, cx| view.toggle_compare_thumbnails(cx)),
-                            ))
+                            el.child(
+                                Button::new("cmp-thumbs", "Thumbs")
+                                    .size(ControlSize::Sm)
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.toggle_compare_thumbnails(cx)
+                                    })),
+                            )
                         });
 
                     let right_canvas = if self.filing_compare_reader.reading_text {
@@ -1943,10 +1974,9 @@ impl Render for Documents {
                         .text_color(rgb(tone))
                         .child(div().flex_1().truncate().child(message))
                         .child(
-                            Button::new("documents-upload-notice-dismiss")
-                                .xsmall()
-                                .ghost()
-                                .label("Dismiss")
+                            Button::new("documents-upload-notice-dismiss", "Dismiss")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.upload_notice = None;
                                     cx.notify();
@@ -2335,12 +2365,12 @@ fn detail_panel(detail: &DocumentDetail, palette: Palette) -> AnyElement {
 #[cfg(test)]
 mod tests {
     use gpui::AppContext as _;
-    use gpui::TestAppContext;
+    use gpui::{Focusable, TestAppContext};
 
     use super::duplicates::parse_page_ranges;
     use super::{workflow_label, DocSort, Documents, Filter, Reader, SortOrder, Zoom};
     use crate::data::Repo;
-    use sjel_gpui_core::shell::{DocumentSummary, ShellError};
+    use sjel_gpui_core::shell::{DocumentDetail, DocumentSummary, ShellError};
 
     fn summary(id: &str, category: Option<&str>, filename: &str) -> DocumentSummary {
         DocumentSummary {
@@ -2365,6 +2395,72 @@ mod tests {
             matched_pages: Vec::new(),
             workflow_stage: "analyze".into(),
         }
+    }
+
+    #[gpui::test]
+    fn reader_controls_keep_page_identity_and_split_edits_unsaved(cx: &mut TestAppContext) {
+        use sjel_gpui_core::shell::DocumentExtractedPage;
+
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, _| {
+            let mut page = Documents::new(Repo::new(Err(ShellError::NotSetUp)));
+            let mut document = summary("invoice", None, "invoice.pdf");
+            document.page_count = 3;
+            page.rows.value = Some(vec![document.clone()]);
+            page.selected = Some(document.id.clone());
+            page.reader.id = Some(document.id.clone());
+            page.reader.pages = 3;
+            page.detail.value = Some(DocumentDetail {
+                document,
+                text: None,
+                proposals: vec![],
+                pages: ["Cover", "Invoice summary", "Invoice payment"]
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, text)| DocumentExtractedPage {
+                        page_number: index as u32 + 1,
+                        text: text.into(),
+                        engine: "fixture".into(),
+                        failure: None,
+                    })
+                    .collect(),
+                children: vec![],
+                split_suggestions: None,
+            });
+            page
+        });
+        let next = cx.debug_bounds("document-page-next-control").unwrap();
+        cx.simulate_click(next.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert_eq!(page.reader.page, 1));
+        cx.update(|window, cx| {
+            page.update(cx, |page, cx| {
+                let input = page.page_search_field(window, cx);
+                window.focus(&input.focus_handle(cx), cx);
+            });
+        });
+        cx.simulate_input("invoice");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.page_search_query, "invoice");
+            assert_eq!(page.reader.page, 1);
+            assert_eq!(page.matched_page_numbers(), [2, 3]);
+        });
+        cx.simulate_keystrokes("enter");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert_eq!(page.reader.page, 2));
+        cx.update(|window, cx| {
+            page.update(cx, |page, cx| {
+                let input = page.split_range_field(window, cx);
+                window.focus(&input.focus_handle(cx), cx);
+            });
+        });
+        cx.simulate_input("1-1, 2-3");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.split_ranges, "1-1, 2-3");
+            assert!(page.workflow_busy.is_none());
+            assert!(page.workflow_error.is_none());
+        });
     }
 
     #[gpui::test]

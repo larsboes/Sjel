@@ -1,6 +1,6 @@
 //! Clip document reader view, citation audits, and paginated block rendering.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, Window};
 use sjel_gpui_core::blocks::Doc;
 use sjel_gpui_core::clipper::{audit_citations, markdown_to_turns, CitationStatus, ClipDocument};
@@ -50,10 +50,9 @@ impl Clips {
         let mut navigation = div().flex().items_center().gap_2();
         if page > 0 {
             navigation = navigation.child(
-                Button::new("clip-page-previous")
-                    .small()
-                    .ghost()
-                    .label("← Previous")
+                Button::new("clip-page-previous", "← Previous")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|view, _, _, cx| {
                         view.reader_page = view.reader_page.saturating_sub(1);
                         cx.notify();
@@ -73,10 +72,9 @@ impl Clips {
         ));
         if page + 1 < page_count {
             navigation = navigation.child(
-                Button::new("clip-page-next")
-                    .small()
-                    .ghost()
-                    .label("Next →")
+                Button::new("clip-page-next", "Next →")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.reader_page = (view.reader_page + 1).min(page_count - 1);
                         cx.notify();
@@ -96,10 +94,9 @@ impl Clips {
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("clips-back")
-                            .small()
-                            .ghost()
-                            .label("← Clips")
+                        Button::new("clips-back", "← Clips")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.open = None;
                                 view.parsed_doc = None;
@@ -108,10 +105,9 @@ impl Clips {
                             })),
                     )
                     .child(
-                        Button::new("clips-edit-composer")
-                            .small()
-                            .ghost()
-                            .label("Edit in Composer")
+                        Button::new("clips-edit-composer", "Edit in Composer")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 let turns = markdown_to_turns(&doc_for_edit.markdown);
                                 view.start_composer(
@@ -124,29 +120,30 @@ impl Clips {
                             })),
                     )
                     .child(
-                        Button::new("clips-original")
-                            .small()
-                            .ghost()
-                            .label("Open original")
+                        Button::new("clips-original", "Open original")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(move |_, _, cx| cx.open_url(&url)),
                     )
                     .child(
-                        Button::new("clips-delete-document")
-                            .small()
-                            .ghost()
-                            .label(if confirm_delete {
+                        Button::new(
+                            "clips-delete-document",
+                            if confirm_delete {
                                 "Confirm delete"
                             } else {
                                 "Delete clip"
-                            })
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                if view.confirm_delete.as_deref() == Some(key_for_delete.as_str()) {
-                                    view.delete_document(key_for_delete.clone(), cx);
-                                } else {
-                                    view.confirm_delete = Some(key_for_delete.clone());
-                                    cx.notify();
-                                }
-                            })),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            if view.confirm_delete.as_deref() == Some(key_for_delete.as_str()) {
+                                view.delete_document(key_for_delete.clone(), cx);
+                            } else {
+                                view.confirm_delete = Some(key_for_delete.clone());
+                                cx.notify();
+                            }
+                        })),
                     ),
             )
             .child(

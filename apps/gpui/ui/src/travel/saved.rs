@@ -1,8 +1,8 @@
 //! Saved items, activities, bookings, and stay candidates board.
 use super::forms::{FormKind, Remove};
 use super::{urlencode, Travel};
+use crate::ely::buttons::ButtonVariant;
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context};
-use gpui_kit::component::button::ButtonVariants;
 use sjel_gpui_core::travel::Item;
 
 impl Travel {
@@ -279,13 +279,12 @@ impl Travel {
                 let item_id = item.id.clone();
                 let active = current_rank == Some(r);
                 actions = actions.child(
-                    self.button(gpui::SharedString::from(format!(
-                        "stay-rank-{}-{r}",
-                        item.id
-                    )))
-                    .when(active, |b| b.primary())
-                    .when(!active, |b| b.ghost())
-                    .label(format!("#{r}"))
+                    self.button(
+                        gpui::SharedString::from(format!("stay-rank-{}-{r}", item.id)),
+                        format!("#{r}"),
+                    )
+                    .when(active, |b| b.variant(ButtonVariant::Primary))
+                    .when(!active, |b| b.variant(ButtonVariant::Ghost))
                     .on_click(cx.listener(move |view, _, window, cx| {
                         let next = if active { None } else { Some(r) };
                         view.set_stay_rank(item_id.clone(), next, window, cx);
@@ -296,43 +295,53 @@ impl Travel {
                 if r > 1 {
                     let item_id = item.id.clone();
                     actions = actions.child(
-                        self.button(gpui::SharedString::from(format!("stay-up-{}", item.id)))
-                            .ghost()
-                            .label("↑")
-                            .on_click(cx.listener(move |view, _, window, cx| {
+                        self.button(
+                            gpui::SharedString::from(format!("stay-up-{}", item.id)),
+                            "↑",
+                        )
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(cx.listener(
+                            move |view, _, window, cx| {
                                 view.set_stay_rank(item_id.clone(), Some(r - 1), window, cx);
-                            })),
+                            },
+                        )),
                     );
                 }
                 let item_id_down = item.id.clone();
                 actions = actions.child(
-                    self.button(gpui::SharedString::from(format!("stay-down-{}", item.id)))
-                        .ghost()
-                        .label("↓")
-                        .on_click(cx.listener(move |view, _, window, cx| {
-                            view.set_stay_rank(item_id_down.clone(), Some(r + 1), window, cx);
-                        })),
+                    self.button(
+                        gpui::SharedString::from(format!("stay-down-{}", item.id)),
+                        "↓",
+                    )
+                    .variant(ButtonVariant::Ghost)
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        view.set_stay_rank(item_id_down.clone(), Some(r + 1), window, cx);
+                    })),
                 );
                 let item_id_clear = item.id.clone();
                 actions = actions.child(
-                    self.button(gpui::SharedString::from(format!("stay-unrank-{}", item.id)))
-                        .ghost()
-                        .label("Unrank")
-                        .on_click(cx.listener(move |view, _, window, cx| {
-                            view.set_stay_rank(item_id_clear.clone(), None, window, cx);
-                        })),
+                    self.button(
+                        gpui::SharedString::from(format!("stay-unrank-{}", item.id)),
+                        "Unrank",
+                    )
+                    .variant(ButtonVariant::Ghost)
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        view.set_stay_rank(item_id_clear.clone(), None, window, cx);
+                    })),
                 );
             }
         }
         if let Some(code) = item.booking_code() {
             let code_str = code.to_owned();
             actions = actions.child(
-                self.button(gpui::SharedString::from(format!("copy-code-{}", item.id)))
-                    .primary()
-                    .label(format!("Copy {code_str}"))
-                    .on_click(cx.listener(move |_view, _, _, cx| {
-                        cx.write_to_clipboard(ClipboardItem::new_string(code_str.clone()));
-                    })),
+                self.button(
+                    gpui::SharedString::from(format!("copy-code-{}", item.id)),
+                    format!("Copy {code_str}"),
+                )
+                .variant(ButtonVariant::Primary)
+                .on_click(cx.listener(move |_view, _, _, cx| {
+                    cx.write_to_clipboard(ClipboardItem::new_string(code_str.clone()));
+                })),
             );
         }
         if let Some(address) = item
@@ -342,20 +351,24 @@ impl Travel {
         {
             let addr = address.to_owned();
             actions = actions.child(
-                self.button(gpui::SharedString::from(format!("map-addr-{}", item.id)))
-                    .ghost()
-                    .label("Apple Maps")
-                    .on_click(move |_, _, cx| {
-                        cx.open_url(&format!("https://maps.apple.com/?q={}", urlencode(&addr)));
-                    }),
+                self.button(
+                    gpui::SharedString::from(format!("map-addr-{}", item.id)),
+                    "Apple Maps",
+                )
+                .variant(ButtonVariant::Ghost)
+                .on_click(move |_, _, cx| {
+                    cx.open_url(&format!("https://maps.apple.com/?q={}", urlencode(&addr)));
+                }),
             );
         }
         if let Some(url) = item.source_url() {
             actions = actions.child(
-                self.button(gpui::SharedString::from(format!("open-item-{}", item.id)))
-                    .ghost()
-                    .label("Source")
-                    .on_click(move |_, _, cx| cx.open_url(url.as_str())),
+                self.button(
+                    gpui::SharedString::from(format!("open-item-{}", item.id)),
+                    "Source",
+                )
+                .variant(ButtonVariant::Ghost)
+                .on_click(move |_, _, cx| cx.open_url(url.as_str())),
             );
         }
         if item.item_type == "booking" || item.item_type == "stay" {

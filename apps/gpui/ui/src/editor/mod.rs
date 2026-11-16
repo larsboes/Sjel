@@ -1148,6 +1148,95 @@ mod tests {
     }
 
     #[gpui::test]
+    fn caret_menu_pointer_choice_preserves_typing_and_tracks_fresh_geometry(
+        cx: &mut TestAppContext,
+    ) {
+        let (editor, cx) = open(cx);
+        focus_end(&editor, 3, cx);
+        cx.simulate_keystrokes("enter / h 2");
+        cx.run_until_parked();
+        let (caret, line, scroll) = editor.read_with(cx, |editor, cx| {
+            let geometry = editor.rows[4]
+                .input
+                .read(cx)
+                .prepaint_caret_geometry()
+                .unwrap();
+            (
+                geometry.cursor_bounds(),
+                geometry.line_height(),
+                geometry.scroll_offset(),
+            )
+        });
+        let menu = cx
+            .debug_bounds("option-list")
+            .expect("caret menu is visible");
+        assert!((menu.left() - caret.left()).abs() <= gpui::px(1.));
+        assert!(menu.top() >= caret.top() + scroll.y + line - gpui::px(1.));
+        cx.update(|window, cx| {
+            assert!(editor.read(cx).rows[4]
+                .input
+                .read(cx)
+                .focus_handle(cx)
+                .is_focused(window))
+        });
+        let option = cx.debug_bounds("option-row 0").unwrap();
+        cx.simulate_mouse_down(
+            option.center(),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            option.center(),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.run_until_parked();
+        assert!(editor.read_with(cx, |editor, _| editor.menu.is_none()));
+        cx.update(|window, cx| {
+            assert!(editor.read(cx).rows[4]
+                .input
+                .read(cx)
+                .focus_handle(cx)
+                .is_focused(window))
+        });
+        cx.simulate_input("Picked");
+        editor.read_with(cx, |editor, _| {
+            assert_eq!(editor.doc.blocks[4].kind, Kind::Heading(2));
+            assert_eq!(editor.doc.blocks[4].text, "Picked");
+        });
+    }
+
+    #[gpui::test]
+    fn caret_menu_outside_click_dismisses_without_applying_a_choice(cx: &mut TestAppContext) {
+        let (editor, cx) = open(cx);
+        focus_end(&editor, 3, cx);
+        cx.simulate_keystrokes("enter / h 2");
+        cx.run_until_parked();
+        let before = markdown(&editor, cx);
+        let other = cx.debug_bounds("formatted-0").unwrap();
+        cx.simulate_mouse_down(
+            other.center(),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            other.center(),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.run_until_parked();
+        assert!(editor.read_with(cx, |editor, _| editor.menu.is_none()));
+        assert_eq!(markdown(&editor, cx), before);
+        cx.update(|window, cx| {
+            assert!(editor.read(cx).rows[0]
+                .input
+                .read(cx)
+                .focus_handle(cx)
+                .is_focused(window))
+        });
+    }
+
+    #[gpui::test]
     fn arrows_pick_in_the_menu_and_escape_closes_it(cx: &mut TestAppContext) {
         let (editor, cx) = open(cx);
         focus_end(&editor, 3, cx);

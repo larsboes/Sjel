@@ -10,14 +10,17 @@
 //!   vector-frame offset in `map` all read from the camera and nothing else, so a frame can be
 //!   drawn mid-gesture without any extra state to keep in step.
 use super::{urlencode, LocationMarker, PlaceCategory, Travel};
+use crate::ely::{
+    buttons::{Button, ButtonVariant},
+    primitives::Tooltip,
+    theme::ControlSize,
+};
 use futures::future::{AbortHandle, Abortable};
 use futures::{stream, SinkExt, StreamExt};
 use gpui::{
     canvas, div, img, point, prelude::*, px, rgb, rgba, AnyElement, Context, MouseButton,
     PathBuilder, StyledImage,
 };
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
 use sjel_gpui_core::{
     shell,
     travel::{self, Coordinate, Tile, TravelRoute, TripSection},
@@ -27,6 +30,18 @@ use std::time::Duration;
 /// How long a gesture must be quiet before anything is requested. Long enough to swallow a
 /// wheel run or a pinch, short enough that the sharp frame feels like the gesture's own end.
 const MAP_SETTLE: Duration = Duration::from_millis(140);
+
+fn with_tooltip(
+    id: &'static str,
+    tip: impl Into<gpui::SharedString> + 'static,
+    child: impl IntoElement,
+) -> AnyElement {
+    div()
+        .id(id)
+        .tooltip(Tooltip::text(tip))
+        .child(child)
+        .into_any_element()
+}
 
 /// How many tile levels above the current one stay usable as placeholders.
 const TILE_LEVELS_KEPT: i32 = 4;
@@ -96,11 +111,10 @@ impl Travel {
         let mut row = div().flex().flex_wrap().items_center().gap_1();
         let all_active = self.selected_category_filter.is_none();
         row = row.child(
-            self.button("filter-all")
-                .small()
-                .label("All places")
-                .when(all_active, |b| b.primary())
-                .when(!all_active, |b| b.ghost())
+            self.button("filter-all", "All places")
+                .size(ControlSize::Sm)
+                .when(all_active, |b| b.variant(ButtonVariant::Primary))
+                .when(!all_active, |b| b.variant(ButtonVariant::Ghost))
                 .on_click(cx.listener(|view, _, _, cx| {
                     view.selected_category_filter = None;
                     cx.notify();
@@ -116,11 +130,10 @@ impl Travel {
             let label = cat.label();
             let id = format!("filter-{}", cat.label().to_lowercase());
             row = row.child(
-                self.button(gpui::SharedString::from(id))
-                    .small()
-                    .label(label)
-                    .when(active, |b| b.primary())
-                    .when(!active, |b| b.ghost())
+                self.button(gpui::SharedString::from(id), label)
+                    .size(ControlSize::Sm)
+                    .when(active, |b| b.variant(ButtonVariant::Primary))
+                    .when(!active, |b| b.variant(ButtonVariant::Ghost))
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.selected_category_filter =
                             if view.selected_category_filter == Some(cat) {
@@ -151,36 +164,39 @@ impl Travel {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(
-                        self.button("map-apple-native")
-                            .ghost()
-                            .small()
-                            .label(if self.apple_maps_inline {
+                    .child(with_tooltip(
+                        "map-apple-native-tip",
+                        "Switch inline map between native Apple Maps and OpenStreetMap",
+                        self.button(
+                            "map-apple-native",
+                            if self.apple_maps_inline {
                                 "Use OpenStreetMap"
                             } else {
                                 "Use Apple Maps"
-                            })
-                            .tooltip(
-                                "Switch inline map between native Apple Maps and OpenStreetMap",
-                            )
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.apple_maps_inline = !view.apple_maps_inline;
-                                cx.notify();
-                            })),
-                    )
+                            },
+                        )
+                        .variant(ButtonVariant::Ghost)
+                        .size(ControlSize::Sm)
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.apple_maps_inline = !view.apple_maps_inline;
+                            cx.notify();
+                        })),
+                    ))
                     .child(
-                        self.button("map-options-toggle")
-                            .ghost()
-                            .small()
-                            .label(if self.map_options_open {
+                        self.button(
+                            "map-options-toggle",
+                            if self.map_options_open {
                                 "Hide map options"
                             } else {
                                 "Map options"
-                            })
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.map_options_open = !view.map_options_open;
-                                cx.notify();
-                            })),
+                            },
+                        )
+                        .variant(ButtonVariant::Ghost)
+                        .size(ControlSize::Sm)
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.map_options_open = !view.map_options_open;
+                            cx.notify();
+                        })),
                     ),
             );
         }
@@ -198,42 +214,47 @@ impl Travel {
                         },
                     ))
                     .child(
-                        self.button("map-renderer")
-                            .ghost()
-                            .label(if self.vector_enabled {
+                        self.button(
+                            "map-renderer",
+                            if self.vector_enabled {
                                 "Use raster map"
                             } else {
                                 "Use vector map"
-                            })
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.deactivate();
-                                view.vector_enabled = !view.vector_enabled;
-                                view.map_error = None;
-                                view.load_map(cx);
-                                cx.notify();
-                            })),
-                    );
-            }
-            if !self.uses_vector_map() {
-                options = options.child(
-                    self.button("map-connection")
-                        .ghost()
-                        .label(if self.online {
-                            "Online tiles"
-                        } else {
-                            "Cached only"
-                        })
-                        .tooltip(if self.online {
-                            "Switch to cached tiles only"
-                        } else {
-                            "Allow online map tiles"
-                        })
+                            },
+                        )
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|view, _, _, cx| {
-                            view.online = !view.online;
+                            view.deactivate();
+                            view.vector_enabled = !view.vector_enabled;
+                            view.map_error = None;
                             view.load_map(cx);
                             cx.notify();
                         })),
-                );
+                    );
+            }
+            if !self.uses_vector_map() {
+                options = options.child(with_tooltip(
+                    "map-connection-tip",
+                    if self.online {
+                        "Switch to cached tiles only"
+                    } else {
+                        "Allow online map tiles"
+                    },
+                    self.button(
+                        "map-connection",
+                        if self.online {
+                            "Online tiles"
+                        } else {
+                            "Cached only"
+                        },
+                    )
+                    .variant(ButtonVariant::Ghost)
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.online = !view.online;
+                        view.load_map(cx);
+                        cx.notify();
+                    })),
+                ));
             }
             page = page.child(options);
         }
@@ -265,8 +286,7 @@ impl Travel {
         }
         if !self.map_enabled {
             page = page.child(
-                self.button("load-basemap")
-                    .label("Load map")
+                self.button("load-basemap", "Load map")
                     .on_click(cx.listener(|view, _, _, cx| {
                         view.map_enabled = true;
                         view.load_map(cx);
@@ -425,10 +445,9 @@ impl Travel {
                                 .gap_2()
                                 .pt_1()
                                 .child(
-                                    self.button("map-open-itinerary")
-                                        .small()
-                                        .primary()
-                                        .label("Itinerary")
+                                    self.button("map-open-itinerary", "Itinerary")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Primary)
                                         .on_click(cx.listener(move |view, _, _, cx| {
                                             view.open_route(
                                                 TravelRoute::Trip {
@@ -440,10 +459,9 @@ impl Travel {
                                         })),
                                 )
                                 .child(
-                                    self.button("map-open-overview")
-                                        .small()
-                                        .ghost()
-                                        .label("Overview")
+                                    self.button("map-open-overview", "Overview")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
                                         .on_click(cx.listener(move |view, _, _, cx| {
                                             view.open_route(
                                                 TravelRoute::Trip {
@@ -455,10 +473,9 @@ impl Travel {
                                         })),
                                 )
                                 .child(
-                                    self.button("map-focus-trip")
-                                        .small()
-                                        .ghost()
-                                        .label("Focus")
+                                    self.button("map-focus-trip", "Focus")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
                                         .on_click(cx.listener(move |view, _, _, cx| {
                                             view.selected = Some(trip_id_fit.clone());
                                             view.fit_trip(cx);
@@ -492,10 +509,9 @@ impl Travel {
                                 .child("SELECTED LOCATION"),
                         )
                         .child(
-                            self.button("clear-selected-stop")
-                                .small()
-                                .ghost()
-                                .label("Clear")
+                            self.button("clear-selected-stop", "Clear")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.selected_stop = None;
                                     cx.notify();
@@ -525,10 +541,9 @@ impl Travel {
                     );
                     panel.child(
                         div().flex().items_center().gap_2().pt_1().child(
-                            self.button("open-apple-maps-panel")
-                                .small()
-                                .primary()
-                                .label("Apple Maps ↗")
+                            self.button("open-apple-maps-panel", "Apple Maps ↗")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Primary)
                                 .on_click(move |_, _, cx| cx.open_url(&maps_url)),
                         ),
                     )
@@ -558,11 +573,14 @@ impl Travel {
                                 .child(marker.label.clone()),
                         )
                         .child(
-                            self.button(gpui::SharedString::from(format!("map-open-trip-{index}")))
-                                .small()
-                                .ghost()
-                                .label("Open trip →")
-                                .on_click(cx.listener(move |view, _, _, cx| {
+                            self.button(
+                                gpui::SharedString::from(format!("map-open-trip-{index}")),
+                                "Open trip →",
+                            )
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
+                            .on_click(cx.listener(
+                                move |view, _, _, cx| {
                                     view.open_route(
                                         TravelRoute::Trip {
                                             id: id.clone(),
@@ -570,7 +588,8 @@ impl Travel {
                                         },
                                         cx,
                                     );
-                                })),
+                                },
+                            )),
                         ),
                 );
             }
@@ -693,12 +712,12 @@ impl Travel {
                     ),
             )
             .child(
-                self.button(gpui::SharedString::from(format!(
-                    "location-open-trip-{index}"
-                )))
-                .small()
-                .ghost()
-                .label("Trip →")
+                self.button(
+                    gpui::SharedString::from(format!("location-open-trip-{index}")),
+                    "Trip →",
+                )
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
                 .on_click(cx.listener(move |view, _, _, cx| {
                     view.open_route(
                         TravelRoute::Trip {
@@ -1383,15 +1402,25 @@ impl Travel {
                             .flex()
                             .items_center()
                             .child(
-                                self.button(gpui::SharedString::from(format!("map-stop-{index}")))
-                                    .small()
-                                    .label(pin_text)
-                                    .tooltip(label.clone())
-                                    .when(selected, |button| button.primary())
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.selected_stop = Some(marker_place.clone());
-                                        cx.notify();
-                                    })),
+                                div()
+                                    .id(gpui::SharedString::from(format!("map-stop-tip-{index}")))
+                                    .tooltip(Tooltip::text(label.clone()))
+                                    .child(
+                                        self.button(
+                                            gpui::SharedString::from(format!("map-stop-{index}")),
+                                            pin_text,
+                                        )
+                                        .size(ControlSize::Sm)
+                                        .when(selected, |button| {
+                                            button.variant(ButtonVariant::Primary)
+                                        })
+                                        .on_click(
+                                            cx.listener(move |view, _, _, cx| {
+                                                view.selected_stop = Some(marker_place.clone());
+                                                cx.notify();
+                                            }),
+                                        ),
+                                    ),
                             ),
                     );
                 }
@@ -1459,10 +1488,9 @@ impl Travel {
                             ),
                     )
                     .child(
-                        self.button("close-stop-card")
-                            .ghost()
-                            .small()
-                            .label("✕")
+                        self.button("close-stop-card", "✕")
+                            .variant(ButtonVariant::Ghost)
+                            .size(ControlSize::Sm)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.selected_stop = None;
                                 cx.notify();
@@ -1501,10 +1529,9 @@ impl Travel {
                     );
                     card = card.child(
                         div().pt_1().flex().gap_1().child(
-                            self.button("map-open-apple-maps")
-                                .primary()
-                                .small()
-                                .label("Open in Apple Maps")
+                            self.button("map-open-apple-maps", "Open in Apple Maps")
+                                .variant(ButtonVariant::Primary)
+                                .size(ControlSize::Sm)
                                 .on_click(move |_, _, cx| cx.open_url(&maps_url)),
                         ),
                     );
@@ -1526,13 +1553,13 @@ impl Travel {
                 .border_1()
                 .border_color(rgba(palette.border))
                 .bg(rgba(palette.surface))
-                .child(
-                    self.button("home-map-here")
-                        .small()
-                        .label("📍 Here")
-                        .when(!is_zoomed_out, |b| b.primary())
-                        .when(is_zoomed_out, |b| b.ghost())
-                        .tooltip("Focus on your current location")
+                .child(with_tooltip(
+                    "home-map-here-tip",
+                    "Focus on your current location",
+                    self.button("home-map-here", "📍 Here")
+                        .size(ControlSize::Sm)
+                        .when(!is_zoomed_out, |b| b.variant(ButtonVariant::Primary))
+                        .when(is_zoomed_out, |b| b.variant(ButtonVariant::Ghost))
                         .on_click(cx.listener(|view, _, _, cx| {
                             view.home_zoom_out = false;
                             view.selected_stop = None;
@@ -1544,36 +1571,36 @@ impl Travel {
                             }
                             cx.notify();
                         })),
-                )
-                .child(
-                    self.button("home-map-trips")
-                        .small()
-                        .label("🗺 Trips")
-                        .when(is_zoomed_out, |b| b.primary())
-                        .when(!is_zoomed_out, |b| b.ghost())
-                        .tooltip("Zoom out to view upcoming trips and stops")
+                ))
+                .child(with_tooltip(
+                    "home-map-trips-tip",
+                    "Zoom out to view upcoming trips and stops",
+                    self.button("home-map-trips", "🗺 Trips")
+                        .size(ControlSize::Sm)
+                        .when(is_zoomed_out, |b| b.variant(ButtonVariant::Primary))
+                        .when(!is_zoomed_out, |b| b.variant(ButtonVariant::Ghost))
                         .on_click(cx.listener(|view, _, _, cx| {
                             view.home_zoom_out = true;
                             view.selected_stop = None;
                             view.fit_trip(cx);
                         })),
-                )
-                .child(
-                    self.button("zoom-in")
-                        .small()
-                        .label("+")
-                        .ghost()
-                        .tooltip("Zoom in")
+                ))
+                .child(with_tooltip(
+                    "compact-zoom-in-tip",
+                    "Zoom in",
+                    self.button("zoom-in", "+")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|view, _, _, cx| view.zoom_by(1., None, cx))),
-                )
-                .child(
-                    self.button("zoom-out")
-                        .small()
-                        .label("−")
-                        .ghost()
-                        .tooltip("Zoom out")
+                ))
+                .child(with_tooltip(
+                    "compact-zoom-out-tip",
+                    "Zoom out",
+                    self.button("zoom-out", "−")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|view, _, _, cx| view.zoom_by(-1., None, cx))),
-                )
+                ))
         } else {
             let is_expanded = self.map_expanded;
             div()
@@ -1587,23 +1614,23 @@ impl Travel {
                 .border_1()
                 .border_color(rgba(palette.border))
                 .bg(rgba(palette.surface))
-                .child(
-                    self.button("fit-trip")
-                        .small()
-                        .label("Fit map")
-                        .primary()
-                        .tooltip("Fit all locations in view")
+                .child(with_tooltip(
+                    "fit-trip-tip",
+                    "Fit all locations in view",
+                    self.button("fit-trip", "Fit map")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Primary)
                         .on_click(cx.listener(|view, _, _, cx| {
                             view.selected_stop = None;
                             view.fit_trip(cx);
                         })),
-                )
-                .child(
-                    self.button("home-here-btn")
-                        .small()
-                        .label("📍 Here")
-                        .ghost()
-                        .tooltip("Focus on your current location")
+                ))
+                .child(with_tooltip(
+                    "home-here-btn-tip",
+                    "Focus on your current location",
+                    self.button("home-here-btn", "📍 Here")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|view, _, _, cx| {
                             view.selected_stop = None;
                             if let Some(user_loc) = view.current_user_location() {
@@ -1614,39 +1641,42 @@ impl Travel {
                             }
                             cx.notify();
                         })),
-                )
-                .child(
-                    self.button("map-toggle-size")
-                        .small()
-                        .label(if is_expanded { "Compress" } else { "Expand" })
-                        .ghost()
-                        .tooltip(if is_expanded {
-                            "Restore standard map height"
-                        } else {
-                            "Expand map to full height"
-                        })
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.map_expanded = !view.map_expanded;
-                            view.fit_pending = true;
-                            cx.notify();
-                        })),
-                )
-                .child(
-                    self.button("zoom-in")
-                        .small()
-                        .label("+")
-                        .ghost()
-                        .tooltip("Zoom in")
+                ))
+                .child(with_tooltip(
+                    "map-toggle-size-tip",
+                    if is_expanded {
+                        "Restore standard map height"
+                    } else {
+                        "Expand map to full height"
+                    },
+                    self.button(
+                        "map-toggle-size",
+                        if is_expanded { "Compress" } else { "Expand" },
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.map_expanded = !view.map_expanded;
+                        view.fit_pending = true;
+                        cx.notify();
+                    })),
+                ))
+                .child(with_tooltip(
+                    "zoom-in-tip",
+                    "Zoom in",
+                    self.button("zoom-in", "+")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|view, _, _, cx| view.zoom_by(1., None, cx))),
-                )
-                .child(
-                    self.button("zoom-out")
-                        .small()
-                        .label("−")
-                        .ghost()
-                        .tooltip("Zoom out")
+                ))
+                .child(with_tooltip(
+                    "zoom-out-tip",
+                    "Zoom out",
+                    self.button("zoom-out", "−")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|view, _, _, cx| view.zoom_by(-1., None, cx))),
-                )
+                ))
         };
         map = map.child(controls);
         if no_locations && self.map_error.is_none() {
@@ -1669,13 +1699,10 @@ impl Travel {
                     "World view · no trip stops located"
                 });
             if !self.resolving && self.current().is_some() {
-                overlay = overlay.child(
-                    self.button("map-locate-stops")
-                        .label("Locate stops")
-                        .on_click(
-                            cx.listener(|view, _, _, cx| view.resolve_current_plan(false, cx)),
-                        ),
-                );
+                overlay =
+                    overlay.child(self.button("map-locate-stops", "Locate stops").on_click(
+                        cx.listener(|view, _, _, cx| view.resolve_current_plan(false, cx)),
+                    ));
             }
             map = map.child(overlay);
         }
@@ -1727,14 +1754,12 @@ impl Travel {
                             .text_color(rgb(palette.amber))
                             .child(error),
                     )
-                    .child(
-                        self.button("retry-map")
-                            .label("Retry")
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.load_map(cx);
-                                cx.notify();
-                            })),
-                    ),
+                    .child(self.button("retry-map", "Retry").on_click(cx.listener(
+                        |view, _, _, cx| {
+                            view.load_map(cx);
+                            cx.notify();
+                        },
+                    ))),
             );
         }
         map.child(
@@ -1750,12 +1775,9 @@ impl Travel {
                 .flex()
                 .flex_wrap()
                 .child(
-                    Button::new("osm-attribution")
-                        .label("© OpenStreetMap contributors")
-                        .ghost()
-                        .min_h(px(24.))
-                        .px_1()
-                        .py_0()
+                    Button::new("osm-attribution", "© OpenStreetMap contributors")
+                        .variant(ButtonVariant::Ghost)
+                        .size(ControlSize::Sm)
                         .on_click(|_, _, cx| {
                             cx.open_url("https://www.openstreetmap.org/copyright")
                         }),
@@ -1763,21 +1785,15 @@ impl Travel {
                 .when(self.uses_vector_map(), |attribution| {
                     attribution
                         .child(
-                            Button::new("openmaptiles-attribution")
-                                .label("OpenMapTiles")
-                                .ghost()
-                                .min_h(px(24.))
-                                .px_1()
-                                .py_0()
+                            Button::new("openmaptiles-attribution", "OpenMapTiles")
+                                .variant(ButtonVariant::Ghost)
+                                .size(ControlSize::Sm)
                                 .on_click(|_, _, cx| cx.open_url("https://www.openmaptiles.org/")),
                         )
                         .child(
-                            Button::new("openfreemap-attribution")
-                                .label("OpenFreeMap")
-                                .ghost()
-                                .min_h(px(24.))
-                                .px_1()
-                                .py_0()
+                            Button::new("openfreemap-attribution", "OpenFreeMap")
+                                .variant(ButtonVariant::Ghost)
+                                .size(ControlSize::Sm)
                                 .on_click(|_, _, cx| cx.open_url("https://openfreemap.org/")),
                         )
                 }),

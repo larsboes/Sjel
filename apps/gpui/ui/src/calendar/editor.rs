@@ -5,12 +5,12 @@ use super::{
     page::CalendarPage,
     types::{muted, CalendarIntent},
 };
+use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::calendar::{EventDraft, EventEditor, When};
+use crate::ely::theme::ControlSize;
 use crate::Palette;
 use gpui::Window;
 use gpui::{div, prelude::*, AnyElement, Context, SharedString};
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
 use sjel_gpui_core::{
     calendar::{COMMITMENTS, KINDS},
     shell::{self, CalendarEntry, ShellError},
@@ -164,11 +164,10 @@ impl CalendarPage {
                 .gap_1()
                 .children(KINDS.iter().map(|(key, label, _)| {
                     let on = form.kind == *key;
-                    Button::new(SharedString::from(format!("calendar-kind-{key}")))
-                        .xsmall()
-                        .label(*label)
-                        .when(on, |b| b.primary())
-                        .when(!on, |b| b.ghost())
+                    Button::new(SharedString::from(format!("calendar-kind-{key}")), *label)
+                        .size(ControlSize::Sm)
+                        .when(on, |b| b.variant(ButtonVariant::Primary))
+                        .when(!on, |b| b.variant(ButtonVariant::Ghost))
                         .on_click(cx.listener(move |page, _, _, cx| {
                             if let Some(form) = page.form.as_mut() {
                                 form.kind = (*key).into();
@@ -181,17 +180,19 @@ impl CalendarPage {
             .gap_1()
             .children(COMMITMENTS.iter().map(|(key, label)| {
                 let on = form.commitment == *key;
-                Button::new(SharedString::from(format!("calendar-commitment-{key}")))
-                    .xsmall()
-                    .label(*label)
-                    .when(on, |b| b.primary())
-                    .when(!on, |b| b.ghost())
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        if let Some(form) = page.form.as_mut() {
-                            form.commitment = (*key).into();
-                        }
-                        cx.notify();
-                    }))
+                Button::new(
+                    SharedString::from(format!("calendar-commitment-{key}")),
+                    *label,
+                )
+                .size(ControlSize::Sm)
+                .when(on, |b| b.variant(ButtonVariant::Primary))
+                .when(!on, |b| b.variant(ButtonVariant::Ghost))
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    if let Some(form) = page.form.as_mut() {
+                        form.commitment = (*key).into();
+                    }
+                    cx.notify();
+                }))
             }));
         let extra = div()
             .flex()
@@ -203,10 +204,9 @@ impl CalendarPage {
             .child(commitments)
             .when(self.show_availability && form.editing.is_none(), |panel| {
                 panel.child(
-                    Button::new("calendar-gap-travel")
-                        .small()
-                        .ghost()
-                        .label("Plan travel on this day")
+                    Button::new("calendar-gap-travel", "Plan travel on this day")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|page, _, _, cx| {
                             cx.emit(CalendarIntent::PlanTravel { day: page.day })
                         })),

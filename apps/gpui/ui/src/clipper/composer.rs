@@ -1,7 +1,8 @@
 //! Multi-turn dialogue composer, auto-split clipboard importer, and citation audit view.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputState, Textarea, TextareaState};
-use gpui_kit::component::{IconName, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, TextInput};
+use crate::ely::theme::ControlSize;
+use gpui_kit::component::input::{Textarea, TextareaState};
 use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context, Entity, FontWeight, Window};
 use sjel_gpui_core::clipper::{self, markdown_to_turns, turns_to_markdown, ClipTurn};
 
@@ -20,8 +21,8 @@ pub(super) struct TurnState {
 }
 
 pub(super) struct ComposerState {
-    pub(super) title: Entity<InputState>,
-    pub(super) url: Entity<InputState>,
+    pub(super) title: Entity<TextInput>,
+    pub(super) url: Entity<TextInput>,
     pub(super) turns: Vec<TurnState>,
     pub(super) saving: bool,
     pub(super) status: Option<(bool, String)>,
@@ -46,15 +47,15 @@ impl Clips {
         cx: &mut Context<Self>,
     ) {
         let title_input = cx.new(|cx| {
-            let mut s = InputState::new(window, cx)
+            let mut s = TextInput::new(window, cx)
                 .placeholder("Clip Title (e.g. LLM Privacy and Routing Strategy)");
-            s.set_value(title, window, cx);
+            s.set_text(title, cx);
             s
         });
         let url_input = cx.new(|cx| {
-            let mut s = InputState::new(window, cx)
+            let mut s = TextInput::new(window, cx)
                 .placeholder("Source URL (e.g. https://aistudio.google.com/...)");
-            s.set_value(url, window, cx);
+            s.set_text(url, cx);
             s
         });
         let mut turn_states = Vec::new();
@@ -228,12 +229,12 @@ impl Clips {
                 let url = self
                     .composer
                     .as_ref()
-                    .map(|c| c.url.read(cx).value().to_string())
+                    .map(|c| c.url.read(cx).text().to_owned())
                     .unwrap_or_default();
                 let title = self
                     .composer
                     .as_ref()
-                    .map(|c| c.title.read(cx).value().to_string())
+                    .map(|c| c.title.read(cx).text().to_owned())
                     .unwrap_or_default();
                 self.start_composer(title, url, turns, window, cx);
                 if let Some(composer) = &mut self.composer {
@@ -261,8 +262,8 @@ impl Clips {
         let Some(composer) = &mut self.composer else {
             return;
         };
-        let title = composer.title.read(cx).value().trim().to_string();
-        let url = composer.url.read(cx).value().trim().to_string();
+        let title = composer.title.read(cx).text().trim().to_owned();
+        let url = composer.url.read(cx).text().trim().to_owned();
         let title = if title.is_empty() {
             "Untitled Thread Clip".to_string()
         } else {
@@ -355,10 +356,9 @@ impl Clips {
             let mut turn_nav = div().flex().items_center().gap_1();
             if i > 0 {
                 turn_nav = turn_nav.child(
-                    Button::new(("turn-up", i))
-                        .small()
-                        .ghost()
-                        .label("↑")
+                    Button::new(("turn-up", i), "↑")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(move |view, _, _, cx| {
                             view.move_turn(i, true, cx);
                         })),
@@ -366,10 +366,9 @@ impl Clips {
             }
             if i + 1 < total_turns {
                 turn_nav = turn_nav.child(
-                    Button::new(("turn-down", i))
-                        .small()
-                        .ghost()
-                        .label("↓")
+                    Button::new(("turn-down", i), "↓")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(move |view, _, _, cx| {
                             view.move_turn(i, false, cx);
                         })),
@@ -377,10 +376,9 @@ impl Clips {
             }
             if total_turns > 1 {
                 turn_nav = turn_nav.child(
-                    Button::new(("turn-del", i))
-                        .small()
-                        .ghost()
-                        .label("✕ Delete")
+                    Button::new(("turn-del", i), "✕ Delete")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(move |view, _, _, cx| {
                             view.remove_turn(i, cx);
                         })),
@@ -429,11 +427,9 @@ impl Clips {
                                         .child(format!("Prompt {}", i + 1)),
                                 )
                                 .child(
-                                    Button::new(("turn-paste-prompt", i))
-                                        .small()
-                                        .ghost()
-                                        .icon(IconName::Copy)
-                                        .label("Paste Prompt")
+                                    Button::new(("turn-paste-prompt", i), "Paste Prompt")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
                                         .on_click(cx.listener(move |view, _, window, cx| {
                                             view.paste_into_prompt(i, window, cx);
                                         })),
@@ -453,24 +449,26 @@ impl Clips {
                                 .items_center()
                                 .justify_between()
                                 .child(
-                                    Button::new(("turn-toggle-thoughts", i))
-                                        .small()
-                                        .ghost()
-                                        .label(if show_thoughts {
+                                    Button::new(
+                                        ("turn-toggle-thoughts", i),
+                                        if show_thoughts {
                                             "▼ Thoughts"
                                         } else {
                                             "▶ ✦ Thoughts (optional)"
-                                        })
-                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                        },
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(cx.listener(
+                                        move |view, _, _, cx| {
                                             view.toggle_thoughts(i, cx);
-                                        })),
+                                        },
+                                    )),
                                 )
                                 .children(show_thoughts.then(|| {
-                                    Button::new(("turn-paste-thoughts", i))
-                                        .small()
-                                        .ghost()
-                                        .icon(IconName::Copy)
-                                        .label("Paste Thoughts")
+                                    Button::new(("turn-paste-thoughts", i), "Paste Thoughts")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
                                         .on_click(cx.listener(move |view, _, window, cx| {
                                             view.paste_into_thoughts(i, window, cx);
                                         }))
@@ -497,14 +495,17 @@ impl Clips {
                                         .child(format!("Response {}", i + 1)),
                                 )
                                 .child(
-                                    Button::new(("turn-paste-rich", i))
-                                        .small()
-                                        .primary()
-                                        .icon(IconName::Copy)
-                                        .label("Paste Response (Rich + Links)")
-                                        .on_click(cx.listener(move |view, _, window, cx| {
+                                    Button::new(
+                                        ("turn-paste-rich", i),
+                                        "Paste Response (Rich + Links)",
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Primary)
+                                    .on_click(cx.listener(
+                                        move |view, _, window, cx| {
                                             view.paste_rich_turn(i, window, cx);
-                                        })),
+                                        },
+                                    )),
                                 ),
                         )
                         .child(Textarea::new(&response_entity)),
@@ -524,10 +525,9 @@ impl Clips {
                     .items_center()
                     .gap_3()
                     .child(
-                        Button::new("composer-cancel")
-                            .small()
-                            .ghost()
-                            .label("← Cancel")
+                        Button::new("composer-cancel", "← Cancel")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.composer = None;
                                 cx.notify();
@@ -546,35 +546,35 @@ impl Clips {
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("composer-auto-split")
-                            .small()
-                            .ghost()
-                            .label("⚡ Auto-Split Clipboard")
+                        Button::new("composer-auto-split", "⚡ Auto-Split Clipboard")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.auto_split_clipboard(window, cx);
                             })),
                     )
                     .child(
-                        Button::new("composer-save-indiv")
-                            .small()
-                            .ghost()
-                            .label("Save Individual Notes")
+                        Button::new("composer-save-indiv", "Save Individual Notes")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.save_composer(true, cx);
                             })),
                     )
                     .child(
-                        Button::new("composer-save-thread")
-                            .small()
-                            .primary()
-                            .label(if saving {
+                        Button::new(
+                            "composer-save-thread",
+                            if saving {
                                 "Saving…"
                             } else {
                                 "Save 1 Thread Note"
-                            })
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.save_composer(false, cx);
-                            })),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Primary)
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.save_composer(false, cx);
+                        })),
                     ),
             );
 
@@ -614,10 +614,9 @@ impl Clips {
             .items_center()
             .justify_between()
             .child(
-                Button::new("composer-add-turn")
-                    .small()
-                    .ghost()
-                    .label("+ Add Turn")
+                Button::new("composer-add-turn", "+ Add Turn")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .on_click(cx.listener(|view, _, window, cx| {
                         view.add_turn(window, cx);
                     })),
@@ -628,26 +627,27 @@ impl Clips {
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("composer-save-indiv-bottom")
-                            .small()
-                            .ghost()
-                            .label("Save Individual Notes")
+                        Button::new("composer-save-indiv-bottom", "Save Individual Notes")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.save_composer(true, cx);
                             })),
                     )
                     .child(
-                        Button::new("composer-save-thread-bottom")
-                            .small()
-                            .primary()
-                            .label(if saving {
+                        Button::new(
+                            "composer-save-thread-bottom",
+                            if saving {
                                 "Saving…"
                             } else {
                                 "Save 1 Thread Note"
-                            })
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.save_composer(false, cx);
-                            })),
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Primary)
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.save_composer(false, cx);
+                        })),
                     ),
             );
 

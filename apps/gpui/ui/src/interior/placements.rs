@@ -1,8 +1,8 @@
 //! Spatial 3D room plan placement review, space assignment, and layout geometry.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::InputState;
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::TextInput;
+use crate::ely::theme::ControlSize;
 use gpui_kit::{
     canvas, div, point, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, PathBuilder, Window,
 };
@@ -22,9 +22,9 @@ pub(crate) struct PlacementEditor {
     pub(super) item_id: String,
     pub(super) expected_revision: i64,
     pub(super) current_position: Option<(i32, i32, i32)>,
-    pub(super) x: Entity<InputState>,
-    pub(super) y: Entity<InputState>,
-    pub(super) rot: Entity<InputState>,
+    pub(super) x: Entity<TextInput>,
+    pub(super) y: Entity<TextInput>,
+    pub(super) rot: Entity<TextInput>,
 }
 
 #[derive(Clone)]
@@ -169,12 +169,12 @@ impl RoomPlanHistory {
             .map(|placement| (placement.revision, placement.x, placement.y, placement.rot))
             .unwrap_or((0, 0, 0, 0));
         let current_position = placement.map(|placement| (placement.x, placement.y, placement.rot));
-        let x_input = cx.new(|cx| InputState::new(window, cx).placeholder("x · cm"));
-        let y_input = cx.new(|cx| InputState::new(window, cx).placeholder("y · cm"));
-        let rot_input = cx.new(|cx| InputState::new(window, cx).placeholder("rotation · degrees"));
-        x_input.update(cx, |input, cx| input.set_value(x.to_string(), window, cx));
-        y_input.update(cx, |input, cx| input.set_value(y.to_string(), window, cx));
-        rot_input.update(cx, |input, cx| input.set_value(rot.to_string(), window, cx));
+        let x_input = cx.new(|cx| TextInput::new(window, cx).placeholder("x · cm"));
+        let y_input = cx.new(|cx| TextInput::new(window, cx).placeholder("y · cm"));
+        let rot_input = cx.new(|cx| TextInput::new(window, cx).placeholder("rotation · degrees"));
+        x_input.update(cx, |input, cx| input.set_text(x.to_string(), cx));
+        y_input.update(cx, |input, cx| input.set_text(y.to_string(), cx));
+        rot_input.update(cx, |input, cx| input.set_text(rot.to_string(), cx));
         self.placement_editor = Some(PlacementEditor {
             space_id: space_id.clone(),
             revision_id: revision_id.clone(),
@@ -229,7 +229,7 @@ impl RoomPlanHistory {
         }
     }
 
-    pub(super) fn use_scan_position(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn use_scan_position(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let (Some(editor), Some(response)) = (
             self.placement_editor.as_ref(),
             self.placement_proposal.value.as_ref(),
@@ -244,15 +244,15 @@ impl RoomPlanHistory {
         {
             return;
         }
-        editor.x.update(cx, |input, cx| {
-            input.set_value(proposal.x.to_string(), window, cx)
-        });
-        editor.y.update(cx, |input, cx| {
-            input.set_value(proposal.y.to_string(), window, cx)
-        });
-        editor.rot.update(cx, |input, cx| {
-            input.set_value(proposal.rot.to_string(), window, cx)
-        });
+        editor
+            .x
+            .update(cx, |input, cx| input.set_text(proposal.x.to_string(), cx));
+        editor
+            .y
+            .update(cx, |input, cx| input.set_text(proposal.y.to_string(), cx));
+        editor
+            .rot
+            .update(cx, |input, cx| input.set_text(proposal.rot.to_string(), cx));
         self.space_feedback = Some(
             "Scan-derived position copied into the review fields. Check it before saving.".into(),
         );
@@ -269,10 +269,10 @@ impl RoomPlanHistory {
         if self.placement_busy.is_some() {
             return;
         }
-        let parse = |field: &Entity<InputState>, name: &str, cx: &Context<Self>| {
+        let parse = |field: &Entity<TextInput>, name: &str, cx: &Context<Self>| {
             field
                 .read(cx)
-                .value()
+                .text()
                 .trim()
                 .parse::<i32>()
                 .map_err(|_| format!("Enter a whole-number {name} value."))
@@ -383,16 +383,18 @@ impl RoomPlanHistory {
                         .child(message),
                 )
                 .child(
-                    Button::new("roomplan-model-refresh")
-                        .small()
-                        .ghost()
-                        .label(if self.model.loading {
+                    Button::new(
+                        "roomplan-model-refresh",
+                        if self.model.loading {
                             "Loading…"
                         } else {
                             "Retry"
-                        })
-                        .disabled(self.model.loading)
-                        .on_click(cx.listener(|page, _, _, cx| page.refresh_model(cx))),
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
+                    .disabled(self.model.loading)
+                    .on_click(cx.listener(|page, _, _, cx| page.refresh_model(cx))),
                 )
                 .into_any_element();
         };
@@ -654,10 +656,9 @@ impl RoomPlanHistory {
                             .child(error.to_string()),
                     )
                     .children(id.map(|id| {
-                        Button::new("roomplan-layout-retry")
-                            .small()
-                            .ghost()
-                            .label("Retry")
+                        Button::new("roomplan-layout-retry", "Retry")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(move |page, _, _, cx| {
                                 page.load_layout_preview(id.clone(), cx)
                             }))

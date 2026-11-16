@@ -226,7 +226,7 @@ impl Projects {
 
         let columns = vec![
             Column::new("done", "").width(rems(32. / 16.)).editable(),
-            Column::new("title", "TASK").editable(),
+            Column::new("title", "TASK").min_width(rems(15.)).editable(),
             Column::new("status", "STATUS")
                 .width(rems(cols.status.unwrap_or(100. / 16.)))
                 .choices(TASK_STATUSES),
@@ -288,6 +288,7 @@ impl Projects {
         let (on_curr, on_open, on_edit, on_act) =
             (cx.entity(), cx.entity(), cx.entity(), cx.entity());
         let table = DataTable::new("project-tasks", columns)
+            .label("Project tasks")
             .rows(rows)
             .hidden(hidden)
             .density(ely_density(cols.density))
@@ -540,7 +541,7 @@ impl Projects {
 
         let columns = vec![
             Column::new("done", "").width(rems(32. / 16.)).editable(),
-            Column::new("title", "TASK"),
+            Column::new("title", "TASK").min_width(rems(15.)),
             Column::new("project", "PROJECT").width(rems(cols.project.unwrap_or(140. / 16.))),
             Column::new("status", "STATUS")
                 .width(rems(cols.status.unwrap_or(100. / 16.)))
@@ -635,6 +636,7 @@ impl Projects {
             cx.entity(),
         );
         let table = DataTable::new("all-tasks", columns)
+            .label("All tasks")
             .rows(rows)
             .hidden(hidden)
             .sorts(sorts)
@@ -844,6 +846,7 @@ impl Projects {
 
         let (on_open, on_sort, on_act) = (cx.entity(), cx.entity(), cx.entity());
         let table = DataTable::new("all-notes", columns)
+            .label("All notes")
             .rows(rows)
             .hidden(hidden)
             .sorts(sorts)
@@ -968,6 +971,7 @@ impl Projects {
 
         let (on_open, on_sort, on_act) = (cx.entity(), cx.entity(), cx.entity());
         DataTable::new("projects-hub", columns)
+            .label("Projects")
             .rows(rows)
             .hidden(hidden)
             .sorts([SortKey {

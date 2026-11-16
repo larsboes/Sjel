@@ -4,14 +4,11 @@ mod diagrams;
 mod parser;
 mod types;
 
-use gpui::StatefulInteractiveElement;
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui::{Focusable, StatefulInteractiveElement};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::text::{
     FrontmatterPlugin, MarkdownExtensions, TextView, TextViewPlugin as _, TextViewState,
 };
-use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, Context, Entity, IntoElement, ScrollHandle, SharedString,
     StyleRefinement, Subscription, Window,
@@ -22,6 +19,9 @@ pub(crate) use parser::{doc_slug, source_url};
 pub(crate) use types::{anchor_source_range, summary, title, DocSource};
 
 use crate::doc_view::text_view_style;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use crate::theme::ThemeContext;
 
 include!(concat!(env!("OUT_DIR"), "/docs.rs"));
@@ -29,7 +29,7 @@ include!(concat!(env!("OUT_DIR"), "/docs.rs"));
 pub struct DocsPage {
     selected: String,
     query: String,
-    filter: Option<(Entity<InputState>, Subscription)>,
+    filter: Option<(Entity<TextInput>, Subscription)>,
     text_view_state: Option<Entity<TextViewState>>,
     scroll: ScrollHandle,
     nav_scroll: ScrollHandle,
@@ -83,15 +83,15 @@ impl DocsPage {
         state
     }
 
-    fn filter(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    fn filter(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
         if let Some((input, _)) = &self.filter {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search documentation…"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Search documentation…"));
         let subscription =
             cx.subscribe_in(&input, window, |this, input, event: &InputEvent, _, cx| {
-                if matches!(event, InputEvent::Change) {
-                    this.query = input.read(cx).value().to_string();
+                if matches!(event, InputEvent::Changed) {
+                    this.query = input.read(cx).text().to_owned();
                     cx.notify();
                 }
             });
@@ -101,7 +101,7 @@ impl DocsPage {
 
     pub fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let input = self.filter(window, cx);
-        input.update(cx, |input, cx| input.focus(window, cx));
+        window.focus(&input.focus_handle(cx), cx);
     }
 
     fn source(&self) -> &'static DocSource {
@@ -187,6 +187,7 @@ impl Render for DocsPage {
                 nav.push(
                     div()
                         .id(SharedString::from(format!("doc-{}", doc.slug)))
+                        .debug_selector(move || format!("doc-{}", doc.slug))
                         .px_2()
                         .py(px(5.))
                         .rounded(px(5.))
@@ -286,10 +287,9 @@ impl Render for DocsPage {
                             .child(source.file),
                     )
                     .child(
-                        Button::new("docs-source")
-                            .small()
-                            .ghost()
-                            .label("Open source")
+                        Button::new("docs-source", "Open source")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(move |_, _, cx| cx.open_url(&source_url)),
                     ),
             )
@@ -331,6 +331,26 @@ mod tests {
     use crate::theme::Palette;
     use diagrams::render_mermaid;
     use gpui_kit::component::text::MarkdownPlugin as _;
+
+    #[gpui::test]
+    fn search_filters_navigation_and_keeps_the_selected_document(cx: &mut gpui::TestAppContext) {
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, _| DocsPage::new());
+        let selected = page.read_with(cx, |page, _| page.selected.clone());
+        cx.update(|window, cx| {
+            page.update(cx, |page, cx| page.focus_search(window, cx));
+        });
+        cx.simulate_keystrokes("z z z z z z z z z");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.query, "zzzzzzzzz");
+            assert_eq!(page.selected, selected);
+        });
+        assert!(cx.debug_bounds("doc-index").is_none());
+        cx.simulate_keystrokes("cmd-a backspace");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| assert!(page.query.is_empty()));
+        assert!(cx.debug_bounds("doc-index").is_some());
+    }
 
     #[test]
     fn anchor_source_range_finds_headings_and_skips_code_fences() {

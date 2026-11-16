@@ -1,6 +1,6 @@
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::Input;
-use gpui_kit::component::Sizable;
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::forms::Input;
+use crate::ely::theme::ControlSize;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, ListOffset, ListState, Pixels,
     SharedString, Window,
@@ -46,11 +46,13 @@ impl Feed {
         };
         let kind_button = |label: String, kind: Option<String>, cx: &mut Context<Self>| {
             let active = self.library_kind == kind;
-            Button::new(SharedString::from(format!("feed-kind-{label}")))
-                .small()
-                .label(label)
-                .when(active, |b| b.primary())
-                .when(!active, |b| b.ghost())
+            Button::new(SharedString::from(format!("feed-kind-{label}")), label)
+                .size(ControlSize::Sm)
+                .variant(if active {
+                    ButtonVariant::Primary
+                } else {
+                    ButtonVariant::Ghost
+                })
                 .on_click(cx.listener(move |view, _, _, cx| {
                     view.library_kind = kind.clone();
                     view.library_rev = view.library_rev.wrapping_add(1);
@@ -75,7 +77,11 @@ impl Feed {
             .child(pill("Kept", Some(Filter::Kept), cx))
             .child(pill("Dismissed", Some(Filter::Dismissed), cx))
             .child(div().flex_1())
-            .child(div().w(px(280.)).child(Input::new(&input).small()));
+            .child(
+                div()
+                    .w(px(280.))
+                    .child(Input::new(&input).size(ControlSize::Sm)),
+            );
 
         let mut column = div()
             .flex()
@@ -180,11 +186,13 @@ pub(crate) fn library_row(
     let shrinking = |width: f32, text: String| cell(width, text).flex_shrink(1.).min_w_0();
     let action = |label: &'static str, status: &'static str, cx: &mut Context<Feed>| {
         let id = entry.id.clone();
-        Button::new(SharedString::from(format!("feed-library-{label}-{i}")))
-            .small()
-            .ghost()
-            .label(label)
-            .on_click(cx.listener(move |view, _, _, cx| view.decide(id.clone(), status, cx)))
+        Button::new(
+            SharedString::from(format!("feed-library-{label}-{i}")),
+            label,
+        )
+        .size(ControlSize::Sm)
+        .variant(ButtonVariant::Ghost)
+        .on_click(cx.listener(move |view, _, _, cx| view.decide(id.clone(), status, cx)))
     };
     let actions = match entry.status.as_str() {
         "new" => div()

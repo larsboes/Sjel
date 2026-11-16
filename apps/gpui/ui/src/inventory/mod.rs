@@ -1,12 +1,12 @@
 //! Household inventory, asset catalog, wishlist budget, and interior spatial layout.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{InputEvent, InputState};
+use crate::ely::buttons::Button;
+use crate::ely::forms::{InputEvent, TextInput};
+use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
-    KeyBinding, Render, ScrollHandle, Subscription, Window,
+    Focusable, KeyBinding, Render, ScrollHandle, Subscription, Window,
 };
 
 use crate::data::{Remote, Repo};
@@ -91,7 +91,7 @@ pub struct InventoryPage {
     pub(super) owned_derived: OwnedDerived,
     pub(super) wishlist_derived: WishlistDerived,
     pub scroll: ScrollHandle,
-    pub(super) search_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) search_input: Option<(Entity<TextInput>, Subscription)>,
     pub(super) wish_form: Option<WishForm>,
     pub(super) group_form: Option<GroupForm>,
     /// The wish whose group picker is open, by id.
@@ -298,14 +298,14 @@ impl InventoryPage {
             .update(cx, |history, cx| history.refresh(cx));
     }
 
-    fn search_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    fn search_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
         if let Some((input, _)) = &self.search_input {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search inventory…"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Search inventory…"));
         let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
-                view.search_query = input.read(cx).value().trim().to_lowercase();
+            if matches!(event, InputEvent::Changed) {
+                view.search_query = input.read(cx).text().trim().to_lowercase();
                 view.filter_rev = view.filter_rev.wrapping_add(1);
                 cx.notify();
             }
@@ -320,7 +320,7 @@ impl InventoryPage {
             self.set_tab(InventoryTab::Owned, cx);
         }
         let field = self.search_field(window, cx);
-        field.update(cx, |input, cx| input.focus(window, cx));
+        field.update(cx, |input, cx| window.focus(&input.focus_handle(cx), cx));
     }
 
     fn render_header_bar(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
@@ -384,18 +384,18 @@ impl InventoryPage {
             ))
             .child(
                 div().flex().items_center().gap_3().child(
-                    Button::new("inventory-header-new-entry")
-                        .small()
-                        .primary()
-                        .label(if self.wish_form.is_some() {
+                    Button::new(
+                        "inventory-header-new-entry",
+                        if self.wish_form.is_some() {
                             "Cancel"
                         } else {
                             "+ New entry"
-                        })
-                        .disabled(self.wish_busy.as_deref() == Some("new"))
-                        .on_click(
-                            cx.listener(|page, _, window, cx| page.open_wish_form(window, cx)),
-                        ),
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .primary()
+                    .disabled(self.wish_busy.as_deref() == Some("new"))
+                    .on_click(cx.listener(|page, _, window, cx| page.open_wish_form(window, cx))),
                 ),
             )
             .into_any_element()
@@ -690,6 +690,169 @@ mod tests {
                 &row,
                 Cell::Lines("Chair".into(), "Color: Oak · Qty 2".into())
             )
+        );
+    }
+
+    #[gpui::test]
+    fn search_and_category_toggles_filter_owned_rows_and_keep_the_query_across_tabs(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (page, cx) =
+            crate::test_support::mount_root(cx, Some(gpui::size(px(1000.), px(900.))), |_, cx| {
+                let mut page = InventoryPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+                let chair = owned("chair", "Oak chair", None);
+                let mut bag = owned("bag", "Travel bag", None);
+                bag.item.category = Some("Gear".into());
+                page.rows.value = Some(vec![chair, bag]);
+                page
+            });
+        let gear = cx.debug_bounds("toggle gear").expect("gear filter renders");
+        cx.simulate_click(gear.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.selected_category.as_deref(), Some("gear"));
+            assert_eq!(page.owned_derived.filtered.len(), 1);
+            assert_eq!(page.owned_derived.filtered[0].item.id, "bag");
+        });
+        cx.update(|window, cx| page.update(cx, |page, cx| page.focus_search(window, cx)));
+        cx.simulate_input("  OAK  ");
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.search_query, "oak");
+            assert!(page.owned_derived.filtered.is_empty());
+        });
+        let gear = cx.debug_bounds("toggle gear").unwrap();
+        cx.simulate_click(gear.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert!(page.selected_category.is_none());
+            assert_eq!(page.owned_derived.filtered[0].item.id, "chair");
+        });
+        page.update(cx, |page, cx| page.set_tab(InventoryTab::Wishlist, cx));
+        cx.run_until_parked();
+        page.update(cx, |page, cx| page.set_tab(InventoryTab::Owned, cx));
+        cx.run_until_parked();
+        page.read_with(cx, |page, cx| {
+            assert_eq!(
+                page.search_input.as_ref().unwrap().0.read(cx).text(),
+                "  OAK  "
+            )
+        });
+    }
+
+    #[gpui::test]
+    fn wishlist_group_toggles_select_and_clear_the_visible_candidates(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (page, cx) =
+            crate::test_support::mount_root(cx, Some(gpui::size(px(1000.), px(900.))), |_, cx| {
+                let mut page = InventoryPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+                let chair = owned("chair", "Chair", None).item;
+                let bag = owned("bag", "Bag", None).item;
+                page.wishlist.value = Some(InventoryWishlist {
+                    items: vec![chair.clone(), bag],
+                    total_low_cents: 0,
+                    total_high_cents: 0,
+                    unpriced_count: 2,
+                    monthly_balance: None,
+                    months_to_pay: None,
+                });
+                page.wish_groups.value = Some(vec![WishGroup {
+                    id: "desk".into(),
+                    title: "Desk setup".into(),
+                    items: vec![chair],
+                    items_count: 1,
+                    ..Default::default()
+                }]);
+                page.set_tab(InventoryTab::Wishlist, cx);
+                page
+            });
+        let group = cx
+            .debug_bounds("toggle desk")
+            .expect("group filter renders");
+        cx.simulate_click(group.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.selected_group.as_deref(), Some("desk"));
+            assert_eq!(page.wishlist_derived.shown.len(), 1);
+            assert_eq!(page.wishlist_derived.shown[0].id, "chair");
+        });
+        let group = cx.debug_bounds("toggle desk").unwrap();
+        cx.simulate_click(group.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert!(page.selected_group.is_none());
+            assert_eq!(page.wishlist_derived.shown.len(), 2);
+        });
+    }
+
+    #[gpui::test]
+    fn category_filters_wrap_without_squeezing_search(cx: &mut gpui::TestAppContext) {
+        let (_, cx) =
+            crate::test_support::mount_root(cx, Some(gpui::size(px(800.), px(720.))), |_, cx| {
+                let mut page = InventoryPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+                page.rows.value = Some(
+                    (0..12)
+                        .map(|n| {
+                            let mut row = owned(&n.to_string(), "Item", None);
+                            row.item.category = Some(format!("Category {n}"));
+                            row
+                        })
+                        .collect(),
+                );
+                page
+            });
+        let bar = cx
+            .debug_bounds("inventory-owned-filters")
+            .expect("filters render");
+        let search = cx
+            .debug_bounds("inventory-owned-search")
+            .expect("search renders");
+        assert_eq!(search.size.width, px(280.));
+        assert!(search.left() >= bar.left() && search.right() <= bar.right());
+        assert!(
+            bar.size.height > search.size.height,
+            "categories wrap to another line"
+        );
+    }
+
+    #[gpui::test]
+    fn long_wish_notes_leave_actions_inside_the_card(cx: &mut gpui::TestAppContext) {
+        let (_, cx) =
+            crate::test_support::mount_root(cx, Some(gpui::size(px(800.), px(720.))), |_, cx| {
+                let mut page = InventoryPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+                page.set_tab(InventoryTab::Wishlist, cx);
+                page.wishlist.value = Some(sjel_gpui_core::inventory::InventoryWishlist {
+                    items: vec![sjel_gpui_core::inventory::InventoryItem {
+                        id: "long-note".into(),
+                        label: "A wish with a long note".into(),
+                        notes: Some(
+                            "A long note that must not push the actions offscreen. ".repeat(20),
+                        ),
+                        ..Default::default()
+                    }],
+                    total_low_cents: 0,
+                    total_high_cents: 0,
+                    unpriced_count: 1,
+                    monthly_balance: None,
+                    months_to_pay: None,
+                });
+                page
+            });
+        let card = cx
+            .debug_bounds("wishlist-card-long-note")
+            .expect("wish renders");
+        let actions = cx
+            .debug_bounds("wishlist-actions-long-note")
+            .expect("actions render");
+        assert!(actions.left() >= card.left());
+        assert!(
+            actions.right() <= card.right(),
+            "actions stay inside the card"
+        );
+        assert!(
+            actions.right() <= px(800.),
+            "actions stay inside the window"
         );
     }
 

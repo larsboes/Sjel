@@ -1,8 +1,8 @@
 //! Feature package explorer, installed extensions management, and Ask topic recommendations.
 
-use gpui_kit::component::button::{Button, ButtonGroup, ButtonVariants};
-use gpui_kit::component::{Disableable, Selectable, Sizable};
 use gpui_kit::{div, prelude::*, AnyElement, Context, IntoElement, SharedString};
+use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
+use sjel_gpui_ui::ely::theme::ControlSize;
 use sjel_gpui_ui::primitives::{list, note, placeholder, section};
 use sjel_gpui_ui::theme::Palette;
 
@@ -15,27 +15,29 @@ pub(super) fn features(
     palette: Palette,
     cx: &mut Context<Workspace>,
 ) -> AnyElement {
-    let tabs = ButtonGroup::new("feature-manager-view")
-        .outline()
-        .small()
+    let tabs = div()
+        .id("feature-manager-view")
+        .flex()
+        .items_center()
+        .gap_1()
         .children(FeatureView::ALL.into_iter().map(|feature_view| {
-            Button::new(feature_view.title())
-                .label(feature_view.title())
-                .selected(view.settings_feature_view == feature_view)
-        }))
-        .on_click(cx.listener(|view, picked: &Vec<usize>, _, cx| {
-            if let Some(&index) = picked.first() {
-                if let Some(feature_view) = FeatureView::ALL.get(index).copied() {
+            let selected = view.settings_feature_view == feature_view;
+            Button::new(feature_view.title(), feature_view.title())
+                .size(ControlSize::Sm)
+                .variant(if selected {
+                    ButtonVariant::Primary
+                } else {
+                    ButtonVariant::Outline
+                })
+                .on_click(cx.listener(move |view, _, _, cx| {
                     view.settings_feature_view = feature_view;
                     view.settings_feature_detail = None;
                     cx.notify();
-                }
-            }
+                }))
         }));
-    let refresh = Button::new("feature-inventory-refresh")
-        .ghost()
-        .small()
-        .label("Refresh inventory")
+    let refresh = Button::new("feature-inventory-refresh", "Refresh inventory")
+        .variant(ButtonVariant::Ghost)
+        .size(ControlSize::Sm)
         .loading(view.installed_features.loading)
         .disabled(view.installed_features.loading)
         .on_click(cx.listener(|view, _, _, cx| {
@@ -77,10 +79,9 @@ pub(super) fn features(
             vec![row(
                 "Runtime services and health",
                 Some("Enable capabilities, inspect service health, and start or stop services."),
-                Button::new("settings-open-capabilities")
-                    .outline()
-                    .small()
-                    .label("Open Capabilities")
+                Button::new("settings-open-capabilities", "Open Capabilities")
+                    .variant(ButtonVariant::Outline)
+                    .size(ControlSize::Sm)
                     .on_click(cx.listener(|view, _, _, cx| view.go(Page::Capabilities, cx))),
                 palette,
             )],
@@ -123,11 +124,11 @@ pub(super) fn installed_features(
                             .items_center()
                             .gap_1()
                             .child(
-                                Button::new(SharedString::from(format!(
-                                    "feature-uninstall-confirm-{name}"
-                                )))
-                                .small()
-                                .label("Uninstall and keep data")
+                                Button::new(
+                                    SharedString::from(format!("feature-uninstall-confirm-{name}")),
+                                    "Uninstall and keep data",
+                                )
+                                .size(ControlSize::Sm)
                                 .loading(busy)
                                 .disabled(busy)
                                 .on_click(cx.listener({
@@ -136,12 +137,12 @@ pub(super) fn installed_features(
                                 })),
                             )
                             .child(
-                                Button::new(SharedString::from(format!(
-                                    "feature-uninstall-cancel-{name}"
-                                )))
-                                .ghost()
-                                .small()
-                                .label("Cancel")
+                                Button::new(
+                                    SharedString::from(format!("feature-uninstall-cancel-{name}")),
+                                    "Cancel",
+                                )
+                                .variant(ButtonVariant::Ghost)
+                                .size(ControlSize::Sm)
                                 .disabled(busy)
                                 .on_click(
                                     cx.listener(|view, _, _, cx| view.cancel_feature_uninstall(cx)),
@@ -149,15 +150,19 @@ pub(super) fn installed_features(
                             )
                     } else {
                         div().child(
-                            Button::new(SharedString::from(format!("feature-uninstall-{name}")))
-                                .ghost()
-                                .small()
-                                .label("Uninstall…")
-                                .loading(busy)
-                                .disabled(busy)
-                                .on_click(cx.listener(move |view, _, _, cx| {
+                            Button::new(
+                                SharedString::from(format!("feature-uninstall-{name}")),
+                                "Uninstall…",
+                            )
+                            .variant(ButtonVariant::Ghost)
+                            .size(ControlSize::Sm)
+                            .loading(busy)
+                            .disabled(busy)
+                            .on_click(cx.listener(
+                                move |view, _, _, cx| {
                                     view.request_feature_uninstall(name.clone(), cx)
-                                })),
+                                },
+                            )),
                         )
                     };
                     row(
@@ -286,13 +291,15 @@ pub(super) fn recommendations(
                                 },
                             ))
                             .child(
-                                Button::new(SharedString::from(format!(
-                                    "feature-recommendation-dismiss-{}",
-                                    package.name
-                                )))
-                                .ghost()
-                                .small()
-                                .label("Dismiss")
+                                Button::new(
+                                    SharedString::from(format!(
+                                        "feature-recommendation-dismiss-{}",
+                                        package.name
+                                    )),
+                                    "Dismiss",
+                                )
+                                .variant(ButtonVariant::Ghost)
+                                .size(ControlSize::Sm)
                                 .on_click(cx.listener(
                                     move |view, _, _, cx| {
                                         view.dismiss_feature_recommendation(
@@ -327,10 +334,9 @@ pub(super) fn recommendation_empty(
             .gap_3()
             .child(note(message, palette.muted))
             .child(
-                Button::new("recommended-browse-features")
-                    .outline()
-                    .small()
-                    .label("Browse features")
+                Button::new("recommended-browse-features", "Browse features")
+                    .variant(ButtonVariant::Outline)
+                    .size(ControlSize::Sm)
                     .on_click(cx.listener(|view, _, _, cx| {
                         view.settings_feature_view = FeatureView::Explore;
                         cx.notify();
@@ -401,12 +407,12 @@ pub(super) fn explore_features(
                         let name = package.name.clone();
                         let detail_name = name.clone();
                         let expanded = view.settings_feature_detail.as_deref() == Some(name.as_str());
-                        let detail_button = Button::new(SharedString::from(format!(
-                            "feature-details-{name}"
-                        )))
-                        .ghost()
-                        .small()
-                        .label(if expanded { "Hide details" } else { "Details" })
+                        let detail_button = Button::new(
+                            SharedString::from(format!("feature-details-{name}")),
+                            if expanded { "Hide details" } else { "Details" },
+                        )
+                        .variant(ButtonVariant::Ghost)
+                        .size(ControlSize::Sm)
                         .on_click(cx.listener(move |view, _, _, cx| {
                             view.settings_feature_detail = if expanded {
                                 None
@@ -462,12 +468,14 @@ pub(super) fn explore_features(
                             let package_version = package.version.clone();
                             let package_sha256 = package.sha256.clone();
                             let install_action = if already_installed {
-                                Button::new(SharedString::from(format!("feature-installed-{name}")))
-                                    .ghost()
-                                    .small()
-                                    .label("Installed · enable in Capabilities")
-                                    .disabled(true)
-                                    .into_any_element()
+                                Button::new(
+                                    SharedString::from(format!("feature-installed-{name}")),
+                                    "Installed · enable in Capabilities",
+                                )
+                                .variant(ButtonVariant::Ghost)
+                                .size(ControlSize::Sm)
+                                .disabled(true)
+                                .into_any_element()
                             } else if !package.installable {
                                 div().into_any_element()
                             } else if view.feature_install_confirmation.as_deref()
@@ -478,12 +486,14 @@ pub(super) fn explore_features(
                                     .items_center()
                                     .gap_2()
                                     .child(
-                                        Button::new(SharedString::from(format!(
-                                            "feature-install-confirm-{name}"
-                                        )))
-                                        .primary()
-                                        .small()
-                                        .label("Install package")
+                                        Button::new(
+                                            SharedString::from(format!(
+                                                "feature-install-confirm-{name}"
+                                            )),
+                                            "Install package",
+                                        )
+                                        .variant(ButtonVariant::Primary)
+                                        .size(ControlSize::Sm)
                                         .loading(install_busy)
                                         .disabled(install_busy)
                                         .on_click(cx.listener({
@@ -501,12 +511,14 @@ pub(super) fn explore_features(
                                         })),
                                     )
                                     .child(
-                                        Button::new(SharedString::from(format!(
-                                            "feature-install-cancel-{name}"
-                                        )))
-                                        .ghost()
-                                        .small()
-                                        .label("Cancel")
+                                        Button::new(
+                                            SharedString::from(format!(
+                                                "feature-install-cancel-{name}"
+                                            )),
+                                            "Cancel",
+                                        )
+                                        .variant(ButtonVariant::Ghost)
+                                        .size(ControlSize::Sm)
                                         .disabled(install_busy)
                                         .on_click(cx.listener(|view, _, _, cx| {
                                             view.cancel_feature_install(cx)
@@ -514,16 +526,18 @@ pub(super) fn explore_features(
                                     )
                                     .into_any_element()
                             } else {
-                                Button::new(SharedString::from(format!("feature-install-{name}")))
-                                    .primary()
-                                    .small()
-                                    .label("Install…")
-                                    .loading(install_busy)
-                                    .disabled(install_busy)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.request_feature_install(name.clone(), cx)
-                                    }))
-                                    .into_any_element()
+                                Button::new(
+                                    SharedString::from(format!("feature-install-{name}")),
+                                    "Install…",
+                                )
+                                .variant(ButtonVariant::Primary)
+                                .size(ControlSize::Sm)
+                                .loading(install_busy)
+                                .disabled(install_busy)
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.request_feature_install(name.clone(), cx)
+                                }))
+                                .into_any_element()
                             };
                             div()
                                 .ml_4()

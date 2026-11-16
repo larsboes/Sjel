@@ -1,6 +1,6 @@
 //! Action bar for mail triage bulk operations and confirmations.
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgba, AnyElement, Context, FontWeight, SharedString};
 use sjel_gpui_core::mail::{MailAction, CATEGORIES};
 
@@ -27,19 +27,17 @@ impl Mail {
                 .bg(rgba(palette.raised))
                 .child(div().flex_1().text_sm().child(question))
                 .child(
-                    Button::new("mail-cancel")
-                        .small()
-                        .ghost()
-                        .label("Cancel · Esc")
+                    Button::new("mail-cancel", "Cancel · Esc")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(
                             cx.listener(|view, _, window, cx| view.on_cancel(&Cancel, window, cx)),
                         ),
                 )
                 .child(
-                    Button::new("mail-confirm")
-                        .small()
-                        .primary()
-                        .label("Confirm · ↩")
+                    Button::new("mail-confirm", "Confirm · ↩")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Primary)
                         .on_click(
                             cx.listener(|view, _, window, cx| {
                                 view.on_confirm(&Confirm, window, cx)
@@ -51,10 +49,9 @@ impl Mail {
         let none = targets.is_empty() || self.busy;
         let action =
             |id: &'static str, label: &'static str, action: MailAction, cx: &mut Context<Self>| {
-                Button::new(id)
-                    .small()
-                    .ghost()
-                    .label(label)
+                Button::new(id, label)
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
                     .disabled(none)
                     .on_click(cx.listener(move |view, _, _, cx| view.request(action.clone(), cx)))
             };
@@ -74,14 +71,16 @@ impl Mail {
                     .child(format!("{} selected", self.selected.len())),
             )
             .children(CATEGORIES.iter().map(|(key, label)| {
-                Button::new(SharedString::from(format!("mail-set-{key}")))
-                    .xsmall()
-                    .ghost()
-                    .label(format!("→ {label}"))
-                    .disabled(none)
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.request(MailAction::Categorize((*key).to_owned()), cx)
-                    }))
+                Button::new(
+                    SharedString::from(format!("mail-set-{key}")),
+                    format!("→ {label}"),
+                )
+                .size(ControlSize::Sm)
+                .variant(ButtonVariant::Ghost)
+                .disabled(none)
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.request(MailAction::Categorize((*key).to_owned()), cx)
+                }))
             }))
             .child(action(
                 "mail-bulk-dismiss",

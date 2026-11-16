@@ -1,6 +1,6 @@
 //! A typed record and the capabilities that refer to it.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
+use crate::ely::buttons::{Button, ButtonVariant};
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 use sjel_gpui_core::record::{self, Basis, View};
 
@@ -107,13 +107,15 @@ impl Render for RecordPage {
                     .map(|record| {
                         let id = record.id.clone();
                         let button_id = format!("record-{}", id);
-                        Button::new(SharedString::from(button_id))
-                            .ghost()
-                            .label(format!("{}  {}", record.title, record.meta))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.open(id.clone(), cx);
-                            }))
-                            .into_any_element()
+                        Button::new(
+                            SharedString::from(button_id),
+                            format!("{}  {}", record.title, record.meta),
+                        )
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.open(id.clone(), cx);
+                        }))
+                        .into_any_element()
                     })
                     .collect::<Vec<_>>();
                 if let Some(error) = &group.error {

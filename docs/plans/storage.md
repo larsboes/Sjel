@@ -160,13 +160,14 @@ Shipped:
 
 - File authority, external-edit adoption and configurable classification floors: `0cd23b7f`.
 - Contained-harness refusal of private folders and pi wrapper isolation: `48a65349`.
+- Trusted-harness refusal of the overlay's `data/`: Claude Code and Codex deny rules
+  (`25ce8498`) and the `sjel run` trusted seatbelt profile (`45207668`). Claude Code's Bash is
+  walled only under `sjel run`, because its own sandbox is off
+  ([`containment.md`](containment.md#1-the-rule)).
 
-Open, in order:
+Open:
 
-1. Trusted-harness policy. Claude Code and Codex retain direct overlay access under
-   [`containment.md`](containment.md#1-the-rule). Removing that access requires an explicit
-   product decision; contained-ring isolation does not establish trusted-ring isolation.
-2. Note-path search acceptance. The Mac Finder displays and searches each note's relative
+1. Note-path search acceptance. The Mac Finder displays and searches each note's relative
    Markdown path (`apps/gpui/src/finder/search.rs::record_hits`). Done when an installed-app
    search by title and by path displays the path and opens that note. Installed-app acceptance
    has not run; this change does not add body search or a status-server note source.

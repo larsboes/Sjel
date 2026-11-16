@@ -16,17 +16,17 @@
 # they describe.
 [[IgnoredVulns]]
 id = "RUSTSEC-2025-0141"
-ignoreUntil = 2027-01-01
+effectiveUntil = 2027-01-01
 reason = "bincode 2.0.1 is unmaintained (RustSec type INFO, no CVE, no affected function, no patched version: the team stopped development after a harassment campaign). Reach: `research/benchmarks/graph-store/Cargo.lock` only — a benchmark crate that is built by hand when someone re-measures the graph store, and that no capability links. Ends when that benchmark drops bincode or moves to a maintained fork; adopting one is the maintainer's call, not a patch here."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0436"
-ignoreUntil = 2027-01-01
+effectiveUntil = 2027-01-01
 reason = "Unmaintained paste proc-macro 1.0.15, build-time only. No affected functions, CVSS or fixed version. Reach, re-measured 2026-11-01: `apps/gpui/Cargo.lock` only, through `gpui-component 0.7.3 <- gpui-kit 0.7.3`, `metal 0.33.0 <- gpui-pre-apple`, and `pulp 0.22.3 <- exr <- image <- gpui-pre` — all macro expansion over code the build already holds, no runtime input. The root `Cargo.lock` still lists the crate, but `cargo tree -i paste` prints \"nothing to print\" for the workspace at any target: the parquet <- punctuality path this entry used to name no longer reaches it. Ends when those upstreams move to `pastey`, the successor paste names; not a patch a transitive bump here can make."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0192"
-ignoreUntil = 2027-01-01
+effectiveUntil = 2027-01-01
 # "user-supplied" was the wrong half of the sentence, and it is corrected below rather than
 # softened. Transit fetches no PDF: `src/hafas.rs` names three JSON endpoints and nothing else
 # reaches the network, so nothing here arrives by a URL. The bytes arrive two ways, and only one
@@ -39,17 +39,17 @@ reason = "Unmaintained ttf-parser 0.25.1, non-optional and runtime-reachable in 
 # with a zbus 6 major bump upstream.
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0370"
-ignoreUntil = 2027-01-01
+effectiveUntil = 2027-01-01
 reason = "Unmaintained zvariant 5.15.0, the D-Bus wire format, reached only through zbus on Linux and resolved for neither macOS nor iOS. No known vulnerability, no CVSS, no affected function and no fixed version: the crate is zbus 6.0.0's `wire` module now, so ending this needs a zbus major bump rather than a patch here. Revisit when GPUI's Linux tree moves to zbus 6."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0371"
-ignoreUntil = 2027-01-01
+effectiveUntil = 2027-01-01
 reason = "Unmaintained zbus_names 4.3.4, the D-Bus name types, reached only through zbus on Linux and resolved for neither macOS nor iOS. Same shape and same end as RUSTSEC-2026-0370: no known vulnerability, no CVSS, no affected function, no fixed version, and the successor is zbus 6.0.0's `names` module."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0372"
-ignoreUntil = 2027-01-01
+effectiveUntil = 2027-01-01
 reason = "Unmaintained zvariant_derive 5.15.0, build-time derive macros that zvariant re-exports, reached only through zbus on Linux and resolved for neither macOS nor iOS. No CVSS, no affected function, no fixed version, and zbus 6.0.0 supplies the same macros. Same reach and same end as RUSTSEC-2026-0370."
 
 # Both arrive through GPUI at the Zed revision apps/gpui-prototype pins (5f8a7413), so the bump is
@@ -57,15 +57,15 @@ reason = "Unmaintained zvariant_derive 5.15.0, build-time derive macros that zva
 # apps/gpui-prototype.
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0206"
-ignoreUntil = 2026-12-01
+effectiveUntil = 2026-12-01
 reason = "Unmaintained rustybuzz 0.20.1, runtime, via usvg 0.46 <- gpui-pre 0.3.6 <- gpui-kit 0.6.0 <- apps/gpui-prototype. rustybuzz shapes only SVG <text> elements. The app renders gpui-kit-assets 0.6.6 icons through usvg, and none of its 1,830 SVG files has a <text> element (grep, 2026-10-15), so nothing reaches it. No affected functions, CVSS, or fixed version. The successor is harfrust. Revisit when gpui-pre moves usvg to it, or when the app renders an SVG it did not ship."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0384"
-ignoreUntil = 2026-12-01
+effectiveUntil = 2026-12-01
 reason = "Unmaintained instant 0.1.13, via gpui-base and gpui-component 0.6.6 <- gpui-kit 0.6.0 <- apps/gpui-prototype, and notify-types. An informational advisory: no affected functions, CVSS, or fixed version. The successor is web-time. Revisit when gpui-kit drops it or the prototype bumps gpui-kit."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2025-0134"
-ignoreUntil = 2026-12-01
+effectiveUntil = 2026-12-01
 reason = "Unmaintained rustls-pemfile 2.2.0, via gpui-pre-reqwest 0.12.15 <- gpui-pre-reqwest-client 0.3.6 <- gpui-kit 0.6.0 <- apps/gpui-prototype. An informational advisory: no affected functions, CVSS, or fixed version, and its parsing lives on in rustls-pki-types. The prototype talks only to loopback sjel-status over plain http. Revisit at the step 0 bump."

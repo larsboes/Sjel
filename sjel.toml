@@ -34,7 +34,7 @@ overlay = "~/.sjel-overlay"
 # nothing to wait out (CONTRIBUTING.md#patch-first).
 #
 # [audit] expiry_warn_days stood here too, and had one reader: tools/audit's expiry clock, which
-# warned before an osv-scanner.toml ignoreUntil lapsed. osv-scanner enforces those dates itself
+# warned before an osv-scanner.toml effectiveUntil lapsed. osv-scanner enforces those dates itself
 # and names a lapsed entry under `unused ignores`, so the pre-warning was the only thing Sjel
 # added and the only thing given up. A manifest key with no reader is the decay this file's own
 # header argues against, which is why both blocks are deleted rather than left as history.

@@ -100,7 +100,7 @@ test("dependency findings remain fatal and scanners retain their scope and confi
   expect(scan["continue-on-error"]).toBeUndefined();
   expect(scan.run).toContain("osv-scanner scan source -r --config osv-scanner.toml");
   for (const excluded of ["target", "node_modules", "to-integrate"]) {
-    expect(scan.run).toContain(`--experimental-exclude ${excluded}`);
+    expect(scan.run).toContain(`--x-exclude ${excluded}`);
   }
   expect(step(security.jobs.images, "Scan")["continue-on-error"]).toBe(true);
   expect(step(security.jobs.images, "The scan covered something")["continue-on-error"]).toBeUndefined();

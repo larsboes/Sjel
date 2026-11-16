@@ -276,12 +276,12 @@ fn repo_osv_section(root: &Path, r: &mut Report) {
     let mut cmd = Command::new("osv-scanner");
     cmd.args(["scan", "source", "-r", "--config", &config]);
     for d in EXCLUDED {
-        cmd.args(["--experimental-exclude", d]);
+        cmd.args(["--x-exclude", d]);
     }
     cmd.arg(&root_text);
     // Inherited, not captured: the table of what it found is the finding, and a scanner that
     // reported one must not have its report swallowed. `osv-scanner.toml` enforces its own
-    // `ignoreUntil` dates and names a lapsed entry under "unused ignores", so this carries no
+    // `effectiveUntil` dates and names a lapsed entry under "unused ignores", so this carries no
     // clock of its own.
     let code = status_code(cmd.status());
     match code {
@@ -414,7 +414,7 @@ fn globals_osv_section(root: &Path, r: &mut Report) {
                     println!("  ✗ vulnerabilities found above");
                     // Cargo findings come from the lockfile published inside the installed crate;
                     // reinstalling that crate does not change its dependency tree.
-                    println!("  · an npm finding here may be movable: `sjel update apply --only npm --re-resolve <package>`");
+                    println!("  · an npm finding here may be movable: find the global package that owns it with `npm ls -g --all <vulnerable-package>`, then run `sjel update apply --only npm --re-resolve <owning-package>`");
                     println!("  · a cargo one cannot be: this pass reads the Cargo.lock published inside the crate, and no install on this machine changes that file — accept it in osv-scanner-installed.toml with its reach and a date");
                     r.fail = true;
                 }

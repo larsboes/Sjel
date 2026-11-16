@@ -65,9 +65,9 @@ jobs:
         run: |
           set -uo pipefail
           osv-scanner scan source -r --config osv-scanner.toml \
-            --experimental-exclude target \
-            --experimental-exclude node_modules \
-            --experimental-exclude to-integrate .
+            --x-exclude target \
+            --x-exclude node_modules \
+            --x-exclude to-integrate .
 
   images:
     name: grype (every declared image)

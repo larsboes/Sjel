@@ -829,7 +829,16 @@ boundary. Keep pure logic tests outside GPUI windows.
 (`WishForm`, `GroupForm`), `inventory/owned.rs` (`InventoryEditForm`) and `inventory/mail_review.rs`
 (`MailReviewForm`) use `ely::forms::{Form, FormField, FormError, Input, TextInput}` and
 `ely::buttons::{Button, ButtonVariant}` instead of Kit `InputState` entities. Inventory's
-top-bar search field and list/category pills remain on Kit until search/list bars move;
+search bars, category/group toggles and wishlist actions also use Ely. CV capture uses Ely
+forms and its application ledger uses `DataTable`, with slug-based actions and posting links.
+Finance uses Ely buttons and text inputs for search, balance snapshots, CSV mapping, review
+and investment ideas; the thesis input retains multiline editing. Finance overview charts
+retain currency formatting, observed-month averages and signed net amounts. Capture retains
+draft fields after a failed write and clears unchanged fields after success.
+
+Shipped in `da94b403`. Native light/dark acceptance, installation and full workspace gates
+have not run.
+
 `ui/src/feedback.rs` registers a GPUI root plugin with one Ely `Toaster` and `ToastViewport`
 per window. Workspace, shared mutation helpers, Projects and Editor report through that path.
 Kit's notification queue stays empty. Menus/overlays retain the audited boundaries below.
@@ -844,12 +853,16 @@ Live light/dark visual acceptance for tables, charts, calendar and the migrated 
 
 #### Execution order
 
+Documents, Import and Docs use Ely buttons and retained text inputs (`da94b403`). Documents
+keeps PDF rendering, extracted-page search, proposal writes and comparison state; Docs keeps the
+Kit Markdown renderer, Mermaid plugin and anchor handling. Media adoption stays on hold under
+[`product.md`](product.md#open-reductions).
+
 Tables, `test_support.rs`, Calendar (`c3d0ed19`), interactive Charts (`f0d20861`) and
 People/Inventory forms (`8171f0c5`, `475c9800`) have landed; live light/dark acceptance remains
 open. Workspace feedback and shared test setup shipped in `944b0eb5`. The menus/overlays audit below
 keeps the slash menu and dock until their contracts can be preserved. Remaining adoption work
-moves through navigation/layout, then interaction-gated
-`mail/`, `documents::BlockEditor` and `ely::terminal` (after a fork remote-transport API).
+is interaction-gated `mail/` and `documents::BlockEditor`.
 Optional list conversions stay last.
 
 Sjel administration buttons and inputs, plus shared Setup/Research tabs, shipped in `06739e59`.
@@ -876,12 +889,28 @@ The fork's `48ae78d` constrains virtual table rows to the column layout. A live 
 subtitle previously pushed row actions outside their column; a regression reproduces that
 failure and now passes for plain and virtual tables. All 1,753 default-engine and 1,752
 gpui-fast fork tests pass, as does fork Clippy. The app pin shipped in `627805fd`; installed
-Inventory retests pass in light/dark and at 1040 × 720. Remaining layout defects: Wishlist
-notes displace actions, Inventory's category toolbar squeezes search at that width, and the
-grouped task title column is too narrow. Mutation acceptance and minimum-window checks remain
-open; live checks did not modify records.
+Inventory retests pass in light/dark and at 1040 × 720. The three layout defects found there
+(Wishlist notes, Inventory categories, grouped task titles) are fixed in `da94b403`.
+Mutation acceptance and native minimum-window checks remain open; live checks did not modify records.
 The documentation link gate fails on an unrelated Projects heading link in `data.md`;
 focused whitespace checks pass. Full workspace gates and phone checks did not run for this pass.
+
+#### Current adoption sequence
+
+The approved order was existing adoption gaps, component discovery, navigation/layout, remote
+terminal transport, then caret-menu presentation. Mail/composer and data permissions remain
+outside this work. All five steps shipped against Ely `da7136f` (fork branch `sjel`):
+
+- Shared section, back button and sync badge, Inventory category wrapping, Wishlist note
+  truncation, table labels and 15-rem task titles (Ely `986d544`), workspace and project-detail
+  breadcrumbs, `ely::terminal` over a queued remote transport (Ely `b80b5a2`) and the slash menu
+  as a focus-neutral `CaretMenu` (Ely `da7136f`): `da94b403`.
+- The GPUI skill's `scripts/find_component.py`: `582e8bcf`.
+
+Verification: 234 UI library tests pass, including 23 terminal tests; the Mac app checks; Clippy
+reports two existing type-complexity warnings in Projects and Travel. Open: native light/dark
+and accessibility acceptance, installed-app checks of the terminal and the caret menu, and full
+workspace gates.
 
 #### Remaining component parity
 

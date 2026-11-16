@@ -86,5 +86,19 @@ domain store or an independent application.
    photo-manager or accounting-engine expansion. Done when each removed path has an equivalent
    source or outbound path, dependent joins still pass their checks, and obsolete code is removed.
 
+   Source inspection of the Documents reader retains the existing evidence boundary:
+   `apps/gpui/ui/src/documents/viewer.rs` renders stored originals, searches extracted pages and
+   opens originals through the platform renderer. Filing comparison and duplicate review use
+   that reader; replacing it requires equivalent evidence inspection, not an unrelated editor.
+   Reader controls may adopt shared components while PDF rendering and search remain intact.
+
+   Media organization remains unresolved. `crates/media/src/organize.rs` moves whole collections
+   by same-volume rename from an approved structure and records a reversal journal; it neither
+   indexes nor ingests bytes. No equivalent outbound workflow has been verified. Keep its code
+   and defer Media UI polish until replacement acceptance or a retained-boundary decision.
+   `apps/gpui/ui/src/media/content.rs` separately reviews extracted tag/collection candidates;
+   accepting metadata does not authorize a file move. This inspection ran no live file moves,
+   reader acceptance checks or dependent-join tests.
+
 The audit is not complete while these reductions or the private-overlay review remain open.
 No capability, service, personal record or original file has been removed by this audit.

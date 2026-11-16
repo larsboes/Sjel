@@ -55,8 +55,8 @@ mod content;
 mod contracts;
 mod error;
 mod feed;
-mod markdown_links;
 mod mail_evidence_eval;
+mod markdown_links;
 mod source_handlers;
 mod triage;
 
@@ -464,8 +464,14 @@ fn build_router(dashboard_origin: &str) -> Router {
     // sets differ in what they cost when they run, not because they differ in
     // what admits a caller — one gate covers both.
     let write_routes = Router::new()
-        .route("/triage/mail-evidence/evaluation/freeze", post(mail_evidence_eval::freeze))
-        .route("/triage/mail-evidence/evaluation/run", post(mail_evidence_eval::run))
+        .route(
+            "/triage/mail-evidence/evaluation/freeze",
+            post(mail_evidence_eval::freeze),
+        )
+        .route(
+            "/triage/mail-evidence/evaluation/run",
+            post(mail_evidence_eval::run),
+        )
         .route("/content/{source}/{id}/digest", post(digest_handler))
         .route("/content/{source}/{id}/diagram", post(diagram_handler))
         .route("/content/{source}/{id}/chart", post(chart_handler))

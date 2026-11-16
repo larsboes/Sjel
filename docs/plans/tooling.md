@@ -215,8 +215,12 @@ archive includes the managed path resolver; its extracted-path regression passes
   The service remained stopped while the release was built in the existing writable verification
   cache; deployment required copying the verified binary while stopped. The signed client could
   activate it on demand; shell lifecycle could not read protected deployment configuration.
+  Comms also answers HTTP while the runner reports no owned process; persistence probing
+  cannot read that protected configuration. No Comms activation was attempted. Extraction
+  verification used admitted MCP sources and in-memory evaluator input instead.
   Add a service-runner build-target option with stopped-service checks and atomic binary
-  installation. Done when a cache-cleanup refusal uses a writable cache without replacing an
+  installation, plus a supported activation path that establishes process ownership before
+  replacement. Done when a cache-cleanup refusal uses a writable cache without replacing an
   executing binary, and a failed build retains the previous artifact and restart hold.
 
 - **Read web clips from the CLI and MCP.** Comms exposes `/clips` and `/clips/document`

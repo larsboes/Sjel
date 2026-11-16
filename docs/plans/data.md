@@ -40,12 +40,18 @@ in `1da10eb6` ([alias contract](../capabilities/mail-evidence.md#reviewed-aliase
 Owner-only native message freeze/replay, classification rechecks and rules-default evaluation
 shipped in `45e3aa48` ([native evaluation](../capabilities/mail-evidence.md#native-message-evaluation)).
 Owner-terminal native freeze/replay commands with guarded private outputs shipped in `ade115e2`.
+Strict German bullet-item delivery/cancellation extraction (`purchase-sections-v2`) shipped in
+`b7401c86`; returns and unsupported formats still abstain.
 
-Native evaluation verification: 543 Comms tests, including ten adapter tests and seven CLI checks,
-all-target Clippy, route-schema, documentation-link, publication, self-model and architecture
-freshness checks passed. The prior native adapter change also passed the store-transaction check.
+Extraction verification: 547 Comms tests and all-target Clippy passed, including complete-section
+refusal, quantity evidence, separate delivery statements and conflicting frames. Documentation
+links, publication hygiene and self-model checks passed. Native evaluation previously passed
+route-schema, architecture and store-transaction checks; those checks were not rerun for the
+parser-only change.
 Live deployment, owner-run native review/replay, AFM admission and production chunking acceptance
-did not run. Full workspace tests did not run. Doctor reports an overdue home-automation backup.
+did not run. Comms answers HTTP while the runner reports no owned process; persistence probing
+cannot read protected deployment configuration. No live process was replaced. Full workspace
+tests did not run. Doctor reports an overdue home-automation backup.
 
 Remaining work, in order:
 
@@ -61,6 +67,15 @@ Remaining work, in order:
    parser; all five abstained. It used no generation, embeddings or learned state. This is narrow
    order/shipment coverage, not a broad accuracy result. Add independently reviewed formats
    before extending adapters; unsupported layouts must keep abstaining as a whole.
+   A separate seven-message development set was agent-labelled and frozen before the v2 adapter
+   was written. It overlaps the earlier pilot and is not an independent holdout. On identical
+   frozen pseudonymized `c1` inputs, v1 produced zero correct claims, zero false claims, four
+   missed claims and seven abstentions. V2 produced three correct claims, zero false claims,
+   one missed claim and four abstentions. It recognizes two completed deliveries and one
+   cancellation; a different delivery format remains unsupported. Digital refunds, imminent
+   delivery and marketing remain negative cases. All three negatives still abstain. The older
+   twelve-case pilot remains unchanged at two correct and five missed claims. Both runs were
+   model-free; corpus/report artifacts retain no full bodies and use private mode `0600`.
    Generation is AFM-only; other local and
    hosted generators are excluded. The original seven-case AFM run passed profile and context
    checks but failed shared model admission (`model_admission`). No AFM accuracy result exists. Diagnose
@@ -72,8 +87,8 @@ Remaining work, in order:
    converted. Synthetic fresh-read tests establish repeatability without model
    access, but live classification, AFM admission and chunking acceptance remain open. Done when
    a repeatable local run reports false claims, missed claims, incorrect targets and duplicates
-   with provenance and no retained
-   full bodies. A first small baseline does not set an acceptance threshold.
+   with provenance and no retained full bodies. A first small baseline does not set an
+   acceptance threshold.
 2. **Integrate reviewed identities into the source and review workflow.** Canonical references
    and uniquely resolved owner-reviewed physical aliases establish identity; product aliases and
    lexical matches remain candidates. Alias review checks current item/state revisions, retains

@@ -735,6 +735,9 @@ cleanup; verification used the isolated Cargo runner with a writable scratch tar
   `gpui-kit`, `gpui-pre`, `gpui-fast` and `nsh` set, which moves by hand per
   [`gpui.md`](gpui.md#6-one-ui-crate-every-platform). The `verification result` check is
   required on `main`, so a GPUI bump that fails its GPUI check does not auto-merge.
+- Dependabot's bun block declares `firewall-api.socket.dev` as a scoped registry, because its
+  proxy blocked the Socket install scanner with "egress not allowlisted" on every bun run from
+  2026-11-09. Open: a bun Dependabot run that passes the scanner has not been observed yet.
 - `sjel demo app [page]` runs the Mac app against the seeded demo node, to debug on
   synthetic data next to the live node. See [`gpui.md`](gpui.md#10-dev-and-prod).
 - `tools/intake review <dir> --source <name> --reviewer claude` runs a fresh `claude -p` with

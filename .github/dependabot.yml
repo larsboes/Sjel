@@ -31,6 +31,13 @@
 # unverified — an ecosystem block that may watch nothing is exactly the rot this change removes.
 # That base image is a dated Debian snapshot tag, bumped by hand.
 version: 2
+# Bun's install scanner (bunfig.toml) calls this host; Dependabot's proxy allows only declared
+# registries. The scope matches no package, so no dependency resolves here.
+registries:
+  socket-firewall:
+    type: npm-registry
+    url: https://firewall-api.socket.dev
+    scope: "@sjel-socket-scanner-egress"
 updates:
   - package-ecosystem: "cargo"
     directory: "/"
@@ -78,6 +85,8 @@ updates:
         update-types: ["minor", "patch"]
 
   - package-ecosystem: "bun"
+    registries:
+      - socket-firewall
     directories:
       - "/crates/comms/clipper"
       - "/Packs/harness/pi-packages/pi-subagents"

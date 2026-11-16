@@ -7,6 +7,13 @@ The helper reads the adjacent lockfile and the cached release's `.cargo_vcs_info
 GPUI Kit links use that publication commit. A missing cache leaves the versioned package source
 as the fallback, not upstream `main`. Read the installed API before using any example.
 
+To locate a component before reading broadly, run
+`python3 scripts/find_component.py <workspace/Cargo.toml> <ComponentOrModule>` from the skill
+root. It resolves locked, cached Cargo sources for the Rust host, then reports declaration,
+consumer-use and test-candidate locations. Use `--package gpui-kit` for Kit instead of Ely and
+`--limit N` for more locations. It is offline and refuses missing or locally patched sources;
+its matches do not establish interaction parity.
+
 The matching upstream skill references have distinct uses:
 
 | Reference under `skills/gpui-kit/references/` | Read for |

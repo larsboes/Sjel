@@ -48,8 +48,8 @@ impl ScanReport {
     }
 }
 
-// Only literal loopback addresses are accepted; no DNS, credentials, query or path.
-pub(crate) fn local_base(base: &str) -> Option<String> {
+/// Validate an HTTP loopback origin without DNS, credentials, query or path.
+pub fn local_base(base: &str) -> Option<String> {
     let url = reqwest::Url::parse(base).ok()?;
     let host = url.host_str()?;
     let ip: std::net::IpAddr = host.trim_matches(['[', ']']).parse().ok()?;

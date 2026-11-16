@@ -219,9 +219,35 @@ representation field; native sources need independent review and fingerprints. E
 the whole selected message. Production chunking and live AFM admission still need separate
 acceptance; this adapter does not establish either result.
 
-The existing `sjel capability call comms post PATH @REQUEST.json` can submit metadata-only
-request files from an owner terminal. Agent tokens are refused on both endpoints. No source
-bodies are returned to the caller, staged as proposals or written to an evaluation store; Gmail
-is read without mutation. Retained responses include private references and reviewed excerpts,
-so callers must save them as new mode `0600` files in the private overlay. The stdin evaluator's
-file safeguards do not apply to arbitrary HTTP clients.
+The evaluator CLI provides two owner-terminal commands:
+
+```sh
+comms-mail-evidence-eval freeze-native CORPUS < native-review.json
+comms-mail-evidence-eval run-native CORPUS REPORT
+comms-mail-evidence-eval run-native CORPUS AFM_REPORT summarization_light
+```
+
+`freeze-native` accepts references and independently reviewed labels, never source bodies.
+`run-native` reads only the frozen corpus; it does not read stdin. Omit the role for the
+model-free baseline. Each command discovers Comms with `sjel capability url comms` and refuses
+agent sessions before reading input files, loading owner credentials or sending requests.
+Credentials stay in the process; request labels are not command-line arguments or temporary
+files. Only literal HTTP loopback origins are accepted, with redirects and proxies disabled.
+
+Both commands require new output paths under the active private overlay, use mode `0600` and
+refuse overwrites, including a second run to the same report path. Requests are capped at
+2 MiB and responses at 4 MiB. Freeze and rules requests have a five-minute timeout; an AFM run
+adds 120 seconds per case for the existing generation deadline. A timeout does not cancel work
+already running in the service. HTTP failures report only their status; response bodies are
+discarded. A successful run with unscored cases saves its report and exits with status 1;
+command failures exit with status 2. Unknown report fields are refused before persistence.
+
+Comms must already serve the native endpoints; building the evaluator does not deploy the
+service. Build and execution follow the deployment distinction above. Labels must be reviewed
+from the native messages independently; the commands do not generate ground truth.
+
+The existing `sjel capability call comms post PATH @REQUEST.json` can also submit metadata-only
+requests from an owner terminal. Its arbitrary HTTP output handling does not enforce the
+evaluator CLI's file safeguards. Agent tokens are refused on both endpoints. No source bodies
+are returned, staged as proposals or written to an evaluation store; Gmail is read without
+mutation. Frozen references and reviewed excerpts remain private artifacts.

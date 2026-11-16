@@ -189,7 +189,8 @@ pub fn freeze(review: Review) -> Result<Corpus, &'static str> {
 }
 
 /// Separate error counts; source text and predicted labels never enter the report.
-#[derive(Default, Debug, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Counts {
     pub abstained: bool,
     pub scored: usize,
@@ -267,12 +268,13 @@ pub fn score(labels: &[Label], parsed: &Parsed) -> Counts {
 }
 
 /// Model provenance and per-case counts for one read-only run.
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Report {
     pub started_unix_seconds: u64,
     pub corpus_hash: String,
     pub role: String,
-    pub extraction_version: &'static str,
+    pub extraction_version: String,
     pub backend: String,
     pub model: String,
     pub context_tokens: Option<u32>,
@@ -375,7 +377,8 @@ pub(crate) fn run_with_guard(
             mail_evidence::EXTRACTION_VERSION
         } else {
             crate::purchase_sections::REVISION
-        },
+        }
+        .into(),
         backend: role
             .as_ref()
             .map(|r| r.backend_name.clone())

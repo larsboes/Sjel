@@ -30,12 +30,23 @@ AFM is the only generative backend admitted by this pipeline. The default role i
 Other local or hosted generators are refused before inference. AFM proposes grounded fields;
 Sjel owns parsing, normalization, validation, identity resolution and review decisions.
 
-Before generation, Comms tries the strict order/shipment section parser in
+Before generation, Comms tries the strict purchase-section parser in
 [`purchase_sections`](../../crates/comms/src/purchase_sections.rs). It recognizes bounded German
 and English section frames and product rows with explicit quantities. Unknown rows, missing
 section boundaries, competing frames and duplicate excerpts cause the whole adapter to abstain.
 The excerpt retains quantity; a proposal remains one order line, with no inferred physical-item
-identity. Cancellation, return, delivery and arbitrary prose remain unsupported by this adapter.
+identity. The `purchase-sections-v2` adapter also recognizes two German bullet-item frames:
+completed delivery with an explicit delivery sentence and status, and confirmed cancellation
+with the no-charge confirmation. Both require the action heading, one tracking/details link,
+complete `* title` / `Menge: quantity` pairs and the known section end. Cancellation permits an
+optional EUR price after each item. A link may be an HTTP(S) URL or the admitted interface's
+opaque link token; it is never dereferenced or used as item identity.
+
+Delivery proposals retain the separate statement in `claim`; cancellation proposals do not
+change ownership. Quantity stays in the grounded item excerpt. Repeated statements, competing
+frames, malformed quantities, incomplete pairs and unexpected section text abstain as a whole.
+The return-instructions footer only ends the delivery section; it is not a return event.
+Physical returns, other delivery/cancellation formats and arbitrary prose remain unsupported.
 
 `comms mail evidence <thread-id>... --rules-only` stages only supported Inventory proposals.
 It resolves no model role, makes no generation calls and performs no project extraction.

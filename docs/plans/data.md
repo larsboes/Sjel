@@ -39,12 +39,13 @@ Reviewed scoped aliases, product/physical identity separation and retained revoc
 in `1da10eb6` ([alias contract](../capabilities/mail-evidence.md#reviewed-aliases)).
 Owner-only native message freeze/replay, classification rechecks and rules-default evaluation
 shipped in `45e3aa48` ([native evaluation](../capabilities/mail-evidence.md#native-message-evaluation)).
+Owner-terminal native freeze/replay commands with guarded private outputs shipped in `ade115e2`.
 
-Native adapter verification: 536 Comms tests, including ten adapter tests, all-target Clippy,
-route-schema, documentation-link, publication, store-transaction and self-model checks passed.
+Native evaluation verification: 543 Comms tests, including ten adapter tests and seven CLI checks,
+all-target Clippy, route-schema, documentation-link, publication, self-model and architecture
+freshness checks passed. The prior native adapter change also passed the store-transaction check.
 Live deployment, owner-run native review/replay, AFM admission and production chunking acceptance
-did not run. Full workspace tests did not run. Doctor retains one unrelated failure; architecture
-freshness fails on unrelated database-service and coding-Pack descriptions.
+did not run. Full workspace tests did not run. Doctor reports an overdue home-automation backup.
 
 Remaining work, in order:
 
@@ -66,11 +67,12 @@ Remaining work, in order:
    that gate through the owning capability without bypassing it. Add human review,
    project assignments, English physical-purchase positives and actual physical returns before
    broader acceptance. The English additions are negative cases. Deploy and exercise the native
-   adapter from an owner context with fresh independent labels; the pseudonymized pilot cannot
-   be silently converted. Its synthetic fresh-read tests establish repeatability without model
+   adapter using `freeze-native` and `run-native` from an owner terminal with fresh independent
+   labels; omit the role for the rules baseline. The pseudonymized pilot cannot be silently
+   converted. Synthetic fresh-read tests establish repeatability without model
    access, but live classification, AFM admission and chunking acceptance remain open. Done when
-   a repeatable local run reports
-   false claims, missed claims, incorrect targets and duplicates with provenance and no retained
+   a repeatable local run reports false claims, missed claims, incorrect targets and duplicates
+   with provenance and no retained
    full bodies. A first small baseline does not set an acceptance threshold.
 2. **Integrate reviewed identities into the source and review workflow.** Canonical references
    and uniquely resolved owner-reviewed physical aliases establish identity; product aliases and

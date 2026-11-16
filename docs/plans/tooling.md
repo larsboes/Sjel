@@ -12,8 +12,9 @@ covers it.
 
 - **Accept native evaluation replay on the active deployment.** Owner-only native freeze/run
   endpoints shipped in `45e3aa48`; ten synthetic adapter tests cover fresh reads, changed inputs,
-  whole-thread classification, context drift and model-free evaluation. The existing capability
-  caller can submit metadata-only request files. Live owner-run review/replay remains unverified;
+  whole-thread classification, context drift and model-free evaluation. Owner-terminal
+  `freeze-native` and `run-native` commands shipped in `ade115e2`, reusing the evaluator's private
+  output safeguards; seven CLI checks passed. Live owner-run review/replay remains unverified;
   it needs fresh native labels, not converted session pseudonyms. Done when separate owner
   sessions replay the same labels without temporary body files or agent access to raw stores,
   and stale inputs or stricter classification refuse extraction. Acceptance is owned by

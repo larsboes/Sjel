@@ -1202,6 +1202,16 @@
       ]
     },
     {
+      "from": "containment",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/containment/Cargo.toml"
+      ]
+    },
+    {
       "from": "cv",
       "to": "sjel-config",
       "kinds": [

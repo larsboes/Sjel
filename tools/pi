@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# pi, walled by default (docs/plans/containment.md §1). `~/.local/bin/pi` links here.
+#
+#   pi [--unwalled] [pi args...]
+#
+# The provider is pi's `--provider`, else `defaultProvider` in ~/.pi/agent/settings.json. A
+# trusted provider runs under `sjel run`'s trusted profile; any other runs contained through
+# tools/contain/pi. `--unwalled` drops the profile for debugging: trusted providers only, and
+# sjel-contain records each such run. The project is the working directory. bash 3.2-safe.
+set -u
+
+source_path="${BASH_SOURCE[0]:-$0}"
+while [ -L "$source_path" ]; do
+  dir="$(cd -P "$(dirname "$source_path")" && pwd)"
+  target="$(readlink "$source_path")"
+  case "$target" in
+    /*) source_path="$target" ;;
+    *) source_path="$dir/$target" ;;
+  esac
+done
+_here="$(cd -P "$(dirname "$source_path")" && pwd)"
+
+pi_bin="${PI_BIN:-$HOME/.pi/agent/bin/pi}"
+[ -x "$pi_bin" ] || { echo "pi: no pi binary at $pi_bin" >&2; exit 2; }
+
+unwalled=""
+provider=""
+args=()
+expect_provider=""
+for arg in "$@"; do
+  if [ -n "$expect_provider" ]; then
+    provider="$arg"; expect_provider=""
+  else
+    case "$arg" in
+      --unwalled) unwalled="--unwalled"; continue ;;
+      --provider) expect_provider=1 ;;
+      --provider=*) provider="${arg#--provider=}" ;;
+    esac
+  fi
+  args+=("$arg")
+done
+
+if [ -z "$provider" ]; then
+  settings="$HOME/.pi/agent/settings.json"
+  provider="$(plutil -extract defaultProvider raw -o - "$settings" 2>/dev/null)" || provider=""
+fi
+case "$provider" in
+  *[!a-z0-9-]*|"") echo "pi: no provider; pass --provider <slug> or set defaultProvider in pi" >&2; exit 2 ;;
+esac
+
+ring="$("$_here/contain/contain" --ring-of "$provider")" || exit 2
+if [ "$ring" = trusted ]; then
+  exec "$_here/contain/contain" "$pi_bin" --provider "$provider" --project "$PWD" $unwalled \
+    -- "${args[@]+"${args[@]}"}"
+fi
+if [ -n "$unwalled" ]; then
+  echo "pi: --unwalled is for trusted providers only; $provider always runs contained" >&2
+  exit 2
+fi
+exec "$_here/contain/pi" --project "$PWD" --provider "$provider" -- "${args[@]+"${args[@]}"}"

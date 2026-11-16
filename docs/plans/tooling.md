@@ -27,6 +27,14 @@ covers it.
   active deployment after an explicit selection. Done when build/test isolation stays intact
   and the selected diagnostic runs against the intended overlay without a copied cache path.
 
+## Launcher rebuilds
+
+- **Rebuild `sjel-cli` when a dependency changes.** `tools/lib/sjel-cli.sh` rebuilds only when
+  `crates/sjel-cli` sources are newer than the binary, so a change in `sjel-server` (the doctor's
+  harness check) left doctor on the old binary until a manual `cargo build --release -p sjel-cli`.
+  Compare against the path dependencies from `cargo metadata`, or let Cargo's own fingerprint
+  decide. Done when changing a path dependency's source makes the next `tools/doctor` rebuild.
+
 ## Private repository consolidation
 
 - **Import a private source workspace with history.** Consolidating a sibling application

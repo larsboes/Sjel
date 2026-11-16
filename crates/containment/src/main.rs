@@ -18,28 +18,83 @@ fn demo_token() -> Option<String> {
     Some(token.trim().to_owned()).filter(|t| !t.is_empty())
 }
 
+/// The one harness that may run without the trusted profile, for debugging
+/// (`docs/plans/containment.md` §1).
+const UNWALLED_HARNESS: &str = "pi";
+
+/// The overlay root, from the environment `tools/lib/paths.sh` exports.
+fn overlay_root() -> Option<PathBuf> {
+    std::env::var_os("SJEL_OVERLAY_ROOT")
+        .or_else(|| std::env::var_os("SJEL_PERSONAL_ROOT"))
+        .map(PathBuf::from)
+}
+
+/// The current UTC time as `YYYY-MM-DDTHH:MM:SSZ`.
+fn now_utc() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
+    let (day, time) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+    format!(
+        "{}T{:02}:{:02}:{:02}Z",
+        civil_date::iso_of_unix_day(day),
+        time / 3600,
+        time % 3600 / 60,
+        time % 60
+    )
+}
+
+/// Appends one line per unwalled run to [`sjel_config::UNWALLED_RUNS_LOG`]: UTC time, harness,
+/// provider and project, tab-separated.
+fn record_unwalled(
+    overlay: &std::path::Path,
+    harness: &str,
+    provider: &str,
+    project: &std::path::Path,
+) -> std::io::Result<()> {
+    use std::io::Write;
+    let path = overlay.join(sjel_config::UNWALLED_RUNS_LOG);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut log = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    writeln!(
+        log,
+        "{}\t{harness}\t{provider}\t{}",
+        now_utc(),
+        project.display()
+    )
+}
+
 /// A trusted-ring run: the harness keeps the network and the filesystem, except the overlay's
-/// `data/` and `secrets/` and the home credentials no harness signs in with. `SJEL_AGENT=1`
-/// makes Sjel's own tools inside the run present the agent token, which the gate pseudonymizes.
+/// `data/` and `secrets/` and the home credentials no harness signs in with. `walled: false`
+/// skips that profile for debugging. `SJEL_AGENT=1` makes Sjel's own tools inside the run
+/// present the agent token, which the gate pseudonymizes, walled or not.
 fn run_trusted(
     harness_bin: &str,
     harness_args: &[String],
     project_dir: &std::path::Path,
     env_pairs: Vec<(String, String)>,
+    walled: bool,
 ) -> ExitCode {
     let home = std::env::var_os("HOME").map(PathBuf::from);
-    let overlay = std::env::var_os("SJEL_OVERLAY_ROOT")
-        .or_else(|| std::env::var_os("SJEL_PERSONAL_ROOT"))
-        .map(PathBuf::from);
-    if overlay.is_none() {
-        eprintln!("[containment] no overlay is set: only the home credentials are closed");
-    }
-    let profile = TrustedProfile::new(home.as_deref(), overlay.as_deref());
-    let mut cmd = std::process::Command::new("/usr/bin/sandbox-exec");
-    cmd.arg("-p")
-        .arg(profile.render())
-        .arg(harness_bin)
-        .args(harness_args);
+    let overlay = overlay_root();
+    let mut cmd = if walled {
+        if overlay.is_none() {
+            eprintln!("[containment] no overlay is set: only the home credentials are closed");
+        }
+        let profile = TrustedProfile::new(home.as_deref(), overlay.as_deref());
+        let mut cmd = std::process::Command::new("/usr/bin/sandbox-exec");
+        cmd.arg("-p").arg(profile.render()).arg(harness_bin);
+        cmd
+    } else {
+        eprintln!("[containment] UNWALLED: this run can read the overlay's data/ and secrets/");
+        std::process::Command::new(harness_bin)
+    };
+    cmd.args(harness_args);
     cmd.current_dir(project_dir).env("SJEL_AGENT", "1");
     // The token the run's Sjel tools present: `sjel-agent-token.<harness>`, else the default.
     if std::env::var_os("SJEL_AGENT_NAME").is_none() {
@@ -57,7 +112,7 @@ fn run_trusted(
     match cmd.status() {
         Ok(s) => ExitCode::from(s.code().unwrap_or(1) as u8),
         Err(e) => {
-            eprintln!("Failed to start the harness under sandbox-exec: {e}");
+            eprintln!("Failed to start the harness: {e}");
             ExitCode::from(1)
         }
     }
@@ -69,13 +124,30 @@ async fn main() -> ExitCode {
     let own = args.iter().take_while(|a| *a != "--");
     if args.is_empty() || own.into_iter().any(|a| a == "--help" || a == "-h") {
         eprintln!(
-            "Usage: sjel-contain <harness-bin> --provider <name> --project <dir> [--read <dir>]... [--write <dir>]... [--keep-env <NAME>]... [--env <NAME=VALUE>]... [--credential <provider>|<entry>=<VAR>]... [-- <harness-args...>]"
+            "Usage: sjel-contain <harness-bin> --provider <name> --project <dir> [--unwalled] [--read <dir>]... [--write <dir>]... [--keep-env <NAME>]... [--env <NAME=VALUE>]... [--credential <provider>|<entry>=<VAR>]... [-- <harness-args...>]\n       sjel-contain --ring-of <provider>"
         );
         return ExitCode::from(2);
     }
 
+    let providers = ReviewedProvidersList::load();
+    if let [flag, provider] = args.as_slice() {
+        if flag == "--ring-of" {
+            let ring = classify_ring(&providers, provider, &civil_date::today());
+            println!(
+                "{}",
+                if ring == Ring::Trusted {
+                    "trusted"
+                } else {
+                    "contained"
+                }
+            );
+            return ExitCode::SUCCESS;
+        }
+    }
+
     let mut harness_bin = String::new();
     let mut provider = String::new();
+    let mut unwalled = false;
     let mut project = String::new();
     let mut harness_args = Vec::new();
     let mut read_dirs: Vec<PathBuf> = Vec::new();
@@ -89,6 +161,9 @@ async fn main() -> ExitCode {
         if args[i] == "--" {
             harness_args.extend(args[i + 1..].iter().cloned());
             break;
+        } else if args[i] == "--unwalled" {
+            unwalled = true;
+            i += 1;
         } else if args[i] == "--provider" && i + 1 < args.len() {
             provider = args[i + 1].clone();
             i += 2;
@@ -147,14 +222,46 @@ async fn main() -> ExitCode {
         }
     }
 
-    let providers = ReviewedProvidersList::load();
     let ring = classify_ring(&providers, &provider, &civil_date::today());
     let hosts = provider_hosts(&providers, &provider);
 
     println!("[containment] harness={harness_bin} provider={provider} ring={ring:?}");
 
+    if unwalled {
+        let harness_name = std::path::Path::new(&harness_bin)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        if harness_name != UNWALLED_HARNESS {
+            eprintln!(
+                "[containment] --unwalled is for {UNWALLED_HARNESS} only; {harness_name} always runs walled"
+            );
+            return ExitCode::from(2);
+        }
+        if ring != Ring::Trusted {
+            eprintln!(
+                "[containment] --unwalled is for trusted providers only; {provider} always runs contained"
+            );
+            return ExitCode::from(2);
+        }
+        let Some(overlay) = overlay_root() else {
+            eprintln!("[containment] --unwalled needs the overlay set, to record the run");
+            return ExitCode::from(2);
+        };
+        if let Err(e) = record_unwalled(&overlay, &harness_bin, &provider, &project_dir) {
+            eprintln!("[containment] --unwalled: the run could not be recorded: {e}");
+            return ExitCode::from(2);
+        }
+    }
+
     if ring == Ring::Trusted {
-        return run_trusted(&harness_bin, &harness_args, &project_dir, env_pairs);
+        return run_trusted(
+            &harness_bin,
+            &harness_args,
+            &project_dir,
+            env_pairs,
+            !unwalled,
+        );
     }
 
     // Contained run: resolve the named provider keys first, so a missing one stops the run.

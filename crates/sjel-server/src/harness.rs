@@ -23,9 +23,17 @@ pub struct HarnessWalls<'a> {
     pub data: &'a str,
     pub codex: Option<&'a str>,
     pub claude: Option<&'a str>,
-    pub pi: bool,
+    pub pi: Option<PiLaunch>,
     pub antigravity: bool,
     pub enrolled: &'a BTreeSet<String>,
+}
+
+/// How the `pi` command starts, and the last run `pi --unwalled` recorded.
+pub struct PiLaunch {
+    /// `~/.local/bin/pi` resolves to the checkout's `tools/pi`, which walls it by default.
+    pub walled_default: bool,
+    /// The last line of [`sjel_config::UNWALLED_RUNS_LOG`] for pi: its UTC time and provider.
+    pub last_unwalled: Option<(String, String)>,
 }
 
 pub fn harness_walls(h: &HarnessWalls) -> Vec<(Level, String)> {
@@ -95,11 +103,24 @@ pub fn harness_walls(h: &HarnessWalls) -> Vec<(Level, String)> {
         }
         token(&mut out, "claude-code");
     }
-    if h.pi {
-        out.push((
-            Level::Warn,
-            "pi: no sandbox of its own — start it with `sjel run pi --provider openai --project <dir>`, or tools/contain/pi for other providers".into(),
-        ));
+    if let Some(pi) = &h.pi {
+        if pi.walled_default {
+            out.push((
+                Level::Ok,
+                "pi: walled by default through tools/pi; `pi --unwalled` debugs on a trusted provider".into(),
+            ));
+        } else {
+            out.push((
+                Level::Warn,
+                "pi: `pi` starts unwalled — link ~/.local/bin/pi to the checkout's tools/pi".into(),
+            ));
+        }
+        if let Some((at, provider)) = &pi.last_unwalled {
+            out.push((
+                Level::Ok,
+                format!("pi: last unwalled run {at} on {provider}"),
+            ));
+        }
         token(&mut out, "pi");
     }
     if h.antigravity {
@@ -140,9 +161,24 @@ pub fn on_this_machine(home: &Path, overlay: &Path, claude_dir: &Path) -> Vec<(L
         data: &data,
         codex: codex.as_deref(),
         claude: claude.as_deref(),
-        pi: home.join(".pi/agent/bin/pi").exists(),
+        pi: home.join(".pi/agent/bin/pi").exists().then(|| PiLaunch {
+            walled_default: std::fs::canonicalize(home.join(".local/bin/pi"))
+                .is_ok_and(|p| p.ends_with("tools/pi")),
+            last_unwalled: last_unwalled_pi(&read(overlay.join(sjel_config::UNWALLED_RUNS_LOG))),
+        }),
         antigravity: home.join(".local/bin/agy").exists(),
         enrolled: &enrolled,
+    })
+}
+
+/// The time and provider of the last pi line in the unwalled-runs log.
+fn last_unwalled_pi(log: &Option<String>) -> Option<(String, String)> {
+    log.as_deref()?.lines().rev().find_map(|line| {
+        let mut fields = line.split('\t');
+        let (at, harness, provider) = (fields.next()?, fields.next()?, fields.next()?);
+        Path::new(harness)
+            .ends_with("pi")
+            .then(|| (at.to_owned(), provider.to_owned()))
     })
 }
 
@@ -153,7 +189,7 @@ mod harness_wall_tests {
     fn walls(
         codex: Option<&str>,
         claude: Option<&str>,
-        pi: bool,
+        pi: Option<PiLaunch>,
         names: &[&str],
     ) -> Vec<(Level, String)> {
         let enrolled: BTreeSet<String> = names.iter().map(|n| n.to_string()).collect();
@@ -174,30 +210,69 @@ mod harness_wall_tests {
         let other =
             "default_permissions = \"q\"\n[permissions.p.filesystem]\n\"/o/data\" = \"deny\"\n";
         assert_eq!(
-            walls(Some(good), None, false, &["codex"]),
+            walls(Some(good), None, None, &["codex"]),
             vec![(Level::Ok, "Codex: its own sandbox denies /o/data".into())]
         );
-        assert_eq!(walls(Some(other), None, false, &["codex"])[0].0, Level::Bad);
-        assert!(walls(Some(good), None, false, &[])[1]
+        assert_eq!(walls(Some(other), None, None, &["codex"])[0].0, Level::Bad);
+        assert!(walls(Some(good), None, None, &[])[1]
             .1
             .contains("sjel agent enroll codex"));
     }
 
     #[test]
-    fn claude_without_its_sandbox_names_sjel_run_and_pi_always_does() {
+    fn claude_without_its_sandbox_names_sjel_run() {
         let claude = r#"{"permissions": {"deny": ["Read(~/o/data/**)"]}}"#;
-        let found = walls(None, Some(claude), true, &["claude-code", "pi"]);
-        assert_eq!(found.len(), 2);
+        let found = walls(None, Some(claude), None, &["claude-code"]);
+        assert_eq!(found.len(), 1);
         assert!(found
             .iter()
             .all(|(l, m)| *l == Level::Warn && m.contains("sjel run")));
-        let open = walls(None, Some("{}"), false, &["claude-code"]);
+        let open = walls(None, Some("{}"), None, &["claude-code"]);
         assert_eq!(open[0].0, Level::Bad);
         let sandboxed =
             r#"{"permissions": {"deny": ["Read(~/o/data/**)"]}, "sandbox": {"enabled": true}}"#;
         assert_eq!(
-            walls(None, Some(sandboxed), false, &["claude-code"]),
+            walls(None, Some(sandboxed), None, &["claude-code"]),
             vec![(Level::Ok, "Claude Code: its own shell sandbox is on".into())]
+        );
+    }
+
+    #[test]
+    fn pi_is_walled_only_through_tools_pi_and_reports_its_last_unwalled_run() {
+        let bare = walls(
+            None,
+            None,
+            Some(PiLaunch {
+                walled_default: false,
+                last_unwalled: None,
+            }),
+            &["pi"],
+        );
+        assert_eq!(bare.len(), 1);
+        assert_eq!(bare[0].0, Level::Warn);
+        assert!(bare[0].1.contains("tools/pi"));
+
+        let log = Some(
+            "2026-11-16T10:00:00Z\t/x/pi\topenai\t/p\n2026-11-16T11:00:00Z\t/x/cat\topenai\t/p\n"
+                .to_owned(),
+        );
+        let last = last_unwalled_pi(&log);
+        assert_eq!(last, Some(("2026-11-16T10:00:00Z".into(), "openai".into())));
+        let walled = walls(
+            None,
+            None,
+            Some(PiLaunch {
+                walled_default: true,
+                last_unwalled: last,
+            }),
+            &["pi"],
+        );
+        assert_eq!(
+            walled,
+            vec![
+                (Level::Ok, "pi: walled by default through tools/pi; `pi --unwalled` debugs on a trusted provider".into()),
+                (Level::Ok, "pi: last unwalled run 2026-11-16T10:00:00Z on openai".into()),
+            ]
         );
     }
 }

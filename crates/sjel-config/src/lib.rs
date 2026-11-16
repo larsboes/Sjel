@@ -41,6 +41,10 @@ pub fn overlay_config(name: &str) -> Option<PathBuf> {
     overlay_root().map(|r| r.join("config").join(name))
 }
 
+/// Where `sjel-contain --unwalled` records each run, relative to the overlay root. Doctor and
+/// the harness panel report the last line.
+pub const UNWALLED_RUNS_LOG: &str = "data/containment/unwalled-runs.log";
+
 /// `<overlay>/data/<capability>` — where a capability persists its data.
 pub fn overlay_data_dir(capability: &str) -> Option<PathBuf> {
     overlay_root().map(|r| r.join("data").join(capability))

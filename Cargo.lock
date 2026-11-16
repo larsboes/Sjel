@@ -5017,6 +5017,7 @@ name = "sjel-containment"
 version = "0.1.0"
 dependencies = [
  "civil-date",
+ "sjel-config",
  "sjel-inference",
  "tokio",
 ]

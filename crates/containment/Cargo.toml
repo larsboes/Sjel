@@ -17,6 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 civil-date = { path = "../civil-date" }
+sjel-config = { path = "../sjel-config" }
 sjel-inference = { path = "../inference" }
 tokio = { workspace = true, features = ["full"] }
 

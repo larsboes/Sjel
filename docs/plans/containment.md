@@ -21,6 +21,14 @@ Decided 2026-10-31, rings redrawn 2026-11-04.
 | `trusted` | `anthropic` and `openai`: Claude Code, Codex, and pi on OpenAI | The harness's own sandbox where it denies `data/` (Codex today); otherwise `sjel run <harness> --provider <name> --project <dir>`, which allows everything except the overlay's `data/` and `secrets/` and the home credentials (`TrustedProfile`, `crates/containment/src/seatbelt.rs`). `tools/doctor` ("Harness sandboxes") reports each installed harness's wall and whether it has its own agent token; the app's Systems → Agent tab shows the same (`GET /api/sjel-status/agent/harnesses`) and sets each token's cap (`POST …/harnesses/{name}/cap`), both owner only. Enrolling stays a shell command the page names. Not verified: the panel in the installed app (C1, 2026-11-15) | As today | The live node, fully: the agent gate at the `trusted` tier, `c3` still withheld |
 | `contained` | Every other provider: DeepSeek, OpenCode Go, GitHub Copilot, Antigravity, and any provider not listed | The project directory read-write. System paths and toolchains read-only. Nothing else. | The provider's `hosts` and the package registries through the proxy, and the demo node | The demo node only (`sjel demo up`). The overlay and the file-based credentials stay closed. The Keychain's broker answers, but an item stays readable only by the application its ACL trusts, so a harness's own sign-in is still out of reach (C3). The machine's TLS roots reach the run as a bundle the launcher writes (C7). |
 
+- **pi starts walled; it is the one harness with a debug escape** (decided 2026-11-16).
+  `~/.local/bin/pi` links to `tools/pi`, which reads the provider from `--provider` or pi's
+  `defaultProvider` and starts a trusted provider under the trusted profile and any other
+  through `tools/contain/pi`. `pi --unwalled` drops the profile for debugging. `sjel-contain`
+  admits it for the `pi` binary on a trusted provider only, and refuses it without an overlay to
+  record the run in (`sjel_config::UNWALLED_RUNS_LOG`). Doctor and the harness panel report
+  whether `pi` is linked and the last unwalled run. Claude Code and Codex get no escape. A
+  `pi update` that restores the installer's link shows as a doctor warning.
 - **The trusted harnesses reach Sjel through `sjel mcp`.** `tools/sjel-mcp/sjel-mcp register`
   writes it into Claude Code, Codex and pi, with the default agent token. That token reads at
   the `trusted` tier once the owner runs `sjel agent tier default trusted`. pi's registration
@@ -45,7 +53,8 @@ Decided 2026-10-31, rings redrawn 2026-11-04.
 | Claude Code sandbox floor | User-level `sandbox` settings | Off on this machine, so its rules bind the file tools only. The trusted profile of `sjel run` is the boundary instead. |
 | macOS seatbelt | `/usr/bin/sandbox-exec` | The mechanism. |
 
-Not in place: pi, opencode, `copilot` and `agy` run with full user access, with no wrapper.
+Not in place: opencode, `copilot` and `agy` run with full user access, with no wrapper. pi starts
+through `tools/pi` (§1).
 
 **Measured gap, 2026-11-07.** The profile grants `file-read-data` on the granted subpaths and
 `file-read-metadata` everywhere, which is enough for the kernel to resolve an absolute path. It is

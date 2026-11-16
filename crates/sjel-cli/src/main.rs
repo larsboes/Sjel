@@ -297,7 +297,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "distribution" => distribution::USAGE,
         "testflight" => testflight::USAGE,
         "demo" => "Usage: sjel demo up | app [page] | mac <page> [light|dark] [out.png] | down",
-        "run" => "Usage: sjel run <harness-bin> --provider <name> --project <dir> [-- <args...>]\n       pi needs a prepared home: tools/contain/pi --project <dir> [--provider <slug>] [-- pi args...]",
+        "run" => "Usage: sjel run <harness-bin> --provider <name> --project <dir> [--unwalled] [-- <args...>]\n       sjel run --ring-of <provider>\n       pi starts walled through tools/pi; `pi --unwalled` debugs on a trusted provider.",
         "search" => "Usage: sjel search <words...>",
         "app" => app::USAGE,
         "capture" => {

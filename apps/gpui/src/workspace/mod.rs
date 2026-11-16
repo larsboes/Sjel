@@ -2105,10 +2105,11 @@ mod tests {
     /// a test that mixes GPUI's executor with real I/O.
     fn open(cx: &mut TestAppContext) -> (Entity<Workspace>, &mut VisualTestContext) {
         cx.executor().allow_parking();
-        cx.update(bind_keys);
         let (view, cx) = sjel_gpui_ui::test_support::mount_root(cx, None, |window, cx| {
             Workspace::new("http://example.invalid", window, cx)
         });
+        // After Ely's init, as `main.rs` orders it: a later binding wins at the same depth.
+        cx.update(|_, cx| bind_keys(cx));
         view.update(cx, |view, cx| {
             // Through `go`, because that is the only way a page is opened: it hands the frame the
             // focus the page it replaced was holding.
@@ -2305,7 +2306,7 @@ mod tests {
             assert_eq!(inbox.cursor.as_deref(), Some("a"));
             let (id, field, _) = inbox.editing.as_ref().expect("the text is open");
             assert_eq!(id, "a");
-            assert_eq!(field.read(cx).value(), "shirt jed");
+            assert_eq!(field.read(cx).text(), "shirt jed");
         });
     }
 

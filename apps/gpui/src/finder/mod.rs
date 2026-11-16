@@ -461,6 +461,7 @@ impl Render for Finder {
             .track_focus(&self.focus)
             .on_action(cx.listener(|view, _: &SelectUp, _, cx| view.step(-1, cx)))
             .on_action(cx.listener(|view, _: &SelectDown, _, cx| view.step(1, cx)))
+            .on_action(cx.listener(|view, _: &ConfirmOtherWay, _, cx| view.confirm(true, cx)))
             .on_action(cx.listener(|view, _: &NextMode, _, cx| {
                 view.mode = view.mode.next();
                 view.search_server_soon(cx);

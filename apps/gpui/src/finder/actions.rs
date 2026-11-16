@@ -6,7 +6,10 @@ use sjel_gpui_ui::ely::forms::{InputEvent, TextInput};
 use super::types::FinderEvent;
 use super::Finder;
 
-actions!(finder, [SelectUp, SelectDown, NextMode, Close]);
+actions!(
+    finder,
+    [SelectUp, SelectDown, ConfirmOtherWay, NextMode, Close]
+);
 
 impl Finder {
     pub(super) fn ensure_input(
@@ -117,13 +120,17 @@ impl Finder {
         cx.notify();
     }
 
-    /// Bindings the finder carries. Up and down reach it because a one-line input lets them
-    /// through, the same way the kit's command palette receives them. Escape is the
-    /// workspace's window-wide binding, which closes an open finder first.
-    pub fn keys() -> [gpui_kit::KeyBinding; 5] {
+    /// Bindings the finder carries. The arrows and ⌘↩ are also Ely input keys, and the deeper
+    /// context wins, so they bind at `Finder > ElyInput` as well. Escape is the workspace's
+    /// window-wide binding, which closes an open finder first.
+    pub fn keys() -> [gpui_kit::KeyBinding; 8] {
+        const IN_INPUT: Option<&str> = Some("Finder > ElyInput");
         [
             gpui_kit::KeyBinding::new("up", SelectUp, Some("Finder")),
             gpui_kit::KeyBinding::new("down", SelectDown, Some("Finder")),
+            gpui_kit::KeyBinding::new("up", SelectUp, IN_INPUT),
+            gpui_kit::KeyBinding::new("down", SelectDown, IN_INPUT),
+            gpui_kit::KeyBinding::new("cmd-enter", ConfirmOtherWay, IN_INPUT),
             gpui_kit::KeyBinding::new("ctrl-p", SelectUp, Some("Finder")),
             gpui_kit::KeyBinding::new("ctrl-n", SelectDown, Some("Finder")),
             gpui_kit::KeyBinding::new("cmd-w", Close, Some("Finder")),

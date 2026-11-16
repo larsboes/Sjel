@@ -120,15 +120,6 @@ impl Screen {
         }
     }
 
-    /// Every line the parser still holds, history included.
-    pub(crate) fn select_all(&mut self) {
-        let top = GridPoint::new(Line(-(self.term.grid().history_size() as i32)), Column(0));
-        let bottom = GridPoint::new(Line(self.size.rows as i32 - 1), Column(self.size.cols - 1));
-        let mut selection = Selection::new(SelectionType::Lines, top, Side::Left);
-        selection.update(bottom, Side::Right);
-        self.term.selection = Some(selection);
-    }
-
     /// A click without a drag selects nothing, so it leaves no highlight behind.
     pub(crate) fn drop_empty_selection(&mut self) {
         if self
@@ -141,18 +132,10 @@ impl Screen {
         }
     }
 
-    pub(crate) fn clear_selection(&mut self) {
-        self.term.selection = None;
-    }
-
     pub(crate) fn selected_text(&self) -> Option<String> {
         self.term
             .selection_to_string()
             .filter(|text| !text.is_empty())
-    }
-
-    pub(crate) fn bracketed_paste(&self) -> bool {
-        self.term.mode().contains(TermMode::BRACKETED_PASTE)
     }
 
     /// The screen as the view draws it: one entry per line, each a run per shared look.

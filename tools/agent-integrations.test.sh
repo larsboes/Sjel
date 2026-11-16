@@ -43,4 +43,15 @@ if $SCRIPT update nothing 2>"$tmp/err"; then
 fi
 grep -q "unknown upstream 'nothing'" "$tmp/err"
 
+# A configured harness that interceptor does not serve (pi) must not stop the marker loop
+# before a later one (copilot).
+mkdir -p "$tmp/bin" "$HOME/.pi" "$HOME/.copilot"
+printf '#!/bin/sh\nexit 0\n' >"$tmp/bin/interceptor"
+chmod +x "$tmp/bin/interceptor"
+PATH="$tmp/bin:$PATH" $SCRIPT update interceptor >/dev/null
+[ -s "$HOME/.copilot/.interceptor-skills-sjel" ] || {
+  echo "update interceptor did not write the copilot marker" >&2
+  exit 1
+}
+
 echo "agent-integrations.test.sh: ok"

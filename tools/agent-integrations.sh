@@ -247,7 +247,9 @@ interceptor_install() {  # <harness> — the product re-adopts its own skills, o
 interceptor_write_marker() {  # <harness>
   local dir
   dir="$(interceptor_harness_dir "$1")"
-  [ -n "$dir" ] && [ -d "$dir" ] && date -u +%Y-%m-%d > "$dir/.interceptor-skills-sjel"
+  # A harness interceptor does not serve has no directory here and is skipped, not an error.
+  [ -n "$dir" ] && [ -d "$dir" ] || return 0
+  date -u +%Y-%m-%d > "$dir/.interceptor-skills-sjel"
 }
 
 # ── the table (C15) ────────────────────────────────────────────────────────

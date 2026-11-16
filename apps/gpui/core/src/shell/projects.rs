@@ -1,11 +1,15 @@
 //! Projects, Records, Notes & Tasks shell client methods.
 
 use super::*;
-use projects_api::reads::{ProjectReadResponse, RecordReadResponse};
+use projects_api::reads::{ProjectReadResponse, RecordListResponse, RecordReadResponse};
 use projects_api::{
-    AddNoteRequest, AddProjectRequest, AddTaskRequest, InventoryLinkDecisionRequest,
-    MailDecisionRequest, RemoveRecordRequest, RenameRecordRequest, SaveRecordRequest,
-    SetDoneRequest, SetPropertyRequest,
+    proxy_route_mail_decision, AddNoteRequest, AddProjectRequest, AddTaskRequest,
+    InventoryLinkDecisionRequest, MailDecisionRequest, RemoveRecordRequest, RenameRecordRequest,
+    SaveRecordRequest, SetDoneRequest, SetPropertyRequest, PROXY_ROUTE_INVENTORY_LINKS,
+    PROXY_ROUTE_INVENTORY_LINKS_REMOVE, PROXY_ROUTE_MAIL_PROPOSALS, PROXY_ROUTE_NOTES,
+    PROXY_ROUTE_PROJECT, PROXY_ROUTE_PROJECTS, PROXY_ROUTE_RECORD, PROXY_ROUTE_RECORDS,
+    PROXY_ROUTE_RECORD_PROPERTY, PROXY_ROUTE_RECORD_REMOVE, PROXY_ROUTE_RECORD_RENAME,
+    PROXY_ROUTE_TASKS, PROXY_ROUTE_TASKS_DONE,
 };
 
 /// A typed request as the JSON body the shell sends.
@@ -22,7 +26,7 @@ impl Shell {
         struct Envelope {
             links: Vec<ProjectInventoryLink>,
         }
-        let path = with_query("/projects/api/inventory-links", &[("path", path)]);
+        let path = with_query(PROXY_ROUTE_INVENTORY_LINKS, &[("path", path)]);
         let result: Envelope = self.json(Method::GET, &path, None, 10).await?;
         Ok(result.links)
     }
@@ -32,7 +36,7 @@ impl Shell {
         struct Envelope {
             record: ProjectLinkRecord,
         }
-        let path = with_query("/projects/api/record", &[("path", path)]);
+        let path = with_query(PROXY_ROUTE_RECORD, &[("path", path)]);
         let result: Envelope = self.json(Method::GET, &path, None, 10).await?;
         Ok(result.record)
     }
@@ -49,9 +53,9 @@ impl Shell {
             changed: bool,
         }
         let path = if remove {
-            "/projects/api/inventory-links/remove"
+            PROXY_ROUTE_INVENTORY_LINKS_REMOVE
         } else {
-            "/projects/api/inventory-links"
+            PROXY_ROUTE_INVENTORY_LINKS
         };
         let request = InventoryLinkDecisionRequest {
             project: project.to_owned(),
@@ -72,8 +76,8 @@ impl Shell {
         before: Option<i64>,
     ) -> ShellResult<ProjectMailPage> {
         let path = before.map_or_else(
-            || "/projects/api/mail-proposals".to_owned(),
-            |id| format!("/projects/api/mail-proposals?before={id}"),
+            || PROXY_ROUTE_MAIL_PROPOSALS.to_owned(),
+            |id| with_query(PROXY_ROUTE_MAIL_PROPOSALS, &[("before", &id.to_string())]),
         );
         self.json(Method::GET, &path, None, 10).await
     }
@@ -83,7 +87,7 @@ impl Shell {
         struct One {
             record: ProjectMailTarget,
         }
-        let path = with_query("/projects/api/record", &[("path", path)]);
+        let path = with_query(PROXY_ROUTE_RECORD, &[("path", path)]);
         let one: One = self.json(Method::GET, &path, None, 10).await?;
         Ok(one.record)
     }
@@ -95,7 +99,7 @@ impl Shell {
     ) -> ShellResult<ProjectMailDecision> {
         self.json(
             Method::POST,
-            &format!("/projects/api/mail-proposals/{id}/decision"),
+            &proxy_route_mail_decision(id),
             Some(body(request)?),
             10,
         )
@@ -108,78 +112,36 @@ impl Shell {
             projects: Vec<ProjectSummary>,
         }
         let list: List = self
-            .json(Method::GET, "/projects/api/projects", None, 5)
+            .json(Method::GET, PROXY_ROUTE_PROJECTS, None, 5)
             .await?;
         Ok(list.projects)
     }
 
     /// A project's records without their content: what a list of notes draws.
     pub async fn project(&self, name: &str) -> ShellResult<Vec<ProjectRecord>> {
-        let path = with_query(
-            "/projects/api/project",
-            &[("name", name), ("content", "false")],
-        );
+        let path = with_query(PROXY_ROUTE_PROJECT, &[("name", name), ("content", "false")]);
         let read: ProjectReadResponse = self.json(Method::GET, &path, None, 10).await?;
         Ok(read.records.into_iter().map(ProjectRecord::from).collect())
     }
 
     /// One record with its content: what the note editor opens.
     pub async fn record(&self, path: &str) -> ShellResult<ProjectRecord> {
-        let path = with_query("/projects/api/record", &[("path", path)]);
+        let path = with_query(PROXY_ROUTE_RECORD, &[("path", path)]);
         let read: RecordReadResponse = self.json(Method::GET, &path, None, 10).await?;
         Ok(read.record.into())
     }
 
-    /// Every note across projects (`GET /projects/api/records`).
+    /// Every note and project record across projects (`GET /projects/api/records`). A kind
+    /// whose read fails is left out, so one failing list does not empty the other.
     pub async fn notes(&self) -> ShellResult<Vec<GlobalNote>> {
-        #[derive(Deserialize)]
-        struct Records {
-            records: Vec<RecordItem>,
-        }
-        #[derive(Deserialize)]
-        struct RecordItem {
-            id: String,
-            #[serde(default)]
-            kind: String,
-            title: String,
-            #[serde(default)]
-            project: String,
-        }
-        let notes_req: Result<Records, _> = self
-            .json(
-                Method::GET,
-                "/projects/api/records?kind=note&content=false",
-                None,
-                10,
-            )
-            .await;
         let mut list = Vec::new();
-        if let Ok(records) = notes_req {
-            for r in records.records {
-                list.push(GlobalNote {
-                    path: r.id,
-                    kind: r.kind,
-                    title: r.title,
-                    project: r.project,
-                });
-            }
-        }
-        if let Ok(projects) = self
-            .json::<Records>(
-                Method::GET,
-                "/projects/api/records?kind=project&content=false",
-                None,
-                10,
-            )
-            .await
-        {
-            for r in projects.records {
-                list.push(GlobalNote {
-                    path: r.id,
-                    kind: r.kind,
-                    title: r.title,
-                    project: r.project,
-                });
+        for kind in ["note", "project"] {
+            let path = with_query(PROXY_ROUTE_RECORDS, &[("kind", kind), ("content", "false")]);
+            if let Ok(read) = self
+                .json::<RecordListResponse>(Method::GET, &path, None, 10)
+                .await
+            {
+                list.extend(read.records.into_iter().map(GlobalNote::from));
             }
         }
         list.sort_by(|a, b| {
@@ -198,14 +160,9 @@ impl Shell {
             content: content.to_owned(),
             base: Some(base.to_owned()),
         };
-        self.send(
-            Method::POST,
-            "/projects/api/record",
-            Some(body(&request)?),
-            10,
-        )
-        .await
-        .map(drop)
+        self.send(Method::POST, PROXY_ROUTE_RECORD, Some(body(&request)?), 10)
+            .await
+            .map(drop)
     }
 
     /// Renames a record: its file takes the new title, and every record linking `[[old]]` follows.
@@ -216,7 +173,7 @@ impl Shell {
         };
         self.json(
             Method::POST,
-            "/projects/api/record/rename",
+            PROXY_ROUTE_RECORD_RENAME,
             Some(body(&request)?),
             30,
         )
@@ -236,7 +193,7 @@ impl Shell {
         let task: Task = self
             .json(
                 Method::POST,
-                "/projects/api/tasks/done",
+                PROXY_ROUTE_TASKS_DONE,
                 Some(body(&request)?),
                 10,
             )
@@ -264,7 +221,7 @@ impl Shell {
         let task: Task = self
             .json(
                 Method::POST,
-                "/projects/api/record/property",
+                PROXY_ROUTE_RECORD_PROPERTY,
                 Some(body(&request)?),
                 10,
             )
@@ -290,14 +247,9 @@ impl Shell {
             due: due.map(str::to_owned),
             priority,
         };
-        self.send(
-            Method::POST,
-            "/projects/api/tasks",
-            Some(body(&request)?),
-            10,
-        )
-        .await
-        .map(drop)
+        self.send(Method::POST, PROXY_ROUTE_TASKS, Some(body(&request)?), 10)
+            .await
+            .map(drop)
     }
 
     /// Tasks across all live projects, optionally filtered by ?status=open|done.
@@ -307,8 +259,8 @@ impl Shell {
             tasks: Vec<GlobalTask>,
         }
         let path = match status {
-            Some(s) => format!("/projects/api/tasks?status={s}"),
-            None => "/projects/api/tasks".to_string(),
+            Some(s) => with_query(PROXY_ROUTE_TASKS, &[("status", s)]),
+            None => PROXY_ROUTE_TASKS.to_owned(),
         };
         let list: List = self.json(Method::GET, &path, None, 10).await?;
         Ok(list.tasks)
@@ -322,7 +274,7 @@ impl Shell {
         };
         self.send(
             Method::POST,
-            "/projects/api/projects",
+            PROXY_ROUTE_PROJECTS,
             Some(body(&request)?),
             10,
         )
@@ -337,14 +289,9 @@ impl Shell {
             title: title.to_owned(),
             summary: String::new(),
         };
-        self.send(
-            Method::POST,
-            "/projects/api/notes",
-            Some(body(&request)?),
-            10,
-        )
-        .await
-        .map(drop)
+        self.send(Method::POST, PROXY_ROUTE_NOTES, Some(body(&request)?), 10)
+            .await
+            .map(drop)
     }
 
     /// Removes a record from the projects store and disk.
@@ -354,7 +301,7 @@ impl Shell {
         };
         self.send(
             Method::POST,
-            "/projects/api/record/remove",
+            PROXY_ROUTE_RECORD_REMOVE,
             Some(body(&request)?),
             10,
         )

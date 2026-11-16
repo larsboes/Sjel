@@ -1,9 +1,11 @@
 //! Classified wire responses for the project list and record readers.
 
+use std::collections::BTreeMap;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{ProjectKind, ProjectRecord, ProjectSummary};
+use crate::{GlobalNote, ProjectKind, ProjectRecord, ProjectSummary};
 
 /// A project summary with the strictest class of its source records.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
@@ -66,6 +68,44 @@ pub struct RecordReadResponse {
     pub record: RecordRead,
 }
 
+/// One live record as the task and record lists serve it.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+pub struct TaskRead {
+    pub id: String,
+    pub kind: ProjectKind,
+    pub title: String,
+    pub done: bool,
+    pub due: Option<String>,
+    pub priority: u8,
+    pub summary: Option<String>,
+    pub projects: Vec<String>,
+    /// The project folder the record lives in.
+    pub project: String,
+    /// Every frontmatter key, lists flattened to `a, b`.
+    pub fields: BTreeMap<String, String>,
+    /// The dashboard page that shows the record.
+    pub uri: String,
+    pub data_class: String,
+    pub data_class_rationale: String,
+}
+
+impl From<TaskRead> for GlobalNote {
+    fn from(read: TaskRead) -> Self {
+        Self {
+            path: read.id,
+            kind: read.kind.as_str().to_owned(),
+            title: read.title,
+            project: read.project,
+        }
+    }
+}
+
+/// The successful response from the record-list route, for one kind.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+pub struct RecordListResponse {
+    pub records: Vec<TaskRead>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +157,42 @@ mod tests {
         let record = ProjectRecord::from(records.into_iter().next().unwrap());
         assert_eq!(record.content, "");
         assert_eq!(record.title, "A");
+    }
+
+    #[test]
+    fn a_record_list_decodes_into_client_notes() {
+        let wire = serde_json::to_value(RecordListResponse {
+            records: vec![TaskRead {
+                id: "Home/Plan.md".into(),
+                kind: ProjectKind::Note,
+                title: "Plan".into(),
+                done: false,
+                due: None,
+                priority: 0,
+                summary: None,
+                projects: vec!["Home".into()],
+                project: "Home".into(),
+                fields: BTreeMap::new(),
+                uri: "/projects?project=Home".into(),
+                data_class: "c1".into(),
+                data_class_rationale: "own".into(),
+            }],
+        })
+        .unwrap();
+        let notes: Vec<GlobalNote> = serde_json::from_value::<RecordListResponse>(wire)
+            .unwrap()
+            .records
+            .into_iter()
+            .map(GlobalNote::from)
+            .collect();
+        assert_eq!(
+            notes,
+            vec![GlobalNote {
+                path: "Home/Plan.md".into(),
+                kind: "note".into(),
+                title: "Plan".into(),
+                project: "Home".into(),
+            }]
+        );
     }
 }

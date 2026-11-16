@@ -14,8 +14,8 @@ use serde_json::{json, Value};
 use projects::{ops, Kind, Projects};
 use projects_api::{
     reads::{
-        ClassifiedProjectSummary, ProjectListResponse, ProjectReadResponse, RecordRead,
-        RecordReadResponse,
+        ClassifiedProjectSummary, ProjectListResponse, ProjectReadResponse, RecordListResponse,
+        RecordRead, RecordReadResponse,
     },
     ProjectSummary,
 };
@@ -577,11 +577,11 @@ async fn list_projects(
 async fn list_records(
     State(projects): State<Shared>,
     Query(query): Query<KindQuery>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<RecordListResponse>, ApiError> {
     let records = ops::records(&projects, query.kind)
         .await
         .map_err(|e| api_error(false, e))?;
-    Ok(Json(json!({ "records": records })))
+    Ok(Json(RecordListResponse { records }))
 }
 
 async fn list_files(State(projects): State<Shared>) -> Result<Json<Value>, ApiError> {
@@ -715,7 +715,7 @@ async fn add_task(
     .map_err(|e| api_error(true, e))?;
     Ok((
         StatusCode::CREATED,
-        Json(json!({ "task": ops::Task::from_record(&record) })),
+        Json(json!({ "task": ops::task(&record) })),
     ))
 }
 
@@ -726,7 +726,7 @@ async fn set_done(
     let record = ops::set_done(&projects, &body.id, body.done)
         .await
         .map_err(|e| api_error(true, e))?;
-    Ok(Json(json!({ "task": ops::Task::from_record(&record) })))
+    Ok(Json(json!({ "task": ops::task(&record) })))
 }
 
 async fn add_project(
@@ -767,7 +767,7 @@ async fn set_property(
     let record = ops::set_property(&projects, &body.path, &body.key, &body.value)
         .await
         .map_err(|e| api_error(true, e))?;
-    Ok(Json(json!({ "task": ops::Task::from_record(&record) })))
+    Ok(Json(json!({ "task": ops::task(&record) })))
 }
 
 async fn add_note(

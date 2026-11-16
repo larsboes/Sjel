@@ -21,6 +21,11 @@ pub const READ_RESPONSES: &[ResponseSchema] = &[
         path: crate::ROUTE_RECORD,
         schema: response_schema_of::<RecordReadResponse>,
     },
+    ResponseSchema {
+        method: "GET",
+        path: crate::ROUTE_RECORDS,
+        schema: response_schema_of::<RecordListResponse>,
+    },
 ];
 
 /// The first object projections; identity follows stored paths and summary grouping.

@@ -31,6 +31,63 @@ pub const ROUTE_MAIL_DECISION: &str = "/api/mail-proposals/{id}/decision";
 pub const ROUTE_INVENTORY_LINKS: &str = "/api/inventory-links";
 pub const ROUTE_INVENTORY_LINKS_REMOVE: &str = "/api/inventory-links/remove";
 
+/// The same routes behind the status proxy, which mounts the capability at `/projects`.
+pub const PROXY_PREFIX: &str = "/projects";
+pub const PROXY_ROUTE_PROJECTS: &str = "/projects/api/projects";
+pub const PROXY_ROUTE_RECORDS: &str = "/projects/api/records";
+pub const PROXY_ROUTE_RECORD: &str = "/projects/api/record";
+pub const PROXY_ROUTE_RECORD_PROPERTY: &str = "/projects/api/record/property";
+pub const PROXY_ROUTE_RECORD_REMOVE: &str = "/projects/api/record/remove";
+pub const PROXY_ROUTE_RECORD_RENAME: &str = "/projects/api/record/rename";
+pub const PROXY_ROUTE_PROJECT: &str = "/projects/api/project";
+pub const PROXY_ROUTE_TASKS: &str = "/projects/api/tasks";
+pub const PROXY_ROUTE_TASKS_DONE: &str = "/projects/api/tasks/done";
+pub const PROXY_ROUTE_NOTES: &str = "/projects/api/notes";
+pub const PROXY_ROUTE_MAIL_PROPOSALS: &str = "/projects/api/mail-proposals";
+pub const PROXY_ROUTE_INVENTORY_LINKS: &str = "/projects/api/inventory-links";
+pub const PROXY_ROUTE_INVENTORY_LINKS_REMOVE: &str = "/projects/api/inventory-links/remove";
+
+/// `ROUTE_MAIL_DECISION` behind the status proxy, for one proposal.
+pub fn proxy_route_mail_decision(id: i64) -> String {
+    format!(
+        "{PROXY_PREFIX}{}",
+        ROUTE_MAIL_DECISION.replace("{id}", &id.to_string())
+    )
+}
+
+#[cfg(test)]
+mod route_tests {
+    use super::*;
+
+    #[test]
+    fn every_proxy_route_is_its_server_route_under_the_prefix() {
+        for (proxy, route) in [
+            (PROXY_ROUTE_PROJECTS, ROUTE_PROJECTS),
+            (PROXY_ROUTE_RECORDS, ROUTE_RECORDS),
+            (PROXY_ROUTE_RECORD, ROUTE_RECORD),
+            (PROXY_ROUTE_RECORD_PROPERTY, ROUTE_RECORD_PROPERTY),
+            (PROXY_ROUTE_RECORD_REMOVE, ROUTE_RECORD_REMOVE),
+            (PROXY_ROUTE_RECORD_RENAME, ROUTE_RECORD_RENAME),
+            (PROXY_ROUTE_PROJECT, ROUTE_PROJECT),
+            (PROXY_ROUTE_TASKS, ROUTE_TASKS),
+            (PROXY_ROUTE_TASKS_DONE, ROUTE_TASKS_DONE),
+            (PROXY_ROUTE_NOTES, ROUTE_NOTES),
+            (PROXY_ROUTE_MAIL_PROPOSALS, ROUTE_MAIL_PROPOSALS),
+            (PROXY_ROUTE_INVENTORY_LINKS, ROUTE_INVENTORY_LINKS),
+            (
+                PROXY_ROUTE_INVENTORY_LINKS_REMOVE,
+                ROUTE_INVENTORY_LINKS_REMOVE,
+            ),
+        ] {
+            assert_eq!(proxy, format!("{PROXY_PREFIX}{route}"));
+        }
+        assert_eq!(
+            proxy_route_mail_decision(7),
+            "/projects/api/mail-proposals/7/decision"
+        );
+    }
+}
+
 // ============================================================================
 // Core Enums and Models
 // ============================================================================

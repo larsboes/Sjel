@@ -44,10 +44,9 @@ The full documentation-link launcher now passes for all 419 documents.
    [GPUI work package 31](gpui.md#open).
    Reviewed 2026-11-15: no app-core type shares a name with an API crate type. Device pairing now
    sends `devices_api::ClaimRequest` and `JoinRequest` instead of hand-built JSON. The Projects
-   client decodes `RecordRead` and sends the `projects_api` request types for every write with
-   a typed request. Open: `GET /projects/api/records` answers untyped JSON, so the client's
-   note list keeps a local struct; and the client's route paths copy `projects_api`'s
-   `ROUTE_*` constants as literals.
+   client decodes `RecordRead`, sends the `projects_api` request types for every typed write,
+   decodes `GET /projects/api/records` as `RecordListResponse`, and addresses every route through
+   `projects_api::PROXY_ROUTE_*`.
 2. Remove stale live paths and references to retired services, after distinguishing historical
    fixtures and compatibility readers from active configuration. Done when maintenance path
    candidates have been reviewed and every active path resolves. Proposed paths remain open

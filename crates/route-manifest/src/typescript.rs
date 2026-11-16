@@ -39,11 +39,14 @@ fn render(schema: &Value, root: &Value, refs: &mut Vec<String>) -> Result<String
             return Err(format!("unsupported TypeScript schema keyword: {keyword}"));
         }
     }
-    if schema
-        .get("additionalProperties")
-        .is_some_and(Value::is_object)
-    {
-        return Err("typed additionalProperties is unsupported".into());
+    if let Some(values) = schema.get("additionalProperties").filter(|v| v.is_object()) {
+        let named = schema["properties"]
+            .as_object()
+            .is_some_and(|props| !props.is_empty());
+        if named || schema["type"] != "object" {
+            return Err("typed additionalProperties beside named properties is unsupported".into());
+        }
+        return Ok(format!("Record<string, {}>", render(values, root, refs)?));
     }
     if let Some(reference) = schema["$ref"].as_str() {
         if refs.iter().any(|seen| seen == reference) {
@@ -129,6 +132,15 @@ mod tests {
     }
 
     #[test]
+    fn a_string_keyed_map_is_a_record() {
+        let schema = json!({"title": "Read", "type": "object", "required": ["fields"],
+            "properties": {"fields": {"type": "object", "additionalProperties": {"type": "string"}}}});
+        assert!(declaration(&schema)
+            .unwrap()
+            .contains("\"fields\": Record<string, string>;"));
+    }
+
+    #[test]
     fn object_fields_are_canonical_regardless_of_schema_insertion_order() {
         let schema = serde_json::from_str(
             r#"{"title":"Read","type":"object","properties":{"z":{"type":"string"},"a":{"type":"object","properties":{"y":{"type":"boolean"},"b":{"type":"integer"}}}}}"#,
@@ -145,7 +157,7 @@ mod tests {
         for schema in [
             json!({"title": "Bad", "anyOf": [{"type": "string"}]}),
             json!({"title": "Bad", "type": "string", "oneOf": [{"type": "string"}]}),
-            json!({"title": "Bad", "type": "object", "properties": {}, "additionalProperties": {"type": "string"}}),
+            json!({"title": "Bad", "type": "object", "properties": {"a": {"type": "string"}}, "additionalProperties": {"type": "string"}}),
             json!({"title": "Bad", "$ref": "https://example.org/schema"}),
             json!({"title": "Bad", "$ref": "#/$defs/Loop", "$defs": {"Loop": {"$ref": "#/$defs/Loop"}}}),
             json!({"title": "Bad; injected", "type": "string"}),

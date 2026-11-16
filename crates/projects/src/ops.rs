@@ -26,25 +26,7 @@ const CLASS_KEY: &str = "class";
 
 /// One task, as decision-ladder band 620 and the dashboard tables read it. The core keys keep the
 /// shape the retired vault task reader served.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct Task {
-    pub id: String,
-    pub kind: Kind,
-    pub title: String,
-    pub done: bool,
-    pub due: Option<String>,
-    pub priority: u8,
-    pub summary: Option<String>,
-    pub projects: Vec<String>,
-    /// The project folder the task lives in.
-    pub project: String,
-    /// Every frontmatter key, lists flattened to `a, b`: the columns of the tasks table.
-    pub fields: std::collections::BTreeMap<String, String>,
-    /// The dashboard page that shows the task.
-    pub uri: String,
-    pub data_class: String,
-    pub data_class_rationale: String,
-}
+pub use projects_api::reads::TaskRead as Task;
 
 /// Classify a project record with the same rule as the vault note it came from.
 pub fn classify_record(record: &Record) -> DataClass {
@@ -95,25 +77,24 @@ pub fn class_refusal(record: &Record) -> Option<String> {
     (class.value != declared).then_some(class.rationale)
 }
 
-impl Task {
-    pub fn from_record(record: &Record) -> Self {
-        let fields = record.fields();
-        let class = classify_fields(&record.path, &fields);
-        Self {
-            id: record.path.clone(),
-            kind: record.kind,
-            title: record.title.clone(),
-            done: record.done,
-            due: record.due.clone(),
-            priority: record.priority,
-            summary: record::value(&fields, "summary"),
-            projects: project_links(&fields).unwrap_or_else(|| vec![record.project.clone()]),
-            project: record.project.clone(),
-            uri: format!("/projects?project={}", encode(&record.project)),
-            data_class: class.value,
-            data_class_rationale: class.rationale,
-            fields: fields.into_iter().collect(),
-        }
+/// A record as the task and record lists serve it.
+pub fn task(record: &Record) -> Task {
+    let fields = record.fields();
+    let class = classify_fields(&record.path, &fields);
+    Task {
+        id: record.path.clone(),
+        kind: record.kind,
+        title: record.title.clone(),
+        done: record.done,
+        due: record.due.clone(),
+        priority: record.priority,
+        summary: record::value(&fields, "summary"),
+        projects: project_links(&fields).unwrap_or_else(|| vec![record.project.clone()]),
+        project: record.project.clone(),
+        uri: format!("/projects?project={}", encode(&record.project)),
+        data_class: class.value,
+        data_class_rationale: class.rationale,
+        fields: fields.into_iter().collect(),
     }
 }
 
@@ -155,7 +136,7 @@ pub async fn tasks(projects: &Projects, status: Option<&str>) -> Fallible<Vec<Ta
             Some("done") => r.done,
             _ => true,
         })
-        .map(Task::from_record)
+        .map(task)
         .collect();
     tasks.sort_by(|a, b| {
         a.done
@@ -173,7 +154,7 @@ pub async fn records(projects: &Projects, kind: Kind) -> Fallible<Vec<Task>> {
         .await?
         .iter()
         .filter(|r| r.kind == kind && !r.archived && !r.domain)
-        .map(Task::from_record)
+        .map(task)
         .collect())
 }
 

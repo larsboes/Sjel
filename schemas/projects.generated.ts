@@ -67,3 +67,21 @@ export type RecordReadResponse = {
   };
 };
 
+export type RecordListResponse = {
+  "records": Array<{
+    "data_class": string;
+    "data_class_rationale": string;
+    "done": boolean;
+    "due": string | null;
+    "fields": Record<string, string>;
+    "id": string;
+    "kind": "project" | "task" | "note";
+    "priority": number;
+    "project": string;
+    "projects": Array<string>;
+    "summary": string | null;
+    "title": string;
+    "uri": string;
+  }>;
+};
+

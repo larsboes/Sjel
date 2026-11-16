@@ -28,14 +28,12 @@ use crate::device::DeviceClient;
 use crate::shell::{CalendarEntry, ProjectRecord};
 use crate::store::TursoStore;
 
-const PROJECTS: &str = "/projects/api/projects";
-const PROJECT: &str = "/projects/api/project";
-const RECORD: &str = "/projects/api/record";
-const NOTES: &str = "/projects/api/notes";
-const TASKS: &str = "/projects/api/tasks";
-const TASKS_DONE: &str = "/projects/api/tasks/done";
-const RECORD_PROPERTY: &str = "/projects/api/record/property";
-const RECORD_REMOVE: &str = "/projects/api/record/remove";
+use projects_api::{
+    PROXY_ROUTE_NOTES as NOTES, PROXY_ROUTE_PROJECT as PROJECT, PROXY_ROUTE_PROJECTS as PROJECTS,
+    PROXY_ROUTE_RECORD as RECORD, PROXY_ROUTE_RECORD_PROPERTY as RECORD_PROPERTY,
+    PROXY_ROUTE_RECORD_REMOVE as RECORD_REMOVE, PROXY_ROUTE_TASKS as TASKS,
+    PROXY_ROUTE_TASKS_DONE as TASKS_DONE,
+};
 /// The calendar's entries: a create on the collection, a change and a delete by id, and a change
 /// feed that answers what moved since a cursor (`crates/calendar/src/server.rs`).
 const CAPTURES: &str = "/comms/captures";

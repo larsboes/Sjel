@@ -199,3 +199,8 @@ reason = "undici 6.29.0, fixed in 6.29.1: the WebSocket client buffers automatic
 id = "GHSA-qrxm-fqhp-jwvm"
 ignoreUntil = 2027-01-01
 reason = "undici 6.29.0, fixed in 6.29.1: denial of service through a TLS 1.2 certificate-changing renegotiation. Same reach and same end as GHSA-2m5v-pch6-74hx."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0486"
+ignoreUntil = 2027-01-01
+reason = "rustix 1.1.4, fixed in 1.1.6: the xattr functions in `rustix::fs` mark unwritten bytes as initialized when given a zero-length buffer. Reach: the published locks of bottom 0.15.0, cargo-deny 0.20.2 and macmon 0.12.0, each installed at its latest release, so no install moves it. The trigger is a call to `getxattr` or `listxattr` with an empty buffer. In the local cargo registry only Linux syscall bindings name those functions, but the three tools' own sources were not all cached, so the reach is not fully read. Ends when the three tools republish against rustix >= 1.1.6."

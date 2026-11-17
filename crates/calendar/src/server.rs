@@ -949,6 +949,17 @@ struct MaterializeBody {
 /// `trip:stage:<id>` or `trip:booking:<id>`, so running it twice updates in
 /// place. Nothing is deleted -- a stage that stops being booked leaves its entry
 /// behind, and removing it is the operator's call, not a sync's.
+/// The trips URL for one plan. The ID is pushed as one encoded path segment, so a
+/// decoded `/`, `?` or `..` from the request path cannot reach another trips route.
+fn trips_plan_url(base: &str, plan_id: &str) -> Result<String, String> {
+    let mut url = reqwest::Url::parse(base).map_err(|e| format!("trips_base_url {base}: {e}"))?;
+    url.path_segments_mut()
+        .map_err(|()| format!("trips_base_url {base} cannot carry a path"))?
+        .pop_if_empty()
+        .extend(["api", "plans", plan_id]);
+    Ok(url.into())
+}
+
 async fn sync_trip_plan(State(state): State<AppState>, Path(plan_id): Path<String>) -> ApiResponse {
     let database_path = state.database_path.clone();
     let config = state.config.clone();
@@ -956,9 +967,7 @@ async fn sync_trip_plan(State(state): State<AppState>, Path(plan_id): Path<Strin
         let store = CalendarStore::open(&database_path).map_err(|e| e.to_string())?;
         let client = sjel_http::client(sjel_http::Purpose::new("calendar-trips"), std::time::Duration::from_secs(20))
             .map_err(|e| format!("client build: {e}"))?;
-        let base = config.trips_base_url.trim_end_matches('/').to_string();
-
-        let url = format!("{base}/api/plans/{plan_id}");
+        let url = trips_plan_url(&config.trips_base_url, &plan_id)?;
         let request = sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url);
         let response = request
             .send()
@@ -2037,6 +2046,24 @@ mod entry_list_class_tests {
             source.matches(&wrapped).count(),
             3,
             "entries, drafts and external proposals are the three entry lists"
+        );
+    }
+}
+
+#[cfg(test)]
+mod trips_plan_url_tests {
+    use super::trips_plan_url;
+
+    #[test]
+    fn a_plan_id_stays_one_path_segment() {
+        let base = "http://127.0.0.1:8080/";
+        assert_eq!(
+            trips_plan_url(base, "trip:plan:1a2b").unwrap(),
+            "http://127.0.0.1:8080/api/plans/trip:plan:1a2b"
+        );
+        assert_eq!(
+            trips_plan_url(base, "../../api/other?x=1").unwrap(),
+            "http://127.0.0.1:8080/api/plans/..%2F..%2Fapi%2Fother%3Fx=1"
         );
     }
 }

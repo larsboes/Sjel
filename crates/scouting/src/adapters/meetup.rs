@@ -93,7 +93,16 @@ impl MeetupAdapter {
         } else {
             keyword.to_string()
         };
-        let url = format!("{FIND_URL}?source=EVENTS&keywords={query}&location={loc}");
+        let url = reqwest::Url::parse_with_params(
+            FIND_URL,
+            [
+                ("source", "EVENTS"),
+                ("keywords", query.as_str()),
+                ("location", loc.as_str()),
+            ],
+        )
+        .map_err(|e| SourceError::Fetch(format!("search URL: {e}")))?
+        .to_string();
 
         if let Some(ref dir) = self.cache_dir {
             let cache_path = dir.join(format!(

@@ -4,20 +4,24 @@ use std::{
     os::unix::fs::{symlink, PermissionsExt},
     path::PathBuf,
     process::{Command, Stdio},
+    sync::atomic::{AtomicUsize, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+static NEXT_SCRATCH: AtomicUsize = AtomicUsize::new(0);
 
 struct Scratch(PathBuf);
 
 impl Scratch {
     fn new() -> Self {
         let path = std::env::temp_dir().join(format!(
-            "mail-eval-cli-{}-{}",
+            "mail-eval-cli-{}-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            NEXT_SCRATCH.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&path).unwrap();
         Self(path)
@@ -46,12 +50,16 @@ impl Scratch {
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-        child
+        // A refused path can exit before reading stdin; the exit status is what the test checks.
+        match child
             .stdin
             .take()
             .unwrap()
             .write_all(review.to_string().as_bytes())
-            .unwrap();
+        {
+            Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => {}
+            result => result.unwrap(),
+        }
         child.wait_with_output().unwrap()
     }
 }

@@ -5,7 +5,8 @@ works in one project directory with no route to the user's data, other checkouts
 credentials. Inside that directory it runs without approval cards, because the operating system
 stops everything outside it.
 
-Priority 0 in [`PLAN.md`](../../PLAN.md) (decided 2026-10-31). It also closes decision A1 in
+Existing containment stays in force. Additional harness support is
+[`PLAN.md` Priority 3](../../PLAN.md#priority-3-agent-features-and-expansion). It also closes decision A1 in
 [`agent.md`](agent.md#10-decisions): the macOS sandbox profile for the `project` tier.
 
 ## 1. The rule

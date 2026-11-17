@@ -44,8 +44,10 @@ names the rest.
 
 ## 2. Phone priority areas
 
-Priority 2 in [`PLAN.md`](../../PLAN.md): the phone is the daily tool for the agent, other agents,
-travel, documents, mail and calendar. The agent and the terminal are in [`agent.md`](agent.md).
+Phone implementation and device acceptance are
+[`PLAN.md` Priority 4](../../PLAN.md#priority-4-deferred-iphone-work). The phone's target is the
+daily tool for the agent, other agents, travel, documents, mail and calendar. The agent and the
+terminal are in [`agent.md`](agent.md).
 
 **Tab bar.** `NshHostScreen` owns the bottom bar: `Today | Mail | Documents | Calendar | Travel |
 Agent` (§6 item 3). Capture, Projects, Interior and People & Places open from Today. Every phone
@@ -271,8 +273,9 @@ Shipped (awaiting manual check in the running app):
 
 ### Open
 
-All five are code-complete in the working tree and not committed. Each one waits for the
-manual acceptance test in the running app. The agent that builds People or Finance work never
+Each package is committed and waits for its manual acceptance test in the running app.
+Phone-only checks, including WP 27, follow
+[`PLAN.md` Priority 4](../../PLAN.md#priority-4-deferred-iphone-work). The agent that builds People or Finance work never
 reads People or Finance records. It uses source, planted fixtures and synthetic tests.
 
 | WP | Scope | Done when |
@@ -715,7 +718,7 @@ so it resolves to the Mac app's 0.1.14.
    with the Mac unreachable, and the phone's original matches the library's SHA-256. Built; the
    check is item 1. Built: cursor paging (500 rows a page) and #245 (side-by-side filing compare).
    Still open from §2: #246–#247.
-3. **Mail on the phone as an NSH screen** (Priority 1 item 4), on the same pattern. Built in
+3. **Mail on the phone as an NSH screen** (Priority 4), on the same pattern. Built in
    `ui/src/nsh_mail.rs` and `core/src/shell/feed_mail.rs` (`Source::mail_proposals`,
    `mail_detail`, `mail_action`, `mail_gmail_job`), wired through `NshHostScreen` on both iOS
    (`Tab::Mail`) and the Mac trial (`SJEL_NSH_TRIAL=mail`). Not run yet: device check on a paired
@@ -762,7 +765,7 @@ that the Mac app selects, and it moves with each Kit upgrade (§6). A component 
 replaces the hand-built one in `ui/`, and the old code is deleted in the same change. A component
 that Ely lacks is built in the fork, not in `ui/`. The phone is NSH and does not use Ely.
 
-Built in `941fcf4`: the fork is re-exported as
+Built in `e5202cc7`: the fork is re-exported as
 `sjel_gpui_ui::ely` under the `gpui` feature, so the phone build carries no Ely. `src/main.rs`
 serves Ely's files before GPUI Kit's and calls `ely::init`. The two share 290 Lucide icon paths;
 289 draw the same, and `icons/credit-card.svg` now draws Ely's version. Ely's tab bindings

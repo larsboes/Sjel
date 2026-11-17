@@ -147,14 +147,15 @@ These need an answer before the work package that depends on them starts.
    | Home server (future) | Data stays home, same Rust binaries as the Mac | Hardware not bought yet. Home uplink and power are single points of failure. |
    | Small VPS | Plain Linux, same binaries | Monthly cost, one more machine to patch |
 
-   Decided 2026-11-03: the home server, a Mac mini (`PLAN.md`, Decisions). Until it is bought,
+   Decided 2026-11-03: the home server, a Mac mini. Until it is bought,
    the collector runs on the Mac. A home address also avoids the datacenter question in spike T0.
 2. **Location data off the user's machines.** A remote collector learns the watch set: which
    stops, at which hours, on which days. That is a daily routine. Decide whether the watch set may
    leave the user's devices in clear text, or whether the remote host only receives stop and line
    IDs padded with decoy stops.
-3. **Priority.** `PLAN.md` lists this area under Priority 3. The Travel tab in Priority 1 would
-   show its results. Decide whether T1–T4 move up.
+3. **Priority.** [`PLAN.md` Priority 2](../../PLAN.md#priority-2-finish-daily-workflows) puts
+   validation of existing results before more collection or model features. T0 and T6 measure
+   what exists. Whether T1–T4 start before that evidence is undecided.
 
 ## 5. Work packages
 

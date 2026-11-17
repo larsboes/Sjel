@@ -20,17 +20,14 @@ tools. The first four items build the shape in the [product page](docs/product.m
 Finish their remaining work before any other framework or surface is introduced. The linked
 area plans distinguish shipped implementation, outstanding acceptance and undecided scope.
 
-1. One registry. A capability declares its object types, properties with data class, links and
-   actions in its manifest, and `route-manifest` carries a response schema for every read route.
-   `projects` is the first capability. Done when its MCP descriptions and TypeScript types are
-   generated from the declaration ([`data.md`](docs/plans/data.md)).
-2. One folder of Markdown files for prose. The files are the authority for their text, and Sjel
-   indexes them
-   ([`storage.md`](docs/plans/storage.md#one-vault-for-prose)).
-3. Derived views in the native app. Done when an object list and an object view for `projects`
-   render from the registry in the Mac app, with no page code for that capability
-   ([`gpui.md` §11](docs/plans/gpui.md#derived-views)). Mac pages take their controls from Sjel's
-   Ely fork ([`gpui.md` §11](docs/plans/gpui.md#components-from-ely)).
+1. One registry for `projects`: shipped `a5942b22`
+   ([`data.md`](docs/plans/data.md#registry-derived-project-views)).
+2. One folder of Markdown files for prose: shipped `0cd23b7f`. Installed-app note-path search
+   acceptance is open ([`storage.md`](docs/plans/storage.md#one-vault-for-prose)).
+3. Derived views in the Mac app: shipped `2029238f`, accepted at `627805fd`. The
+   horizontal-gesture check is open ([`gpui.md` §11](docs/plans/gpui.md#derived-views)).
+   Mac pages take their controls from Sjel's Ely fork
+   ([`gpui.md` §11](docs/plans/gpui.md#components-from-ely)).
 4. Audit every capability against the build rule in the
    [product page](docs/product.md#what-sjel-builds-ingests-and-links-to): build,
    ingest or link out. A capability that fails the rule shrinks to a connector or a link.

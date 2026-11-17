@@ -146,7 +146,7 @@ function parseLinkParameters(input: string): Map<string, string> | null {
 
 	const parameters = new Map<string, string>();
 	for (const part of parts) {
-		const match = /^\s*([!#$%&'*+\-.^_`|~A-Za-z0-9]+)(?:\s*=\s*(?:"((?:\\.|[^"])*)"|(\S+)))?\s*$/.exec(part);
+		const match = /^\s*([!#$%&'*+\-.^_`|~A-Za-z0-9]+)(?:\s*=\s*(?:"((?:\\.|[^"\\])*)"|(\S+)))?\s*$/.exec(part);
 		if (!match) return null;
 		const name = match[1].toLowerCase();
 		const value = match[2] === undefined ? (match[3] ?? "") : match[2].replace(/\\(.)/g, "$1");

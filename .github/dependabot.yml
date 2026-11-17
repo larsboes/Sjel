@@ -37,6 +37,7 @@ registries:
   socket-firewall:
     type: npm-registry
     url: https://firewall-api.socket.dev
+    token: ${{secrets.SOCKET_API_TOKEN}}
     scope: "@sjel-socket-scanner-egress"
 updates:
   - package-ecosystem: "cargo"

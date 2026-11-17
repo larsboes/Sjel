@@ -681,6 +681,27 @@ fn inference_roles(ctx: &mut Ctx) {
     }
 }
 
+/// The `tools/*.sh` setup script that writes this launchd unit, found by its quoted label.
+/// Such a unit has an owner even without a capability manifest.
+fn setup_script_owner(tools: &Path, unit: &Path) -> Option<String> {
+    let label = unit.file_stem()?.to_str()?;
+    let quoted = format!("\"{label}\"");
+    let mut scripts: Vec<PathBuf> = std::fs::read_dir(tools)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "sh"))
+        .collect();
+    scripts.sort();
+    scripts
+        .into_iter()
+        .find(|p| std::fs::read_to_string(p).is_ok_and(|text| text.contains(&quoted)))
+        .and_then(|p| {
+            p.file_name()
+                .map(|n| format!("tools/{}", n.to_string_lossy()))
+        })
+}
+
 fn integrations(ctx: &mut Ctx) {
     let script = tool(ctx, "agent-integrations.sh");
     if !script.exists() {
@@ -1213,6 +1234,13 @@ fn boot_persistence(ctx: &mut Ctx) {
         if managed {
             ctx.warn(format!(
                 "persistence is installed for '{cap}', which this machine does not enable — its watchdog will start it anyway (tools/service-runner.sh remove-persistence {cap})"
+            ));
+            continue;
+        }
+        if let Some(script) = setup_script_owner(&ctx.root.join("tools"), unit) {
+            ctx.ok(format!(
+                "'{cap}' is installed by {script}, which writes {}",
+                unit.display()
             ));
             continue;
         }

@@ -47,11 +47,13 @@ plant_unit comms       # enabled          -> never an orphan
 plant_unit macmon      # enabled capability -> never an orphan (was a dashboard sidecar)
 plant_unit trips       # a disabled capability's leftover unit -> ORPHAN
 plant_unit nothing-declares-this                                # -> UNMANAGED
+# A unit a tools/ setup script writes has an owner without a manifest.
+printf '<plist/>\n' > "$UNIT_DIR/com.sjel.tailscaled.plist"             # -> OWNED BY SCRIPT
 
 # Only the persistence section matters here; doctor legitimately fails other checks against a
 # planted HOME, and asserting on its exit code would be asserting on those instead.
 OUT="$( cd "$_root" && HOME="$FAKE_HOME" SJEL_OVERLAY_ROOT="$OVERLAY" tools/doctor 2>&1 )"
-PERSIST="$(printf '%s\n' "$OUT" | grep -E 'persistence is installed for|is unmanaged:' || true)"
+PERSIST="$(printf '%s\n' "$OUT" | grep -E 'persistence is installed for|is unmanaged:|is installed by' || true)"
 
 flagged() { printf '%s\n' "$PERSIST" | grep -q "persistence is installed for '$1'"; }
 
@@ -77,6 +79,14 @@ $PERSIST"
 fi
 if printf '%s\n' "$PERSIST" | grep -q "remove-persistence nothing-declares-this"; then
   fail "'nothing-declares-this' has no manifest, and doctor suggested removing it"
+fi
+
+if ! printf '%s\n' "$PERSIST" | grep -q "'tailscaled' is installed by tools/setup-tailnet-shell.sh"; then
+  fail "'tailscaled' is written by tools/setup-tailnet-shell.sh and was not reported as owned by it. Persistence notes were:
+$PERSIST"
+fi
+if printf '%s\n' "$PERSIST" | grep -q "'tailscaled' is unmanaged"; then
+  fail "'tailscaled' has an owning setup script, and doctor still called it unmanaged"
 fi
 
 # --- the doctor never names a capability to exempt it ------------------------------------

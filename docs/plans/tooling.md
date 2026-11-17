@@ -735,7 +735,12 @@ cleanup; verification used the isolated Cargo runner with a writable scratch tar
   required on `main`, so a GPUI bump that fails its GPUI check does not auto-merge.
 - Dependabot's bun block declares `firewall-api.socket.dev` as a scoped registry, because its
   proxy blocked the Socket install scanner with "egress not allowlisted" on every bun run from
-  2026-11-09. Open: a bun Dependabot run that passes the scanner has not been observed yet.
+  2026-11-09. The entry alone did not open the proxy: the 2026-11-17 run still logged 83 blocked
+  requests. Open: the entry needs a Socket API token stored as a Dependabot secret.
+- `picomatch` 4.0.7 (GHSA-fc5q-39xc-vjpf, HIGH, no patched release) keeps the Security workflow
+  red through `Packs/harness/pi-packages/pi-subagents/bun.lock` and `crates/comms/clipper/bun.lock`.
+  Reach is dev and build tooling only (vite/tinyglobby, sass/@parcel/watcher) over this
+  repository's own globs. Open: bump when upstream releases a fix.
 - `sjel demo app [page]` runs the Mac app against the seeded demo node, to debug on
   synthetic data next to the live node. See [`gpui.md`](gpui.md#10-dev-and-prod).
 - `tools/intake review <dir> --source <name> --reviewer claude` runs a fresh `claude -p` with

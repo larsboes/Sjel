@@ -54,11 +54,11 @@ Complete existing behavior and its acceptance checks before expanding the surfac
 
 | Area | Next boundary | Plan |
 |---|---|---|
-| Documents, Mail, Calendar and Travel | Mac and phone acceptance, missing writes and offline correctness | [`gpui.md`](docs/plans/gpui.md) |
+| Documents, Mail, Calendar and Travel | Mac acceptance, missing writes and offline correctness | [`gpui.md`](docs/plans/gpui.md) |
 | Storage | Restore proof and domain sync contracts; engine migration only with compatibility evidence | [`storage.md`](docs/plans/storage.md) |
 | Imports and domain data | Correct routing, idempotency and review of existing pipelines | [`data.md`](docs/plans/data.md) |
 | Transit and Finance | Validate existing results before more collection or model features | [`transit.md`](docs/plans/transit.md), [`finance.md`](docs/plans/finance.md) |
-| Physical capture and installation | RoomPlan device acceptance; fresh-user installation | [`scanning.md`](docs/plans/scanning.md), [#235](https://github.com/larsboes/Sjel/issues/235) |
+| Installation | Fresh-user installation | [#235](https://github.com/larsboes/Sjel/issues/235) |
 
 Unification required to finish these workflows stays in Priority 1. A live check remains open
 even when compilation and unit tests pass.
@@ -78,6 +78,14 @@ even when compilation and unit tests pass.
 
 The priority order here supersedes older area-local ordering. Deferred work retains its
 acceptance check; deferral does not authorize a replacement architecture.
+
+## Priority 4: deferred iPhone work
+
+iPhone-specific implementation and physical-device acceptance follow Priorities 1–3. This
+includes registry views, phone workflows, standalone synchronization and RoomPlan device
+acceptance ([`gpui.md`](docs/plans/gpui.md), [`storage.md`](docs/plans/storage.md),
+[`scanning.md`](docs/plans/scanning.md)). Mac work and shared contracts retain their existing
+priority. Shipped phone implementations keep their outstanding acceptance checks.
 
 ## Continuous
 

@@ -1038,9 +1038,11 @@ Open, in order:
 
 1. Mac acceptance: reach offscreen registry columns by horizontal gesture at 1040 × 720.
    Visible headings remain separate at that size; horizontal gesture acceptance has not run.
-2. Phone acceptance: synchronize existing records, browse object properties and relations while
-   offline, then queue an edit and confirm object browsing refuses until sync settles it. Confirm
-   empty projects retain their identity and unknown metadata never receives a default class.
+
+Deferred phone acceptance follows [`PLAN.md` Priority 4](../../PLAN.md#priority-4-deferred-iphone-work):
+synchronize existing records, browse object properties and relations while offline, then queue
+an edit and confirm object browsing refuses until sync settles it. Confirm empty projects retain
+their identity and unknown metadata never receives a default class.
 
 Saved and live views follow Priority 1 under [`PLAN.md`](../../PLAN.md#priority-3-agent-features-and-expansion):
 

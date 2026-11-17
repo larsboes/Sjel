@@ -15,7 +15,7 @@ use std::time::Instant;
 
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, App, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    IntoElement, MouseButton, Render, SharedString, Subscription, Window,
+    IntoElement, MouseButton, Render, Role, SharedString, Subscription, Window,
 };
 use sjel_gpui_core::search::Mode;
 use sjel_gpui_ui::agent_seat::{AgentSeat, AgentSeatEvent, Host};
@@ -245,8 +245,15 @@ impl Render for Finder {
                 // While Enter would ask, no row looks chosen; an arrow key chooses one.
                 let selected = index == self.cursor && (resolved == Mode::Search || self.picked);
                 let open = hit.open.clone();
+                let label = if hit.detail.is_empty() {
+                    hit.title.clone()
+                } else {
+                    format!("{} · {}", hit.title, hit.detail)
+                };
                 div()
                     .id(SharedString::from(format!("finder-hit-{index}")))
+                    .role(Role::Button)
+                    .aria_label(label)
                     .flex()
                     .items_center()
                     .gap_3()

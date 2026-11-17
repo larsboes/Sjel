@@ -189,34 +189,22 @@ archive includes the managed path resolver; its extracted-path regression passes
 ## Open
 
 - **Desktop rebuild efficiency acceptance.** Contracts: [local builds](../../tools/local-build.md)
-  and [desktop builds](../../apps/gpui/README.md#running-it). The UI session supplied the table-API
-  alignment in `831d1fb2`; build tooling makes no changes to those UI files.
-  Verified: full `desktop-dev` compilation, installer regressions with mocked Cargo and real
-  macOS ad-hoc signing, both battery-wrapper suites, four replacement checks, thirteen storage
-  target tests, scoped Clippy with warnings denied, ShellCheck and documentation links.
-  Architecture freshness passes. The installer rejects a profile
-  directory used as a target root.
-  Measured on 2026-11-15 with the correct shared cache root: the successful retry took
-  101.44 seconds. Concurrent input changes prevent treating that as a controlled comparison.
-  A subsequent unchanged-input build took 0.41 seconds overall (Cargo: 0.28 seconds), with no
-  compilation and unchanged HEAD/input hashes. Platform maximum RSS was 199,917,568 bytes,
-  not aggregate process-tree memory. The machine was on AC in Normal mode; these figures do not
-  establish battery savings. No app installation, signing or restart occurred during the builds.
-  An earlier benchmark incorrectly selected the profile directory as its target root; its
-  timings are rejected. The duplicate was removed after canonical-path, profile-marker and
-  open-file checks. The correct executable hash was preserved; the intended profile retains
-  4,331,428 KiB. The installed Cargo uses `.cargo-lock` without a top-level `.fingerprint`;
-  cache-root validation and custom-profile accounting cover both layouts.
-  Invalid requests fail before build admission, and the prebuilt admission CLI receives the
-  library's checkout root. Both wrapper suites pass with inherited root and build allowances
-  unset, covering the clean-runner refusal path.
+  and [desktop builds](../../apps/gpui/README.md#running-it). Profile-root validation and
+  battery-aware build admission are implemented; installer and battery-wrapper regressions pass.
   Open: controlled cold and one-source-edit comparisons, a real installed development bundle's
   Finder-launched rebuild, and runtime/energy comparison with release. Compiler-stamp changes
-  and embedded documentation still invalidate builds. Measurement currently uses platform
-  `time -l` and `du -sk`; an optional report on `tools/local-build run` would own repeated probes.
+  and embedded documentation still invalidate builds. Measurement uses installed Hyperfine and
+  platform disk reporting; an optional report on `tools/local-build run` would own repeated probes.
   Profile-only reclamation required a bounded local removal because existing target cleanup
   would remove the containing working cache. A profile selector in `sjel storage reclaim`,
   using its existing path and live-use guards, is the smallest tooling extension.
+
+  Warm-cache verification on 2026-11-17 used installed Hyperfine with one warmup and three runs
+  of `sjel cargo build --manifest-path apps/gpui/Cargo.toml --locked --profile desktop-dev -p sjel-gpui`.
+  Wall time was 0.597–1.432 seconds, median 0.602 seconds; peak reported RSS was 201,293,824 bytes.
+  A subsequent build completed without compilation. Concurrent checkout edits changed the input
+  fingerprint, so these observations do not establish controlled rebuild or energy savings.
+  Native app inspection timed out, leaving installed-app acceptance unverified.
 
 - **Activate a capability from a writable build cache.** Projects activation could not remove
   Cargo archive temporary directories in either live cache, including an elevated restart.
@@ -592,17 +580,27 @@ archive includes the managed path resolver; its extracted-path regression passes
   daily/release full verification and local format receipts are published; commands
   live in `CONTRIBUTING.md#change-aware-ci`. Ordinary pushes select affected work;
   full verification runs daily and before release artifacts.
+  Cargo failure attribution uses explicit rerun and failed-target package names (`b5474c2c`).
+  Interleaved stdout/stderr previously attributed a Projects contract failure to the next binary,
+  Punctuality. The regression in `tools/ci-impact.test.ts` reproduces that ordering.
+
+  Measured on 2026-11-17: the 100-run history sample produced 87 usable Rust jobs, including seven
+  failures, zero attributed selection misses and zero API errors. One repeated Projects failure
+  was already present at the comparison base. This sample supports the existing selector; it
+  does not prove completeness for future changes. All 21 impact/planner tests pass.
+
+  The [selective run](https://github.com/larsboes/Sjel/actions/runs/43979522700) passed with three
+  of 85 Rust packages selected and all five platform checks retained. The
+  [scheduled full run](https://github.com/larsboes/Sjel/actions/runs/43799015445) passed all 85
+  packages and platform checks; `ci-plan.ts --require-full` accepts that exact revision.
+  Their Rust jobs took 130 and 244 seconds, restored 834,175,571 and 835,946,581 compressed cache
+  bytes, and ended with 3.8 GiB and 8.9 GiB target trees respectively. Different revisions,
+  workloads and runner/cache conditions prevent a controlled savings claim.
+
   Open acceptance checks:
-  1. Observe a selective Actions run, a scheduled daily full run and distribution
-     preflight. A [push-triggered full run](https://github.com/larsboes/Sjel/actions/runs/42511020140)
-     passes Rust tests, formatting/Clippy, Bun/shell tests, repository gates, UI
-     checks and all five platform compile jobs. Native device acceptance remains
-     separate from compilation.
-  2. Continue `bun tools/ci-impact-backtest.ts` against history containing failing Rust tests.
-     The current 20-run sample yielded 19 usable runs and no failing Rust job, so its zero misses
-     do not establish failure-detection coverage.
-  3. Measure target-directory growth, cache transfer and runner time before expanding successful
-     result reuse beyond local formatting. Set resource defaults only from measurements.
+  1. Observe distribution preflight and retain its exact-revision result.
+  2. Measure target growth and repeat matched workloads before expanding successful-result reuse
+     beyond local formatting or changing resource defaults.
   Done when local and CI share the same planner, live full verification passes, and measurements
   establish the cost and savings.
 - **Backup CLI live acceptance.** Status/history commands shipped in `4fa41461`; agent

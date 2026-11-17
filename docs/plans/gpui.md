@@ -1023,13 +1023,22 @@ and focus corrections (`2161a596`). Installed `627805fd` passed live light/dark 
 property opening, relation navigation and focus checks through the proxy
 ([`data.md`](data.md#registry-derived-project-views)).
 
+Phone registry lists, properties and relation navigation over classified replica reads shipped
+in `16748c92` ([contract](../../apps/gpui/README.md)).
+
+Verification: 390 core tests and 30 NSH screen tests pass; six core audio tests remain ignored.
+The iPhone target compiles. Core Clippy passes with warnings denied. Strict NSH Clippy reports
+37 redundant-closure findings in the unchanged Calendar, Capture, People, Settings and Today
+screens. Physical-device and installed-app acceptance did not run: native app inspection timed
+out in this session. Whole-workspace verification has not run for this change.
+
 Open, in order:
 
 1. Mac acceptance: reach offscreen registry columns by horizontal gesture at 1040 × 720.
    Visible headings remain separate at that size; horizontal gesture acceptance has not run.
-2. The same views on the phone as NSH screens, fed from the local copy. The existing replica
-   readers omit classification metadata; extend their read contract before supplying registry
-   projections, preserving object identity and class rather than inventing defaults.
+2. Phone acceptance: synchronize existing records, browse object properties and relations while
+   offline, then queue an edit and confirm object browsing refuses until sync settles it. Confirm
+   empty projects retain their identity and unknown metadata never receives a default class.
 
 Saved and live views follow Priority 1 under [`PLAN.md`](../../PLAN.md#priority-3-agent-features-and-expansion):
 

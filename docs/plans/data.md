@@ -12,8 +12,9 @@ the next six-hour pass. TLS and unclassified request failures remain visible as 
 Registry-derived MCP metadata and TypeScript read contracts with freshness verification shipped
 through `a5942b22` ([`route-manifest`](../../crates/route-manifest/README.md#typescript-read-contracts)).
 
-Open acceptance: live governed MCP reads with real data have not run. The generated-contract
-freshness test and route-manifest suite pass (15 tests).
+Governed MCP acceptance passed on 2026-11-17 for the project list, content-free project records
+and one record detail: classifications and record identity survived the privacy boundary.
+The generated-contract freshness test and route-manifest suite pass (20 tests combined).
 The Mac and phone derived-view acceptance stays in [`gpui.md` §11](gpui.md#derived-views).
 
 ## Private project delivery workflows

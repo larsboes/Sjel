@@ -309,6 +309,12 @@ phone's own records, under the queue count and the report of the last sync. UIKi
 nothing, so pairing later sends the Mac only what the person wrote. A store that cannot open says
 so on that page instead of falling back to memory.
 
+Projects' **Objects** tab derives its lists, properties and relation navigation from the shared
+Projects registry. It reads the phone's replica without a network request and exposes no writes.
+Sync retains the owner's classification, rationale and archive state, including metadata for
+unchanged records and empty project identities. Missing metadata and queued project edits refuse
+object browsing until synchronization completes; the task and note editor remains available.
+
 **The side panel** holds Agent, Terminal, Soundscape and Activity. The Mac uses
 `ui/src/sidebar/`; the phone uses `ui/src/nsh_edge.rs`, with a close action that restores the
 previous page. Its open state and selected seat are persisted in `sidebar.json`. Terminal access

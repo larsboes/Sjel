@@ -168,6 +168,16 @@ export function formatDuration(ms: number): string {
 	}
 }
 
+// True for an http(s) URL. A reader page URL becomes a link href, so nothing else may enter.
+export function isWebUrl(value: string): boolean {
+	try {
+		const protocol = new URL(value).protocol;
+		return protocol === 'http:' || protocol === 'https:';
+	} catch {
+		return false;
+	}
+}
+
 export function getDomain(url: string): string {
 	try {
 		const urlObj = new URL(url);

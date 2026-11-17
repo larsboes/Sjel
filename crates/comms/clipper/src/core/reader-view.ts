@@ -2,7 +2,7 @@ import browser from '../utils/browser-polyfill';
 import { Reader } from '../utils/reader';
 import { initializeI18n, getMessage } from '../utils/i18n';
 import { ReaderSettings } from '../types/types';
-import { getDomain } from '../utils/string-utils';
+import { getDomain, isWebUrl } from '../utils/string-utils';
 import { extractContentBySelector as extractContentBySelectorShared } from '../utils/shared';
 import { setPageUrl, setPageTitle, updatePageDomainSettings, getHighlights, repositionHighlights } from '../utils/highlighter';
 import { throttle } from '../utils/throttle';
@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 	const params = new URLSearchParams(window.location.search);
 	let url = params.get('url');
 
-	if (!url) {
+	if (!url || !isWebUrl(url)) {
 		showUrlInput();
 		return;
 	}
@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 	try {
 		const originalUrl = url;
 		const { html, finalUrl } = await fetchWithRedirects(url);
+		if (!isWebUrl(finalUrl)) throw new Error('Redirected to a non-web URL');
 		url = finalUrl;
 		if (url !== originalUrl) {
 			const readerUrl = browser.runtime.getURL('reader.html?url=' + encodeURIComponent(url));
@@ -204,11 +205,13 @@ async function fetchWithRedirects(url: string): Promise<{ html: string; finalUrl
 // --- SPA navigation ---
 
 async function loadArticle(newUrl: string) {
+	if (!isWebUrl(newUrl)) return;
 	const originalUrl = newUrl;
 	window.scrollTo(0, 0);
 
 	try {
 		const { html, finalUrl } = await fetchWithRedirects(newUrl);
+		if (!isWebUrl(finalUrl)) throw new Error('Redirected to a non-web URL');
 		newUrl = finalUrl;
 		if (newUrl !== originalUrl) {
 			const readerUrl = browser.runtime.getURL('reader.html?url=' + encodeURIComponent(newUrl));

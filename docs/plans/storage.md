@@ -171,10 +171,9 @@ Open:
    Markdown path (`apps/gpui/src/finder/search.rs::record_hits`). Done when an installed-app
    search by title and by path displays the path and opens that note. Installed-app acceptance
    remains open. Native automation accepted title and path queries, but the accessibility tree
-   exposed no result rows. It reported the app quitting after Return on the path query; no
-   diagnostic crash report was found. Successful result opening and whether the exit was
-   user-initiated remain unverified. This change does not add body search or a status-server
-   note source.
+   exposed no result rows. The app was closed manually during the check; no crash was
+   established. Successful result opening remains unverified. This change does not add body
+   search or a status-server note source.
 
 Verification: eight Projects store tests and two Finder tests pass, including external-edit
 adoption, class-floor refusal and path-based note lookup. Full-workspace and phone checks have

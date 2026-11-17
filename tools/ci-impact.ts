@@ -145,16 +145,26 @@ export function rootPackages(root: string, manifest = "Cargo.toml"): Package[] {
 
 /** Packages a cargo test log shows failing: a test binary that reported FAILED, or a crate that did not compile. */
 export function failedPackages(log: string, targets: Map<string, string[]>): string[] {
-  const failed = new Set<string>();
+  const inferred = new Set<string>();
+  const reported = new Set<string>();
+  const compileFailed = new Set<string>();
   let artifact = "";
+  let targetSummary = false;
   for (const line of log.split("\n")) {
     const running = line.match(/Running .* \((?:.*\/)?deps\/([A-Za-z0-9_]+)-[0-9a-f]+\)/);
     if (running) artifact = running[1];
-    if (/test result: FAILED/.test(line) && artifact) for (const p of targets.get(artifact) ?? [`?${artifact}`]) failed.add(p);
+    if (/test result: FAILED/.test(line) && artifact) for (const p of targets.get(artifact) ?? [`?${artifact}`]) inferred.add(p);
+    // Cargo's stderr can name the next binary before the preceding stdout is drained.
+    // Its rerun instructions and final failed-target list carry explicit package identities.
+    const output = line.replace(/^(?:[^\t]*\t){2}\d{4}-\d{2}-\d{2}T\S+ ?/, "");
+    const rerun = output.match(/^error: (?:doc)?test failed, to rerun pass\s+`-p ([A-Za-z0-9_-]+) (?:--lib|--bin|--test|--example|--doc)\b/)
+      ?? (targetSummary ? output.match(/^\s+`-p ([A-Za-z0-9_-]+) (?:--lib|--bin|--test|--example|--doc)\b/) : null);
+    if (rerun) reported.add(rerun[1]);
+    targetSummary = /^error: \d+ targets? failed:/.test(output) || (targetSummary && rerun !== null);
     const compile = line.match(/error: could not compile `([^`]+)`/);
-    if (compile) failed.add(compile[1]);
+    if (compile) compileFailed.add(compile[1]);
   }
-  return [...failed].sort();
+  return [...new Set([...compileFailed, ...(reported.size ? reported : inferred)])].sort();
 }
 
 /** Target artifact name (dashes as underscores) to the packages that build it. */

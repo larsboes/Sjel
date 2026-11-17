@@ -158,6 +158,21 @@ test("failedPackages names a failing test binary's package and a crate that did 
   expect(failedPackages(log, targets)).toEqual(["sjel-cli", "sjel-comms"]);
 });
 
+test("failedPackages uses explicit Cargo failures when stdout arrives after the next binary starts", () => {
+  const targets = new Map([["projects_api", ["projects-api"]], ["punctuality_api", ["punctuality-api"]]]);
+  const log = [
+    "Running unittests src/lib.rs (target/debug/deps/projects_api-aaaa)",
+    "error: test failed, to rerun pass `-p projects-api --lib`",
+    "Running unittests src/lib.rs (target/debug/deps/punctuality_api-bbbb)",
+    "test result: FAILED. 0 passed; 1 failed",
+    "error: 1 target failed:",
+    "    `-p projects-api --lib`",
+  ].join("\n");
+  expect(failedPackages(log, targets)).toEqual(["projects-api"]);
+  expect(failedPackages(log + "\nerror: doctest failed, to rerun pass `-p other --doc`", targets))
+    .toEqual(["other", "projects-api"]);
+});
+
 test("testScope: all is the workspace, a candidate names packages, none is empty", () => {
   expect(testScope(rustImpact(["Cargo.lock"], packages))).toBe("--workspace");
   expect(testScope(rustImpact(["libs/other/src/lib.rs"], packages))).toBe("-p other");

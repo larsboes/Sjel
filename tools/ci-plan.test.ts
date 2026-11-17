@@ -93,12 +93,12 @@ esac
     const chmod = Bun.spawnSync(["chmod", "+x", join(f.root, "bin/gh")]);
     expect(chmod.exitCode).toBe(0);
     const report = join(f.root, "summary.md");
-    const run = Bun.spawnSync(["bun", join(import.meta.dir, "ci-plan.ts"), "--root", f.root, "--base", f.base], {
+    const run = Bun.spawnSync(["bun", "--no-env-file", join(import.meta.dir, "ci-plan.ts"), "--root", f.root, "--base", f.base], {
       env: { ...process.env, PATH: `${join(f.root, "bin")}:${process.env.PATH}`, GITHUB_EVENT_NAME: "push", GITHUB_REPOSITORY: "example/fixture", GITHUB_STEP_SUMMARY: report },
       stdout: "pipe", stderr: "pipe",
     });
     expect(run.stderr.toString()).toBe("");
-    expect(run.exitCode).toBe(0);
+    expect(run.exitCode, run.stdout.toString() + run.stderr.toString()).toBe(0);
     const content = readFileSync(report, "utf8");
     expect(content).toContain("Latest full-run attempt: **failure**");
     expect(content).toContain("Last successful full verification: https://example.invalid/full/2");

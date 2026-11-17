@@ -83,6 +83,8 @@ pub mod nsh_people;
 #[cfg(feature = "nsh")]
 pub mod nsh_projects;
 #[cfg(feature = "nsh")]
+mod nsh_registry;
+#[cfg(feature = "nsh")]
 pub mod nsh_settings;
 #[cfg(feature = "nsh")]
 pub mod nsh_soundscape;

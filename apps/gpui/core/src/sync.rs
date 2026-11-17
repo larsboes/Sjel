@@ -871,6 +871,16 @@ async fn pull<H: Host>(store: &TursoStore, host: &H, report: &mut Report) -> Res
     if !reply.ok() {
         return Err(reply.refused());
     }
+    let classified_projects = reply
+        .json()
+        .filter(|body| {
+            body["projects"]
+                .as_array()
+                .is_some_and(|rows| rows.iter().all(|row| row["archived"].is_boolean()))
+        })
+        .and_then(|body| {
+            serde_json::from_value::<projects_api::reads::ProjectListResponse>(body).ok()
+        });
     let projects: Vec<String> = reply
         .json()
         .and_then(|body| body["projects"].as_array().cloned())
@@ -910,13 +920,33 @@ async fn pull<H: Host>(store: &TursoStore, host: &H, report: &mut Report) -> Res
                 continue;
             }
             seen.insert(path.clone());
-            if dirty.contains(&path) || entry["archived"].as_bool().unwrap_or(false) {
+            if dirty.contains(&path) {
+                continue;
+            }
+            if entry["archived"].as_bool().unwrap_or(false) {
+                store
+                    .archive_registry_record(&path)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 continue;
             }
             let stamp = entry["updated_at"].as_str().unwrap_or_default().to_string();
             let local = store.sync_state(&path).await.map_err(|e| e.to_string())?;
             let known = local.as_ref().and_then(|state| state.remote_at.clone());
             if known.as_deref() == Some(stamp.as_str()) {
+                if let Ok(classified) =
+                    serde_json::from_value::<projects_api::reads::RecordRead>(entry)
+                {
+                    store
+                        .cache_registry_record(&project, &classified)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                } else {
+                    store
+                        .forget_registry_record(&path)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                }
                 continue;
             }
             let one = get(host, &format!("{RECORD}?path={}", quote(&path))).await?;
@@ -925,13 +955,10 @@ async fn pull<H: Host>(store: &TursoStore, host: &H, report: &mut Report) -> Res
                 // local copy goes; here it simply is not in this answer.
                 continue;
             }
-            let Some(record) = one
-                .json()
-                .and_then(|body| body.get("record").cloned())
-                .map(|value| record_from_json(&path, &value))
-            else {
+            let Some(value) = one.json().and_then(|body| body.get("record").cloned()) else {
                 continue;
             };
+            let record = record_from_json(&path, &value);
             // A stamp the Mac moved because this device just wrote to it is not news. What the
             // Mac says is, and the row keeps the new stamp either way.
             let news = match &local {
@@ -948,11 +975,18 @@ async fn pull<H: Host>(store: &TursoStore, host: &H, report: &mut Report) -> Res
             // The record's own project, because a path's first folder is not it: the vault files
             // `Archive/Soma/Tasks/Reopen.md` under `Soma`, and a sweep that wrote `Archive` into
             // the local project column would file the phone's whole history under the wrong name.
-            let filed = filed_under(&record);
+            let filed = filed_under(&record, &project);
             store
                 .upsert_pulled(&filed, &record, &stamp)
                 .await
                 .map_err(|e| e.to_string())?;
+            if let Ok(classified) = serde_json::from_value::<projects_api::reads::RecordRead>(value)
+            {
+                store
+                    .cache_registry_record(&filed, &classified)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
             if news {
                 report.pulled += 1;
             }
@@ -972,6 +1006,18 @@ async fn pull<H: Host>(store: &TursoStore, host: &H, report: &mut Report) -> Res
         }
         store.remove_local(&path).await.map_err(|e| e.to_string())?;
         report.removed += 1;
+    }
+    if let Some(mut response) = classified_projects {
+        response.projects.retain(|p| !p.summary.archived);
+        store
+            .cache_registry_projects(&response)
+            .await
+            .map_err(|e| e.to_string())?;
+    } else {
+        store
+            .set_meta("registry:projects", "")
+            .await
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -1027,13 +1073,12 @@ fn record_from_json(path: &str, value: &Value) -> ProjectRecord {
     }
 }
 
-/// The project a record belongs to: the answer the Mac filed it under, else the path's first
-/// folder, which is what this app writes for a record it made itself (`Board::task_path`).
-fn filed_under(record: &ProjectRecord) -> String {
+/// The owner-supplied project, falling back to the project-list binding rather than a path prefix.
+fn filed_under(record: &ProjectRecord, project: &str) -> String {
     if !record.project.trim().is_empty() {
         return record.project.clone();
     }
-    project_of(&record.path)
+    project.to_owned()
 }
 
 /// The first folder of a path. Only a fallback: see [`filed_under`].
@@ -1062,6 +1107,136 @@ mod tests {
     use crate::store::{TursoStore, DOMAIN_CALENDAR, LOCAL_ENTRY_ID_PREFIX};
     use std::sync::Mutex;
 
+    #[test]
+    fn registry_replica_keeps_owner_metadata_and_refuses_unsynced_edits() {
+        use crate::record::registry::replica;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let store = TursoStore::in_memory().await.unwrap();
+            assert!(replica::load(&store).await.is_err());
+            let mut summaries = projects(&["Inbox", "Empty"]);
+            for summary in summaries["projects"].as_array_mut().unwrap() {
+                summary["data_class"] = json!("c2");
+            }
+            let mut full = record_json("Inbox/Welcome.md", "note", "Welcome", "Original", "v1");
+            full["record"]["archived"] = json!(false);
+            full["record"]["data_class"] = json!("c2");
+            full["record"]["data_class_rationale"] = json!("Owner classification");
+            let mut summary = full["record"].clone();
+            summary.as_object_mut().unwrap().remove("content");
+            let host = Fake::default();
+            host.on("GET", PROJECTS, 200, summaries.clone());
+            host.on(
+                "GET",
+                "/projects/api/project?name=Inbox&content=false",
+                200,
+                json!({"records": [summary.clone()]}),
+            );
+            host.on(
+                "GET",
+                "/projects/api/project?name=Empty&content=false",
+                200,
+                json!({"records": []}),
+            );
+            host.on(
+                "GET",
+                "/projects/api/record?path=Inbox%2FWelcome.md",
+                200,
+                full,
+            );
+            pull(&store, &host, &mut Report::default()).await.unwrap();
+            let list = replica::load(&store).await.unwrap();
+            assert_eq!(list.rows.len(), 2, "empty project identities survive");
+            assert_eq!(list.rows[0]["data_class"], "c2");
+            let binding = list.link(&list.rows[0], 0).unwrap();
+            let records = replica::read(&store, binding.clone()).await.unwrap();
+            assert_eq!(records.rows[0]["path"], "Inbox/Welcome.md");
+            assert_eq!(records.rows[0]["data_class"], "c2");
+            assert_eq!(
+                records.rows[0]["data_class_rationale"],
+                "Owner classification"
+            );
+            assert!(records.rows[0].get("content").is_none());
+
+            store
+                .connection()
+                .await
+                .unwrap()
+                .execute(
+                    "UPDATE projects_records SET registry_class = NULL, registry_archived = NULL",
+                    (),
+                )
+                .await
+                .unwrap();
+            assert!(replica::read(&store, binding.clone()).await.is_err());
+            let host = Fake::default();
+            host.on("GET", PROJECTS, 200, summaries.clone());
+            host.on(
+                "GET",
+                "/projects/api/project?name=Inbox&content=false",
+                200,
+                json!({"records": [summary.clone()]}),
+            );
+            host.on(
+                "GET",
+                "/projects/api/project?name=Empty&content=false",
+                200,
+                json!({"records": []}),
+            );
+            pull(&store, &host, &mut Report::default()).await.unwrap();
+            assert!(
+                replica::read(&store, binding.clone()).await.is_ok(),
+                "unchanged records backfill metadata without fetching bodies"
+            );
+
+            summary["archived"] = json!(true);
+            let host = Fake::default();
+            host.on("GET", PROJECTS, 200, summaries);
+            host.on(
+                "GET",
+                "/projects/api/project?name=Inbox&content=false",
+                200,
+                json!({"records": [summary]}),
+            );
+            host.on(
+                "GET",
+                "/projects/api/project?name=Empty&content=false",
+                200,
+                json!({"records": []}),
+            );
+            pull(&store, &host, &mut Report::default()).await.unwrap();
+            assert!(replica::read(&store, binding)
+                .await
+                .unwrap()
+                .rows
+                .is_empty());
+            store
+                .save_record(
+                    "Inbox",
+                    "Inbox/Welcome.md",
+                    "note",
+                    "Welcome",
+                    "Offline edit",
+                )
+                .await
+                .unwrap();
+            assert!(replica::load(&store).await.is_err());
+            assert_eq!(
+                store
+                    .fetch_record("Inbox/Welcome.md")
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .content,
+                "Offline edit"
+            );
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 1);
+        });
+    }
+
     /// A pulled record keeps the project the Mac filed it under, and falls back on the path only
     /// when no project travelled: the vault's paths are not `<project>/…`.
     #[test]
@@ -1076,11 +1251,11 @@ mod tests {
             due: None,
             priority: 2,
         };
-        assert_eq!(filed_under(&record), "Soma");
+        assert_eq!(filed_under(&record, "Other"), "Soma");
         record.project.clear();
         assert_eq!(
-            filed_under(&record),
-            "Archive",
+            filed_under(&record, "Soma"),
+            "Soma",
             "the fallback, and only that"
         );
     }

@@ -63,6 +63,7 @@ fn publish(s: &State) {
 
 /// Supplies the phone's replica. Writes retain the replica's existing outbox callback.
 pub fn set_repo(repo: Repo) {
+    crate::nsh_registry::set_repo(repo.clone());
     {
         let mut s = state();
         s.repo = Some(repo);
@@ -473,11 +474,15 @@ pub fn ProjectsScreen() -> impl IntoElement {
                 .child(action("Hubs", move || tab.set(0)))
                 .child(action("All tasks", move || tab.set(1)))
                 .child(action("All notes", move || tab.set(2)))
+                .child(action("Objects", move || tab.set(3)))
                 .child(action("Refresh", load))
                 .child(action("New", move || form.update(|v| *v = !*v))),
         )
         .child(field("Search", search))
         .child(scroll().flex_1().child(dynamic(move || {
+            if tab.get() == 3 {
+                return crate::nsh_registry::registry_screen().into_element();
+            }
             if selected.get().is_some() {
                 return record_editor().into_element();
             }

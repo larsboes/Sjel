@@ -11,6 +11,8 @@ use tokio::sync::Mutex;
 
 use crate::shell::{CalendarEntry, ProjectRecord, ShellError};
 
+mod registry;
+
 /// Specific errors for Turso / LibSQL local storage.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StoreError {
@@ -64,7 +66,13 @@ CREATE INDEX IF NOT EXISTS idx_projects_records_done ON projects_records(done);
 "#;
 
 /// The columns an existing database from before delta sync does not have yet.
-const ADDED_COLUMNS: &[(&str, &str)] = &[("synced_content", "TEXT"), ("remote_at", "TEXT")];
+const ADDED_COLUMNS: &[(&str, &str)] = &[
+    ("synced_content", "TEXT"),
+    ("remote_at", "TEXT"),
+    ("registry_class", "TEXT"),
+    ("registry_rationale", "TEXT"),
+    ("registry_archived", "INTEGER"),
+];
 
 /// Offline mutation log to replay deltas when reconnected to the host.
 ///
@@ -772,6 +780,9 @@ impl TursoStore {
                 priority = excluded.priority,
                 synced_content = excluded.synced_content,
                 remote_at = excluded.remote_at,
+                registry_class = NULL,
+                registry_rationale = NULL,
+                registry_archived = NULL,
                 updated_at = excluded.updated_at
             "#,
             libsql::params![

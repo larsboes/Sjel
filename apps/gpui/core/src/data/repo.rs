@@ -219,6 +219,31 @@ fn record_google_export_status(
 }
 
 impl Repo {
+    /// Read registry projections through the capability or the phone's classified replica.
+    ///
+    /// # Errors
+    /// Refuses incomplete replica metadata, invalid bindings or unavailable capability reads.
+    pub async fn registry_view(
+        &self,
+        binding: Option<crate::record::registry::Binding>,
+    ) -> ShellResult<crate::record::registry::View> {
+        use crate::record::registry;
+        if let Some(replica) = &self.replica {
+            return match binding {
+                Some(binding) => registry::replica::read(&replica.store, binding).await,
+                None => registry::replica::load(&replica.store).await,
+            };
+        }
+        let shell = self.shell()?;
+        match binding {
+            Some(binding) => {
+                let view = registry::load(&shell, "projects").await?;
+                registry::read(&shell, view.registry, binding).await
+            }
+            None => registry::load(&shell, "projects").await,
+        }
+    }
+
     pub fn new(shell: Result<Arc<Shell>, ShellError>) -> Self {
         Self {
             shell,

@@ -8,6 +8,8 @@ use serde_json::Value;
 
 use crate::shell::{Shell, ShellError, ShellResult};
 
+pub mod replica;
+
 /// A binding to a declared read, with relation filters applied after the response.
 #[derive(Clone, Debug)]
 pub struct Binding {
@@ -161,7 +163,10 @@ pub async fn read(shell: &Shell, registry: Registry, binding: Binding) -> ShellR
     project(registry, binding, &response, &member, many)
 }
 
-fn request(registry: &Registry, binding: &Binding) -> ShellResult<(String, String, bool)> {
+pub(crate) fn request(
+    registry: &Registry,
+    binding: &Binding,
+) -> ShellResult<(String, String, bool)> {
     let object = registry
         .objects
         .iter()
@@ -200,7 +205,7 @@ fn request(registry: &Registry, binding: &Binding) -> ShellResult<(String, Strin
     ))
 }
 
-fn project(
+pub(crate) fn project(
     registry: Registry,
     binding: Binding,
     response: &Value,

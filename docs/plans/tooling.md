@@ -191,20 +191,30 @@ archive includes the managed path resolver; its extracted-path regression passes
 - **Desktop rebuild efficiency acceptance.** Contracts: [local builds](../../tools/local-build.md)
   and [desktop builds](../../apps/gpui/README.md#running-it). Profile-root validation and
   battery-aware build admission are implemented; installer and battery-wrapper regressions pass.
-  Open: controlled cold and one-source-edit comparisons, a real installed development bundle's
-  Finder-launched rebuild, and runtime/energy comparison with release. Compiler-stamp changes
+  Open: a real installed development bundle's Finder-launched rebuild and runtime/energy
+  comparison with release. Compiler-stamp changes
   and embedded documentation still invalidate builds. Measurement uses installed Hyperfine and
   platform disk reporting; an optional report on `tools/local-build run` would own repeated probes.
   Profile-only reclamation required a bounded local removal because existing target cleanup
   would remove the containing working cache. A profile selector in `sjel storage reclaim`,
   using its existing path and live-use guards, is the smallest tooling extension.
 
-  Warm-cache verification on 2026-11-17 used installed Hyperfine with one warmup and three runs
-  of `sjel cargo build --manifest-path apps/gpui/Cargo.toml --locked --profile desktop-dev -p sjel-gpui`.
-  Wall time was 0.597–1.432 seconds, median 0.602 seconds; peak reported RSS was 201,293,824 bytes.
-  A subsequent build completed without compilation. Concurrent checkout edits changed the input
-  fingerprint, so these observations do not establish controlled rebuild or energy savings.
-  Native app inspection timed out, leaving installed-app acceptance unverified.
+  Artifact-cache measurement on 2026-11-17 used installed Hyperfine and a `git archive` snapshot
+  of `c4f4e0ea`, with a fixed build stamp, one target root and the `desktop-dev` profile. The
+  source snapshot and output live under the deployment's existing two-day scratch retention.
+  Source downloads and operating-system caches were warm. No installed app or live release
+  tree was replaced.
+
+  | Artifact state | Runs | Wall time | Maximum reported RSS |
+  |---|---|---|---|
+  | Empty target | 1 | 744.740 seconds | 3,664,101,376 bytes |
+  | One whitespace-only edit in `core/src/store/registry.rs` | 1 | 8.232 seconds | 1,354,285,056 bytes |
+  | Unchanged after that edit | 3 | 1.074 seconds median; 0.595–1.123 range | 201,883,648 bytes |
+
+  The target tree occupied 3.9 GiB. These timings establish artifact reuse for that source edit;
+  single cold/edit samples and reported RSS do not establish runtime or energy savings, an
+  aggregate process-tree memory bound, or the cost of every kind of code change. A maintained
+  benchmark report command remains the smallest tooling extension for repeated measurements.
 
 - **Activate a capability from a writable build cache.** Projects activation could not remove
   Cargo archive temporary directories in either live cache, including an elevated restart.
@@ -597,10 +607,15 @@ archive includes the managed path resolver; its extracted-path regression passes
   bytes, and ended with 3.8 GiB and 8.9 GiB target trees respectively. Different revisions,
   workloads and runner/cache conditions prevent a controlled savings claim.
 
-  Open acceptance checks:
-  1. Observe distribution preflight and retain its exact-revision result.
-  2. Measure target growth and repeat matched workloads before expanding successful-result reuse
-     beyond local formatting or changing resource defaults.
+  Open: measure target growth and repeat matched workloads before expanding successful-result
+  reuse beyond local formatting or changing resource defaults.
+
+  [Full CI](https://github.com/larsboes/Sjel/actions/runs/44183334591) and
+  [distribution preparation](https://github.com/larsboes/Sjel/actions/runs/44183355882) both passed
+  at `c4f4e0ea`. Distribution's reusable full preflight passed every declared job before preparing
+  the retained `sjel-cli-Linux-X64` artifact with the existing `v0.0.2` label. No release was
+  created. The exact-revision full-verification guard accepts `c4f4e0ea`.
+
   Done when local and CI share the same planner, live full verification passes, and measurements
   establish the cost and savings.
 - **Backup CLI live acceptance.** Status/history commands shipped in `4fa41461`; agent

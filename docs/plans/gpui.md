@@ -1029,8 +1029,10 @@ in `16748c92` ([contract](../../apps/gpui/README.md)).
 Verification: 390 core tests and 30 NSH screen tests pass; six core audio tests remain ignored.
 The iPhone target compiles. Core Clippy passes with warnings denied. Strict NSH Clippy reports
 37 redundant-closure findings in the unchanged Calendar, Capture, People, Settings and Today
-screens. Physical-device and installed-app acceptance did not run: native app inspection timed
-out in this session. Whole-workspace verification has not run for this change.
+screens. Physical-device acceptance remains blocked by CoreDeviceService initialization timing
+out. Installed-app horizontal gesture acceptance has not run. Full CI, including workspace tests
+and all five platform compile jobs, passed at `c4f4e0ea`
+([run](https://github.com/larsboes/Sjel/actions/runs/44183334591)).
 
 Open, in order:
 

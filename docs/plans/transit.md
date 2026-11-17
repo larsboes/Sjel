@@ -149,13 +149,12 @@ These need an answer before the work package that depends on them starts.
 
    Decided 2026-11-03: the home server, a Mac mini. Until it is bought,
    the collector runs on the Mac. A home address also avoids the datacenter question in spike T0.
-2. **Location data off the user's machines.** A remote collector learns the watch set: which
-   stops, at which hours, on which days. That is a daily routine. Decide whether the watch set may
-   leave the user's devices in clear text, or whether the remote host only receives stop and line
-   IDs padded with decoy stops.
+2. **Location data off the user's machines.** Decided: the watch set (stops, hours and days, a
+   daily routine) stays on machines the user owns. The home server qualifies; a datacenter host
+   does not.
 3. **Priority.** [`PLAN.md` Priority 2](../../PLAN.md#priority-2-finish-daily-workflows) puts
-   validation of existing results before more collection or model features. T0 and T6 measure
-   what exists. Whether T1–T4 start before that evidence is undecided.
+   validation of existing results before more collection or model features. Decided: T0 and T6
+   run first; T1–T4 start after T0's table and the first realised rides exist.
 
 ## 5. Work packages
 

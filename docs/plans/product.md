@@ -37,12 +37,12 @@ applies to the stated join or policy boundary, not every feature in its crate.
 | [scouting](../../crates/scouting/README.md) | Build + ingest | Source opportunities joined to qualification rules, interests, dates and journeys |
 | [sjel-status](../../crates/sjel-status/README.md) | Build | Authenticated discovery, lifecycle and health across declared owners |
 | [software](../../crates/software/README.md) | Build + ingest | Platform installation facts joined to storage ownership and reviewed removal decisions |
-| [soundscape](../../crates/soundscape/README.md) | Link out; reduction open | Standalone playback state is not a join; native synthesis and its controller need retirement |
+| [soundscape](../../crates/soundscape/README.md) | Build; join open | Calendar- and presence-driven selection of preset and parameters; the native synthesizer stays in the app |
 | [transit](../../crates/transit/README.md) | Build + ingest | Provider journeys, prices and tickets joined to reliability and trip constraints |
 | [traveler](../../crates/traveler/README.md) | Build | Explicit constraints and ranking preferences shared by destination and journey decisions |
 | [trips](../../crates/trips/README.md) | Build | Itineraries joining calendar, transport, places, people, costs and gear |
 | [vault](../../crates/vault/README.md) | Ingest | Markdown properties, classes and links; files retain text authority |
-| [web-links](../../crates/web-links/README.md) | Link out; reduction open | The launcher/history recommender has no implemented cross-capability join |
+| [web-links](../../crates/web-links/README.md) | Link out; reduction open | Saved links move to one Markdown note in the prose folder |
 
 ### Supporting declarations
 
@@ -58,27 +58,26 @@ domain store or an independent application.
 | `container-refresh`, `host-patch`, `host-watch`, `storage-reclaim` | Declared installation, health and storage lifecycle operations |
 | `foundation-models`, `macmon`, `sqld`, `vaultwarden` | Managed upstream runtimes; consume their interfaces without rebuilding their applications |
 
-## Open reductions
+## Open boundary work
 
-1. **Retire standalone Soundscape.** `crates/soundscape/src/main.rs` stores playback intent and
-   broadcasts it; the native synthesizer lives in `apps/gpui/core/src/soundscape/`. The README
-   explicitly leaves calendar/presence-driven selection unimplemented, so that proposed join
-   cannot justify the current standalone feature. Apple's
-   [Background Sounds](https://support.apple.com/en-mo/guide/mac-help/mchl3061cdc6/mac) supplies
-   local focus/rest audio, but does not establish parity with the custom generative music.
-   Replacement selection is pending; code removal is deferred until that product choice is
-   resolved. Preserve an export of existing settings before retirement. Done when the Mac and
-   phone open the selected destination, playback ownership is clear, native synthesis and the
-   conductor are no longer built or started, and preserved state remains recoverable.
-2. **Reduce Links to destinations.** `crates/web-links/src/server.rs` exposes saved links,
+1. **Build Soundscape's join.** Soundscape stays and earns its Build verdict through the join its
+   README leaves open: preset and parameters follow calendar, presence and activity. The
+   conductor (`crates/soundscape/src/main.rs`) and the native synthesizer
+   (`apps/gpui/core/src/soundscape/`) stay. This is expansion work under
+   [`PLAN.md` Priority 3](../../PLAN.md#priority-3-agent-features-and-expansion). Before code, a
+   spec names the input signals, their mapping to presets and parameters, and how a manual
+   choice overrides a derived one. Done when a calendar entry or a presence change sets the
+   preset and parameters with no manual step, a manual choice stays in force until its session
+   ends, and the selection reads only through the owning capabilities' existing contracts.
+2. **Reduce Links to one Markdown note.** `crates/web-links/src/server.rs` exposes saved links,
    open tracking, browser-history scans and candidate decisions. None feeds another capability.
-   Browser bookmarks already provide saved destinations
-   ([Safari](https://support.apple.com/en-gb/guide/safari/ibrw1039/mac)). The browser/destination
-   choice is pending; retirement is deferred until saved-link export and destination acceptance
-   can be verified. Done when saved destinations are preserved and usable in the selected tool,
-   Sjel retains only the configured outbound destination, and history collection, usage tracking,
-   candidate storage and the standalone service leave the active build and lifecycle. Existing
-   database rows are not deleted as part of code removal.
+   Saved links move to one note in the prose folder
+   ([storage](storage.md#one-vault-for-prose)). The vault indexes its links, and the Finder
+   already searches notes. Done when every saved link is in that note and the Finder finds it by
+   title or URL, the Finder no longer reads the Links service
+   (`apps/gpui/src/finder/search.rs`), and history collection, usage tracking, candidate storage
+   and the standalone service leave the active build and lifecycle. Existing database rows are
+   not deleted as part of code removal.
 3. **Verify reductions inside retained capabilities.** Build + ingest rows are boundary verdicts,
    not feature-complete audits. Inspect feature routes and clients against the retained boundary,
    beginning with Media's organization features, Documents' reader and Finance's independent
@@ -92,13 +91,13 @@ domain store or an independent application.
    that reader; replacing it requires equivalent evidence inspection, not an unrelated editor.
    Reader controls may adopt shared components while PDF rendering and search remain intact.
 
-   Media organization remains unresolved. `crates/media/src/organize.rs` moves whole collections
-   by same-volume rename from an approved structure and records a reversal journal; it neither
-   indexes nor ingests bytes. No equivalent outbound workflow has been verified. Keep its code
-   and defer Media UI polish until replacement acceptance or a retained-boundary decision.
+   Media organization stays inside Media's original-byte custody boundary.
+   `crates/media/src/organize.rs` moves whole collections by same-volume rename from an approved
+   structure and records a reversal journal. It is frozen: no new organization features and no
+   Media UI polish.
    `apps/gpui/ui/src/media/content.rs` separately reviews extracted tag/collection candidates;
    accepting metadata does not authorize a file move. This inspection ran no live file moves,
    reader acceptance checks or dependent-join tests.
 
-The audit is not complete while these reductions or the private-overlay review remain open.
+The audit is not complete while items 2 and 3 or the private-overlay review remain open.
 No capability, service, personal record or original file has been removed by this audit.

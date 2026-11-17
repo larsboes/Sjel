@@ -859,7 +859,7 @@ Live light/dark visual acceptance for tables, charts, calendar and the migrated 
 Documents, Import and Docs use Ely buttons and retained text inputs (`da94b403`). Documents
 keeps PDF rendering, extracted-page search, proposal writes and comparison state; Docs keeps the
 Kit Markdown renderer, Mermaid plugin and anchor handling. Media adoption stays on hold under
-[`product.md`](product.md#open-reductions).
+[`product.md`](product.md#open-boundary-work).
 
 Tables, `test_support.rs`, Calendar (`c3d0ed19`), interactive Charts (`f0d20861`) and
 People/Inventory forms (`8171f0c5`, `475c9800`) have landed; live light/dark acceptance remains
@@ -870,7 +870,7 @@ Optional list conversions stay last.
 
 Sjel administration buttons and inputs, plus shared Setup/Research tabs, shipped in `06739e59`.
 The nine existing areas retain their capability calls. Registry-derived views retain priority, and
-Links retirement remains governed by [`product.md`](product.md#open-reductions).
+Links retirement remains governed by [`product.md`](product.md#open-boundary-work).
 Verification: 224 UI library tests, UI Clippy, the app no-default-features check and the
 UI NSH-only feature check pass. Clippy reports unrelated warnings. Native light/dark
 acceptance, installation and full workspace gates have not run for this migration.

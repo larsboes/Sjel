@@ -69,6 +69,8 @@ even when compilation and unit tests pass.
   additional harness support follows [`containment.md`](docs/plans/containment.md).
 - Pack deployment levels and account synchronization: [`packs.md`](docs/plans/packs.md).
   Defects in current installation integrity can rise to Priority 0 or 1.
+- Soundscape's calendar and presence join:
+  [`product.md`](docs/plans/product.md#open-boundary-work).
 - New learning surfaces and automation: [`learning.md`](docs/plans/learning.md).
 - New home integrations: [`homes.md`](docs/plans/homes.md).
 - Website polish and media: [`website.md`](docs/plans/website.md).

@@ -25,6 +25,7 @@ contains "$out" "storage <browse|report|discover|installed|reclaim|target>"
 contains "$out" "gates"
 contains "$out" "test"
 contains "$out" "cargo <args...>"
+contains "$out" "cv [args...]"
 
 # The three pre-push verbs. Each dispatches to a tool that owns the work, so what is
 # asserted here is the contract of the CLI: the verb exists, its help says what it runs,
@@ -71,5 +72,11 @@ out="$("$SJEL" help storage)"
 contains "$out" "target [--json]"
 contains "$out" "installed [--idle DAYS]"
 [ -x "$ROOT/tools/storage/storage" ] || fail "tools/storage/storage is not executable"
+
+out="$("$SJEL" help cv)"
+contains "$out" "cv linkedin diff"
+contains "$out" "cv linkedin pull"
+[ "$("$SJEL" cv --help)" = "$out" ] || fail "CV help and dispatch disagree"
+contains "$("$SJEL" search cv)" "cv [args...]"
 
 echo "sjel CLI contract passed"

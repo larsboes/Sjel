@@ -38,6 +38,7 @@ Check a change before pushing it:
   worktree new|list|remove       One branch and worktree per work package
 
 Operate capabilities:
+  cv [args...]                   Build CVs and compare LinkedIn snapshots through the CV CLI
   <capability> [args...]          Build and run its declared CLI (for example, projects or finance)
   distribution verify <archive> --sha256 <digest>  Verify a release capability package without installing
   distribution install-package <archive> --sha256 <digest>  Install into a packaged runtime; do not start

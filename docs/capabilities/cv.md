@@ -33,9 +33,15 @@ flowchart LR
 | `crates/cv/src/lib.rs` | Auto-fit build, applications, checked writes, status. |
 | `crates/cv/src/linkedin.rs` | Snapshot pull, CSV-export import, diff, paste sheet. Read-only. |
 | `crates/cv/templates/cv.typ` | Filtering by profile, priority, pin and hide; the layout. |
-| `crates/cv/cv` | Launcher on PATH. Rebuilds `cv-cli` when a source is newer, then execs it. |
+| `crates/cv/cv` | Launcher behind `sjel cv`. Rebuilds `cv-cli` when a source is newer, then execs it. |
 | `crates/cv/check` | Every verb against a throwaway overlay built from the schema. |
 | `crates/sjel-status/src/status/cv.rs` | HTTP surface. Owner-only. |
+
+## CLI entry point
+
+Use `sjel cv <args>` from any directory. `sjel help cv` reads the CV CLI's own help.
+The `cv` verbs below are shorthand for this entry point; a standalone `cv` on PATH is not required.
+The CLI owns reads of CV data in the overlay; callers do not need direct file access.
 
 ## Selection
 

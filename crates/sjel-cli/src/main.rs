@@ -217,6 +217,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         // Each launcher owns its overlay resolution and lazy build, so there is one
         // implementation of both.
         "storage" => exec(Command::new(tool("tools/storage/storage")).args(rest)),
+        "cv" => exec(Command::new(tool("crates/cv/cv")).args(rest)),
         "demo" => exec(Command::new(tool("tools/demo-shots")).args(rest)),
         // A coding harness under its provider's ring (crates/containment).
         "run" => exec(Command::new(tool("tools/contain/contain")).args(rest)),
@@ -285,6 +286,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         // The tool's own `-h` is the one text that cannot drift from its verbs. A copy here
         // listed `apply` and `prune` after both had become `reclaim`.
         "storage" => return exec(Command::new(root.join("tools/storage/storage")).arg("-h")),
+        "cv" => return exec(Command::new(root.join("crates/cv/cv")).arg("--help")),
         "update" => help::UPDATE,
         "mirror" => help::MIRROR,
         "setup" => help::SETUP,

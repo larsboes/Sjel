@@ -1,6 +1,5 @@
 #!/bin/bash
-# crates/cv/cv — build CVs from the master file. Named after its capability, which puts
-# this directory on PATH. Execs cv-cli; `cv` with no arguments prints usage.
+# CV launcher for `sjel cv`; resolves the overlay and execs cv-cli.
 # Portable shell only (CONTRIBUTING.md#portable-shell) — no bash-4-only syntax.
 set -euo pipefail
 

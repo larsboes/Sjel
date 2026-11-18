@@ -11,8 +11,7 @@ publish = false
 name = "cv"
 path = "src/lib.rs"
 
-# cv-cli, not cv: crates/cv/cv is the entry point on PATH and execs this binary.
-# Same reason crates/punctuality names its binary punctuality-cli.
+# The `sjel cv` launcher execs cv-cli.
 [[bin]]
 name = "cv-cli"
 path = "src/main.rs"

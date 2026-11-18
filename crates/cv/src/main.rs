@@ -117,6 +117,10 @@ fn run(args: &[String]) -> Res<()> {
     let Some(verb) = args.first() else {
         return Err(USAGE.into());
     };
+    if matches!(verb.as_str(), "-h" | "--help" | "help") {
+        println!("{USAGE}");
+        return Ok(());
+    }
     let paths = Paths::from_env()?;
     let tail = &args[1..];
     match verb.as_str() {

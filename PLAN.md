@@ -74,6 +74,7 @@ even when compilation and unit tests pass.
 - New learning surfaces and automation: [`learning.md`](docs/plans/learning.md).
 - New home integrations: [`homes.md`](docs/plans/homes.md).
 - Website polish and media: [`website.md`](docs/plans/website.md).
+- Social post drafting, review and later publishing: [`posts.md`](docs/plans/posts.md).
 
 The priority order here supersedes older area-local ordering. Deferred work retains its
 acceptance check; deferral does not authorize a replacement architecture.

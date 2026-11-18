@@ -55,6 +55,13 @@ plugin metadata remain intact. CI selection regressions cover the remaining gate
 
 ## CLI installation and release delivery
 
+CV command discovery: `sjel cv` delegates to the existing CV launcher; `sjel help cv`
+uses data-independent CLI help. The overlay data wall and credentials are unchanged.
+Acceptance: the public CLI contract, 445 CLI unit tests, shell syntax, diff whitespace
+and all 420 documentation link checks pass. The rebuilt CLI is active. Final diff review,
+Claude settings comparison and verification outside the checkout await command-policy approval.
+The full workspace suite and a live Claude Code session have not been tested.
+
 Decided 2026-11-09: deliver a checkout-free CLI and coding-harness installation before desktop
 release work. Direct installations notify about updates and apply them only on explicit request.
 Preview releases use successive `v0.0.x` tags; existing tags remain immutable. A bounded release
@@ -187,6 +194,15 @@ installation, and alternate-platform execution remain unchecked. The node
 archive includes the managed path resolver; its extracted-path regression passes.
 
 ## Open
+
+- **Export Photos library items in a chosen order and build a collage.** A social post needed
+  seven photos exported at full resolution in post order, plus one grid collage. Some originals
+  were stored only in iCloud. The agent ran `osascript` Photos `export` per media item ID, then
+  `magick` to resize, crop to fill and composite. Add a verb that takes an ordered list of media
+  item IDs and an output directory, exports through Photos (so iCloud originals download and
+  edits apply), and builds a collage from a named grid layout. Done when one command produces
+  the numbered files and the collage, and the Photos library stays unchanged. Owner:
+  [`posts.md`](posts.md), package 2.
 
 - **Desktop rebuild efficiency acceptance.** Contracts: [local builds](../../tools/local-build.md)
   and [desktop builds](../../apps/gpui/README.md#running-it). Profile-root validation and

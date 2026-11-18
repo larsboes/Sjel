@@ -319,17 +319,21 @@ impl Shell {
     }
 
     pub async fn inventory_identity(&self, reference: &str) -> ShellResult<InventoryIdentity> {
-        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
-        url.path_segments_mut()
-            .expect("a hierarchical URL")
-            .extend(["inventory", "api", "item-refs", reference]);
-        self.json(Method::GET, url.path(), None, 10).await
+        let path = inventory_api::proxy_route(
+            &inventory_api::ROUTE_ITEM_REFS.replace("{reference}", &segment(reference)),
+        );
+        self.json(Method::GET, &path, None, 10).await
     }
     pub async fn inventory_mail_proposals(
         &self,
     ) -> ShellResult<Vec<crate::inventory::MailProposal>> {
         let result: crate::inventory::MailProposals = self
-            .json(Method::GET, "/inventory/api/mail-proposals", None, 10)
+            .json(
+                Method::GET,
+                &inventory_api::proxy_route(inventory_api::ROUTE_MAIL_PROPOSALS),
+                None,
+                10,
+            )
             .await?;
         Ok(result.proposals)
     }
@@ -338,11 +342,9 @@ impl Shell {
         &self,
         id: &str,
     ) -> ShellResult<crate::inventory::MailMatchSnapshot> {
-        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
-        url.path_segments_mut()
-            .expect("a hierarchical URL")
-            .extend(["inventory", "api", "items", id, "mail-match-snapshot"]);
-        self.json(Method::GET, url.path(), None, 10).await
+        let path =
+            inventory_api::proxy_route_id(inventory_api::ROUTE_MAIL_MATCH_SNAPSHOT, &segment(id));
+        self.json(Method::GET, &path, None, 10).await
     }
 
     pub async fn inventory_mail_decision(
@@ -352,7 +354,10 @@ impl Shell {
     ) -> ShellResult<()> {
         self.send(
             Method::POST,
-            &format!("/inventory/api/mail-proposals/{id}/decision"),
+            &inventory_api::proxy_route_id(
+                inventory_api::ROUTE_MAIL_PROPOSAL_DECISION,
+                &id.to_string(),
+            ),
             Some(body),
             10,
         )
@@ -361,19 +366,34 @@ impl Shell {
     }
 
     pub async fn inventory_rows(&self) -> ShellResult<Vec<crate::inventory::InventoryRow>> {
-        self.json(Method::GET, "/inventory/api/inventory", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            &inventory_api::proxy_route(inventory_api::ROUTE_INVENTORY),
+            None,
+            10,
+        )
+        .await
     }
 
     pub async fn inventory_wishlist(&self) -> ShellResult<crate::inventory::InventoryWishlist> {
-        self.json(Method::GET, "/inventory/api/wishlist", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            &inventory_api::proxy_route(inventory_api::ROUTE_WISHLIST),
+            None,
+            10,
+        )
+        .await
     }
 
     /// The wish groups, each with its members and what they cost.
     pub async fn inventory_wish_groups(&self) -> ShellResult<Vec<crate::inventory::WishGroup>> {
         let envelope: crate::inventory::WishGroups = self
-            .json(Method::GET, "/inventory/api/wish-groups", None, 10)
+            .json(
+                Method::GET,
+                &inventory_api::proxy_route(inventory_api::ROUTE_WISH_GROUPS),
+                None,
+                10,
+            )
             .await?;
         Ok(envelope.wish_groups)
     }
@@ -393,12 +413,14 @@ impl Shell {
         }
         self.send(
             Method::POST,
-            "/inventory/api/wish-groups",
-            Some(serde_json::json!({
-                "id": id,
-                "title": title,
-                "constraint_text": constraint_text,
-            })),
+            &inventory_api::proxy_route(inventory_api::ROUTE_WISH_GROUPS),
+            Some(body(&inventory_api::SaveWishGroupRequest {
+                id: id.to_owned(),
+                title: title.to_owned(),
+                constraint_text: constraint_text.to_owned(),
+                item_ids: None,
+                alternatives: None,
+            })?),
             10,
         )
         .await
@@ -417,14 +439,12 @@ impl Shell {
                 Some("A wish group id is required.".into()),
             ));
         }
-        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
-        url.path_segments_mut()
-            .expect("a hierarchical URL")
-            .extend(["inventory", "api", "wish-groups", id, "items"]);
         self.send(
             Method::PUT,
-            url.path(),
-            Some(serde_json::json!({ "item_ids": item_ids })),
+            &inventory_api::proxy_route_id(inventory_api::ROUTE_WISH_GROUP_ITEMS, &segment(id)),
+            Some(body(&inventory_api::SetWishGroupItemsRequest {
+                item_ids: item_ids.to_vec(),
+            })?),
             10,
         )
         .await
@@ -439,13 +459,9 @@ impl Shell {
                 Some("A wish group id is required.".into()),
             ));
         }
-        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
-        url.path_segments_mut()
-            .expect("a hierarchical URL")
-            .extend(["inventory", "api", "wish-groups", id]);
-        self.send(Method::DELETE, url.path(), None, 10)
-            .await
-            .map(drop)
+        let path =
+            inventory_api::proxy_route_id(inventory_api::ROUTE_WISH_GROUP_BY_ID, &segment(id));
+        self.send(Method::DELETE, &path, None, 10).await.map(drop)
     }
 
     /// Creates an inventory entry through the inventory capability.
@@ -455,7 +471,7 @@ impl Shell {
     ) -> ShellResult<()> {
         self.send(
             Method::POST,
-            "/inventory/api/items",
+            &inventory_api::proxy_route(inventory_api::ROUTE_ITEMS),
             Some(serde_json::to_value(item).map_err(|_| ShellError::Unreadable)?),
             10,
         )
@@ -476,13 +492,9 @@ impl Shell {
                 Some("An inventory item id is required.".into()),
             ));
         }
-        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
-        url.path_segments_mut()
-            .expect("a hierarchical URL")
-            .extend(["inventory", "api", "items", id, "state"]);
         self.json(
             Method::POST,
-            url.path(),
+            &inventory_api::proxy_route_id(inventory_api::ROUTE_ITEM_STATE, &segment(id)),
             Some(serde_json::json!({"state": state.as_str(), "note": note})),
             10,
         )
@@ -509,11 +521,8 @@ impl Shell {
             ));
         };
         fields.insert("expected_revision".to_owned(), revision.into());
-        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
-        url.path_segments_mut()
-            .expect("a hierarchical URL")
-            .extend(["inventory", "api", "items", id]);
-        self.json(Method::PATCH, url.path(), Some(patch), 10).await
+        let path = inventory_api::proxy_route_id(inventory_api::ROUTE_ITEM_BY_ID, &segment(id));
+        self.json(Method::PATCH, &path, Some(patch), 10).await
     }
 
     pub async fn inventory_state_history(
@@ -526,11 +535,8 @@ impl Shell {
                 Some("An inventory item id is required.".into()),
             ));
         }
-        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
-        url.path_segments_mut()
-            .expect("a hierarchical URL")
-            .extend(["inventory", "api", "items", id, "state"]);
-        self.json(Method::GET, url.path(), None, 10).await
+        let path = inventory_api::proxy_route_id(inventory_api::ROUTE_ITEM_STATE, &segment(id));
+        self.json(Method::GET, &path, None, 10).await
     }
 
     pub async fn interior_item_impact(
@@ -554,8 +560,13 @@ impl Shell {
     pub async fn interior_layouts(
         &self,
     ) -> ShellResult<Vec<crate::inventory::InteriorLayoutSummary>> {
-        self.json(Method::GET, "/interior/api/layouts", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            interior_api::PROXY_ROUTE_INTERIOR_LAYOUTS,
+            None,
+            10,
+        )
+        .await
     }
 
     pub async fn interior_layout_preview(
@@ -570,7 +581,7 @@ impl Shell {
         }
         self.json(
             Method::GET,
-            &format!("/interior/api/layouts/{id}"),
+            &format!("{}/{id}", interior_api::PROXY_ROUTE_INTERIOR_LAYOUTS),
             None,
             20,
         )
@@ -584,7 +595,7 @@ impl Shell {
         let body = serde_json::json!({ "items": items });
         self.json(
             Method::POST,
-            "/interior/api/placements/preview",
+            &format!("{}/preview", interior_api::PROXY_ROUTE_INTERIOR_PLACEMENTS),
             Some(body),
             30,
         )
@@ -602,10 +613,18 @@ impl Shell {
                 Some("Choose a saved layout with movable items.".into()),
             ));
         }
-        let body =
-            serde_json::json!({ "layout": layout, "move_refs": move_refs, "step": 20, "limit": 6 });
-        self.json(Method::POST, "/interior/api/search", Some(body), 10)
-            .await
+        let request = interior_api::SearchRequest {
+            layout: layout.to_owned(),
+            move_refs: move_refs.to_vec(),
+            ..interior_api::SearchRequest::default()
+        };
+        self.json(
+            Method::POST,
+            interior_api::PROXY_ROUTE_INTERIOR_SEARCH,
+            Some(body(&request)?),
+            10,
+        )
+        .await
     }
 
     pub async fn interior_compose_layout(
@@ -618,17 +637,30 @@ impl Shell {
                 Some("Choose at least one item to arrange.".into()),
             ));
         }
-        let body = serde_json::json!({ "refs": refs, "step": 25, "beam": 60, "limit": 5, "rotations": [0, 90] });
-        self.json(Method::POST, "/interior/api/compose", Some(body), 10)
-            .await
+        let request = interior_api::ComposeRequest {
+            refs: refs.to_vec(),
+            ..interior_api::ComposeRequest::default()
+        };
+        self.json(
+            Method::POST,
+            interior_api::PROXY_ROUTE_INTERIOR_COMPOSE,
+            Some(body(&request)?),
+            10,
+        )
+        .await
     }
 
     pub async fn interior_planning_job(
         &self,
         id: u64,
     ) -> ShellResult<crate::interior::RoomPlanJob> {
-        self.json(Method::GET, &format!("/interior/api/jobs/{id}"), None, 10)
-            .await
+        self.json(
+            Method::GET,
+            &format!("{}/{id}", interior_api::PROXY_ROUTE_INTERIOR_JOBS),
+            None,
+            10,
+        )
+        .await
     }
 
     pub async fn interior_save_proposal(
@@ -645,20 +677,30 @@ impl Shell {
             ));
         }
         let body = serde_json::json!({ "id": id, "name": name, "items": items, "note_text": note });
-        self.json(Method::POST, "/interior/api/layouts", Some(body), 30)
-            .await
+        self.json(
+            Method::POST,
+            interior_api::PROXY_ROUTE_INTERIOR_LAYOUTS,
+            Some(body),
+            30,
+        )
+        .await
     }
 
     pub async fn interior_model(&self) -> ShellResult<crate::interior::RoomPlanModel> {
-        self.json(Method::GET, "/interior/api/model", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            interior_api::PROXY_ROUTE_INTERIOR_MODEL,
+            None,
+            10,
+        )
+        .await
     }
 
     pub async fn interior_placements(
         &self,
         flat: &str,
     ) -> ShellResult<Vec<crate::interior::RoomPlanPlacement>> {
-        let path = format!("/interior/api/placements/{flat}");
+        let path = format!("{}/{flat}", interior_api::PROXY_ROUTE_INTERIOR_PLACEMENTS);
         self.json(Method::GET, &path, None, 10).await
     }
 
@@ -667,18 +709,21 @@ impl Shell {
         update: crate::interior::PlacementUpdate<'_>,
     ) -> ShellResult<serde_json::Value> {
         let path = format!(
-            "/interior/api/roomplan/spaces/{}/placements/{}",
-            update.space_id, update.item_id
+            "{}/{}/placements/{}",
+            interior_api::PROXY_ROUTE_INTERIOR_ROOMPLAN_SPACES,
+            update.space_id,
+            update.item_id
         );
-        let body = serde_json::json!({
-            "revision_id": update.revision_id,
-            "observation_id": update.observation_id,
-            "expected_revision": update.expected_revision,
-            "x": update.x,
-            "y": update.y,
-            "rot": update.rotation
-        });
-        self.json(Method::PUT, &path, Some(body), 30).await
+        let request = interior_api::RoomPlanPlacementRequest {
+            revision_id: update.revision_id.to_owned(),
+            observation_id: update.observation_id.to_owned(),
+            expected_revision: update.expected_revision,
+            x: update.x,
+            y: update.y,
+            rot: update.rotation,
+        };
+        self.json(Method::PUT, &path, Some(body(&request)?), 30)
+            .await
     }
 
     pub async fn interior_roomplan_propose_placement(
@@ -688,16 +733,16 @@ impl Shell {
         observation_id: &str,
         item_id: &str,
     ) -> ShellResult<crate::interior::RoomPlanPlacementProposalResponse> {
-        let body = serde_json::json!({
-            "space_id": space_id,
-            "revision_id": revision_id,
-            "observation_id": observation_id,
-            "item_id": item_id
-        });
+        let request = interior_api::RoomPlanPlacementProposalRequest {
+            space_id: space_id.to_owned(),
+            revision_id: revision_id.to_owned(),
+            observation_id: observation_id.to_owned(),
+            item_id: item_id.to_owned(),
+        };
         self.json(
             Method::POST,
-            "/interior/api/roomplan/propose-placement",
-            Some(body),
+            interior_api::PROXY_ROUTE_INTERIOR_ROOMPLAN_PROPOSE_PLACEMENT,
+            Some(body(&request)?),
             30,
         )
         .await
@@ -707,8 +752,13 @@ impl Shell {
     pub async fn interior_roomplan_revisions(
         &self,
     ) -> ShellResult<crate::interior::RoomPlanRevisionSet> {
-        self.json(Method::GET, "/interior/api/roomplan/revisions", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            interior_api::PROXY_ROUTE_INTERIOR_ROOMPLAN_REVISIONS,
+            None,
+            10,
+        )
+        .await
     }
 
     /// Reads one immutable RoomPlan revision's parametric USDZ asset.
@@ -719,7 +769,10 @@ impl Shell {
         let response = self
             .send(
                 Method::GET,
-                &format!("/interior/api/roomplan/revisions/{revision_id}/asset"),
+                &format!(
+                    "{}/{revision_id}/asset",
+                    interior_api::PROXY_ROUTE_INTERIOR_ROOMPLAN_REVISIONS
+                ),
                 None,
                 60,
             )
@@ -732,19 +785,27 @@ impl Shell {
     }
 
     pub async fn interior_roomplan_spaces(&self) -> ShellResult<crate::interior::RoomPlanSpaceSet> {
-        self.json(Method::GET, "/interior/api/roomplan/spaces", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            interior_api::PROXY_ROUTE_INTERIOR_ROOMPLAN_SPACES,
+            None,
+            10,
+        )
+        .await
     }
 
     pub async fn interior_roomplan_create_space(
         &self,
         revision_id: &str,
     ) -> ShellResult<crate::interior::RoomPlanSpaceReceipt> {
-        let body = serde_json::json!({ "revision_id": revision_id });
+        let request = interior_api::RoomPlanSpaceCreateRequest {
+            revision_id: revision_id.to_owned(),
+            label: None,
+        };
         self.json(
             Method::POST,
-            "/interior/api/roomplan/spaces",
-            Some(body),
+            interior_api::PROXY_ROUTE_INTERIOR_ROOMPLAN_SPACES,
+            Some(body(&request)?),
             10,
         )
         .await
@@ -755,9 +816,15 @@ impl Shell {
         space_id: &str,
         revision_id: &str,
     ) -> ShellResult<serde_json::Value> {
-        let path = format!("/interior/api/roomplan/spaces/{space_id}/revisions");
-        let body = serde_json::json!({ "revision_id": revision_id });
-        self.json(Method::POST, &path, Some(body), 10).await
+        let path = format!(
+            "{}/{space_id}/revisions",
+            interior_api::PROXY_ROUTE_INTERIOR_ROOMPLAN_SPACES
+        );
+        let request = interior_api::RoomPlanSpaceRevisionRequest {
+            revision_id: revision_id.to_owned(),
+        };
+        self.json(Method::POST, &path, Some(body(&request)?), 10)
+            .await
     }
 
     pub async fn interior_roomplan_link_object(
@@ -767,13 +834,17 @@ impl Shell {
         observation_id: &str,
         item_id: &str,
     ) -> ShellResult<serde_json::Value> {
-        let path = format!("/interior/api/roomplan/spaces/{space_id}/links");
-        let body = serde_json::json!({
-            "revision_id": revision_id,
-            "observation_id": observation_id,
-            "item_id": item_id
-        });
-        self.json(Method::PUT, &path, Some(body), 10).await
+        let path = format!(
+            "{}/{space_id}/links",
+            interior_api::PROXY_ROUTE_INTERIOR_ROOMPLAN_SPACES
+        );
+        let request = interior_api::RoomPlanObjectLinkRequest {
+            revision_id: revision_id.to_owned(),
+            observation_id: observation_id.to_owned(),
+            item_id: item_id.to_owned(),
+        };
+        self.json(Method::PUT, &path, Some(body(&request)?), 10)
+            .await
     }
 
     /// Aligns two archived RoomPlan captures and returns review-only match suggestions.
@@ -782,14 +853,14 @@ impl Shell {
         before_revision_id: &str,
         after_revision_id: &str,
     ) -> ShellResult<crate::interior::RoomPlanReconciliationResponse> {
-        let body = serde_json::json!({
-            "before_revision_id": before_revision_id,
-            "after_revision_id": after_revision_id
-        });
+        let request = interior_api::RoomPlanReconcileRequest {
+            before_revision_id: before_revision_id.to_owned(),
+            after_revision_id: after_revision_id.to_owned(),
+        };
         self.json(
             Method::POST,
-            "/interior/api/roomplan/reconcile",
-            Some(body),
+            interior_api::PROXY_ROUTE_INTERIOR_ROOMPLAN_RECONCILE,
+            Some(body(&request)?),
             30,
         )
         .await
@@ -801,14 +872,20 @@ impl Shell {
         revision_id: &str,
         decision: crate::interior::RoomPlanDecision,
     ) -> ShellResult<crate::interior::RoomPlanReview> {
-        let path = format!("/interior/api/roomplan/revisions/{revision_id}/review");
-        let body = serde_json::json!({
-            "decision": match decision {
+        let path = format!(
+            "{}/{revision_id}/review",
+            interior_api::PROXY_ROUTE_INTERIOR_ROOMPLAN_REVISIONS
+        );
+        let request = interior_api::RoomPlanReviewRequest {
+            decision: match decision {
                 crate::interior::RoomPlanDecision::Accept => "accept",
                 crate::interior::RoomPlanDecision::Reject => "reject",
             }
-        });
-        self.json(Method::POST, &path, Some(body), 10).await
+            .to_owned(),
+            note: None,
+        };
+        self.json(Method::POST, &path, Some(body(&request)?), 10)
+            .await
     }
 }
 

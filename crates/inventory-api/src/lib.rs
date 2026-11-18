@@ -26,11 +26,58 @@ pub const ROUTE_WISHLIST: &str = "/api/wishlist";
 pub const ROUTE_WISH_GROUPS: &str = "/api/wish-groups";
 pub const ROUTE_WISH_GROUP_BY_ID: &str = "/api/wish-groups/{id}";
 pub const ROUTE_WISH_GROUP_ITEMS: &str = "/api/wish-groups/{id}/items";
-pub const ROUTE_WISH_GROUP_SPECS: &str = "/api/wish-groups/{id}/specs";
 pub const ROUTE_WISH_GROUP_NEEDS: &str = "/api/wish-groups/{id}/needs";
-pub const ROUTE_WISH_GROUP_PRICES: &str = "/api/wish-groups/{id}/prices";
+pub const ROUTE_ITEM_SPECS: &str = "/api/items/{id}/specs";
+pub const ROUTE_ITEM_PRICES: &str = "/api/items/{id}/prices";
 pub const ROUTE_WISH_COMPARISON: &str = "/api/wish-comparison";
-pub const ROUTE_LINKS: &str = "/api/links";
+
+/// Every route constant above. The server test checks each one against its manifest.
+pub const ALL_ROUTES: [&str; 17] = [
+    ROUTE_INVENTORY,
+    ROUTE_ITEM_REFS,
+    ROUTE_MAIL_PROPOSALS,
+    ROUTE_MAIL_PROPOSAL_DECISION,
+    ROUTE_MAIL_MATCH_SNAPSHOT,
+    ROUTE_RESOLVE,
+    ROUTE_ITEMS,
+    ROUTE_ITEM_BY_ID,
+    ROUTE_ITEM_STATE,
+    ROUTE_WISHLIST,
+    ROUTE_WISH_GROUPS,
+    ROUTE_WISH_GROUP_BY_ID,
+    ROUTE_WISH_GROUP_ITEMS,
+    ROUTE_WISH_GROUP_NEEDS,
+    ROUTE_ITEM_SPECS,
+    ROUTE_ITEM_PRICES,
+    ROUTE_WISH_COMPARISON,
+];
+
+/// The path prefix under which the status proxy serves these routes.
+pub const PROXY_PREFIX: &str = "/inventory";
+
+/// `route` behind the status proxy.
+pub fn proxy_route(route: &str) -> String {
+    format!("{PROXY_PREFIX}{route}")
+}
+
+/// `route` behind the status proxy, with `{id}` replaced by an id the caller already encoded.
+pub fn proxy_route_id(route: &str, encoded_id: &str) -> String {
+    proxy_route(&route.replace("{id}", encoded_id))
+}
+
+#[cfg(test)]
+mod route_tests {
+    use super::*;
+
+    #[test]
+    fn proxy_routes_sit_under_the_prefix() {
+        assert_eq!(proxy_route(ROUTE_WISH_GROUPS), "/inventory/api/wish-groups");
+        assert_eq!(
+            proxy_route_id(ROUTE_WISH_GROUP_ITEMS, "desk%20lamp"),
+            "/inventory/api/wish-groups/desk%20lamp/items"
+        );
+    }
+}
 
 // ============================================================================
 // Enums

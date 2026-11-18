@@ -313,3 +313,14 @@ fn an_ask_event_preserves_live_tool_activity() {
     assert_eq!(event.name, "calendar_entries");
     assert!(event.arguments.contains("2026-10-21"));
 }
+
+#[test]
+fn a_segment_encodes_what_would_split_or_escape_the_path() {
+    assert_eq!(segment("desk lamp"), "desk%20lamp");
+    assert_eq!(segment("a/b"), "a%2Fb");
+    assert_eq!(segment("../x"), "..%2Fx");
+    assert_eq!(
+        inventory_api::proxy_route_id(inventory_api::ROUTE_ITEM_STATE, &segment("desk lamp")),
+        "/inventory/api/items/desk%20lamp/state"
+    );
+}

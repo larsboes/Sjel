@@ -954,6 +954,16 @@ mod route_manifest_tests {
     }
 
     #[test]
+    fn every_contract_route_is_declared() {
+        for route in inventory_api::ALL_ROUTES {
+            assert!(
+                super::ROUTES.iter().any(|declared| declared.path == route),
+                "inventory-api names {route}, which the manifest does not declare"
+            );
+        }
+    }
+
+    #[test]
     fn the_catalogue_names_every_served_route() {
         let missing = route_manifest::undeclared_routes(include_str!("api.rs"), super::ROUTES);
         assert!(

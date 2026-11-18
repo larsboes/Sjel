@@ -960,6 +960,15 @@ pub fn software_key(key: &str) -> ShellResult<String> {
     Ok(key.replace('@', "%40").replace('/', "%2F"))
 }
 
+/// One URL path segment, percent-encoded the way `Url::path_segments_mut` encodes it.
+fn segment(value: &str) -> String {
+    let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
+    url.path_segments_mut()
+        .expect("a hierarchical URL")
+        .push(value);
+    url.path().trim_start_matches('/').to_owned()
+}
+
 /// A typed request as the JSON body the shell sends.
 fn body(request: &impl serde::Serialize) -> ShellResult<serde_json::Value> {
     serde_json::to_value(request).map_err(|_| ShellError::Unreadable)

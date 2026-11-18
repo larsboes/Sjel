@@ -445,6 +445,72 @@ describe.skipIf(!piConfigured)("pack extensions", () => {
     }
   });
 
+  test("an isolated installed-Pi session executes routine work and refuses harmful effects", async () => {
+    if (!piInstall) throw new Error("Pi is configured but its SDK package was not found.");
+    const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = await import(join(piInstall.packageDir, "dist", "index.js"));
+    const fixture = mkdtempSync(join(tmpdir(), "pi-policy-session-"));
+    const project = join(fixture, "project");
+    const notes = join(fixture, "knowledge");
+    const overlay = join(fixture, "private");
+    const previousOverlay = process.env.SJEL_OVERLAY_ROOT;
+    const previousPersonal = process.env.SJEL_PERSONAL_ROOT;
+    let session: any;
+    for (const path of [project, notes, join(overlay, "config")]) mkdirSync(path, { recursive: true });
+    writeFileSync(join(project, "package.json"), "{}");
+    writeFileSync(join(overlay, "config", "command-policy.json"), JSON.stringify({ markdown_write_roots: [], write_roots: [project, notes], protected_roots: [overlay] }));
+    process.env.SJEL_OVERLAY_ROOT = overlay;
+    delete process.env.SJEL_PERSONAL_ROOT;
+    try {
+      const agentDir = join(fixture, "agent");
+      const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } });
+      const resourceLoader = new DefaultResourceLoader({
+        cwd: project, agentDir, settingsManager, noExtensions: true, noSkills: true,
+        noPromptTemplates: true, noThemes: true, noContextFiles: true,
+        additionalExtensionPaths: [join(SJEL_ROOT, "Packs/security/extensions/command-policy/index.ts")],
+      });
+      await resourceLoader.reload();
+      expect(resourceLoader.getExtensions().errors).toEqual([]);
+      const sessionManager = SessionManager.inMemory(project);
+      sessionManager.appendMessage({ role: "assistant", content: [{ type: "toolCall", id: "policy-acceptance", name: "acceptance", arguments: {} }],
+        api: "openai-responses", provider: "fixture", model: "fixture", stopReason: "toolUse", timestamp: Date.now(),
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } });
+      ({ session } = await createAgentSession({ cwd: project, agentDir, settingsManager, resourceLoader,
+        sessionManager, tools: ["read", "write", "edit", "bash"] }));
+      await session.bindExtensions({ mode: "json" });
+      const runner = session.extensionRunner;
+      const errors: unknown[] = [];
+      runner.onError((error: unknown) => errors.push(error));
+      const tools = runner.createToolContext("policy-acceptance", undefined);
+      const note = join(notes, "note.md");
+      const created = await tools.executeTool("write", { path: note, content: "original" });
+      if (created.isError) throw new Error(JSON.stringify(created.result));
+      expect((await tools.executeTool("read", { path: note })).isError).toBe(false);
+      expect((await tools.executeTool("edit", { path: note, edits: [{ oldText: "original", newText: "updated" }] })).isError).toBe(false);
+      writeFileSync(note, "concurrent");
+      expect((await tools.executeTool("write", { path: note, content: "lost work" })).isError).toBe(true);
+      expect(readFileSync(note, "utf8")).toBe("concurrent");
+      expect((await tools.executeTool("bash", { command: `mkdir -p '${notes}/nested' && touch '${notes}/nested/a'` })).isError).toBe(false);
+      expect(await runner.emitToolCall({ type: "tool_call", toolName: "bash", toolCallId: "local-install", input: { command: "npm add example" } })).toBeUndefined();
+      expect((await runner.emitToolCall({ type: "tool_call", toolName: "bash", toolCallId: "global-install", input: { command: "npm install -g example" } })).block).toBe(true);
+      expect((await tools.executeTool("bash", { command: `rm -rf '${notes}'` })).isError).toBe(true);
+      expect(readFileSync(note, "utf8")).toBe("concurrent");
+      expect((await tools.executeTool("write", { path: join(project, "AGENTS.md"), content: "weaken guards" })).isError).toBe(true);
+      const context = await runner.emitContext([{ role: "user", content: "Compacted task summary", timestamp: Date.now() }]);
+      const guidance = context.find((message: any) => message.role === "custom" && message.customType === "command-policy-context");
+      expect(guidance.content).toContain(notes);
+      expect(guidance.content).toContain("advisory, never permission grants");
+      const cleanup = JSON.parse(/Disposable cleanup roots: (\[.*?\])\. Protected roots:/.exec(guidance.content)![1])[0];
+      expect((await tools.executeTool("bash", { command: `mkdir -p '${cleanup}/output' && touch '${cleanup}/output/a' && rm -rf '${cleanup}/output'` })).isError).toBe(false);
+      await runner.emit({ type: "session_shutdown" });
+      expect(errors).toEqual([]);
+    } finally {
+      session?.dispose();
+      if (previousOverlay === undefined) delete process.env.SJEL_OVERLAY_ROOT; else process.env.SJEL_OVERLAY_ROOT = previousOverlay;
+      if (previousPersonal === undefined) delete process.env.SJEL_PERSONAL_ROOT; else process.env.SJEL_PERSONAL_ROOT = previousPersonal;
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   test("every extension loads and registers under a stub api", async () => {
     const dir = fixture();
     for (const file of packs) {

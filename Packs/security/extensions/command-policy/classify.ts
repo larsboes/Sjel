@@ -1,23 +1,5 @@
-/**
- * Command policy classifier — docs/plans/agent.md §3, for pi.
- *
- * Pure: no pi import, no I/O except resolving symlinks of paths that exist. Every bash command
- * and every write gets one class:
- *
- *   block  refused; the user may allow one call from a card naming the rule, never a session grant
- *   ask    approval card; a session grant is keyed by tool and exact arguments
- *   allow  runs without a card
- *
- * The steps follow the spec: split at shell operators, unwrap wrappers (`env`, `command`,
- * `timeout`, `bash -c`, `xargs`, `find -exec`, an absolute path to a binary), treat a program
- * name that comes from a substitution as opaque, resolve write targets, take the strictest class
- * of the parts, and allow every program without a rule (R4). Cards are kept for harmful classes.
- *
- * This is not a sandbox. Shell indirection is unbounded (a script can do anything its author
- * wrote into it), so the classifier narrows what an agent does by reflex; it does not contain a
- * determined one.
- */
-import { existsSync, realpathSync } from "node:fs";
+/** Shell/write classification with optional machine-local autonomy; not a sandbox. */
+import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 
 export type PolicyClass = "allow" | "ask" | "block";
@@ -30,6 +12,7 @@ export interface Verdict {
   why: string;
   /** Program names seen, for the log. Never arguments: they can carry secrets. */
   programs: string[];
+  protected?: boolean;
 }
 
 export interface Scope {
@@ -37,6 +20,19 @@ export interface Scope {
   home: string;
   /** Directories a write may target besides cwd, e.g. the temp directory. */
   writable: string[];
+  /** Machine-local permissions; absent for the shared baseline classifier. */
+  autonomy?: Autonomy;
+  /** Wrappers or assignments may change package-manager destinations. */
+  packageEnvironment?: boolean;
+  taskRoot?: string;
+  ownedPids?: number[];
+}
+
+/** Pi-specific machine grants layered over the shared baseline. */
+export interface Autonomy {
+  writeRoots: string[];
+  disposableRoots: string[];
+  protectedRoots: string[];
 }
 
 const RANK: Record<PolicyClass, number> = { allow: 0, ask: 1, block: 2 };
@@ -52,7 +48,7 @@ export function strictest(verdicts: Verdict[]): Verdict {
     for (const p of v.programs) programs.add(p);
     if (RANK[v.class] > RANK[worst.class]) worst = v;
   }
-  return { ...worst, programs: [...programs] };
+  return { ...worst, programs: [...programs], ...(verdicts.some((v) => v.protected) ? { protected: true } : {}) };
 }
 
 // ---- lexer -------------------------------------------------------------------------------
@@ -413,7 +409,8 @@ function within(path: string, root: string): boolean {
 }
 
 export function inScope(path: string, scope: Scope): boolean {
-  return [scope.cwd, ...scope.writable].some((root) => within(path, root));
+  const roots = [scope.taskRoot ?? scope.cwd, ...scope.writable];
+  return scope.autonomy ? pinnedWithin(path, scope, roots) : roots.some((root) => within(path, root));
 }
 
 /** Whether `path` is under the home directory but outside the scope: the one write that asks (A1). */
@@ -421,13 +418,103 @@ function homeOutsideScope(path: string, scope: Scope): boolean {
   return !inScope(path, scope) && within(path, scope.home);
 }
 
+/** Canonical paths under a still-pinned directory; broken links never qualify. */
+export function pinnedWithin(raw: string, scope: Scope, roots: string[]): boolean {
+  const expanded = raw === "~" || raw.startsWith("~/") ? scope.home + raw.slice(1) : raw;
+  let ancestor = isAbsolute(expanded) ? resolve(expanded) : resolve(scope.cwd, expanded);
+  try {
+    while (!lstatSync(ancestor, { throwIfNoEntry: false })) {
+      const parent = dirname(ancestor);
+      if (parent === ancestor) return false;
+      ancestor = parent;
+    }
+    realpathSync(ancestor);
+    const path = resolvePath(raw, scope);
+    return roots.some((root) => realpathSync(root) === root && statSync(root).isDirectory() &&
+      (path === root || path.startsWith(`${root}/`)));
+  } catch {
+    return false;
+  }
+}
+
+/** Credential and executable agent-policy targets are not routine project configuration. */
+export function protectedTarget(path: string): boolean {
+  return /(?:^|\/)(?:\.ssh|\.aws|\.gnupg|\.kube|secrets|credentials|command-policy|\.git|\.pi|\.claude|\.codex|\.agents|\.gemini|\.obsidian)(?:\/|$)/i.test(path) ||
+    /(?:^|\/)(?:\.env(?:\..*)?|\.secrets(?:\..*)?|auth\.json|credentials(?:\..*)?|secrets-guard\.[jt]s|AGENTS\.md|CLAUDE\.md|GEMINI\.md|SKILL\.md|copilot-instructions\.md)$/i.test(path) ||
+    /(?:^|\/)(?:extensions|agents|hooks|prompts)(?:\/|$)/i.test(path) || /\.(?:pem|key)$/i.test(path);
+}
+
+function protectedWrite(raw: string, scope: Scope): boolean {
+  if (!scope.autonomy) return false;
+  const path = resolvePath(raw, scope);
+  return protectedTarget(raw) || protectedTarget(path) ||
+    scope.autonomy.protectedRoots.some((root) => within(path, root));
+}
+
+function routineWrite(raw: string, scope: Scope): boolean {
+  return !!scope.autonomy && !protectedWrite(raw, scope) && pinnedWithin(raw, scope, scope.autonomy.writeRoots);
+}
+
+function disposableTarget(raw: string, scope: Scope): boolean {
+  if (!scope.autonomy || /[*?\[\]{}]/.test(raw) || protectedWrite(raw, scope)) return false;
+  const path = resolvePath(raw, scope);
+  if (path === canonical(scope.cwd) || path === canonical(scope.home) || path === "/" ||
+      /(?:^|\/)target\/release(?:\/|$)/.test(path)) return false;
+  return pinnedWithin(raw, scope, scope.autonomy.disposableRoots);
+}
+
+function localPackageChange(program: string, args: Word[], scope: Scope): boolean {
+  if (!scope.autonomy || scope.packageEnvironment || args.some((a) => a.dynamic)) return false;
+  const destinationOption = program === "npm" ? "--prefix" : program === "uv" ? "--project" : program === "cargo" ? "--manifest-path" : undefined;
+  const texts: string[] = [];
+  let destination: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const text = args[i].text;
+    if (destinationOption && (text === destinationOption || text.startsWith(`${destinationOption}=`))) {
+      const target = text === destinationOption ? args[++i]?.text : text.slice(destinationOption.length + 1);
+      if (destination !== undefined || !target || target.startsWith("-") || /[*?\[\]{}]/.test(target)) return false;
+      destination = resolvePath(target, scope);
+      if (program === "cargo" && (basename(target) !== "Cargo.toml" || basename(destination) !== "Cargo.toml")) return false;
+    } else texts.push(text);
+  }
+  const cwd = destination ? program === "cargo" ? dirname(destination) : destination : scope.cwd;
+  if (!routineWrite(cwd, scope)) return false;
+  // All destination options except the single validated selector retain approval.
+  if (texts.some((t) => /^(?:--(?:global|location|prefix|root|target|user|system|directory|cwd|dir|project|package|manifest-path|config|config-file|userconfig|globalconfig|modules-folder|virtual-store-dir|store-dir|python|active|script|isolated)|-[gCcp])(?:$|=|[^-])/.test(t))) return false;
+  const sub = texts[0] ?? "";
+  const allowed: Record<string, string[]> = {
+    npm: ["", "install", "i", "ci", "add", "remove", "rm", "uninstall", "un", "update", "up", "upgrade", "dedupe"],
+    pnpm: ["", "install", "i", "add", "remove", "rm", "uninstall", "update", "up", "upgrade"],
+    yarn: ["", "install", "add", "remove", "upgrade", "up"],
+    bun: ["", "install", "i", "add", "a", "remove", "rm", "update"],
+    uv: ["add", "remove", "sync", "lock"],
+    cargo: ["add", "remove", "update"],
+    go: ["get"],
+  };
+  if (!Object.hasOwn(allowed, program) || !allowed[program].includes(sub)) return false;
+  const safeOptions = new Set([
+    "--save", "--save-dev", "--save-prod", "--save-optional", "--save-exact", "--no-save", "--dev", "--optional", "--exact",
+    "--no-audit", "--no-fund", "--ignore-scripts", "--ignore-script", "--frozen-lockfile", "--lockfile-only", "--package-lock-only",
+    "--locked", "--frozen", "--offline", "--dry-run", "--no-deps", "--no-default-features", "--features", "--no-cache", "--quiet", "--verbose",
+    "--upgrade", "--upgrade-package", "--group", "--extra", "--all-extras", "--all-groups", "--no-dev", "--production", "--prod",
+  ]);
+  if (texts.slice(1).some((t) => t.startsWith("-") &&
+      !(t.startsWith("--") ? safeOptions.has(t.split("=")[0]) : /^-[DEOqvuf]+$/.test(t)))) return false;
+  const manifest = program === "uv" ? "pyproject.toml" : program === "cargo" ? "Cargo.toml" : program === "go" ? "go.mod" : "package.json";
+  const path = resolve(cwd, manifest);
+  return routineWrite(path, scope) && statSync(path, { throwIfNoEntry: false })?.isFile() === true;
+}
+
 /** A write to `raw`: Ask under $HOME outside the scope, otherwise Allow (spec step 4). */
 function writeTarget(raw: Word, scope: Scope, program: string): Verdict | null {
   if (raw.dynamic) return verdict("ask", "A1", `${program} writes to a path only known when it runs`, [program]);
   if (NO_WRITE_TARGETS.has(raw.text)) return null;
-  const path = resolvePath(raw.text.replace(/[*?[].*$/, "") || ".", scope);
-  if (homeOutsideScope(path, scope)) {
-    return verdict("ask", "A1", `${program} writes under the home directory outside the working directory (${raw.text})`, [program]);
+  const target = raw.text.replace(/[*?[].*$/, "") || ".";
+  const path = resolvePath(target, scope);
+  if (protectedWrite(target, scope)) return { ...verdict("ask", "A1", `${program} changes a protected target`, [program]), protected: true };
+  if (routineWrite(target, scope)) return verdict("allow", "R4", `${program} writes inside configured roots`, [program]);
+  if (homeOutsideScope(path, scope) || scope.autonomy && !inScope(path, scope)) {
+    return verdict("ask", "A1", `${program} writes outside approved roots (${raw.text})`, [program]);
   }
   return verdict("allow", "R4", `${program} writes ${raw.text}`, [program]);
 }
@@ -446,14 +533,19 @@ function classifyRm(args: Word[], scope: Scope, unknownArgs: boolean): Verdict {
   const p = ["rm"];
   if (unknownArgs) return verdict("block", "B1", "rm with arguments chosen at run time", p);
   const flags = shortFlags(args.map((a) => a.text));
-  if (["-r", "-R", "--recursive"].some((f) => flags.has(f))) {
-    return verdict("block", "B1", "recursive rm", p);
-  }
   const targets = args.filter((a) => !a.text.startsWith("-"));
+  if (["-r", "-R", "--recursive"].some((f) => flags.has(f))) {
+    if (targets.length && args.every((a) => !a.dynamic && (!a.text.startsWith("-") || /^(?:-[rfR]+|--recursive|--force|--)$/.test(a.text))) &&
+        targets.every((a) => disposableTarget(a.text, scope))) {
+      return verdict("allow", "R4", "recursive cleanup inside pinned disposable roots", p);
+    }
+    return verdict("block", "B1", "recursive rm outside verified disposable roots", p);
+  }
   for (const t of targets) {
     if (t.dynamic) return verdict("ask", "A6", "rm of a path only known when it runs", p);
     const path = resolvePath(t.text.replace(/[*?[].*$/, "") || ".", scope);
-    if (path === "/" || path === canonical(scope.home) || path === canonical(scope.cwd) || !inScope(path, scope)) {
+    if (protectedWrite(t.text, scope)) return verdict("block", "B1", "rm of a protected target", p);
+    if (path === "/" || path === canonical(scope.home) || path === canonical(scope.cwd) || !(inScope(path, scope) || routineWrite(t.text, scope))) {
       return verdict("block", "B1", `rm of ${t.text}`, p);
     }
   }
@@ -558,6 +650,7 @@ function classifyWords(words: Word[], scope: Scope, piped: boolean, unknownArgs:
   let ws = words;
   // Assignments before the program: VAR=value cmd.
   while (ws.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(ws[0].text)) {
+    scope = { ...scope, packageEnvironment: true };
     const subs = ws[0].substitutions;
     if (subs.length) {
       const inner = strictest(subs.map((s) => classify(s, scope, depth + 1)));
@@ -568,7 +661,6 @@ function classifyWords(words: Word[], scope: Scope, piped: boolean, unknownArgs:
   if (!ws.length) return verdict("allow", "R1", "assignment");
 
   const head = ws[0];
-  // Step 3: a program name that comes from a substitution or a variable.
   if (head.dynamic) {
     const inner = head.substitutions.map((s) => classify(s, scope, depth + 1));
     const reached = head.substitutions.join(" ").split(/[^A-Za-z0-9_./-]+/).map(strip)
@@ -586,26 +678,37 @@ function classifyWords(words: Word[], scope: Scope, piped: boolean, unknownArgs:
   const argSubs = args.flatMap((a) => a.substitutions).map((s) => classify(s, scope, depth + 1));
   const withSubs = (v: Verdict) => strictest([v, ...argSubs]);
 
-  // Step 2: wrappers.
   if (prog === "env" || prog === "nice" || prog === "nohup" || prog === "time" || prog === "timeout" ||
       prog === "command" || prog === "builtin" || prog === "exec" || prog === "stdbuf") {
     if (prog === "command" && (texts[0] === "-v" || texts[0] === "-V")) {
       return verdict("allow", "R1", "command lookup", p);
     }
     let j = 0;
+    let wrapperScope = scope;
     const takesArg = WRAPPER_ARGS[prog] ?? new Set<string>();
     while (j < args.length) {
       const t = args[j].text;
-      if (prog === "env" && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) { j++; continue; }
+      if (prog === "env" && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) {
+        wrapperScope = { ...wrapperScope, packageEnvironment: true };
+        j++; continue;
+      }
+      if (prog === "env" && scope.autonomy && (t === "-C" || t === "--chdir" || t.startsWith("--chdir="))) {
+        const target = t.startsWith("--chdir=") ? { ...args[j], text: t.slice(8) } : args[j + 1];
+        if (!target || target.dynamic) return withSubs(verdict("ask", "A6", "env changes directory at run time", p));
+        wrapperScope = { ...wrapperScope, cwd: resolvePath(target.text, wrapperScope), taskRoot: scope.taskRoot ?? scope.cwd };
+        j += t.startsWith("--chdir=") ? 1 : 2;
+        continue;
+      }
       if (prog === "env" && (t === "-S" || t === "--split-string") && args[j + 1]) {
-        return withSubs(classify(args[j + 1].text, scope, depth + 1));
+        if (args[j + 1].dynamic) return withSubs(verdict("ask", "A6", "env builds a command at run time", p));
+        return withSubs(classify(args[j + 1].text, wrapperScope, depth + 1));
       }
       if (t.startsWith("-")) { j += takesArg.has(t) ? 2 : 1; continue; }
       break;
     }
     if (prog === "timeout") j++; // the duration
     if (j >= args.length) return verdict("allow", "R1", `${prog} without a command`, p);
-    return withSubs(classifyWords(args.slice(j), scope, piped, unknownArgs, depth + 1));
+    return withSubs(classifyWords(args.slice(j), wrapperScope, piped, unknownArgs, depth + 1));
   }
   if (prog === "busybox" && args.length) return classifyWords(args, scope, piped, unknownArgs, depth + 1);
   if (prog === "xargs") {
@@ -641,7 +744,6 @@ function classifyWords(words: Word[], scope: Scope, piped: boolean, unknownArgs:
   if (prog === "eval") return withSubs(strictest([verdict("ask", "A6", "eval", p), classify(texts.join(" "), scope, depth + 1)]));
   if (prog === "source" || prog === ".") return withSubs(verdict("allow", "R4", "source runs a file", p));
 
-  // Step 4–6: rules.
   if (BLOCK_PROGRAMS[prog] === "B3") return verdict("block", "B3", `${prog} gains privileges`, p);
   if (prog === "osascript" && texts.join(" ").includes("administrator privileges")) {
     return verdict("block", "B3", "osascript with administrator privileges", p);
@@ -664,16 +766,32 @@ function classifyWords(words: Word[], scope: Scope, piped: boolean, unknownArgs:
     return verdict("block", "B6", "keychain secret", p);
   }
   if (prog === "secret-tool" && ["lookup", "clear"].includes(texts[0] ?? "")) return verdict("block", "B6", "keyring secret", p);
-  if ((prog === "cargo" || prog === "npm" || prog === "bun" || prog === "pnpm" || prog === "yarn" || prog === "uv") && texts[0] === "publish") {
+  const changes = Object.hasOwn(PACKAGE_CHANGES, prog) ? PACKAGE_CHANGES[prog] : undefined;
+  const projectChange = !!changes && !unknownArgs && localPackageChange(prog, args, scope);
+  let packageSub = texts[0];
+  if (scope.autonomy && changes) {
+    if (texts.length && texts.every((t) => ["--help", "--version", "-h", "-v", "-V"].includes(t))) {
+      return withSubs(verdict("allow", "R1", `${prog} help or version`, p));
+    }
+    let i = 0;
+    const values = new Set(["-C", "-c", "-w", "--prefix", "--cwd", "--dir", "--directory", "--project", "--config", "--manifest-path", "--userconfig", "--globalconfig", "--access", "--registry", "--workspace", "--filter", "--location"]);
+    while (i < texts.length && (texts[i].startsWith("-") || prog === "cargo" && texts[i].startsWith("+"))) {
+      i += values.has(texts[i]) ? 2 : 1;
+    }
+    packageSub = texts[i];
+    if (i > 0 && packageSub !== "publish" && !projectChange) {
+      return withSubs(verdict("ask", "A3", `${prog} uses global options that may change its destination or operation`, p));
+    }
+  }
+  if ((prog === "cargo" || prog === "npm" || prog === "bun" || prog === "pnpm" || prog === "yarn" || prog === "uv") && packageSub === "publish") {
     return verdict("block", "B7", `${prog} publish`, p);
   }
   if (prog === "twine" && texts[0] === "upload") return verdict("block", "B7", "twine upload", p);
 
-  const changes = Object.hasOwn(PACKAGE_CHANGES, prog) ? PACKAGE_CHANGES[prog] : undefined;
   if (changes) {
+    if (projectChange) return withSubs(verdict("allow", "R3", `${prog} changes verified project-local dependencies`, p));
     const sub = texts.find((t) => !t.startsWith("-") || changes.has(t)) ?? "";
-    if (changes.has("*") || changes.has(sub)) return verdict("ask", "A3", `${prog} ${sub} changes packages or runs downloaded code`.replace(/\s+/g, " "), p);
-    // A bare `bun`/`npm`/`pnpm`/`yarn` with no subcommand installs.
+    if (changes.has("*") || changes.has(sub)) return withSubs(verdict("ask", "A3", `${prog} ${sub} changes packages or runs downloaded code`.replace(/\s+/g, " "), p));
     if (!sub && ["bun", "npm", "pnpm", "yarn"].includes(prog)) return verdict("ask", "A3", `${prog} installs`, p);
     return withSubs(verdict("allow", "R3", `${prog} ${sub}`.trim(), p));
   }
@@ -706,6 +824,14 @@ function classifyWords(words: Word[], scope: Scope, piped: boolean, unknownArgs:
     return withSubs(strictest([verdict("allow", "R4", "rsync on this machine", p), ...vs]));
   }
   if (PROCESSES.has(prog)) {
+    if (prog === "kill" && scope.autonomy && !unknownArgs && args.every((a) => !a.dynamic)) {
+      const targets = texts.filter((t) => !t.startsWith("-"));
+      const options = texts.filter((t) => t.startsWith("-"));
+      if (targets.length && options.every((t) => /^(?:-(?:TERM|KILL|INT|HUP|[129]|15)|--)$/.test(t)) &&
+          targets.every((t) => /^[1-9]\d*$/.test(t) && scope.ownedPids?.includes(Number(t)))) {
+        return withSubs(verdict("allow", "R4", "signal live processes owned by this Pi run", p));
+      }
+    }
     const nestedReads = Object.hasOwn(DOCKER_NESTED_READS, texts[0]) ? DOCKER_NESTED_READS[texts[0]] : [];
     if ((prog === "docker" || prog === "podman") &&
         (DOCKER_READS.has(texts[0] ?? "") || nestedReads.includes(texts[1]))) {
@@ -715,6 +841,11 @@ function classifyWords(words: Word[], scope: Scope, piped: boolean, unknownArgs:
   }
   if (WRITERS.has(prog)) {
     const targets = args.filter((a) => !a.text.startsWith("-"));
+    if (scope.autonomy && unknownArgs) return withSubs(verdict("ask", "A1", `${prog} receives write targets at run time`, p));
+    if (prog === "mv" && scope.autonomy && targets.slice(0, -1).some((t) =>
+      !t.dynamic && [scope.cwd, ...scope.autonomy!.writeRoots].some((root) => resolvePath(t.text, scope) === root))) {
+      return verdict("block", "B1", "moving an active working directory or permission root", p);
+    }
     // cp/mv/ln/install write their last argument; tee, mkdir, touch, truncate every argument.
     const written = ["cp", "mv", "ln", "install"].includes(prog) ? targets.slice(-1) : targets;
     if (prog === "mv") written.push(...targets.slice(0, -1)); // the source disappears
@@ -748,14 +879,44 @@ function classifySimple(cmd: Simple, scope: Scope, depth: number): Verdict {
       if (w) parts.push(w);
     }
   }
-  // A redirect that writes inside the scope turns a read into A1 (spec, "Rules").
   return strictest(parts);
+}
+
+function changesDirectory(command: Simple): boolean {
+  const words = command.words.map((w) => w.text);
+  let i = 0;
+  while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i] ?? "")) i++;
+  while (["command", "builtin", "time"].includes(words[i])) {
+    i++;
+    while (words[i]?.startsWith("-")) i++;
+  }
+  return ["cd", "pushd", "popd"].includes(words[i]);
 }
 
 /** Classify a shell command string. */
 export function classify(command: string, scope: Scope, depth = 0): Verdict {
   if (depth > 8) return verdict("ask", "A6", "nesting too deep to classify");
-  const commands = parse(lex(command));
+  const homeAssigned = /(?:^|[;&|\s])(?:export\s+)?HOME\s*=/.test(command);
+  const tokens = lex(command, scope.autonomy && !scope.packageEnvironment && !homeAssigned ? scope.home : undefined);
+  if (scope.autonomy) {
+    const separator = tokens.findIndex((t) => t.kind === "op");
+    const prefix = tokens.slice(0, separator < 0 ? undefined : separator);
+    if (prefix[0]?.kind === "word" && prefix[0].text === "cd" && prefix.length === 2 &&
+        prefix[1].kind === "word" && !prefix[1].dynamic && !prefix[1].text.startsWith("-") &&
+        tokens[separator]?.kind === "op" && (tokens[separator] as Op).op === "&&") {
+      const cwd = resolvePath(prefix[1].text, scope);
+      const remaining = tokens.slice(separator + 1);
+      const commands = parse(remaining);
+      if (commands.some(changesDirectory)) {
+        return verdict("ask", "A6", "multiple directory changes require an explicit working directory");
+      }
+      return strictest(commands.map((c) => classifySimple(c, { ...scope, cwd, taskRoot: scope.taskRoot ?? scope.cwd }, depth)));
+    }
+    if (parse(tokens).some(changesDirectory)) {
+      return verdict("ask", "A6", "directory control flow requires an explicit working directory");
+    }
+  }
+  const commands = parse(tokens);
   if (!commands.length) return verdict("allow", "R1", "empty command");
   return strictest(commands.map((c) => classifySimple(c, scope, depth)));
 }
@@ -763,8 +924,10 @@ export function classify(command: string, scope: Scope, depth = 0): Verdict {
 /** A write through pi's `write` or `edit` tool, judged by step 4 like a shell write. */
 export function classifyWrite(path: string, scope: Scope, tool: string): Verdict {
   const resolved = resolvePath(path, scope);
-  if (homeOutsideScope(resolved, scope)) {
-    return verdict("ask", "A1", `${tool} under the home directory outside the working directory (${path})`, [tool]);
+  if (protectedWrite(path, scope)) return { ...verdict("ask", "A1", `${tool} changes a protected target`, [tool]), protected: true };
+  if (routineWrite(path, scope)) return verdict("allow", "R4", `${tool} inside configured roots`, [tool]);
+  if (homeOutsideScope(resolved, scope) || scope.autonomy && !inScope(resolved, scope)) {
+    return verdict("ask", "A1", `${tool} outside approved roots (${path})`, [tool]);
   }
   return verdict("allow", "R4", `${tool} ${inScope(resolved, scope) ? "inside" : "outside"} the working directory`, [tool]);
 }

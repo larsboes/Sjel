@@ -145,29 +145,52 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
 The Pi implementation and Rust classifier share the case table (`b0d94cae`); tests are
 `tools/command-policy.test.ts` and `crates/sjel-agent/tests/policy_cases.rs`.
 
-Pi-specific session file scopes and 60-second permission/decision deferral are implemented
-(commit pending). The current interfaces and limits live in
-[`Packs/security/README.md`](../../Packs/security/README.md#pi-session-permissions) and
-[`Packs/knowledge/README.md`](../../Packs/knowledge/README.md#extensions).
-Persistent machine-local Markdown roots are implemented in Pi (commit pending), sourced only
-from `<overlay>/config/command-policy.json`. Direct `.md` write/edit calls reuse canonical
-containment and protected-target checks; shell permissions remain unchanged. `/permissions`
-shows persistent roots and `/permissions off` suppresses them until reload or session change.
-No classifier model or account-wide bypass is introduced. The Rust gate remains unchanged.
-Checked: `bun test tools/command-policy.test.ts tools/pack-extensions.test.ts` passes 64 tests,
-including persistent config validation, Markdown-only admission, symlink escapes, reload
-persistence, off semantics and the installed Pi typecheck; one non-applicable fallback test
-is skipped. Machine activation has not run. Live acceptance remains: reload Pi, exercise one
-scoped backup, one unanswered approval, and one partially answered decision round.
-RPC asks currently defer immediately because the editor handoff has no cancellation API.
-Live TUI/RPC acceptance and full-workspace checks have not run.
+Pi-specific routine roots, project-local dependency permissions, disposable cleanup, owned-PID
+signals, stale-read checks and request-time advisory context are implemented (commit pending).
+The configuration, controls and limits live in
+[`Packs/security/README.md`](../../Packs/security/README.md#pi-session-permissions).
+The Rust gate and shared baseline case table remain unchanged. Pi's routine-root profile is an
+explicit machine-local exception to baseline A1/A3/A5 and to B1 only for disposable cleanup.
+Legacy file scopes, Markdown-only roots and deferred exceptional approvals remain supported.
+
+Checked: `bun test tools/command-policy*.test.ts tools/pack-extensions.test.ts` passes 85 tests;
+two skips cover the non-applicable install fallback and live PID inspection, which this sandbox
+refuses. PID discovery therefore fails closed and process control remains gated on this host.
+An isolated installed-Pi SDK session executes real sibling writes and scratch cleanup, refuses
+stale writes, source deletion and guard edits, and refreshes context from a compacted-summary
+fixture. Dependency calls are classified without installing packages or making model requests.
+All 11 existing sandbox probes pass. Development and knowledge roots are configured in the
+private overlay; shared disposable build roots remain unset. The registered extension reads
+source in place. Remaining acceptance: reload the attended Pi session and measure the prompt
+rate during real work. Full-workspace and live TUI/RPC card checks have not run. Doctor reports
+unrelated stale comms delivery and home-automation backup failures. RPC asks defer immediately
+because the editor handoff has no cancellation API.
+
+Checkpoint-loop repair is implemented (commit pending): advisory delivery uses `agent_settled`
+and explicit `triggerTurn: false`, not default steering from `agent_end`. Classification is
+unchanged. Two regression tests cover protected-file and unavailable-checkpoint warnings,
+including repeated low-level run endings and a subsequent unchanged run. Checked:
+`bun test tools/command-policy*.test.ts tools/pack-extensions.test.ts` passes 87 tests with two
+skips (non-applicable install fallback and unavailable live PID inspection), including extension
+typechecks and the isolated installed-Pi session. A one-command On-the-go override was explicitly
+approved. Live-session reload and end-to-end checkpoint-loop verification remain outstanding;
+full-workspace checks did not run.
+
+Precision follow-up: explicit npm/uv/Cargo project destinations and package-help classification
+are implemented and regression-tested. Exact-match edit exemptions and compact permission
+context remain unimplemented: the current guard deferred the `runtime.ts` edit, and no retry
+or alternate tool was used. Resume after approval of that exact protected-file edit. Exact
+edits must qualify against current unique text because installed Pi also supports fuzzy fallback;
+whole-file replacement must still require a fresh read after an exempt edit. Context shortening
+must deduplicate displayed roots only, without changing enforcement configuration.
 
 Decided 2026-11-08: ordinary local work and diagnostics run without approval; destructive loss,
 privilege, secrets and external writes keep their guards. New local commits and non-recursive
 in-scope `rm -f` run; amendments and recursive deletion remain Block. Nested container reads and
 explicit system diagnostics are covered by the shared table, including the compound storage
 inventory regression. Container config rendering remains Ask because output options can write
-files. Package changes remain Ask and must be resolved before unattended work.
+files. Package changes remain Ask in the shared baseline; Pi's approved machine-local profile
+admits the project-local dependency operations documented above.
 The native Pi headless procedure lives in the `sjel` skill's `on-unattended.md` reference:
 approved local tasks only, blocked-task deferral, persistent sessions and evidence checkpoints.
 A hard wall-clock or spending supervisor is not implemented; an enforced limit or explicit

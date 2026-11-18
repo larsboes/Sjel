@@ -34,7 +34,7 @@ export function heavyCommand(command: string): string | null {
     while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift();
     const program = words[0]?.replace(/^["']|["']$/g, "").split("/").pop() ?? "";
     const subcommand = words[1] ?? "";
-    const heavy = HEAVY[program];
+    const heavy = Object.hasOwn(HEAVY, program) ? HEAVY[program] : undefined;
     if (heavy && heavy.test(subcommand)) {
       // A program with no subcommand split (xcodebuild, make) is named on its own.
       return heavy.test("") ? program : `${program} ${subcommand}`;

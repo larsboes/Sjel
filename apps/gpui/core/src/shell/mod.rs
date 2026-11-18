@@ -960,6 +960,11 @@ pub fn software_key(key: &str) -> ShellResult<String> {
     Ok(key.replace('@', "%40").replace('/', "%2F"))
 }
 
+/// A typed request as the JSON body the shell sends.
+fn body(request: &impl serde::Serialize) -> ShellResult<serde_json::Value> {
+    serde_json::to_value(request).map_err(|_| ShellError::Unreadable)
+}
+
 /// Runs `work` on the HTTP runtime; the returned future can be awaited from GPUI.
 pub fn run<T: Send + 'static>(
     work: impl Future<Output = T> + Send + 'static,

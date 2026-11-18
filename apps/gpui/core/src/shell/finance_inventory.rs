@@ -16,24 +16,42 @@ impl Shell {
         if let Some(e) = end {
             query.push(("end", e));
         }
-        let path = with_query("/finance/api/dashboard", &query);
+        let path = with_query(
+            &finance_api::proxy_route(finance_api::ROUTE_DASHBOARD),
+            &query,
+        );
         self.json(Method::GET, &path, None, 10).await
     }
 
     /// Read all subscriptions with prices and state history (`GET /finance/api/subscriptions`).
     pub async fn subscriptions(&self) -> ShellResult<Vec<SubscriptionRecord>> {
-        self.json(Method::GET, "/finance/api/subscriptions", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            &finance_api::proxy_route(finance_api::ROUTE_SUBSCRIPTIONS),
+            None,
+            10,
+        )
+        .await
     }
 
     pub async fn finance_csv_mappings(&self) -> ShellResult<Vec<FinanceCsvMappingProfile>> {
-        self.json(Method::GET, "/finance/api/import/csv/mappings", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            &finance_api::proxy_route(finance_api::ROUTE_IMPORT_CSV_MAPPINGS),
+            None,
+            10,
+        )
+        .await
     }
 
     pub async fn finance_candidates(&self) -> ShellResult<Vec<FinanceCandidate>> {
-        self.json(Method::GET, "/finance/api/import/candidates", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            &finance_api::proxy_route(finance_api::ROUTE_IMPORT_CANDIDATES),
+            None,
+            10,
+        )
+        .await
     }
 
     pub async fn finance_preview_csv(
@@ -43,7 +61,7 @@ impl Shell {
     ) -> ShellResult<FinanceCsvPreview> {
         self.json(
             Method::POST,
-            "/finance/api/import/csv/preview",
+            &finance_api::proxy_route(finance_api::ROUTE_IMPORT_CSV_PREVIEW),
             Some(serde_json::json!({ "content": content, "mapping": mapping })),
             30,
         )
@@ -58,7 +76,7 @@ impl Shell {
     ) -> ShellResult<serde_json::Value> {
         self.json(
             Method::POST,
-            "/finance/api/import/csv",
+            &finance_api::proxy_route(finance_api::ROUTE_IMPORT_CSV),
             Some(serde_json::json!({ "content": content, "mapping": mapping, "expected_preview_id": expected_preview_id })),
             30,
         )
@@ -80,8 +98,15 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &format!("/finance/api/import/candidates/{}/review", id.replace(':', "%3A")),
-            Some(serde_json::json!({ "decision": decision, "account": account, "source_account": source_account })),
+            &finance_api::proxy_route_id(
+                finance_api::ROUTE_IMPORT_CANDIDATE_REVIEW,
+                &id.replace(':', "%3A"),
+            ),
+            Some(body(&finance_api::ReviewCandidateRequest {
+                decision: decision.to_owned(),
+                account: account.map(str::to_owned),
+                source_account: source_account.map(str::to_owned),
+            })?),
             30,
         )
         .await
@@ -181,11 +206,13 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &format!(
-                "/finance/api/import/candidates/{}/reconcile-transfer",
-                id.replace(':', "%3A")
+            &finance_api::proxy_route_id(
+                finance_api::ROUTE_IMPORT_CANDIDATE_RECONCILE_TRANSFER,
+                &id.replace(':', "%3A"),
             ),
-            Some(serde_json::json!({ "counterpart_id": counterpart_id })),
+            Some(body(&finance_api::ReconcileTransferRequest {
+                counterpart_id: counterpart_id.to_owned(),
+            })?),
             30,
         )
         .await
@@ -197,10 +224,13 @@ impl Shell {
     ) -> ShellResult<serde_json::Value> {
         self.json(
             Method::POST,
-            "/finance/api/import/candidates/reclassify-batch",
-            Some(serde_json::json!({
-                "items": items.into_iter().map(|(id, account)| serde_json::json!({ "id": id, "account": account })).collect::<Vec<_>>()
-            })),
+            &finance_api::proxy_route(finance_api::ROUTE_IMPORT_CANDIDATES_RECLASSIFY_BATCH),
+            Some(body(&finance_api::ReclassifyBatchRequest {
+                items: items
+                    .into_iter()
+                    .map(|(id, account)| finance_api::ReclassifyItem { id, account })
+                    .collect(),
+            })?),
             30,
         )
         .await
@@ -228,8 +258,15 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &format!("/finance/api/import/candidates/{}/allocation", id.replace(':', "%3A")),
-            Some(serde_json::json!({ "personal_cents": personal_cents, "purpose": purpose, "trip_id": trip_id })),
+            &finance_api::proxy_route_id(
+                finance_api::ROUTE_IMPORT_CANDIDATE_ALLOCATION,
+                &id.replace(':', "%3A"),
+            ),
+            Some(body(&finance_api::AllocateExpenseRequest {
+                personal_cents,
+                purpose: purpose.to_owned(),
+                trip_id: trip_id.map(str::to_owned),
+            })?),
             30,
         )
         .await
@@ -248,11 +285,13 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &format!(
-                "/finance/api/import/candidates/{}/reimbursement",
-                id.replace(':', "%3A")
+            &finance_api::proxy_route_id(
+                finance_api::ROUTE_IMPORT_CANDIDATE_REIMBURSEMENT,
+                &id.replace(':', "%3A"),
             ),
-            Some(serde_json::json!({ "expense_candidate_id": expense_candidate_id })),
+            Some(body(&finance_api::LinkReimbursementRequest {
+                expense_candidate_id: expense_candidate_id.to_owned(),
+            })?),
             30,
         )
         .await
@@ -265,7 +304,7 @@ impl Shell {
         let value: serde_json::Value = self
             .json(
                 Method::POST,
-                "/finance/api/balance-snapshot",
+                &finance_api::proxy_route(finance_api::ROUTE_BALANCE_SNAPSHOT),
                 Some(serde_json::to_value(update).map_err(|_| ShellError::Unreadable)?),
                 30,
             )

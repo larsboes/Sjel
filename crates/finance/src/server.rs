@@ -3194,6 +3194,16 @@ mod tests {
     /// `.route()` without a manifest entry fails here. If it fails,
     /// declare the route; do not weaken the assertion.
     #[test]
+    fn every_contract_route_is_declared() {
+        for route in finance_api::ALL_ROUTES {
+            assert!(
+                ROUTES.iter().any(|declared| declared.path == route),
+                "finance-api names {route}, which the manifest does not declare"
+            );
+        }
+    }
+
+    #[test]
     fn every_route_the_router_serves_is_declared() {
         assert!(
             route_manifest::undeclared_routes(include_str!("server.rs"), ROUTES).is_empty(),

@@ -12,11 +12,6 @@ use projects_api::{
     PROXY_ROUTE_TASKS, PROXY_ROUTE_TASKS_DONE,
 };
 
-/// A typed request as the JSON body the shell sends.
-fn body(request: &impl serde::Serialize) -> ShellResult<serde_json::Value> {
-    serde_json::to_value(request).map_err(|_| ShellError::Unreadable)
-}
-
 impl Shell {
     pub async fn project_inventory_links(
         &self,

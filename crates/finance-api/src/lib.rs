@@ -34,6 +34,81 @@ pub const ROUTE_DECISION_VERDICT: &str = "/api/decisions/{id}/verdict";
 pub const ROUTE_TRIP_SPENDING: &str = "/api/trips/{id}/spending";
 pub const ROUTE_LINKS: &str = "/api/links";
 
+/// Every route constant above. The server test checks each one against its manifest.
+pub const ALL_ROUTES: [&str; 22] = [
+    ROUTE_DASHBOARD,
+    ROUTE_SUBSCRIPTIONS,
+    ROUTE_SUBSCRIPTIONS_BURN,
+    ROUTE_SUBSCRIPTION_PRICE,
+    ROUTE_SUBSCRIPTION_STATE,
+    ROUTE_IMPORT_CSV_MAPPINGS,
+    ROUTE_IMPORT_CANDIDATES,
+    ROUTE_IMPORT_CSV_PREVIEW,
+    ROUTE_IMPORT_CSV,
+    ROUTE_IMPORT_CANDIDATE_REVIEW,
+    ROUTE_IMPORT_CANDIDATE_RECONCILE_TRANSFER,
+    ROUTE_IMPORT_CANDIDATES_RECLASSIFY_BATCH,
+    ROUTE_IMPORT_CANDIDATE_ALLOCATION,
+    ROUTE_IMPORT_CANDIDATE_REIMBURSEMENT,
+    ROUTE_BALANCE_SNAPSHOT,
+    ROUTE_PORTFOLIO,
+    ROUTE_PRICES_STATUS,
+    ROUTE_DECISIONS,
+    ROUTE_DECISIONS_RUN,
+    ROUTE_DECISION_VERDICT,
+    ROUTE_TRIP_SPENDING,
+    ROUTE_LINKS,
+];
+
+/// The path prefix under which the status proxy serves these routes.
+pub const PROXY_PREFIX: &str = "/finance";
+
+/// `route` behind the status proxy.
+pub fn proxy_route(route: &str) -> String {
+    format!("{PROXY_PREFIX}{route}")
+}
+
+/// `route` behind the status proxy, with `{id}` replaced by an id the caller already encoded.
+pub fn proxy_route_id(route: &str, encoded_id: &str) -> String {
+    proxy_route(&route.replace("{id}", encoded_id))
+}
+
+#[cfg(test)]
+mod route_tests {
+    use super::*;
+
+    #[test]
+    fn proxy_routes_sit_under_the_prefix() {
+        assert_eq!(proxy_route(ROUTE_DASHBOARD), "/finance/api/dashboard");
+        assert_eq!(
+            proxy_route_id(ROUTE_IMPORT_CANDIDATE_REVIEW, "csv%3Aab12"),
+            "/finance/api/import/candidates/csv%3Aab12/review"
+        );
+    }
+
+    #[test]
+    fn request_bodies_keep_their_wire_names() {
+        let review = ReviewCandidateRequest {
+            decision: "confirm".into(),
+            account: Some("Expenses:Food".into()),
+            source_account: None,
+        };
+        assert_eq!(
+            serde_json::to_value(review).unwrap(),
+            serde_json::json!({ "decision": "confirm", "account": "Expenses:Food" })
+        );
+        let allocation = AllocateExpenseRequest {
+            personal_cents: 1200,
+            purpose: "trip".into(),
+            trip_id: Some("t1".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(allocation).unwrap(),
+            serde_json::json!({ "personal_cents": 1200, "purpose": "trip", "trip_id": "t1" })
+        );
+    }
+}
+
 // ============================================================================
 // Enums and Common Vocabularies
 // ============================================================================

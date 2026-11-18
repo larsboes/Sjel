@@ -165,11 +165,14 @@ pub(super) fn record_hits(
         title: task.title,
     });
     let notes = notes.into_iter().map(|note| Hit {
-        kind: "note",
+        kind: if note.url.is_some() { "link" } else { "note" },
         detail: note.path.clone(),
-        open: Open::Record {
-            project: note.project.clone(),
-            path: note.path.clone(),
+        open: match note.url {
+            Some(url) => Open::Url(url),
+            None => Open::Record {
+                project: note.project.clone(),
+                path: note.path.clone(),
+            },
         },
         title: note.title,
     });

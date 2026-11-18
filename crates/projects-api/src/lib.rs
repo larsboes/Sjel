@@ -219,6 +219,18 @@ pub struct GlobalNote {
     pub title: String,
     #[serde(default)]
     pub project: String,
+    /// The `url:` frontmatter value when it is an `http` or `https` address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+impl GlobalNote {
+    /// The web address a record's frontmatter names, or nothing for any other scheme.
+    pub fn web_url(value: Option<&str>) -> Option<String> {
+        let value = value?.trim();
+        let lower = value.to_ascii_lowercase();
+        (lower.starts_with("https://") || lower.starts_with("http://")).then(|| value.to_owned())
+    }
 }
 
 // ============================================================================

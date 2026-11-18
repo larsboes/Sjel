@@ -1241,6 +1241,7 @@ impl Workspace {
                         self.open_target(target, window, cx);
                     }
                 }
+                Open::Url(url) => cx.open_url(&url),
                 Open::WebDestination { id, url } => {
                     cx.open_url(&url);
                     if let Ok(client) = self.repo.shell() {

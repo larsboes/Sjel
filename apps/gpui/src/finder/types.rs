@@ -27,6 +27,8 @@ pub enum Open {
     },
     /// A server result's `sjel://` link, opened the way a deep link is.
     Link(String),
+    /// A record's `http(s)` frontmatter `url:`, opened in the browser.
+    Url(String),
     /// A saved web destination, whose local usage counter advances on explicit open.
     WebDestination {
         id: String,

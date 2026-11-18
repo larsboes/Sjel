@@ -92,6 +92,7 @@ pub struct TaskRead {
 impl From<TaskRead> for GlobalNote {
     fn from(read: TaskRead) -> Self {
         Self {
+            url: GlobalNote::web_url(read.fields.get("url").map(String::as_str)),
             path: read.id,
             kind: read.kind.as_str().to_owned(),
             title: read.title,
@@ -192,7 +193,40 @@ mod tests {
                 kind: "note".into(),
                 title: "Plan".into(),
                 project: "Home".into(),
+                url: None,
             }]
         );
+    }
+
+    #[test]
+    fn a_note_carries_only_a_web_url_from_its_frontmatter() {
+        let note = |url: &str| {
+            GlobalNote::from(TaskRead {
+                id: "Atlas/Links/Site/Home.md".into(),
+                kind: ProjectKind::Note,
+                title: "Home".into(),
+                done: false,
+                due: None,
+                priority: 0,
+                summary: None,
+                projects: Vec::new(),
+                project: "Atlas".into(),
+                fields: BTreeMap::from([("url".into(), url.into())]),
+                uri: String::new(),
+                data_class: "c2".into(),
+                data_class_rationale: String::new(),
+            })
+            .url
+        };
+        assert_eq!(
+            note(" https://example.com/a "),
+            Some("https://example.com/a".into())
+        );
+        assert_eq!(
+            note("HTTP://example.com"),
+            Some("HTTP://example.com".into())
+        );
+        assert_eq!(note("javascript:alert(1)"), None);
+        assert_eq!(note("file:///etc/hosts"), None);
     }
 }

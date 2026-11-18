@@ -619,10 +619,16 @@ mod tests {
             )
             .unwrap(),
         ];
-        let notes = vec![serde_json::from_str::<GlobalNote>(
-            r#"{"path":"Atlas/Notes/n.md","title":"Anna notes","project":"Atlas"}"#,
-        )
-        .unwrap()];
+        let notes = vec![
+            serde_json::from_str::<GlobalNote>(
+                r#"{"path":"Atlas/Notes/n.md","title":"Anna notes","project":"Atlas"}"#,
+            )
+            .unwrap(),
+            serde_json::from_str::<GlobalNote>(
+                r#"{"path":"Atlas/Links/Reddit/Rust.md","title":"Rust","project":"Atlas","url":"https://reddit.com/r/rust"}"#,
+            )
+            .unwrap(),
+        ];
         let links = vec![sjel_gpui_core::web_links::WebLink {
             id: "a".repeat(64),
             url: "https://reddit.com/r/rust".into(),
@@ -636,9 +642,10 @@ mod tests {
         let kinds: Vec<&str> = hits.iter().map(|hit| hit.kind).collect();
         assert_eq!(
             kinds,
-            ["project", "task", "note", "link"],
+            ["project", "task", "note", "link", "link"],
             "a done task is not a result"
         );
+        assert!(matches!(&hits[3].open, Open::Url(url) if url == "https://reddit.com/r/rust"));
         assert_eq!(hits[1].detail, "Atlas · due 2026-10-24");
         let refs: Vec<&Hit> = hits.iter().collect();
         let ranked = search::rank("anna", &refs, |hit| (hit.title.as_str(), vec![]));

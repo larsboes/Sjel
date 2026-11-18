@@ -431,7 +431,7 @@ impl Repo {
     /// Read notes directly from the local LibSQL database if accessible, otherwise the shell.
     pub async fn fetch_all_notes(&self) -> ShellResult<Vec<GlobalNote>> {
         if let Some(conn) = self.connection().await {
-            let query = "SELECT path, kind, title, project \
+            let query = "SELECT path, kind, title, project, content \
                          FROM projects_records WHERE kind != 'task' \
                          ORDER BY project ASC, path ASC";
             if let Ok(mut rows) = conn.query(query, ()).await {
@@ -441,11 +441,18 @@ impl Repo {
                     let kind: String = row.get(1).unwrap_or_else(|_| "note".into());
                     let title: String = row.get(2).unwrap_or_default();
                     let project: String = row.get(3).unwrap_or_default();
+                    let content: String = row.get(4).unwrap_or_default();
+                    let url = markdown_root::frontmatter_spanned(&content)
+                        .ok()
+                        .and_then(|front| {
+                            GlobalNote::web_url(front.fields.get("url").map(String::as_str))
+                        });
                     list.push(GlobalNote {
                         path,
                         kind,
                         title,
                         project,
+                        url,
                     });
                 }
                 if !list.is_empty() || self.replica.is_some() {

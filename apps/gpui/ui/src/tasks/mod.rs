@@ -179,6 +179,7 @@ mod tests {
             kind: kind.into(),
             title: title.into(),
             project: project.into(),
+            url: None,
         };
         let a = note("Zeta Note", "Alpha", "note");
         let b = note("Beta Hub", "Zeta", "project");

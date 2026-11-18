@@ -1,7 +1,8 @@
 //! One Markdown file per saved link, in one folder per site group, for the projects tree.
 //!
 //! The files take over from the Links store (`docs/plans/product.md`, "Open boundary work").
-//! The projects index names a record after its file, so the file name is the link's title.
+//! The projects index names a record after its file, so the file name is the link's title. The
+//! body repeats the address because the note editor does not show frontmatter.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -43,7 +44,7 @@ pub fn plan(links: &[Link]) -> Vec<ExportFile> {
             if link.pinned {
                 content.push_str("pinned: true\n");
             }
-            content.push_str("---\n");
+            content.push_str(&format!("---\n<{}>\n", link.url));
             ExportFile {
                 path: format!("{folder}/{name}.md"),
                 content,
@@ -121,7 +122,7 @@ mod tests {
         assert_eq!(files[0].path, "Reddit/Rust.md");
         assert_eq!(
             files[0].content,
-            "---\nurl: https://www.reddit.com/r/rust/\nclass: c2\npinned: true\n---\n"
+            "---\nurl: https://www.reddit.com/r/rust/\nclass: c2\npinned: true\n---\n<https://www.reddit.com/r/rust/>\n"
         );
         assert_eq!(files[1].path, "Work-Tools/CI- main.md");
     }

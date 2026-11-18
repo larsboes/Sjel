@@ -3343,12 +3343,14 @@ mod tests {
                             kind: "note".into(),
                             title: "Architecture".into(),
                             project: "Sjel".into(),
+                            url: None,
                         },
                         GlobalNote {
                             path: "BetterCode/BetterCode.md".into(),
                             kind: "project".into(),
                             title: "BetterCode".into(),
                             project: "BetterCode".into(),
+                            url: None,
                         },
                     ]),
                     ..Remote::default()

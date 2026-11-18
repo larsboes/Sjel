@@ -34,6 +34,10 @@ links remove <id>
 links history scan [--days 90] [--min-visits 3]
 links history candidates
 links history keep|dismiss <candidate-id>
+links export-files [--into DIR]
 ```
+
+`export-files` writes one Markdown file per saved link to `<overlay>/data/projects/Atlas/Links/<group>/<title>.md`,
+with `url:` and `class: c2` in the frontmatter. It refuses before writing anything when a target exists.
 
 The API and data flow are documented in [`docs/capabilities/web-links.md`](../../docs/capabilities/web-links.md).

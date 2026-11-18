@@ -42,7 +42,7 @@ applies to the stated join or policy boundary, not every feature in its crate.
 | [traveler](../../crates/traveler/README.md) | Build | Explicit constraints and ranking preferences shared by destination and journey decisions |
 | [trips](../../crates/trips/README.md) | Build | Itineraries joining calendar, transport, places, people, costs and gear |
 | [vault](../../crates/vault/README.md) | Ingest | Markdown properties, classes and links; files retain text authority |
-| [web-links](../../crates/web-links/README.md) | Link out; reduction open | Saved links move to one Markdown note in the prose folder |
+| [web-links](../../crates/web-links/README.md) | Link out; reduction open | Saved links move to one Markdown file each under `Atlas/Links/` in the prose folder |
 
 ### Supporting declarations
 
@@ -69,15 +69,16 @@ domain store or an independent application.
    choice overrides a derived one. Done when a calendar entry or a presence change sets the
    preset and parameters with no manual step, a manual choice stays in force until its session
    ends, and the selection reads only through the owning capabilities' existing contracts.
-2. **Reduce Links to one Markdown note.** `crates/web-links/src/server.rs` exposes saved links,
+2. **Reduce Links to files in folders.** `crates/web-links/src/server.rs` exposes saved links,
    open tracking, browser-history scans and candidate decisions. None feeds another capability.
-   Saved links move to one note in the prose folder
-   ([storage](storage.md#one-vault-for-prose)). The vault indexes its links, and the Finder
-   already searches notes. Done when every saved link is in that note and the Finder finds it by
-   title or URL, the Finder no longer reads the Links service
-   (`apps/gpui/src/finder/search.rs`), and history collection, usage tracking, candidate storage
-   and the standalone service leave the active build and lifecycle. Existing database rows are
-   not deleted as part of code removal.
+   Each saved link becomes one Markdown file under `Atlas/Links/` in the prose folder
+   ([storage](storage.md#one-vault-for-prose)), with `url:` in its frontmatter. The folders are
+   the owner's organization; a link that belongs to a person or project names it in
+   frontmatter. `links export-files` writes the first layout, one folder per site group.
+   Done when every saved link has its file, the Finder opens a link file's `url:` directly,
+   and history collection, usage tracking, candidate storage, the Links page and the standalone
+   service leave the active build and lifecycle. Existing database rows are not deleted as part
+   of code removal.
 3. **Verify reductions inside retained capabilities.** Build + ingest rows are boundary verdicts,
    not feature-complete audits. Inspect feature routes and clients against the retained boundary,
    beginning with Media's organization features, Documents' reader and Finance's independent

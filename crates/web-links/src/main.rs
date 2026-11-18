@@ -116,6 +116,20 @@ fn run(args: &[String]) -> Result<(), String> {
             );
             Ok(())
         }
+        ["export-files", rest @ ..] => {
+            let root = match rest {
+                ["--into", dir] => PathBuf::from(dir),
+                [] => sjel_config::overlay_data_dir("projects")
+                    .ok_or("no overlay is configured; pass --into <dir>")?
+                    .join(web_links::export::FOLDER),
+                _ => return Err(USAGE.into()),
+            };
+            let links = store.list().map_err(|error| error.to_string())?;
+            let files = web_links::export::plan(&links);
+            let written = web_links::export::write(&root, &files)?;
+            println!("{written} link files written under {}", root.display());
+            Ok(())
+        }
         _ => Err(USAGE.into()),
     }
 }
@@ -127,7 +141,8 @@ const USAGE: &str = "links — local web destinations
   links remove <id>
   links history scan [--days 90] [--min-visits 3]
   links history candidates
-  links history keep|dismiss <candidate-id>";
+  links history keep|dismiss <candidate-id>
+  links export-files [--into DIR]   one Markdown file per link, default <overlay>/data/projects/Atlas/Links";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();

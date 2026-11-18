@@ -35,6 +35,7 @@ url = "2.5"
 rusqlite = { workspace = true, features = ["backup"] }
 
 [dev-dependencies]
+markdown-root = { path = "../markdown-root" }
 tower = { workspace = true, features = ["util"] }
 
 [lints]

@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 
+pub mod export;
 pub mod history;
 pub mod store;
 

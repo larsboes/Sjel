@@ -60,7 +60,6 @@ use sjel_gpui_ui::theme::{
     step_font_size, step_terminal_font_size, AppearanceSettings, GlassStyle, ThemeContext,
     DEFAULT_UI_FONT_SIZE, UI_FONT_SIZES,
 };
-use sjel_gpui_ui::web_links::LinksPage;
 
 mod features;
 mod panels;
@@ -393,7 +392,6 @@ pub struct Workspace {
     pub backup_page: Option<Entity<BackupPage>>,
     pub inventory_page: Option<Entity<InventoryPage>>,
     pub software: Option<Entity<Software>>,
-    pub links_page: Option<Entity<LinksPage>>,
     pub docs_page: Option<Entity<DocsPage>>,
     pub record_page: Option<Entity<RecordPage>>,
     pub import: Option<Entity<ImportPage>>,
@@ -660,7 +658,6 @@ impl Workspace {
             backup_page: None,
             inventory_page: None,
             software: None,
-            links_page: None,
             docs_page: None,
             record_page: None,
             import: None,
@@ -1242,16 +1239,6 @@ impl Workspace {
                     }
                 }
                 Open::Url(url) => cx.open_url(&url),
-                Open::WebDestination { id, url } => {
-                    cx.open_url(&url);
-                    if let Ok(client) = self.repo.shell() {
-                        let work = shell::run(async move { client.web_link_open(&id).await });
-                        cx.spawn(async move |_, _| {
-                            let _ = work.await;
-                        })
-                        .detach();
-                    }
-                }
                 Open::Record { project, path } => {
                     self.go(Page::Projects, cx);
                     self.projects.update(cx, |projects, cx| {
@@ -1985,7 +1972,6 @@ impl Render for Workspace {
                                 | Page::Inbox
                                 | Page::Calendar
                                 | Page::Software
-                                | Page::Links
                                 | Page::Settings
                         ),
                         |frame| frame.key_context("Workspace"),

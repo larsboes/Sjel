@@ -629,20 +629,11 @@ mod tests {
             )
             .unwrap(),
         ];
-        let links = vec![sjel_gpui_core::web_links::WebLink {
-            id: "a".repeat(64),
-            url: "https://reddit.com/r/rust".into(),
-            title: "Rust community".into(),
-            host: "reddit.com".into(),
-            tenant: Some("r/rust".into()),
-            group: "Reddit".into(),
-            ..Default::default()
-        }];
-        let hits = record_hits(projects, tasks, notes, links);
+        let hits = record_hits(projects, tasks, notes);
         let kinds: Vec<&str> = hits.iter().map(|hit| hit.kind).collect();
         assert_eq!(
             kinds,
-            ["project", "task", "note", "link", "link"],
+            ["project", "task", "note", "link"],
             "a done task is not a result"
         );
         assert!(matches!(&hits[3].open, Open::Url(url) if url == "https://reddit.com/r/rust"));

@@ -28,7 +28,7 @@ const AREAS: [string, string, string[]][] = [
   ["Time & work", "Calendar, projects, CV and the knowledge base.",
     ["calendar", "projects", "cv", "knowledge-base", "vault"]],
   ["Mail, feed & documents", "Mail triage, reading, clips, documents and media.",
-    ["comms", "feed-sweep", "documents", "import", "media", "web-links", "archive", "soundscape"]],
+    ["comms", "feed-sweep", "documents", "import", "media", "archive", "soundscape"]],
   ["Assistant", "The agent, local models and the agent sandbox.",
     ["assistant", "foundation-models", "agentbox", "packs"]],
 ];
@@ -672,13 +672,13 @@ ${THEME_SCRIPT}
         <div class="panel">
           <h3>Under the hood</h3>
           <p>Every capability serves its own route manifest, speaks typed JSON over loopback HTTP and keeps its state in SQLite. Every workflow also runs from the terminal.</p>
-<pre class="term"><span class="p">$</span> curl -s 127.0.0.1:8109/routes
+<pre class="term"><span class="p">$</span> curl -s 127.0.0.1:8103/routes
 {
-  <span class="k">"capability"</span>: <span class="v">"web-links"</span>,
+  <span class="k">"capability"</span>: <span class="v">"projects"</span>,
   <span class="k">"routes"</span>: [
-    { <span class="k">"method"</span>: <span class="v">"GET"</span>, <span class="k">"path"</span>: <span class="v">"/api/links"</span>,
-      <span class="k">"summary"</span>: <span class="v">"Saved web destinations, grouped by site…"</span> },
-    { <span class="k">"method"</span>: <span class="v">"POST"</span>, <span class="k">"path"</span>: <span class="v">"/api/links"</span>,
+    { <span class="k">"method"</span>: <span class="v">"GET"</span>, <span class="k">"path"</span>: <span class="v">"/api/projects"</span>,
+      <span class="k">"summary"</span>: <span class="v">"Every project with its open and done task counts…"</span> },
+    { <span class="k">"method"</span>: <span class="v">"POST"</span>, <span class="k">"path"</span>: <span class="v">"/api/tasks"</span>,
       <span class="k">"request_schema"</span>: { … } }
   ]
 }</pre>

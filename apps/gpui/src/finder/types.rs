@@ -29,11 +29,6 @@ pub enum Open {
     Link(String),
     /// A record's `http(s)` frontmatter `url:`, opened in the browser.
     Url(String),
-    /// A saved web destination, whose local usage counter advances on explicit open.
-    WebDestination {
-        id: String,
-        url: String,
-    },
 }
 
 /// One result row.

@@ -139,8 +139,6 @@ pub mod theme;
 pub mod travel;
 #[cfg(feature = "gpui")]
 pub mod viz;
-#[cfg(feature = "gpui")]
-pub mod web_links;
 
 #[cfg(feature = "gpui")]
 pub use doc_view::{render_block, render_doc, render_markdown, text_view_style};

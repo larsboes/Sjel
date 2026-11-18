@@ -24,7 +24,6 @@ use sjel_gpui_ui::setup::SetupPage;
 use sjel_gpui_ui::software::Software;
 use sjel_gpui_ui::systems::SystemsPage;
 use sjel_gpui_ui::theme::Palette;
-use sjel_gpui_ui::web_links::LinksPage;
 
 use super::Workspace;
 use crate::home;
@@ -95,13 +94,6 @@ impl Workspace {
         let repo = self.repo.clone();
         self.software
             .get_or_insert_with(|| cx.new(|_| Software::new(repo)))
-            .clone()
-    }
-
-    pub(super) fn ensure_links_page(&mut self, cx: &mut Context<Self>) -> Entity<LinksPage> {
-        let repo = self.repo.clone();
-        self.links_page
-            .get_or_insert_with(|| cx.new(|_| LinksPage::new(repo)))
             .clone()
     }
 
@@ -208,11 +200,6 @@ impl Workspace {
             } else if page == Page::Software {
                 self.ensure_software(cx)
                     .update(cx, |software, cx| software.load(cx));
-            } else if page == Page::Links {
-                self.ensure_links_page(cx).update(cx, |links, cx| {
-                    links.load(cx);
-                    links.load_candidates(cx);
-                });
             } else if page == Page::Import {
                 self.ensure_import(cx)
                     .update(cx, |import, cx| import.load(cx));
@@ -274,11 +261,6 @@ impl Workspace {
         if self.page == Page::Projects {
             self.projects
                 .update(cx, |projects, cx| projects.load_projects(cx));
-        } else if self.page == Page::Links {
-            self.ensure_links_page(cx).update(cx, |links, cx| {
-                links.load(cx);
-                links.load_candidates(cx);
-            });
         } else if self.page == Page::Travel {
             self.travel.update(cx, |travel, cx| travel.refresh(cx));
         } else if self.page == Page::Documents {
@@ -356,7 +338,6 @@ impl Workspace {
                         "backup" => Page::Backup,
                         "import" => Page::Import,
                         "software" => Page::Software,
-                        "web-links" | "links" => Page::Links,
                         "feed" | "comms" => Page::Feed,
                         "systems" => Page::Systems,
                         "packs" => Page::Packs,
@@ -374,7 +355,6 @@ impl Workspace {
                 page.into_any_element()
             }
             Page::Software => self.ensure_software(cx).into_any_element(),
-            Page::Links => self.ensure_links_page(cx).into_any_element(),
             Page::Docs => self.ensure_docs_page(cx).into_any_element(),
             Page::Record => self.ensure_record_page(cx).into_any_element(),
             Page::Import => self.ensure_import(cx).into_any_element(),

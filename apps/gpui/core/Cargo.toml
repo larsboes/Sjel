@@ -67,7 +67,6 @@ status-api = { path = "../../../crates/status-api" }
 traveler-api = { path = "../../../crates/traveler-api" }
 trips-api = { path = "../../../crates/trips-api" }
 transit-api = { path = "../../../crates/transit-api" }
-web-links-api = { path = "../../../crates/web-links-api" }
 zeroize.workspace = true
 
 

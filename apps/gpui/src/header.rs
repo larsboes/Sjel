@@ -214,7 +214,7 @@ fn tab_strip(
                         &[Page::Capabilities, Page::Systems, Page::Backup, Page::Setup]
                     }
                     Self::Architecture => &[Page::SelfModel, Page::Packs, Page::Research],
-                    Self::Catalog => &[Page::Software, Page::Links],
+                    Self::Catalog => &[Page::Software],
                 }
             }
             fn of(page: Page) -> Self {
@@ -223,7 +223,7 @@ fn tab_strip(
                         Self::Runtime
                     }
                     Page::SelfModel | Page::Packs | Page::Research => Self::Architecture,
-                    Page::Software | Page::Links => Self::Catalog,
+                    Page::Software => Self::Catalog,
                     _ => Self::Runtime,
                 }
             }
@@ -324,7 +324,6 @@ fn subtitle(view: &Workspace, cx: &Context<Workspace>) -> SharedString {
             "Household inventory, wishlist budget, and interior spatial layout".into()
         }
         Page::Software => "Apps on this Mac: size, last used, and what to keep".into(),
-        Page::Links => "Your recurring web destinations, grouped and ready to open".into(),
         Page::Docs => "Architecture, capability contracts, and operating guides".into(),
         Page::Record => "A record and the Sjel data connected to it".into(),
         Page::Import => "Bring a folder into Sjel, each file to its owner".into(),

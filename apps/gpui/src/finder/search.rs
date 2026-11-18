@@ -17,22 +17,14 @@ impl Finder {
             let projects = repo.fetch_projects().await.unwrap_or_default();
             let tasks = repo.fetch_tasks(None).await.unwrap_or_default();
             let notes = repo.fetch_all_notes().await.unwrap_or_default();
-            let links = match repo.shell() {
-                Ok(shell) => shell
-                    .web_links()
-                    .await
-                    .map(|reply| reply.links)
-                    .unwrap_or_default(),
-                Err(_) => Vec::new(),
-            };
-            (projects, tasks, notes, links)
+            (projects, tasks, notes)
         });
         cx.spawn(async move |this, cx| {
-            let Some((projects, tasks, notes, links)) = reads.await else {
+            let Some((projects, tasks, notes)) = reads.await else {
                 return;
             };
             let _ = this.update(cx, |view, cx| {
-                view.records = record_hits(projects, tasks, notes, links);
+                view.records = record_hits(projects, tasks, notes);
                 cx.notify();
             });
         })
@@ -141,7 +133,6 @@ pub(super) fn record_hits(
     projects: Vec<ProjectSummary>,
     tasks: Vec<GlobalTask>,
     notes: Vec<GlobalNote>,
-    links: Vec<sjel_gpui_core::web_links::WebLink>,
 ) -> Vec<Hit> {
     let projects = projects
         .into_iter()
@@ -176,22 +167,5 @@ pub(super) fn record_hits(
         },
         title: note.title,
     });
-    let links = links.into_iter().map(|link| Hit {
-        kind: "link",
-        detail: format!(
-            "{}{} · {}",
-            link.group,
-            link.tenant
-                .as_ref()
-                .map(|tenant| format!(" · {tenant}"))
-                .unwrap_or_default(),
-            link.url
-        ),
-        open: Open::WebDestination {
-            id: link.id,
-            url: link.url,
-        },
-        title: link.title,
-    });
-    projects.chain(tasks).chain(notes).chain(links).collect()
+    projects.chain(tasks).chain(notes).collect()
 }

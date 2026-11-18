@@ -683,19 +683,6 @@
       }
     },
     {
-      "name": "web-links",
-      "kind": "capability",
-      "service": {
-        "kind": "process",
-        "requires": [],
-        "port": "8109"
-      }
-    },
-    {
-      "name": "web-links-api",
-      "kind": "lib"
-    },
-    {
       "name": "wish-prices",
       "kind": "capability",
       "service": {
@@ -3199,56 +3186,6 @@
       ],
       "evidence": [
         "crates/vault/Cargo.toml"
-      ]
-    },
-    {
-      "from": "web-links",
-      "to": "route-manifest",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "crates/web-links/Cargo.toml"
-      ]
-    },
-    {
-      "from": "web-links",
-      "to": "sjel-config",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "crates/web-links/Cargo.toml"
-      ]
-    },
-    {
-      "from": "web-links",
-      "to": "sjel-server",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "crates/web-links/Cargo.toml"
-      ]
-    },
-    {
-      "from": "web-links",
-      "to": "sjel-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "crates/web-links/Cargo.toml"
-      ]
-    },
-    {
-      "from": "web-links",
-      "to": "web-links-api",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "crates/web-links/Cargo.toml"
       ]
     }
   ],

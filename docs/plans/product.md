@@ -42,7 +42,7 @@ applies to the stated join or policy boundary, not every feature in its crate.
 | [traveler](../../crates/traveler/README.md) | Build | Explicit constraints and ranking preferences shared by destination and journey decisions |
 | [trips](../../crates/trips/README.md) | Build | Itineraries joining calendar, transport, places, people, costs and gear |
 | [vault](../../crates/vault/README.md) | Ingest | Markdown properties, classes and links; files retain text authority |
-| [web-links](../../crates/web-links/README.md) | Link out; reduction open | Saved links move to one Markdown file each under `Atlas/Links/` in the prose folder |
+| web-links (retired) | Link out | Saved links are one Markdown file each under `Atlas/Links/` in the prose folder |
 
 ### Supporting declarations
 
@@ -69,16 +69,9 @@ domain store or an independent application.
    choice overrides a derived one. Done when a calendar entry or a presence change sets the
    preset and parameters with no manual step, a manual choice stays in force until its session
    ends, and the selection reads only through the owning capabilities' existing contracts.
-2. **Reduce Links to files in folders.** `crates/web-links/src/server.rs` exposes saved links,
-   open tracking, browser-history scans and candidate decisions. None feeds another capability.
-   Each saved link becomes one Markdown file under `Atlas/Links/` in the prose folder
-   ([storage](storage.md#one-vault-for-prose)), with `url:` in its frontmatter. The folders are
-   the owner's organization; a link that belongs to a person or project names it in
-   frontmatter. `links export-files` writes the first layout, one folder per site group.
-   Done when every saved link has its file, the Finder opens a link file's `url:` directly,
-   and history collection, usage tracking, candidate storage, the Links page and the standalone
-   service leave the active build and lifecycle. Existing database rows are not deleted as part
-   of code removal.
+2. **Reduce Links to files in folders.** Export `8dd803a4`, Finder `url:` opening `3ccfe487`,
+   service retirement in the commit that removed `crates/web-links`. The store held no saved
+   links and no history candidates at retirement, so the export wrote no files.
 3. **Verify reductions inside retained capabilities.** Build + ingest rows are boundary verdicts,
    not feature-complete audits. Inspect feature routes and clients against the retained boundary,
    beginning with Media's organization features, Documents' reader and Finance's independent
@@ -100,5 +93,5 @@ domain store or an independent application.
    accepting metadata does not authorize a file move. This inspection ran no live file moves,
    reader acceptance checks or dependent-join tests.
 
-The audit is not complete while items 2 and 3 or the private-overlay review remain open.
+The audit is not complete while item 3 or the private-overlay review remain open.
 No capability, service, personal record or original file has been removed by this audit.

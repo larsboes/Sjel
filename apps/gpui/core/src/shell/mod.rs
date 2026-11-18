@@ -947,18 +947,9 @@ fn runtime() -> &'static tokio::runtime::Handle {
     &RUNTIME
 }
 
-/// Runs `work` on the HTTP runtime; the returned future can be awaited from GPUI.
 /// A software row key as one URL path segment. Keys are a bundle id (`com.example.app`) or
 /// `<manager>:<name>`, where an npm name may be scoped (`npm:@playwright/cli`); `/` and `@` are
 /// percent-encoded so the key stays one segment. Anything else is refused before it reaches a URL.
-fn web_link_key(id: &str) -> ShellResult<&str> {
-    if id.len() == 64 && id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        Ok(id)
-    } else {
-        Err(ShellError::Refused(400, Some("Not a web-link id.".into())))
-    }
-}
-
 pub fn software_key(key: &str) -> ShellResult<String> {
     let allowed =
         |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':' | '@' | '/');
@@ -969,6 +960,7 @@ pub fn software_key(key: &str) -> ShellResult<String> {
     Ok(key.replace('@', "%40").replace('/', "%2F"))
 }
 
+/// Runs `work` on the HTTP runtime; the returned future can be awaited from GPUI.
 pub fn run<T: Send + 'static>(
     work: impl Future<Output = T> + Send + 'static,
 ) -> impl Future<Output = Option<T>> {

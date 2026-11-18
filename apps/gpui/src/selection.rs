@@ -53,7 +53,6 @@ impl Workspace {
             | Page::People
             | Page::Inventory
             | Page::Software
-            | Page::Links
             | Page::Import
             | Page::Systems
             | Page::Packs

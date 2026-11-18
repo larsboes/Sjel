@@ -2135,6 +2135,16 @@ mod route_manifest_tests {
     /// the router's own source, so adding a `.route()` without a summary fails
     /// here rather than shipping a surface that lies about itself.
     #[test]
+    fn every_contract_route_is_declared() {
+        for route in trips_api::ALL_ROUTES {
+            assert!(
+                super::ROUTES.iter().any(|declared| declared.path == route),
+                "trips-api names {route}, which the manifest does not declare"
+            );
+        }
+    }
+
+    #[test]
     fn the_manifest_covers_every_served_route() {
         let missing = route_manifest::undeclared_routes(include_str!("server.rs"), super::ROUTES);
         assert!(missing.is_empty(), "served but undocumented: {missing:?}");

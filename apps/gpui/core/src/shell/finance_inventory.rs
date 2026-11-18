@@ -17,7 +17,7 @@ impl Shell {
             query.push(("end", e));
         }
         let path = with_query(
-            &finance_api::proxy_route(finance_api::ROUTE_DASHBOARD),
+            &proxied(finance_api::PROXY_PREFIX, finance_api::ROUTE_DASHBOARD),
             &query,
         );
         self.json(Method::GET, &path, None, 10).await
@@ -27,7 +27,7 @@ impl Shell {
     pub async fn subscriptions(&self) -> ShellResult<Vec<SubscriptionRecord>> {
         self.json(
             Method::GET,
-            &finance_api::proxy_route(finance_api::ROUTE_SUBSCRIPTIONS),
+            &proxied(finance_api::PROXY_PREFIX, finance_api::ROUTE_SUBSCRIPTIONS),
             None,
             10,
         )
@@ -37,7 +37,10 @@ impl Shell {
     pub async fn finance_csv_mappings(&self) -> ShellResult<Vec<FinanceCsvMappingProfile>> {
         self.json(
             Method::GET,
-            &finance_api::proxy_route(finance_api::ROUTE_IMPORT_CSV_MAPPINGS),
+            &proxied(
+                finance_api::PROXY_PREFIX,
+                finance_api::ROUTE_IMPORT_CSV_MAPPINGS,
+            ),
             None,
             10,
         )
@@ -47,7 +50,10 @@ impl Shell {
     pub async fn finance_candidates(&self) -> ShellResult<Vec<FinanceCandidate>> {
         self.json(
             Method::GET,
-            &finance_api::proxy_route(finance_api::ROUTE_IMPORT_CANDIDATES),
+            &proxied(
+                finance_api::PROXY_PREFIX,
+                finance_api::ROUTE_IMPORT_CANDIDATES,
+            ),
             None,
             10,
         )
@@ -61,7 +67,10 @@ impl Shell {
     ) -> ShellResult<FinanceCsvPreview> {
         self.json(
             Method::POST,
-            &finance_api::proxy_route(finance_api::ROUTE_IMPORT_CSV_PREVIEW),
+            &proxied(
+                finance_api::PROXY_PREFIX,
+                finance_api::ROUTE_IMPORT_CSV_PREVIEW,
+            ),
             Some(serde_json::json!({ "content": content, "mapping": mapping })),
             30,
         )
@@ -76,7 +85,7 @@ impl Shell {
     ) -> ShellResult<serde_json::Value> {
         self.json(
             Method::POST,
-            &finance_api::proxy_route(finance_api::ROUTE_IMPORT_CSV),
+            &proxied(finance_api::PROXY_PREFIX, finance_api::ROUTE_IMPORT_CSV),
             Some(serde_json::json!({ "content": content, "mapping": mapping, "expected_preview_id": expected_preview_id })),
             30,
         )
@@ -98,7 +107,8 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &finance_api::proxy_route_id(
+            &proxied_id(
+                finance_api::PROXY_PREFIX,
                 finance_api::ROUTE_IMPORT_CANDIDATE_REVIEW,
                 &id.replace(':', "%3A"),
             ),
@@ -206,7 +216,8 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &finance_api::proxy_route_id(
+            &proxied_id(
+                finance_api::PROXY_PREFIX,
                 finance_api::ROUTE_IMPORT_CANDIDATE_RECONCILE_TRANSFER,
                 &id.replace(':', "%3A"),
             ),
@@ -224,7 +235,10 @@ impl Shell {
     ) -> ShellResult<serde_json::Value> {
         self.json(
             Method::POST,
-            &finance_api::proxy_route(finance_api::ROUTE_IMPORT_CANDIDATES_RECLASSIFY_BATCH),
+            &proxied(
+                finance_api::PROXY_PREFIX,
+                finance_api::ROUTE_IMPORT_CANDIDATES_RECLASSIFY_BATCH,
+            ),
             Some(body(&finance_api::ReclassifyBatchRequest {
                 items: items
                     .into_iter()
@@ -258,7 +272,8 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &finance_api::proxy_route_id(
+            &proxied_id(
+                finance_api::PROXY_PREFIX,
                 finance_api::ROUTE_IMPORT_CANDIDATE_ALLOCATION,
                 &id.replace(':', "%3A"),
             ),
@@ -285,7 +300,8 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &finance_api::proxy_route_id(
+            &proxied_id(
+                finance_api::PROXY_PREFIX,
                 finance_api::ROUTE_IMPORT_CANDIDATE_REIMBURSEMENT,
                 &id.replace(':', "%3A"),
             ),
@@ -304,7 +320,10 @@ impl Shell {
         let value: serde_json::Value = self
             .json(
                 Method::POST,
-                &finance_api::proxy_route(finance_api::ROUTE_BALANCE_SNAPSHOT),
+                &proxied(
+                    finance_api::PROXY_PREFIX,
+                    finance_api::ROUTE_BALANCE_SNAPSHOT,
+                ),
                 Some(serde_json::to_value(update).map_err(|_| ShellError::Unreadable)?),
                 30,
             )
@@ -319,7 +338,8 @@ impl Shell {
     }
 
     pub async fn inventory_identity(&self, reference: &str) -> ShellResult<InventoryIdentity> {
-        let path = inventory_api::proxy_route(
+        let path = proxied(
+            inventory_api::PROXY_PREFIX,
             &inventory_api::ROUTE_ITEM_REFS.replace("{reference}", &segment(reference)),
         );
         self.json(Method::GET, &path, None, 10).await
@@ -330,7 +350,10 @@ impl Shell {
         let result: crate::inventory::MailProposals = self
             .json(
                 Method::GET,
-                &inventory_api::proxy_route(inventory_api::ROUTE_MAIL_PROPOSALS),
+                &proxied(
+                    inventory_api::PROXY_PREFIX,
+                    inventory_api::ROUTE_MAIL_PROPOSALS,
+                ),
                 None,
                 10,
             )
@@ -342,8 +365,11 @@ impl Shell {
         &self,
         id: &str,
     ) -> ShellResult<crate::inventory::MailMatchSnapshot> {
-        let path =
-            inventory_api::proxy_route_id(inventory_api::ROUTE_MAIL_MATCH_SNAPSHOT, &segment(id));
+        let path = proxied_id(
+            inventory_api::PROXY_PREFIX,
+            inventory_api::ROUTE_MAIL_MATCH_SNAPSHOT,
+            &segment(id),
+        );
         self.json(Method::GET, &path, None, 10).await
     }
 
@@ -354,7 +380,8 @@ impl Shell {
     ) -> ShellResult<()> {
         self.send(
             Method::POST,
-            &inventory_api::proxy_route_id(
+            &proxied_id(
+                inventory_api::PROXY_PREFIX,
                 inventory_api::ROUTE_MAIL_PROPOSAL_DECISION,
                 &id.to_string(),
             ),
@@ -368,7 +395,7 @@ impl Shell {
     pub async fn inventory_rows(&self) -> ShellResult<Vec<crate::inventory::InventoryRow>> {
         self.json(
             Method::GET,
-            &inventory_api::proxy_route(inventory_api::ROUTE_INVENTORY),
+            &proxied(inventory_api::PROXY_PREFIX, inventory_api::ROUTE_INVENTORY),
             None,
             10,
         )
@@ -378,7 +405,7 @@ impl Shell {
     pub async fn inventory_wishlist(&self) -> ShellResult<crate::inventory::InventoryWishlist> {
         self.json(
             Method::GET,
-            &inventory_api::proxy_route(inventory_api::ROUTE_WISHLIST),
+            &proxied(inventory_api::PROXY_PREFIX, inventory_api::ROUTE_WISHLIST),
             None,
             10,
         )
@@ -390,7 +417,10 @@ impl Shell {
         let envelope: crate::inventory::WishGroups = self
             .json(
                 Method::GET,
-                &inventory_api::proxy_route(inventory_api::ROUTE_WISH_GROUPS),
+                &proxied(
+                    inventory_api::PROXY_PREFIX,
+                    inventory_api::ROUTE_WISH_GROUPS,
+                ),
                 None,
                 10,
             )
@@ -413,7 +443,10 @@ impl Shell {
         }
         self.send(
             Method::POST,
-            &inventory_api::proxy_route(inventory_api::ROUTE_WISH_GROUPS),
+            &proxied(
+                inventory_api::PROXY_PREFIX,
+                inventory_api::ROUTE_WISH_GROUPS,
+            ),
             Some(body(&inventory_api::SaveWishGroupRequest {
                 id: id.to_owned(),
                 title: title.to_owned(),
@@ -441,7 +474,11 @@ impl Shell {
         }
         self.send(
             Method::PUT,
-            &inventory_api::proxy_route_id(inventory_api::ROUTE_WISH_GROUP_ITEMS, &segment(id)),
+            &proxied_id(
+                inventory_api::PROXY_PREFIX,
+                inventory_api::ROUTE_WISH_GROUP_ITEMS,
+                &segment(id),
+            ),
             Some(body(&inventory_api::SetWishGroupItemsRequest {
                 item_ids: item_ids.to_vec(),
             })?),
@@ -459,8 +496,11 @@ impl Shell {
                 Some("A wish group id is required.".into()),
             ));
         }
-        let path =
-            inventory_api::proxy_route_id(inventory_api::ROUTE_WISH_GROUP_BY_ID, &segment(id));
+        let path = proxied_id(
+            inventory_api::PROXY_PREFIX,
+            inventory_api::ROUTE_WISH_GROUP_BY_ID,
+            &segment(id),
+        );
         self.send(Method::DELETE, &path, None, 10).await.map(drop)
     }
 
@@ -471,7 +511,7 @@ impl Shell {
     ) -> ShellResult<()> {
         self.send(
             Method::POST,
-            &inventory_api::proxy_route(inventory_api::ROUTE_ITEMS),
+            &proxied(inventory_api::PROXY_PREFIX, inventory_api::ROUTE_ITEMS),
             Some(serde_json::to_value(item).map_err(|_| ShellError::Unreadable)?),
             10,
         )
@@ -494,7 +534,11 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &inventory_api::proxy_route_id(inventory_api::ROUTE_ITEM_STATE, &segment(id)),
+            &proxied_id(
+                inventory_api::PROXY_PREFIX,
+                inventory_api::ROUTE_ITEM_STATE,
+                &segment(id),
+            ),
             Some(serde_json::json!({"state": state.as_str(), "note": note})),
             10,
         )
@@ -521,7 +565,11 @@ impl Shell {
             ));
         };
         fields.insert("expected_revision".to_owned(), revision.into());
-        let path = inventory_api::proxy_route_id(inventory_api::ROUTE_ITEM_BY_ID, &segment(id));
+        let path = proxied_id(
+            inventory_api::PROXY_PREFIX,
+            inventory_api::ROUTE_ITEM_BY_ID,
+            &segment(id),
+        );
         self.json(Method::PATCH, &path, Some(patch), 10).await
     }
 
@@ -535,7 +583,11 @@ impl Shell {
                 Some("An inventory item id is required.".into()),
             ));
         }
-        let path = inventory_api::proxy_route_id(inventory_api::ROUTE_ITEM_STATE, &segment(id));
+        let path = proxied_id(
+            inventory_api::PROXY_PREFIX,
+            inventory_api::ROUTE_ITEM_STATE,
+            &segment(id),
+        );
         self.json(Method::GET, &path, None, 10).await
     }
 

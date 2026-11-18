@@ -14,6 +14,17 @@ pub const ROUTE_APP_DECISION: &str = "/api/apps/{bundle_id}/decision";
 pub const ROUTE_APP_UNINSTALL: &str = "/api/apps/{bundle_id}/uninstall";
 pub const ROUTE_APPS_SCAN: &str = "/api/apps/scan";
 
+/// Every route constant above. The server test checks each one against its manifest.
+pub const ALL_ROUTES: [&str; 4] = [
+    ROUTE_APPS,
+    ROUTE_APP_DECISION,
+    ROUTE_APP_UNINSTALL,
+    ROUTE_APPS_SCAN,
+];
+
+/// The path prefix under which the status proxy serves these routes.
+pub const PROXY_PREFIX: &str = "/software";
+
 // ============================================================================
 // Models
 // ============================================================================

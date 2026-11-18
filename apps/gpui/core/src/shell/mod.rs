@@ -23,7 +23,7 @@ use futures::channel::mpsc::UnboundedReceiver;
 /// The default shell endpoint, from `crates/sjel-status/service.toml`.
 pub const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:8082";
 const KEYCHAIN_SERVICE: &str = "sjel-inbound-token";
-const EVENTS_PATH: &str = "/api/sjel-status/events";
+const EVENTS_PATH: &str = status_api::ROUTE_STATUS_EVENTS;
 
 /// The ceiling on one original, matching `MAX_BYTES` in `crates/documents/src/server.rs`.
 /// A reader holds one document at a time, and this is the most it can be asked to hold; the two
@@ -118,7 +118,13 @@ fn is_sha256(id: &str) -> bool {
 /// The reader route for one document's original, or `None` for an id that is not a digest. The
 /// check runs before any request, so a malformed id never reaches the capability.
 pub(crate) fn document_original_path(id: &str) -> Option<String> {
-    is_sha256(id).then(|| format!("/documents/api/documents/{id}/original"))
+    is_sha256(id).then(|| {
+        proxied_id(
+            documents_api::PROXY_PREFIX,
+            documents_api::ROUTE_DOCUMENT_ORIGINAL,
+            id,
+        )
+    })
 }
 
 fn too_large() -> ShellError {
@@ -625,12 +631,12 @@ impl Shell {
     }
 
     pub async fn health(&self) -> ShellResult<NodeHealth> {
-        self.json(Method::GET, "/api/sjel-status/health", None, 10)
+        self.json(Method::GET, status_api::ROUTE_STATUS_HEALTH, None, 10)
             .await
     }
 
     pub async fn capability_registry(&self) -> ShellResult<Vec<RegistryEntry>> {
-        self.json(Method::GET, "/api/sjel-status/capabilities", None, 10)
+        self.json(Method::GET, status_api::ROUTE_STATUS_CAPABILITIES, None, 10)
             .await
     }
 
@@ -958,6 +964,16 @@ pub fn software_key(key: &str) -> ShellResult<String> {
         return Err(ShellError::Refused(400, Some("Not a software key.".into())));
     }
     Ok(key.replace('@', "%40").replace('/', "%2F"))
+}
+
+/// `route` behind the status proxy, under a capability's `PROXY_PREFIX`.
+fn proxied(prefix: &str, route: &str) -> String {
+    format!("{prefix}{route}")
+}
+
+/// [`proxied`] with `{id}` replaced by a value the caller already encoded.
+fn proxied_id(prefix: &str, route: &str, encoded_id: &str) -> String {
+    proxied(prefix, &route.replace("{id}", encoded_id))
 }
 
 /// One URL path segment, percent-encoded the way `Url::path_segments_mut` encodes it.

@@ -34,6 +34,39 @@ pub const ROUTE_MARKDOWN_SOURCES: &str = "/api/markdown/sources";
 pub const ROUTE_MARKDOWN_PREVIEW: &str = "/api/markdown/preview";
 pub const ROUTE_MARKDOWN_IMPORT: &str = "/api/markdown/import";
 pub const ROUTE_LINKS: &str = "/api/links";
+pub const ROUTE_CONTENT_ITEM: &str = "/api/content/{source}/{id}";
+
+/// Every route constant above. The server test checks each one against its manifest.
+pub const ALL_ROUTES: [&str; 25] = [
+    ROUTE_ENTRIES,
+    ROUTE_ENTRY_CHANGES,
+    ROUTE_ENTRY_BY_ID,
+    ROUTE_ENTRY_EXTERNAL,
+    ROUTE_PROPOSALS,
+    ROUTE_RHYTHMS,
+    ROUTE_RHYTHM_BY_ID,
+    ROUTE_RHYTHM_MATERIALIZE,
+    ROUTE_VERDICTS,
+    ROUTE_WINDOWS,
+    ROUTE_TRIP_DRAFTS,
+    ROUTE_TRIP_DRAFTS_MATERIALIZE,
+    ROUTE_TRIP_PLANS_SYNC,
+    ROUTE_GOOGLE_DRAFTS,
+    ROUTE_GOOGLE_IMPORT,
+    ROUTE_GOOGLE_IMPORT_PREVIEW,
+    ROUTE_GOOGLE_IMPORT_SELECTED,
+    ROUTE_GOOGLE_EXPORT,
+    ROUTE_GOOGLE_EXPORTS,
+    ROUTE_GOOGLE_ENTRY_EXPORT,
+    ROUTE_MARKDOWN_SOURCES,
+    ROUTE_MARKDOWN_PREVIEW,
+    ROUTE_MARKDOWN_IMPORT,
+    ROUTE_LINKS,
+    ROUTE_CONTENT_ITEM,
+];
+
+/// The path prefix under which the status proxy serves these routes.
+pub const PROXY_PREFIX: &str = "/calendar";
 
 // ============================================================================
 // Constants and Vocabularies
@@ -234,9 +267,14 @@ impl TripDrafts {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct TripMaterializeRequest {
+    /// The entries the trip is made of, named explicitly because drafts are recomputed per
+    /// request.
     pub entry_ids: Vec<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// Attach the entries to this existing plan instead of the ledger's plan or a new one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]

@@ -45,7 +45,12 @@ impl Shell {
         }
         let path = match source {
             "feed" | "mail" => format!("/comms/content/{source}/{id}"),
-            "calendar" => format!("/calendar/api/content/calendar/{id}"),
+            "calendar" => proxied(
+                calendar_api::PROXY_PREFIX,
+                &calendar_api::ROUTE_CONTENT_ITEM
+                    .replace("{source}", "calendar")
+                    .replace("{id}", id),
+            ),
             _ => unreachable!("validated content source"),
         };
         self.json(Method::GET, &path, None, 10).await
@@ -379,11 +384,20 @@ impl Shell {
                     .or_else(|| capture::host(url))
                     .or_else(|| url.map(str::to_owned))
                     .unwrap_or_else(|| "Unbenannter Ort".into());
-                let body = serde_json::json!({
-                    "name": name, "link": url, "note": text, "query": text.or(url),
-                });
+                let request = places_api::CreatePlaceRequest {
+                    name: Some(name),
+                    link: url.map(str::to_owned),
+                    note: text.map(str::to_owned),
+                    query: text.or(url).map(str::to_owned),
+                    ..places_api::CreatePlaceRequest::default()
+                };
                 let place: Created = self
-                    .json(Method::POST, "/places/api/places", Some(body), 20)
+                    .json(
+                        Method::POST,
+                        &proxied(places_api::PROXY_PREFIX, places_api::ROUTE_PLACES),
+                        Some(body(&request)?),
+                        20,
+                    )
                     .await?;
                 format!("places:{}", place.id)
             }
@@ -411,7 +425,12 @@ impl Shell {
                     }
                     // A taken id answers 409; the next suffix is tried, twenty at most.
                     match self
-                        .send(Method::POST, "/inventory/api/items", Some(body), 10)
+                        .send(
+                            Method::POST,
+                            &proxied(inventory_api::PROXY_PREFIX, inventory_api::ROUTE_ITEMS),
+                            Some(body),
+                            10,
+                        )
                         .await
                     {
                         Ok(_) => break format!("inventory:{id}"),

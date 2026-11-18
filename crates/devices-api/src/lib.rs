@@ -20,6 +20,22 @@ pub const ROUTE_PAIRING_REQUEST: &str = "/api/pairing/requests/{id}";
 pub const ROUTE_PAIRING_APPROVE: &str = "/api/pairing/requests/{id}/approve";
 pub const ROUTE_PAIRING_DENY: &str = "/api/pairing/requests/{id}/deny";
 
+/// Every route constant above. The server test checks each one against its manifest.
+pub const ALL_ROUTES: [&str; 9] = [
+    ROUTE_DEVICES,
+    ROUTE_DEVICES_ME,
+    ROUTE_DEVICE_REVOKE,
+    ROUTE_PAIRING_CHALLENGES,
+    ROUTE_PAIRING_CLAIMS,
+    ROUTE_PAIRING_REQUESTS,
+    ROUTE_PAIRING_REQUEST,
+    ROUTE_PAIRING_APPROVE,
+    ROUTE_PAIRING_DENY,
+];
+
+/// The path prefix under which the status proxy serves these routes.
+pub const PROXY_PREFIX: &str = "/devices";
+
 pub const PROXY_ROUTE_DEVICES: &str = "/devices/api/devices";
 pub const PROXY_ROUTE_DEVICES_ME: &str = "/devices/api/devices/me";
 pub const PROXY_ROUTE_PAIRING_CHALLENGES: &str = "/devices/api/pairing/challenges";

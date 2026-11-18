@@ -4,7 +4,7 @@ use super::*;
 
 impl Shell {
     pub async fn agent(&self) -> ShellResult<AgentView> {
-        self.json(Method::GET, "/api/sjel-status/agent", None, 5)
+        self.json(Method::GET, status_api::ROUTE_STATUS_AGENT, None, 5)
             .await
     }
 
@@ -21,16 +21,26 @@ impl Shell {
             ));
         }
         let body = serde_json::json!({ "capability": capability, "mode": mode });
-        self.send(Method::POST, "/api/sjel-status/agent/mode", Some(body), 5)
-            .await
-            .map(drop)
+        self.send(
+            Method::POST,
+            status_api::ROUTE_STATUS_AGENT_MODE,
+            Some(body),
+            5,
+        )
+        .await
+        .map(drop)
     }
 
     /// Each installed harness's wall around the overlay's `data/`, and each agent name with its
     /// own token, tier and cap. Owner only: the agent token is refused here.
     pub async fn harnesses(&self) -> ShellResult<HarnessesView> {
-        self.json(Method::GET, "/api/sjel-status/agent/harnesses", None, 5)
-            .await
+        self.json(
+            Method::GET,
+            status_api::ROUTE_STATUS_AGENT_HARNESSES,
+            None,
+            5,
+        )
+        .await
     }
 
     /// Sets the highest data class one enrolled agent name reads; `None` removes the cap. The
@@ -46,7 +56,7 @@ impl Shell {
             ));
         }
         let body = serde_json::json!({ "cap": cap });
-        let path = format!("/api/sjel-status/agent/harnesses/{name}/cap");
+        let path = status_api::ROUTE_STATUS_AGENT_HARNESS_CAP.replace("{name}", name);
         self.send(Method::POST, &path, Some(body), 5)
             .await
             .map(drop)
@@ -64,7 +74,7 @@ impl Shell {
     /// What fills the disk, from `tools/storage report --json`. A `du` walk per class, so it
     /// takes seconds and the page reads it on demand rather than on a timer.
     pub async fn storage(&self) -> ShellResult<crate::systems::StorageReport> {
-        self.json(Method::GET, "/api/sjel-status/storage", None, 120)
+        self.json(Method::GET, status_api::ROUTE_STATUS_STORAGE, None, 120)
             .await
     }
 
@@ -91,14 +101,19 @@ impl Shell {
 
     /// The disk's own hourly readings, kept by sjel-status.
     pub async fn storage_history(&self) -> ShellResult<crate::systems::StorageHistory> {
-        self.json(Method::GET, "/api/sjel-status/storage-history", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            status_api::ROUTE_STATUS_STORAGE_HISTORY,
+            None,
+            10,
+        )
+        .await
     }
 
     /// Installed software outside this checkout, from `tools/updates --json`. The shell answers
     /// a cached report for up to 15 minutes, so a read is cheap.
     pub async fn updates(&self) -> ShellResult<crate::systems::UpdatesReport> {
-        self.json(Method::GET, "/api/sjel-status/updates", None, 30)
+        self.json(Method::GET, status_api::ROUTE_STATUS_UPDATES, None, 30)
             .await
     }
 
@@ -114,7 +129,7 @@ impl Shell {
         let body = serde_json::json!({ "class": class });
         self.send(
             Method::POST,
-            "/api/sjel-status/updates/apply",
+            status_api::ROUTE_STATUS_UPDATES_APPLY,
             Some(body),
             10,
         )
@@ -125,14 +140,14 @@ impl Shell {
     /// The hourly host watch's open findings.
     pub async fn host_watch(&self) -> ShellResult<Vec<crate::systems::Finding>> {
         let findings: crate::systems::Findings = self
-            .json(Method::GET, "/api/sjel-status/host-watch", None, 10)
+            .json(Method::GET, status_api::ROUTE_STATUS_HOST_WATCH, None, 10)
             .await?;
         Ok(findings.findings)
     }
 
     /// The runtime profile in force on this machine.
     pub async fn runtime(&self) -> ShellResult<crate::systems::RuntimeStatus> {
-        self.json(Method::GET, "/api/sjel-status/runtime", None, 10)
+        self.json(Method::GET, status_api::ROUTE_STATUS_RUNTIME, None, 10)
             .await
     }
 
@@ -142,13 +157,18 @@ impl Shell {
         &self,
         body: serde_json::Value,
     ) -> ShellResult<crate::systems::RuntimeStatus> {
-        self.json(Method::POST, "/api/sjel-status/runtime", Some(body), 10)
-            .await
+        self.json(
+            Method::POST,
+            status_api::ROUTE_STATUS_RUNTIME,
+            Some(body),
+            10,
+        )
+        .await
     }
 
     /// Agent skills across installed harnesses from `tools/harnesses status --json`.
     pub async fn packs(&self) -> ShellResult<crate::packs::PacksView> {
-        self.json(Method::GET, "/api/sjel-status/packs", None, 30)
+        self.json(Method::GET, status_api::ROUTE_STATUS_PACKS, None, 30)
             .await
     }
 
@@ -164,19 +184,19 @@ impl Shell {
             "harness": harness,
             "packs": packs,
         });
-        self.json(Method::POST, "/api/sjel-status/packs", Some(body), 60)
+        self.json(Method::POST, status_api::ROUTE_STATUS_PACKS, Some(body), 60)
             .await
     }
 
     /// Architectural self-model and live state from `GET /api/sjel-status/self`.
     pub async fn self_model(&self) -> ShellResult<crate::self_model::SelfModelResponse> {
-        self.json(Method::GET, "/api/sjel-status/self", None, 15)
+        self.json(Method::GET, status_api::ROUTE_STATUS_SELF, None, 15)
             .await
     }
 
     /// CV status, applications, profiles and built PDFs from `GET /api/sjel-status/cv`.
     pub async fn cv(&self) -> ShellResult<crate::cv::CvView> {
-        self.json(Method::GET, "/api/sjel-status/cv", None, 20)
+        self.json(Method::GET, status_api::ROUTE_STATUS_CV, None, 20)
             .await
     }
 
@@ -186,23 +206,39 @@ impl Shell {
         req: &crate::cv::CvWriteRequest,
     ) -> ShellResult<crate::cv::CvWriteResult> {
         let body = serde_json::to_value(req).map_err(|_| ShellError::Unreadable)?;
-        self.json(Method::POST, "/api/sjel-status/cv", Some(body), 60)
+        self.json(Method::POST, status_api::ROUTE_STATUS_CV, Some(body), 60)
             .await
     }
 
     /// Read index status totals and indexed volumes via `GET /media/api/status`.
     pub async fn media_status(&self) -> ShellResult<crate::media::MediaStatus> {
-        self.json(Method::GET, "/media/api/status", None, 15).await
+        self.json(
+            Method::GET,
+            &proxied(media_api::PROXY_PREFIX, media_api::ROUTE_MEDIA_STATUS),
+            None,
+            15,
+        )
+        .await
     }
 
     /// Read the recent ingest runs via `GET /media/api/ingests`.
     pub async fn media_ingests(&self) -> ShellResult<crate::media::MediaIngestRunsResponse> {
-        self.json(Method::GET, "/media/api/ingests", None, 15).await
+        self.json(
+            Method::GET,
+            &proxied(media_api::PROXY_PREFIX, media_api::ROUTE_MEDIA_INGESTS),
+            None,
+            15,
+        )
+        .await
     }
 
     /// Read full details of one ingest run via `GET /media/api/ingests/{id}`.
     pub async fn media_ingest(&self, id: i64) -> ShellResult<crate::media::MediaIngestDetail> {
-        let path = format!("/media/api/ingests/{id}");
+        let path = proxied_id(
+            media_api::PROXY_PREFIX,
+            media_api::ROUTE_MEDIA_INGEST_BY_ID,
+            &id.to_string(),
+        );
         self.json(Method::GET, &path, None, 20).await
     }
 
@@ -213,7 +249,10 @@ impl Shell {
         after: i64,
     ) -> ShellResult<crate::media::ContentPage> {
         let path = super::with_query(
-            "/media/api/content/proposals",
+            &proxied(
+                media_api::PROXY_PREFIX,
+                media_api::ROUTE_MEDIA_CONTENT_PROPOSALS,
+            ),
             &[("state", state), ("after", &after.to_string())],
         );
         self.json(Method::GET, &path, None, 15).await
@@ -223,7 +262,11 @@ impl Shell {
     pub async fn media_content_detail(&self, id: i64) -> ShellResult<crate::media::ContentDetail> {
         self.json(
             Method::GET,
-            &format!("/media/api/content/proposals/{id}"),
+            &proxied_id(
+                media_api::PROXY_PREFIX,
+                media_api::ROUTE_MEDIA_CONTENT_PROPOSAL,
+                &id.to_string(),
+            ),
             None,
             20,
         )
@@ -239,7 +282,11 @@ impl Shell {
         let body = serde_json::to_value(decision).map_err(|_| ShellError::Unreadable)?;
         self.json(
             Method::POST,
-            &format!("/media/api/content/proposals/{id}/decision"),
+            &proxied_id(
+                media_api::PROXY_PREFIX,
+                media_api::ROUTE_MEDIA_CONTENT_DECISION,
+                &id.to_string(),
+            ),
             Some(body),
             20,
         )
@@ -262,13 +309,13 @@ impl Shell {
 
     /// Read what this machine still needs via `GET /api/sjel-status/setup`.
     pub async fn setup_plans(&self) -> ShellResult<crate::setup::SetupPlans> {
-        self.json(Method::GET, "/api/sjel-status/setup", None, 30)
+        self.json(Method::GET, setup_api::ROUTE_STATUS_SETUP, None, 30)
             .await
     }
 
     /// Check connection to primary via `GET /api/sjel-status/setup/verify`.
     pub async fn setup_verify(&self) -> ShellResult<crate::setup::SetupVerification> {
-        self.json(Method::GET, "/api/sjel-status/setup/verify", None, 30)
+        self.json(Method::GET, setup_api::ROUTE_STATUS_SETUP_VERIFY, None, 30)
             .await
     }
 
@@ -278,14 +325,24 @@ impl Shell {
         request: &crate::setup::SetupApplyRequest,
     ) -> ShellResult<crate::setup::SetupApplied> {
         let body = serde_json::to_value(request).unwrap_or(serde_json::Value::Null);
-        self.json(Method::POST, "/api/sjel-status/setup/apply", Some(body), 60)
-            .await
+        self.json(
+            Method::POST,
+            setup_api::ROUTE_STATUS_SETUP_APPLY,
+            Some(body),
+            60,
+        )
+        .await
     }
 
     /// List paired devices via `GET /devices/api/devices`.
     pub async fn setup_devices(&self) -> ShellResult<Vec<crate::setup::PairedDevice>> {
         match self
-            .json::<DevicesResp>(Method::GET, "/devices/api/devices", None, 10)
+            .json::<DevicesResp>(
+                Method::GET,
+                &proxied(devices_api::PROXY_PREFIX, devices_api::ROUTE_DEVICES),
+                None,
+                10,
+            )
             .await
         {
             Ok(resp) => Ok(resp.devices),
@@ -296,14 +353,18 @@ impl Shell {
     /// Revoke one device's key via `POST /devices/api/devices/{id}/revoke`. The answer is the
     /// device as the node now holds it, which is `revoked`.
     pub async fn setup_revoke_device(&self, id: &str) -> ShellResult<crate::setup::PairedDevice> {
-        let path = format!("/devices/api/devices/{id}/revoke");
+        let path = proxied_id(
+            devices_api::PROXY_PREFIX,
+            devices_api::ROUTE_DEVICE_REVOKE,
+            id,
+        );
         self.json(Method::POST, &path, Some(serde_json::json!({})), 15)
             .await
     }
 
     /// This node's Same-Wi-Fi listener via `GET /api/sjel-status/lan`, or `None` when it has none.
     pub async fn setup_lan(&self) -> ShellResult<crate::setup::LanStatus> {
-        self.json(Method::GET, "/api/sjel-status/lan", None, 10)
+        self.json(Method::GET, setup_api::ROUTE_STATUS_LAN, None, 10)
             .await
     }
 
@@ -311,7 +372,10 @@ impl Shell {
     pub async fn setup_create_challenge(&self) -> ShellResult<crate::setup::PairingChallenge> {
         self.json(
             Method::POST,
-            "/devices/api/pairing/challenges",
+            &proxied(
+                devices_api::PROXY_PREFIX,
+                devices_api::ROUTE_PAIRING_CHALLENGES,
+            ),
             Some(serde_json::json!({})),
             15,
         )
@@ -321,7 +385,15 @@ impl Shell {
     /// List pending join requests via `GET /devices/api/pairing/requests`.
     pub async fn setup_pending_joins(&self) -> ShellResult<Vec<crate::setup::SetupJoinRequest>> {
         match self
-            .json::<JoinsResp>(Method::GET, "/devices/api/pairing/requests", None, 10)
+            .json::<JoinsResp>(
+                Method::GET,
+                &proxied(
+                    devices_api::PROXY_PREFIX,
+                    devices_api::ROUTE_PAIRING_REQUESTS,
+                ),
+                None,
+                10,
+            )
             .await
         {
             Ok(resp) => Ok(resp.requests),
@@ -334,14 +406,22 @@ impl Shell {
         &self,
         id: &str,
     ) -> ShellResult<crate::setup::SetupJoinRequest> {
-        let path = format!("/devices/api/pairing/requests/{}/approve", id);
+        let path = proxied_id(
+            devices_api::PROXY_PREFIX,
+            devices_api::ROUTE_PAIRING_APPROVE,
+            id,
+        );
         self.json(Method::POST, &path, Some(serde_json::json!({})), 15)
             .await
     }
 
     /// Deny a device join request via `POST /devices/api/pairing/requests/{id}/deny`.
     pub async fn setup_deny_join(&self, id: &str) -> ShellResult<crate::setup::SetupJoinRequest> {
-        let path = format!("/devices/api/pairing/requests/{}/deny", id);
+        let path = proxied_id(
+            devices_api::PROXY_PREFIX,
+            devices_api::ROUTE_PAIRING_DENY,
+            id,
+        );
         self.json(Method::POST, &path, Some(serde_json::json!({})), 15)
             .await
     }
@@ -387,7 +467,7 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            "/api/sjel-status/upstreams/watch",
+            status_api::ROUTE_STATUS_UPSTREAMS_WATCH,
             Some(body),
             30,
         )
@@ -401,7 +481,7 @@ impl Shell {
         struct Envelope {
             hits: Vec<ServerHit>,
         }
-        let path = with_query("/api/sjel-status/search", &[("q", query)]);
+        let path = with_query(status_api::ROUTE_STATUS_SEARCH, &[("q", query)]);
         let res: Envelope = self.json(Method::GET, &path, None, 10).await?;
         Ok(res.hits)
     }
@@ -411,7 +491,7 @@ impl Shell {
         if id.is_empty() || !id.chars().all(|c| c.is_ascii_hexdigit()) {
             return Err(ShellError::Refused(400, Some("Not an approval id.".into())));
         }
-        let path = format!("/api/sjel-status/agent/approvals/{id}");
+        let path = status_api::ROUTE_STATUS_AGENT_APPROVAL.replace("{id}", id);
         let body = serde_json::json!({ "allow": allow });
         self.send(Method::POST, &path, Some(body), 5)
             .await
@@ -427,18 +507,23 @@ impl Shell {
             ));
         }
         let action = if running { "start" } else { "stop" };
-        let path = format!("/api/sjel-status/capabilities/{name}/{action}");
+        let path = format!("{}/{name}/{action}", status_api::ROUTE_STATUS_CAPABILITIES);
         self.send(Method::POST, &path, None, 60).await.map(drop)
     }
 
     pub async fn backups(&self) -> ShellResult<Backups> {
-        self.json(Method::GET, "/api/sjel-status/backups", None, 10)
+        self.json(Method::GET, status_api::ROUTE_STATUS_BACKUPS, None, 10)
             .await
     }
 
     pub async fn backup_targets(&self) -> ShellResult<Vec<crate::backup::BackupTargetRecord>> {
         let res: crate::backup::BackupTargetsResponse = self
-            .json(Method::GET, "/api/sjel-status/backup/targets", None, 10)
+            .json(
+                Method::GET,
+                status_api::ROUTE_STATUS_BACKUP_TARGETS,
+                None,
+                10,
+            )
             .await?;
         Ok(res.targets)
     }
@@ -447,7 +532,7 @@ impl Shell {
         &self,
         limit: usize,
     ) -> ShellResult<(Vec<crate::backup::BackupRunAttemptRecord>, usize)> {
-        let path = format!("/api/sjel-status/backup/runs?limit={limit}");
+        let path = format!("{}?limit={limit}", status_api::ROUTE_STATUS_BACKUP_RUNS);
         let res: crate::backup::BackupRunsResponse =
             self.json(Method::GET, &path, None, 10).await?;
         Ok((res.runs, res.running))
@@ -460,7 +545,7 @@ impl Shell {
         let body = serde_json::json!({ "target": target });
         self.json(
             Method::POST,
-            "/api/sjel-status/backup/verify",
+            status_api::ROUTE_STATUS_BACKUP_VERIFY,
             Some(body),
             60,
         )
@@ -478,7 +563,7 @@ impl Shell {
         });
         self.send(
             Method::POST,
-            "/api/sjel-status/backup/policy",
+            status_api::ROUTE_STATUS_BACKUP_POLICY,
             Some(body),
             10,
         )
@@ -498,7 +583,7 @@ impl Shell {
                 Some("Not a capability name.".into()),
             ));
         }
-        let path = format!("/api/sjel-status/capabilities/{name}/backup");
+        let path = format!("{}/{name}/backup", status_api::ROUTE_STATUS_CAPABILITIES);
         let body = target.map(|t| serde_json::json!({ "target": t }));
         self.send(Method::POST, &path, body, 10).await.map(drop)
     }
@@ -506,47 +591,80 @@ impl Shell {
     /// Sorts every file under `folder` without importing. Walks the whole tree, so a large
     /// archive takes seconds.
     pub async fn import_plan(&self, folder: &str) -> ShellResult<ImportPlan> {
-        let path = with_query("/import/api/import/plan", &[("folder", folder)]);
+        let path = with_query(
+            &proxied(import_api::PROXY_PREFIX, import_api::ROUTE_IMPORT_PLAN),
+            &[("folder", folder)],
+        );
         self.json(Method::GET, &path, None, 120).await
     }
 
     pub async fn import_status(&self, folder: &str) -> ShellResult<ImportStatus> {
-        let path = with_query("/import/api/import/status", &[("folder", folder)]);
+        let path = with_query(
+            &proxied(import_api::PROXY_PREFIX, import_api::ROUTE_IMPORT_STATUS),
+            &[("folder", folder)],
+        );
         self.json(Method::GET, &path, None, 10).await
     }
 
     /// Starts an import in the background. 409 while another runs.
     pub async fn import_start(&self, folder: &str) -> ShellResult<()> {
         let body = serde_json::json!({ "folder": folder });
-        self.send(Method::POST, "/import/api/import/runs", Some(body), 10)
-            .await
-            .map(drop)
+        self.send(
+            Method::POST,
+            &proxied(import_api::PROXY_PREFIX, import_api::ROUTE_IMPORT_RUNS),
+            Some(body),
+            10,
+        )
+        .await
+        .map(drop)
     }
 
     pub async fn import_current(&self) -> ShellResult<Option<ImportJob>> {
         let envelope: ImportJobEnvelope = self
-            .json(Method::GET, "/import/api/import/runs/current", None, 10)
+            .json(
+                Method::GET,
+                &proxied(
+                    import_api::PROXY_PREFIX,
+                    import_api::ROUTE_IMPORT_RUNS_CURRENT,
+                ),
+                None,
+                10,
+            )
             .await?;
         Ok(envelope.job)
     }
 
     pub async fn software_apps(&self) -> ShellResult<SoftwareApps> {
-        self.json(Method::GET, "/software/api/apps", None, 10).await
+        self.json(
+            Method::GET,
+            &proxied(software_api::PROXY_PREFIX, software_api::ROUTE_APPS),
+            None,
+            10,
+        )
+        .await
     }
 
     /// Scans now. Waits for the scan, which takes tens of seconds on a full /Applications.
     pub async fn software_scan(&self) -> ShellResult<()> {
         let body = serde_json::json!({});
-        self.send(Method::POST, "/software/api/apps/scan", Some(body), 120)
-            .await
-            .map(drop)
+        self.send(
+            Method::POST,
+            &proxied(software_api::PROXY_PREFIX, software_api::ROUTE_APPS_SCAN),
+            Some(body),
+            120,
+        )
+        .await
+        .map(drop)
     }
 
     /// Appends a decision about one app. `decision` is `use`, `remove`, `replace` or `rebuild`.
     /// Uninstalls a row whose decision is `remove`. Waits for it: a cask or a large app takes a
     /// while, and the service rescans afterwards.
     pub async fn software_uninstall(&self, bundle_id: &str) -> ShellResult<()> {
-        let path = format!("/software/api/apps/{}/uninstall", software_key(bundle_id)?);
+        let path = proxied(
+            software_api::PROXY_PREFIX,
+            &software_api::ROUTE_APP_UNINSTALL.replace("{bundle_id}", &software_key(bundle_id)?),
+        );
         let body = serde_json::json!({});
         self.send(Method::POST, &path, Some(body), 300)
             .await
@@ -559,7 +677,10 @@ impl Shell {
         decision: &str,
         note: &str,
     ) -> ShellResult<()> {
-        let path = format!("/software/api/apps/{}/decision", software_key(bundle_id)?);
+        let path = proxied(
+            software_api::PROXY_PREFIX,
+            &software_api::ROUTE_APP_DECISION.replace("{bundle_id}", &software_key(bundle_id)?),
+        );
         let body = serde_json::json!({ "decision": decision, "note": note });
         self.send(Method::POST, &path, Some(body), 10)
             .await
@@ -772,7 +893,7 @@ impl Shell {
 
     /// `GET /api/sjel-status/credentials`: every declared credential with its presence. No value.
     pub async fn credentials(&self) -> ShellResult<Vec<crate::accounts::CredentialRow>> {
-        self.json(Method::GET, "/api/sjel-status/credentials", None, 10)
+        self.json(Method::GET, status_api::ROUTE_STATUS_CREDENTIALS, None, 10)
             .await
     }
 
@@ -995,7 +1116,10 @@ impl Shell {
 
     /// Queues an instruction for the next model request in an active Ask run.
     pub async fn steer_ask(&self, run_id: u64, message: &str) -> ShellResult<()> {
-        let path = format!("/assistant/api/ask/{run_id}/steer");
+        let path = proxied(
+            assistant_api::PROXY_PREFIX,
+            &assistant_api::ROUTE_STEER.replace("{run_id}", &run_id.to_string()),
+        );
         let body = serde_json::json!({ "message": message });
         self.send(Method::POST, &path, Some(body), 5)
             .await
@@ -1004,7 +1128,10 @@ impl Shell {
 
     /// Requests cooperative cancellation of an active Ask run.
     pub async fn stop_ask(&self, run_id: u64) -> ShellResult<()> {
-        let path = format!("/assistant/api/ask/{run_id}/stop");
+        let path = proxied(
+            assistant_api::PROXY_PREFIX,
+            &assistant_api::ROUTE_STOP.replace("{run_id}", &run_id.to_string()),
+        );
         self.send(Method::POST, &path, Some(serde_json::json!({})), 5)
             .await
             .map(drop)

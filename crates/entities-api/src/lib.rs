@@ -21,6 +21,27 @@ pub const ROUTE_LOCATED: &str = "/api/located";
 pub const ROUTE_HOME: &str = "/api/home";
 pub const ROUTE_RESOLVE: &str = "/api/resolve";
 pub const ROUTE_SOURCES: &str = "/api/entities/{id}/sources";
+pub const ROUTE_ENTITY_FACTS: &str = "/api/entities/{id}/facts";
+pub const ROUTE_ENTITY_FACT_BY_ID: &str = "/api/entities/{id}/facts/{fact_id}";
+
+/// Every route constant above. The server test checks each one against its manifest.
+pub const ALL_ROUTES: [&str; 12] = [
+    ROUTE_ENTITIES,
+    ROUTE_ENTITY_BY_ID,
+    ROUTE_FIELDS,
+    ROUTE_DUPLICATES,
+    ROUTE_DUPLICATES_DISTINCT,
+    ROUTE_MERGE,
+    ROUTE_LOCATED,
+    ROUTE_HOME,
+    ROUTE_RESOLVE,
+    ROUTE_SOURCES,
+    ROUTE_ENTITY_FACTS,
+    ROUTE_ENTITY_FACT_BY_ID,
+];
+
+/// The path prefix under which the status proxy serves these routes.
+pub const PROXY_PREFIX: &str = "/entities";
 
 // ============================================================================
 // Core Vocabularies

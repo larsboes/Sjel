@@ -1334,6 +1334,16 @@ mod tests {
     /// source, so adding a `.route()` without a manifest entry fails here
     /// (`libs/route-manifest/README.md`).
     #[test]
+    fn every_contract_route_is_declared() {
+        for route in places_api::ALL_ROUTES {
+            assert!(
+                ROUTES.iter().any(|declared| declared.path == route),
+                "places-api names {route}, which the manifest does not declare"
+            );
+        }
+    }
+
+    #[test]
     fn the_manifest_covers_every_served_route() {
         assert!(
             route_manifest::undeclared_routes(include_str!("server.rs"), ROUTES).is_empty(),

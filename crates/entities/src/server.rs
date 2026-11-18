@@ -784,6 +784,17 @@ mod route_manifest_tests {
     use super::*;
 
     #[test]
+
+    fn every_contract_route_is_declared() {
+        for route in entities_api::ALL_ROUTES {
+            assert!(
+                ROUTES.iter().any(|declared| declared.path == route),
+                "entities-api names {route}, which the manifest does not declare"
+            );
+        }
+    }
+
+    #[test]
     fn the_manifest_covers_every_served_route() {
         let missing = route_manifest::undeclared_routes(include_str!("server.rs"), ROUTES);
         assert!(missing.is_empty(), "undeclared routes: {missing:?}");

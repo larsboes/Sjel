@@ -916,20 +916,6 @@ async fn candidate_verdicts(
     }
 }
 
-#[derive(serde::Deserialize)]
-struct MaterializeBody {
-    /// The entries this trip is made of. Explicit rather than "the draft at
-    /// place X": drafts are recomputed per request, so naming one by position
-    /// would race any edit made between reading and confirming.
-    entry_ids: Vec<String>,
-    #[serde(default)]
-    title: Option<String>,
-    /// Attach the entries to this existing plan (a draft's `suggested_plan_id`) instead of
-    /// the plan the ledger names or a new one.
-    #[serde(default)]
-    plan_id: Option<String>,
-}
-
 /// Writes a plan's committed travel back into the calendar.
 ///
 /// The loop only ran one way. Calendar could turn clustered entries into a
@@ -1118,7 +1104,7 @@ async fn sync_trip_plan(State(state): State<AppState>, Path(plan_id): Path<Strin
 /// twice returns the plan that exists instead of making a second one.
 async fn materialize_trip(
     State(state): State<AppState>,
-    Json(body): Json<MaterializeBody>,
+    Json(body): Json<calendar_api::TripMaterializeRequest>,
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
     let config = state.config.clone();
@@ -2075,6 +2061,16 @@ mod route_manifest_tests {
     /// A stale manifest is worse than none, because it gets believed. This
     /// reads the router's own source, so adding a `.route()` without a summary
     /// fails here rather than shipping a surface that lies about itself.
+    #[test]
+    fn every_contract_route_is_declared() {
+        for route in calendar_api::ALL_ROUTES {
+            assert!(
+                ROUTES.iter().any(|declared| declared.path == route),
+                "calendar-api names {route}, which the manifest does not declare"
+            );
+        }
+    }
+
     #[test]
     fn the_manifest_covers_every_served_route() {
         let missing = route_manifest::undeclared_routes(include_str!("server.rs"), ROUTES);

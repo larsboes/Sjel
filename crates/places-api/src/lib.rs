@@ -26,15 +26,36 @@ pub const ROUTE_PLACES_LAYER_SPEND: &str = "/api/layers/spend";
 pub const ROUTE_PLACES_LAYER_TRAVEL: &str = "/api/layers/travel";
 pub const ROUTE_PLACES_LAYER_PEOPLE: &str = "/api/layers/people";
 pub const ROUTE_PLACES_LAYER_PHOTOS: &str = "/api/layers/photos";
-pub const ROUTE_PLACES_LAYER_COMPANIONS: &str = "/api/layers/companions";
-pub const ROUTE_PLACES_LAYER_COMPOSITE: &str = "/api/layers/composite";
 pub const ROUTE_PLACES_UNPLACED: &str = "/api/unplaced";
 pub const ROUTE_PLACES_UNPLACED_ASSIGN: &str = "/api/unplaced/assign";
 pub const ROUTE_PLACES_PEOPLE_PROPOSALS: &str = "/api/people/proposals";
 pub const ROUTE_PLACES_PEOPLE_PLACES: &str = "/api/people/places";
 pub const ROUTE_PLACES_PEOPLE_PRESENCE: &str = "/api/people/presence";
-pub const ROUTE_PLACES_REVIEWS: &str = "/api/reviews";
-pub const ROUTE_PLACES_REVIEWS_DECIDE: &str = "/api/reviews/decide";
+
+/// Every route constant above. The server test checks each one against its manifest.
+pub const ALL_ROUTES: [&str; 18] = [
+    ROUTE_PLACES_HEALTH,
+    ROUTE_PLACES_READY,
+    ROUTE_PLACES_ROUTES,
+    ROUTE_PLACES_LINKS,
+    ROUTE_PLACES_PEOPLE_OPEN,
+    ROUTE_PLACES_PEOPLE_DECIDE,
+    ROUTE_PLACES,
+    ROUTE_PLACES_VISITS,
+    ROUTE_PLACES_GEOCODE,
+    ROUTE_PLACES_LAYER_SPEND,
+    ROUTE_PLACES_LAYER_TRAVEL,
+    ROUTE_PLACES_LAYER_PEOPLE,
+    ROUTE_PLACES_LAYER_PHOTOS,
+    ROUTE_PLACES_UNPLACED,
+    ROUTE_PLACES_UNPLACED_ASSIGN,
+    ROUTE_PLACES_PEOPLE_PROPOSALS,
+    ROUTE_PLACES_PEOPLE_PLACES,
+    ROUTE_PLACES_PEOPLE_PRESENCE,
+];
+
+/// The path prefix under which the status proxy serves these routes.
+pub const PROXY_PREFIX: &str = "/places";
 
 // ============================================================================
 // Core Place & Link Models

@@ -319,6 +319,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_contract_route_is_declared() {
+        for route in devices_api::ALL_ROUTES {
+            assert!(
+                ROUTES.iter().any(|declared| declared.path == route),
+                "devices-api names {route}, which the manifest does not declare"
+            );
+        }
+    }
+
+    #[test]
     fn route_manifest_contains_pairing_and_revocation() {
         assert!(ROUTES
             .iter()

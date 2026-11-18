@@ -307,6 +307,16 @@ mod tests {
     use tower::util::ServiceExt;
 
     #[test]
+    fn every_contract_route_is_declared() {
+        for route in software_api::ALL_ROUTES {
+            assert!(
+                ROUTES.iter().any(|declared| declared.path == route),
+                "software-api names {route}, which the manifest does not declare"
+            );
+        }
+    }
+
+    #[test]
     fn manifest_covers_routes_and_write_schema() {
         let source = include_str!("main.rs");
         assert!(route_manifest::undeclared_routes(source, ROUTES).is_empty());

@@ -26,6 +26,26 @@ pub const ROUTE_PEOPLE_OPEN: &str = "/api/people/open";
 pub const ROUTE_PEOPLE_DECIDE: &str = "/api/people/decide";
 pub const ROUTE_LINKS: &str = "/api/links";
 
+/// Every route constant above. The server test checks each one against its manifest.
+pub const ALL_ROUTES: [&str; 13] = [
+    ROUTE_PLANS,
+    ROUTE_PLAN_BY_ID,
+    ROUTE_PLAN_COST,
+    ROUTE_PLAN_ITEMS,
+    ROUTE_PLAN_ITEM_BY_ID,
+    ROUTE_PLAN_ITEM_FIELDS,
+    ROUTE_PLAN_RESOLVE_PLACES,
+    ROUTE_PLAN_RETROSPECTIVE,
+    ROUTE_PLAN_OUTCOME,
+    ROUTE_BASES,
+    ROUTE_PEOPLE_OPEN,
+    ROUTE_PEOPLE_DECIDE,
+    ROUTE_LINKS,
+];
+
+/// The path prefix under which the status proxy serves these routes.
+pub const PROXY_PREFIX: &str = "/trips";
+
 // ============================================================================
 // Core Trip and Place Types
 // ============================================================================

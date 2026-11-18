@@ -16,6 +16,8 @@ pub const ROUTE_GENERATE: &str = "/api/generate";
 pub const ROUTE_STEER: &str = "/api/ask/{run_id}/steer";
 pub const ROUTE_STOP: &str = "/api/ask/{run_id}/stop";
 
+/// The path prefix under which the status proxy serves these routes.
+pub const PROXY_PREFIX: &str = "/assistant";
 pub const PROXY_ROUTE_ASSISTANT_ASK: &str = "/assistant/api/ask";
 pub const PROXY_ROUTE_ASSISTANT_ASK_STREAM: &str = "/assistant/api/ask/stream";
 pub const PROXY_ROUTE_ASSISTANT_PROVIDERS: &str = "/assistant/api/ask/providers";

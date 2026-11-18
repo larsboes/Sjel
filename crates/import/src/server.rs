@@ -258,6 +258,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_contract_route_is_declared() {
+        for route in import_api::ALL_ROUTES {
+            assert!(
+                ROUTES.iter().any(|declared| declared.path == route),
+                "import-api names {route}, which the manifest does not declare"
+            );
+        }
+    }
+
+    #[test]
     fn manifest_covers_routes_and_write_bodies() {
         assert!(route_manifest::undeclared_routes(include_str!("server.rs"), ROUTES).is_empty());
         assert!(route_manifest::bodies_without_schemas(ROUTES).is_empty());

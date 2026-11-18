@@ -55,30 +55,6 @@ pub const ALL_ROUTES: [&str; 17] = [
 /// The path prefix under which the status proxy serves these routes.
 pub const PROXY_PREFIX: &str = "/inventory";
 
-/// `route` behind the status proxy.
-pub fn proxy_route(route: &str) -> String {
-    format!("{PROXY_PREFIX}{route}")
-}
-
-/// `route` behind the status proxy, with `{id}` replaced by an id the caller already encoded.
-pub fn proxy_route_id(route: &str, encoded_id: &str) -> String {
-    proxy_route(&route.replace("{id}", encoded_id))
-}
-
-#[cfg(test)]
-mod route_tests {
-    use super::*;
-
-    #[test]
-    fn proxy_routes_sit_under_the_prefix() {
-        assert_eq!(proxy_route(ROUTE_WISH_GROUPS), "/inventory/api/wish-groups");
-        assert_eq!(
-            proxy_route_id(ROUTE_WISH_GROUP_ITEMS, "desk%20lamp"),
-            "/inventory/api/wish-groups/desk%20lamp/items"
-        );
-    }
-}
-
 // ============================================================================
 // Enums
 // ============================================================================

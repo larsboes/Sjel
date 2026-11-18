@@ -26,10 +26,10 @@ const RECENT_RUNS: i64 = 20;
 
 /// The manifest served at `GET /routes`.
 pub const ROUTES: &[route_manifest::Route] = &[
-    route_manifest::get("GET", "/api/content/proposals", "Operator-only content review queue. Filters: state and after; at most 50 items and a next_after cursor. No previews in list rows."),
-    route_manifest::get("GET", "/api/content/proposals/{id}", "Operator-only evidence, private PNG previews, raw candidates and approved metadata for one immutable proposal."),
+    route_manifest::get("GET", media_api::ROUTE_MEDIA_CONTENT_PROPOSALS, "Operator-only content review queue. Filters: state and after; at most 50 items and a next_after cursor. No previews in list rows."),
+    route_manifest::get("GET", media_api::ROUTE_MEDIA_CONTENT_PROPOSAL, "Operator-only evidence, private PNG previews, raw candidates and approved metadata for one immutable proposal."),
     route_manifest::Route {
-        method: "POST", path: "/api/content/proposals/{id}/decision",
+        method: "POST", path: media_api::ROUTE_MEDIA_CONTENT_DECISION,
         summary: "Persist explicit accepted tags/collections or rejection for the exact evidence fingerprint. Idempotent identical retries; conflicting decisions refuse. Originals never change.",
         request_schema: Some(route_manifest::schema_of::<media_api::ContentDecision>),
     },

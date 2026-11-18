@@ -74,8 +74,13 @@ impl Shell {
             DuplicateCandidateKind::Part => "part",
         });
         let kind = kind.map_or_else(String::new, |kind| format!("&kind={kind}"));
-        let path =
-            format!("/documents/api/documents/duplicates?limit={limit}&offset={offset}{kind}");
+        let path = format!(
+            "{}?limit={limit}&offset={offset}{kind}",
+            proxied(
+                documents_api::PROXY_PREFIX,
+                documents_api::ROUTE_DOCUMENT_DUPLICATES
+            )
+        );
         self.json(Method::GET, &path, None, 30).await
     }
 
@@ -85,7 +90,10 @@ impl Shell {
         let response: DuplicateDecisionResponse = self
             .json(
                 Method::POST,
-                "/documents/api/documents/duplicates/review",
+                &proxied(
+                    documents_api::PROXY_PREFIX,
+                    documents_api::ROUTE_DOCUMENT_DUPLICATES_REVIEW,
+                ),
                 Some(body),
                 30,
             )
@@ -109,7 +117,11 @@ impl Shell {
         let _: serde_json::Value = self
             .json(
                 Method::POST,
-                &format!("/documents/api/documents/{id}/analyze"),
+                &proxied_id(
+                    documents_api::PROXY_PREFIX,
+                    documents_api::ROUTE_DOCUMENT_ANALYZE,
+                    id,
+                ),
                 Some(serde_json::json!({})),
                 120,
             )
@@ -126,11 +138,14 @@ impl Shell {
         if !is_sha256(id) {
             return Err(ShellError::Refused(400, Some("Not a document id.".into())));
         }
-        let body = serde_json::to_value(request).map_err(|_| ShellError::Unreadable)?;
         self.json(
             Method::POST,
-            &format!("/documents/api/documents/{id}/split"),
-            Some(body),
+            &proxied_id(
+                documents_api::PROXY_PREFIX,
+                documents_api::ROUTE_DOCUMENT_SPLIT,
+                id,
+            ),
+            Some(body(request)?),
             30,
         )
         .await
@@ -143,7 +158,11 @@ impl Shell {
         }
         self.json(
             Method::GET,
-            &format!("/documents/api/documents/{id}/children"),
+            &proxied_id(
+                documents_api::PROXY_PREFIX,
+                documents_api::ROUTE_DOCUMENT_CHILDREN,
+                id,
+            ),
             None,
             10,
         )
@@ -165,8 +184,13 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &format!("/documents/api/documents/{id}/proposals/{proposal_id}/review"),
-            Some(serde_json::json!({"outcome": outcome})),
+            &proxied_id(
+                documents_api::PROXY_PREFIX,
+                documents_api::ROUTE_DOCUMENT_PROPOSAL_REVIEW,
+                id,
+            )
+            .replace("{proposal_id}", proposal_id),
+            Some(body(&documents_api::ProposalReviewRequest { outcome })?),
             10,
         )
         .await
@@ -182,7 +206,11 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &format!("/documents/api/documents/{id}/proposals/regenerate"),
+            &proxied_id(
+                documents_api::PROXY_PREFIX,
+                documents_api::ROUTE_DOCUMENT_PROPOSALS_REGENERATE,
+                id,
+            ),
             Some(serde_json::json!({})),
             10,
         )
@@ -198,7 +226,11 @@ impl Shell {
         }
         self.json(
             Method::POST,
-            &format!("/documents/api/documents/{id}/proposals/model"),
+            &proxied_id(
+                documents_api::PROXY_PREFIX,
+                documents_api::ROUTE_DOCUMENT_PROPOSALS_MODEL,
+                id,
+            ),
             Some(serde_json::json!({})),
             55,
         )
@@ -214,11 +246,18 @@ impl Shell {
         if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(ShellError::Refused(400, Some("Not a document id.".into())));
         }
-        let body = serde_json::json!({"category": category, "project": project});
+        let request = documents_api::ReviewRequest {
+            category: category.to_owned(),
+            project: project.map(str::to_owned),
+        };
         self.json(
             Method::PATCH,
-            &format!("/documents/api/documents/{id}"),
-            Some(body),
+            &proxied_id(
+                documents_api::PROXY_PREFIX,
+                documents_api::ROUTE_DOCUMENT_BY_ID,
+                id,
+            ),
+            Some(body(&request)?),
             10,
         )
         .await
@@ -230,7 +269,11 @@ impl Shell {
         }
         self.json(
             Method::DELETE,
-            &format!("/documents/api/documents/{id}"),
+            &proxied_id(
+                documents_api::PROXY_PREFIX,
+                documents_api::ROUTE_DOCUMENT_BY_ID,
+                id,
+            ),
             None,
             10,
         )
@@ -274,7 +317,10 @@ impl Shell {
         if bytes.len() > MAX_DOCUMENT_BYTES {
             return Err(too_large());
         }
-        let path = with_query("/documents/api/documents", &[("filename", filename)]);
+        let path = with_query(
+            &proxied(documents_api::PROXY_PREFIX, documents_api::ROUTE_DOCUMENTS),
+            &[("filename", filename)],
+        );
         let response = self
             .send_payload(Method::POST, &path, Some(Payload::Bytes(bytes)), 60)
             .await?;
@@ -289,13 +335,21 @@ fn documents_path(offset: usize, query: Option<&str>) -> String {
     if let Some(query) = query {
         pairs.push(("q", query));
     }
-    with_query("/documents/api/documents", &pairs)
+    with_query(
+        &proxied(documents_api::PROXY_PREFIX, documents_api::ROUTE_DOCUMENTS),
+        &pairs,
+    )
 }
 
 /// The detail path of a document, or `None` when `id` is not a SHA-256 in hex.
 fn document_path(id: &str) -> Option<String> {
-    (id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()))
-        .then(|| format!("/documents/api/documents/{id}"))
+    (id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit())).then(|| {
+        proxied_id(
+            documents_api::PROXY_PREFIX,
+            documents_api::ROUTE_DOCUMENT_BY_ID,
+            id,
+        )
+    })
 }
 
 impl crate::device::Source {

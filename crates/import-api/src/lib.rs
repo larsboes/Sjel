@@ -15,6 +15,17 @@ pub const ROUTE_IMPORT_STATUS: &str = "/api/import/status";
 pub const ROUTE_IMPORT_RUNS_CURRENT: &str = "/api/import/runs/current";
 pub const ROUTE_IMPORT_RUNS: &str = "/api/import/runs";
 
+/// Every route constant above. The server test checks each one against its manifest.
+pub const ALL_ROUTES: [&str; 4] = [
+    ROUTE_IMPORT_PLAN,
+    ROUTE_IMPORT_STATUS,
+    ROUTE_IMPORT_RUNS_CURRENT,
+    ROUTE_IMPORT_RUNS,
+];
+
+/// The path prefix under which the status proxy serves these routes.
+pub const PROXY_PREFIX: &str = "/import";
+
 // ============================================================================
 // Core Models
 // ============================================================================

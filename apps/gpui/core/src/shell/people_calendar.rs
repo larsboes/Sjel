@@ -21,7 +21,11 @@ impl Shell {
         }
         self.json(
             Method::GET,
-            &format!("/calendar/api/entries/{id}"),
+            &proxied_id(
+                calendar_api::PROXY_PREFIX,
+                calendar_api::ROUTE_ENTRY_BY_ID,
+                id,
+            ),
             None,
             10,
         )
@@ -29,7 +33,13 @@ impl Shell {
     }
 
     pub async fn travel_plans(&self) -> ShellResult<Vec<crate::travel::Plan>> {
-        self.json(Method::GET, "/trips/api/plans", None, 10).await
+        self.json(
+            Method::GET,
+            &proxied(trips_api::PROXY_PREFIX, trips_api::ROUTE_PLANS),
+            None,
+            10,
+        )
+        .await
     }
 
     /// A read from transit. Only `/transit/api/` paths, which `travel::connections` builds.
@@ -73,7 +83,12 @@ impl Shell {
     /// `POST /trips/api/plans` with a body from [`crate::travel::edit::TripDraft::body`].
     pub async fn trip_create(&self, body: serde_json::Value) -> ShellResult<crate::travel::Plan> {
         let plan: crate::travel::Plan = self
-            .json(Method::POST, "/trips/api/plans", Some(body), 10)
+            .json(
+                Method::POST,
+                &proxied(trips_api::PROXY_PREFIX, trips_api::ROUTE_PLANS),
+                Some(body),
+                10,
+            )
             .await?;
         self.trip_calendar_sync(&plan.id).await;
         Ok(plan)
@@ -175,7 +190,7 @@ impl Shell {
         self.json(
             Method::POST,
             &path,
-            Some(serde_json::json!({ "refresh": refresh })),
+            Some(body(&trips_api::ResolvePlacesRequest { refresh })?),
             30,
         )
         .await
@@ -184,14 +199,12 @@ impl Shell {
     /// Calendar mirrors stages and booking deadlines only when asked. Best effort: the trip write
     /// already succeeded.
     async fn trip_calendar_sync(&self, plan: &str) {
-        let Ok(mut url) = reqwest::Url::parse("http://localhost/calendar/api/trip-plans/") else {
-            return;
-        };
-        if let Ok(mut segments) = url.path_segments_mut() {
-            segments.pop_if_empty().push(plan).push("sync");
-        }
+        let path = proxied(
+            calendar_api::PROXY_PREFIX,
+            &calendar_api::ROUTE_TRIP_PLANS_SYNC.replace("{plan_id}", &segment(plan)),
+        );
         let _ = self
-            .send(Method::POST, url.path(), Some(serde_json::json!({})), 10)
+            .send(Method::POST, &path, Some(serde_json::json!({})), 10)
             .await;
     }
 
@@ -203,9 +216,17 @@ impl Shell {
         &self,
         query: &str,
     ) -> ShellResult<Option<crate::travel::Coordinate>> {
-        let body = serde_json::json!({ "query": query });
+        let request = places_api::GeocodeRequest {
+            query: Some(query.to_owned()),
+            ..places_api::GeocodeRequest::default()
+        };
         let answer: places_api::GeocodeResponse = self
-            .json(Method::POST, "/places/api/geocode", Some(body), 20)
+            .json(
+                Method::POST,
+                &proxied(places_api::PROXY_PREFIX, places_api::ROUTE_PLACES_GEOCODE),
+                Some(body(&request)?),
+                20,
+            )
             .await?;
         Ok(answer
             .place
@@ -213,7 +234,10 @@ impl Shell {
     }
     /// Entries overlapping `[from, to)`, both `YYYY-MM-DD`: `to` is exclusive.
     pub async fn calendar(&self, from: &str, to: &str) -> ShellResult<Vec<CalendarEntry>> {
-        let path = format!("/calendar/api/entries?from={from}&to={to}");
+        let path = format!(
+            "{}?from={from}&to={to}",
+            proxied(calendar_api::PROXY_PREFIX, calendar_api::ROUTE_ENTRIES)
+        );
         self.json(Method::GET, &path, None, 5).await
     }
 
@@ -223,13 +247,24 @@ impl Shell {
         from: &str,
         to: &str,
     ) -> ShellResult<Vec<CalendarEntry>> {
-        let path = with_query("/calendar/api/proposals", &[("from", from), ("to", to)]);
+        let path = with_query(
+            &proxied(calendar_api::PROXY_PREFIX, calendar_api::ROUTE_PROPOSALS),
+            &[("from", from), ("to", to)],
+        );
         self.json(Method::GET, &path, None, 10).await
     }
 
     pub async fn calendar_google_exports(&self) -> ShellResult<Vec<CalendarGoogleExportOptIn>> {
-        self.json(Method::GET, "/calendar/api/google/exports", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            &proxied(
+                calendar_api::PROXY_PREFIX,
+                calendar_api::ROUTE_GOOGLE_EXPORTS,
+            ),
+            None,
+            10,
+        )
+        .await
     }
 
     /// Dry-run previews the approved queue; a real run is requested separately by the operator.
@@ -239,7 +274,10 @@ impl Shell {
     ) -> ShellResult<CalendarGoogleExportReport> {
         self.json(
             Method::POST,
-            "/calendar/api/google/export",
+            &proxied(
+                calendar_api::PROXY_PREFIX,
+                calendar_api::ROUTE_GOOGLE_EXPORT,
+            ),
             Some(serde_json::json!({ "dry_run": dry_run })),
             60,
         )
@@ -255,7 +293,11 @@ impl Shell {
         }
         self.json(
             Method::PUT,
-            &format!("/calendar/api/entries/{id}/google-export"),
+            &proxied_id(
+                calendar_api::PROXY_PREFIX,
+                calendar_api::ROUTE_GOOGLE_ENTRY_EXPORT,
+                id,
+            ),
             Some(serde_json::json!({})),
             10,
         )
@@ -271,7 +313,11 @@ impl Shell {
         }
         self.json::<CalendarGoogleExportOptOut>(
             Method::DELETE,
-            &format!("/calendar/api/entries/{id}/google-export"),
+            &proxied_id(
+                calendar_api::PROXY_PREFIX,
+                calendar_api::ROUTE_GOOGLE_ENTRY_EXPORT,
+                id,
+            ),
             None,
             10,
         )
@@ -302,7 +348,11 @@ impl Shell {
         }
         self.json(
             Method::PATCH,
-            &format!("/calendar/api/entries/{id}"),
+            &proxied_id(
+                calendar_api::PROXY_PREFIX,
+                calendar_api::ROUTE_ENTRY_BY_ID,
+                id,
+            ),
             Some(body),
             10,
         )
@@ -315,7 +365,7 @@ impl Shell {
         to: &str,
     ) -> ShellResult<crate::calendar::TripDrafts> {
         let path = with_query(
-            "/calendar/api/trip-drafts",
+            &proxied(calendar_api::PROXY_PREFIX, calendar_api::ROUTE_TRIP_DRAFTS),
             &[("from", from), ("to", to), ("max_gap_days", "5")],
         );
         self.json(Method::GET, &path, None, 10).await
@@ -329,11 +379,15 @@ impl Shell {
     ) -> ShellResult<crate::calendar::TripMaterialization> {
         self.json(
             Method::POST,
-            "/calendar/api/trip-drafts/materialize",
-            Some(serde_json::json!({
-                "entry_ids": entry_ids,
-                "title": (!title.trim().is_empty()).then_some(title.trim()),
-            })),
+            &proxied(
+                calendar_api::PROXY_PREFIX,
+                calendar_api::ROUTE_TRIP_DRAFTS_MATERIALIZE,
+            ),
+            Some(body(&calendar_api::TripMaterializeRequest {
+                entry_ids: entry_ids.to_vec(),
+                title: (!title.trim().is_empty()).then(|| title.trim().to_owned()),
+                plan_id: None,
+            })?),
             30,
         )
         .await
@@ -354,7 +408,10 @@ impl Shell {
             ("to", to.to_owned()),
         ];
         let path = with_query(
-            "/places/api/people/presence",
+            &proxied(
+                places_api::PROXY_PREFIX,
+                places_api::ROUTE_PLACES_PEOPLE_PRESENCE,
+            ),
             &pairs
                 .iter()
                 .map(|(key, value)| (*key, value.as_str()))
@@ -368,8 +425,13 @@ impl Shell {
         &self,
         body: serde_json::Value,
     ) -> ShellResult<CalendarEntry> {
-        self.json(Method::POST, "/calendar/api/entries", Some(body), 10)
-            .await
+        self.json(
+            Method::POST,
+            &proxied(calendar_api::PROXY_PREFIX, calendar_api::ROUTE_ENTRIES),
+            Some(body),
+            10,
+        )
+        .await
     }
 
     pub async fn delete_calendar_entry(&self, id: &str) -> ShellResult<()> {
@@ -382,7 +444,11 @@ impl Shell {
         }
         self.send(
             Method::DELETE,
-            &format!("/calendar/api/entries/{id}"),
+            &proxied_id(
+                calendar_api::PROXY_PREFIX,
+                calendar_api::ROUTE_ENTRY_BY_ID,
+                id,
+            ),
             None,
             10,
         )
@@ -398,7 +464,10 @@ impl Shell {
                 pairs.push(("q", q));
             }
         }
-        let path = with_query("/entities/api/entities", &pairs);
+        let path = with_query(
+            &proxied(entities_api::PROXY_PREFIX, entities_api::ROUTE_ENTITIES),
+            &pairs,
+        );
         #[derive(Deserialize)]
         struct Envelope {
             entities: Vec<EntityRecord>,
@@ -413,22 +482,35 @@ impl Shell {
         struct Envelope {
             fields: Vec<EntityField>,
         }
-        let path = with_query("/entities/api/fields", &[("kind", kind)]);
+        let path = with_query(
+            &proxied(entities_api::PROXY_PREFIX, entities_api::ROUTE_FIELDS),
+            &[("kind", kind)],
+        );
         let res: Envelope = self.json(Method::GET, &path, None, 10).await?;
         Ok(res.fields)
     }
 
     /// Declares a new field on a kind (`POST /entities/api/fields`). An existing key is refused.
     pub async fn entity_declare_field(&self, body: serde_json::Value) -> ShellResult<EntityField> {
-        self.json(Method::POST, "/entities/api/fields", Some(body), 10)
-            .await
+        self.json(
+            Method::POST,
+            &proxied(entities_api::PROXY_PREFIX, entities_api::ROUTE_FIELDS),
+            Some(body),
+            10,
+        )
+        .await
     }
 
     /// Creates an entity (`POST /entities/api/entities`). Every key in `values` must be a field
     /// the kind declares, which is why the form offers the registry's own list.
     pub async fn entity_create(&self, body: serde_json::Value) -> ShellResult<EntityRecord> {
-        self.json(Method::POST, "/entities/api/entities", Some(body), 10)
-            .await
+        self.json(
+            Method::POST,
+            &proxied(entities_api::PROXY_PREFIX, entities_api::ROUTE_ENTITIES),
+            Some(body),
+            10,
+        )
+        .await
     }
 
     /// Changes an entity (`PATCH /entities/api/entities/:id`). An absent key is left alone and a
@@ -440,7 +522,11 @@ impl Shell {
     ) -> ShellResult<EntityRecord> {
         self.json(
             Method::PATCH,
-            &format!("/entities/api/entities/{id}"),
+            &proxied_id(
+                entities_api::PROXY_PREFIX,
+                entities_api::ROUTE_ENTITY_BY_ID,
+                id,
+            ),
             Some(body),
             10,
         )
@@ -451,7 +537,11 @@ impl Shell {
     pub async fn entity_delete(&self, id: &str) -> ShellResult<()> {
         self.send(
             Method::DELETE,
-            &format!("/entities/api/entities/{id}"),
+            &proxied_id(
+                entities_api::PROXY_PREFIX,
+                entities_api::ROUTE_ENTITY_BY_ID,
+                id,
+            ),
             None,
             10,
         )
@@ -473,7 +563,11 @@ impl Shell {
         let added: Added = self
             .json(
                 Method::POST,
-                &format!("/entities/api/entities/{id}/facts"),
+                &proxied_id(
+                    entities_api::PROXY_PREFIX,
+                    entities_api::ROUTE_ENTITY_FACTS,
+                    id,
+                ),
                 Some(body),
                 15,
             )
@@ -485,7 +579,12 @@ impl Shell {
     pub async fn entity_fact_delete(&self, id: &str, fact: &str) -> ShellResult<()> {
         self.send(
             Method::DELETE,
-            &format!("/entities/api/entities/{id}/facts/{fact}"),
+            &proxied_id(
+                entities_api::PROXY_PREFIX,
+                entities_api::ROUTE_ENTITY_FACT_BY_ID,
+                id,
+            )
+            .replace("{fact_id}", fact),
             None,
             10,
         )
@@ -500,7 +599,10 @@ impl Shell {
         struct Envelope {
             candidates: Vec<DuplicatePair>,
         }
-        let path = with_query("/entities/api/duplicates", &[("limit", &limit.to_string())]);
+        let path = with_query(
+            &proxied(entities_api::PROXY_PREFIX, entities_api::ROUTE_DUPLICATES),
+            &[("limit", &limit.to_string())],
+        );
         let res: Envelope = self.json(Method::GET, &path, None, 15).await?;
         Ok(res.candidates)
     }
@@ -510,7 +612,7 @@ impl Shell {
         let body = serde_json::json!({ "other": other, "name": name, "pick": [] });
         self.send(
             Method::POST,
-            &format!("/entities/api/entities/{keep}/merge"),
+            &proxied_id(entities_api::PROXY_PREFIX, entities_api::ROUTE_MERGE, keep),
             Some(body),
             15,
         )
@@ -523,7 +625,10 @@ impl Shell {
         let body = serde_json::json!({ "a": a, "b": b });
         self.send(
             Method::POST,
-            "/entities/api/duplicates/distinct",
+            &proxied(
+                entities_api::PROXY_PREFIX,
+                entities_api::ROUTE_DUPLICATES_DISTINCT,
+            ),
             Some(body),
             10,
         )
@@ -540,7 +645,10 @@ impl Shell {
         struct Envelope {
             located: Vec<crate::travel::around::Located>,
         }
-        let path = with_query("/entities/api/located", &[("day", day)]);
+        let path = with_query(
+            &proxied(entities_api::PROXY_PREFIX, entities_api::ROUTE_LOCATED),
+            &[("day", day)],
+        );
         let res: Envelope = self.json(Method::GET, &path, None, 10).await?;
         Ok(res.located)
     }
@@ -552,7 +660,10 @@ impl Shell {
     ) -> ShellResult<CalendarEntry> {
         self.json(
             Method::PUT,
-            "/calendar/api/entries/external",
+            &proxied(
+                calendar_api::PROXY_PREFIX,
+                calendar_api::ROUTE_ENTRY_EXTERNAL,
+            ),
             Some(body),
             10,
         )
@@ -566,7 +677,7 @@ impl Shell {
     ) -> ShellResult<crate::scouting::CalendarVerdicts> {
         self.json(
             Method::POST,
-            "/calendar/api/verdicts",
+            &proxied(calendar_api::PROXY_PREFIX, calendar_api::ROUTE_VERDICTS),
             Some(serde_json::json!({ "candidates": candidates })),
             10,
         )

@@ -22,6 +22,24 @@ pub const ROUTE_DOCUMENT_PROPOSALS_MODEL: &str = "/api/documents/{id}/proposals/
 pub const ROUTE_DOCUMENT_PROPOSAL_REVIEW: &str =
     "/api/documents/{id}/proposals/{proposal_id}/review";
 
+/// Every route constant above. The server test checks each one against its manifest.
+pub const ALL_ROUTES: [&str; 11] = [
+    ROUTE_DOCUMENTS,
+    ROUTE_DOCUMENT_BY_ID,
+    ROUTE_DOCUMENT_ANALYZE,
+    ROUTE_DOCUMENT_CHILDREN,
+    ROUTE_DOCUMENT_ORIGINAL,
+    ROUTE_DOCUMENT_DUPLICATES,
+    ROUTE_DOCUMENT_DUPLICATES_REVIEW,
+    ROUTE_DOCUMENT_SPLIT,
+    ROUTE_DOCUMENT_PROPOSALS_REGENERATE,
+    ROUTE_DOCUMENT_PROPOSALS_MODEL,
+    ROUTE_DOCUMENT_PROPOSAL_REVIEW,
+];
+
+/// The path prefix under which the status proxy serves these routes.
+pub const PROXY_PREFIX: &str = "/documents";
+
 // ============================================================================
 // Core Document Models
 // ============================================================================

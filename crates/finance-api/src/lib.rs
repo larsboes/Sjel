@@ -63,28 +63,9 @@ pub const ALL_ROUTES: [&str; 22] = [
 /// The path prefix under which the status proxy serves these routes.
 pub const PROXY_PREFIX: &str = "/finance";
 
-/// `route` behind the status proxy.
-pub fn proxy_route(route: &str) -> String {
-    format!("{PROXY_PREFIX}{route}")
-}
-
-/// `route` behind the status proxy, with `{id}` replaced by an id the caller already encoded.
-pub fn proxy_route_id(route: &str, encoded_id: &str) -> String {
-    proxy_route(&route.replace("{id}", encoded_id))
-}
-
 #[cfg(test)]
 mod route_tests {
     use super::*;
-
-    #[test]
-    fn proxy_routes_sit_under_the_prefix() {
-        assert_eq!(proxy_route(ROUTE_DASHBOARD), "/finance/api/dashboard");
-        assert_eq!(
-            proxy_route_id(ROUTE_IMPORT_CANDIDATE_REVIEW, "csv%3Aab12"),
-            "/finance/api/import/candidates/csv%3Aab12/review"
-        );
-    }
 
     #[test]
     fn request_bodies_keep_their_wire_names() {

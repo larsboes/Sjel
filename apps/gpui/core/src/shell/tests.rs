@@ -320,7 +320,27 @@ fn a_segment_encodes_what_would_split_or_escape_the_path() {
     assert_eq!(segment("a/b"), "a%2Fb");
     assert_eq!(segment("../x"), "..%2Fx");
     assert_eq!(
-        inventory_api::proxy_route_id(inventory_api::ROUTE_ITEM_STATE, &segment("desk lamp")),
+        proxied_id(
+            inventory_api::PROXY_PREFIX,
+            inventory_api::ROUTE_ITEM_STATE,
+            &segment("desk lamp"),
+        ),
         "/inventory/api/items/desk%20lamp/state"
+    );
+}
+
+#[test]
+fn proxied_routes_sit_under_the_capability_prefix() {
+    assert_eq!(
+        proxied(finance_api::PROXY_PREFIX, finance_api::ROUTE_DASHBOARD),
+        "/finance/api/dashboard"
+    );
+    assert_eq!(
+        proxied_id(
+            finance_api::PROXY_PREFIX,
+            finance_api::ROUTE_IMPORT_CANDIDATE_REVIEW,
+            "csv%3Aab12"
+        ),
+        "/finance/api/import/candidates/csv%3Aab12/review"
     );
 }

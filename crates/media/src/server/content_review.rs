@@ -83,10 +83,10 @@ fn decision_error(error: Box<dyn std::error::Error>) -> ApiError {
 
 pub(super) fn router(ledger: Arc<Ledger>, library: Arc<attachments::Library>) -> Router {
     Router::new()
-        .route("/api/content/proposals", get(queue))
-        .route("/api/content/proposals/{id}", get(detail))
+        .route(media_api::ROUTE_MEDIA_CONTENT_PROPOSALS, get(queue))
+        .route(media_api::ROUTE_MEDIA_CONTENT_PROPOSAL, get(detail))
         .route(
-            "/api/content/proposals/{id}/decision",
+            media_api::ROUTE_MEDIA_CONTENT_DECISION,
             axum::routing::post(decision),
         )
         .layer(DefaultBodyLimit::max(16 * 1024))

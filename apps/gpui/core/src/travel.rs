@@ -428,8 +428,12 @@ pub(crate) fn plan_path(id: &str, rest: &[&str]) -> Result<String, String> {
     if !navigation::valid_id(id) {
         return Err("The trip identifier is invalid.".into());
     }
-    let mut url =
-        reqwest::Url::parse("http://localhost/trips/api/plans/").map_err(|e| e.to_string())?;
+    let base = format!(
+        "http://localhost{}{}/",
+        trips_api::PROXY_PREFIX,
+        trips_api::ROUTE_PLANS
+    );
+    let mut url = reqwest::Url::parse(&base).map_err(|e| e.to_string())?;
     url.path_segments_mut()
         .map_err(|_| "Cannot build the trip address.")?
         .pop_if_empty()

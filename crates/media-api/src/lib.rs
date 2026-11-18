@@ -21,10 +21,16 @@ pub const ROUTE_MEDIA_INGESTS: &str = "/api/ingests";
 pub const ROUTE_MEDIA_INGEST_BY_ID: &str = "/api/ingests/{id}";
 pub const ROUTE_MEDIA_PERCEPTUAL: &str = "/api/perceptual";
 pub const ROUTE_MEDIA_GEOTAGS: &str = "/api/geotags";
+pub const ROUTE_MEDIA_CONTENT_PROPOSALS: &str = "/api/content/proposals";
+pub const ROUTE_MEDIA_CONTENT_PROPOSAL: &str = "/api/content/proposals/{id}";
+pub const ROUTE_MEDIA_CONTENT_DECISION: &str = "/api/content/proposals/{id}/decision";
 pub const ROUTE_MUSIC_PROBE: &str = "/api/probe";
 pub const ROUTE_MUSIC_BUILD: &str = "/api/build";
 pub const ROUTE_MUSIC_JOBS: &str = "/api/jobs";
 pub const ROUTE_MUSIC_JOB_BY_ID: &str = "/api/jobs/{id}";
+
+/// The path prefix under which the status proxy serves the media routes.
+pub const PROXY_PREFIX: &str = "/media";
 
 // ============================================================================
 // Media Ledger and Ingest Models

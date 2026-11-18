@@ -191,9 +191,15 @@ archive includes the managed path resolver; its extracted-path regression passes
 - **Desktop rebuild efficiency acceptance.** Contracts: [local builds](../../tools/local-build.md)
   and [desktop builds](../../apps/gpui/README.md#running-it). Profile-root validation and
   battery-aware build admission are implemented; installer and battery-wrapper regressions pass.
-  Open: a real installed development bundle's Finder-launched rebuild and runtime/energy
-  comparison with release. Compiler-stamp changes
-  and embedded documentation still invalidate builds. Measurement uses installed Hyperfine and
+  Installed-app Rebuild acceptance passed on 2026-11-18: the bundle launched without a terminal
+  rebuilt from `c4f4e0ea` to `0992624c`, retained `desktop-dev`, and passed strict code-signature
+  verification. Direct CLI replacement was denied even outside the execution sandbox; the
+  app-owned rebuild completed the installation.
+
+  Open: runtime/energy comparison with release. The adopted macmon sampler reports
+  `Failed to create subscription` both inside and outside the execution sandbox, and its metrics
+  endpoint is unavailable. No energy comparison has run. Compiler-stamp changes and embedded
+  documentation still invalidate builds. Measurement uses installed Hyperfine and
   platform disk reporting; an optional report on `tools/local-build run` would own repeated probes.
   Profile-only reclamation required a bounded local removal because existing target cleanup
   would remove the containing working cache. A profile selector in `sjel storage reclaim`,

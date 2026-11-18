@@ -170,10 +170,10 @@ Open:
 1. Note-path search acceptance. The Mac Finder displays and searches each note's relative
    Markdown path (`apps/gpui/src/finder/search.rs::record_hits`). Done when an installed-app
    search by title and by path displays the path and opens that note. Installed-app acceptance
-   remains open. Native automation accepted title and path queries, but the accessibility tree
-   exposed no result rows. The app was closed manually during the check; no crash was
-   established. Successful result opening remains unverified. This change does not add body
-   search or a status-server note source.
+   remains open. Finder results expose accessible buttons carrying their title and path
+   (`bb87db4b`); four focused Finder tests pass. Successful installed-app result opening remains
+   unverified: after the in-app rebuild, native automation reports `cgWindowNotFound` for the
+   running app. This change does not add body search or a status-server note source.
 
 Verification: eight Projects store tests and two Finder tests pass, including external-edit
 adoption, class-floor refusal and path-based note lookup. Full-workspace and phone checks have

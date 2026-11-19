@@ -17,8 +17,8 @@ pub struct ClassifiedProjectSummary {
 
 /// The successful response from the project list route.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
-pub struct ProjectListResponse {
-    pub projects: Vec<ClassifiedProjectSummary>,
+pub struct ProjectListResponse<T = ClassifiedProjectSummary> {
+    pub projects: Vec<T>,
 }
 
 /// A record's classified read projection; omitted content is not an empty record.
@@ -110,6 +110,20 @@ pub struct RecordListResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_list_client_reads_classified_and_legacy_summaries() {
+        let legacy = serde_json::json!({"projects": [{"name": "Example"}]});
+        let classified = serde_json::json!({
+            "projects": [{"name": "Example", "data_class": "c1"}]
+        });
+        let legacy: ProjectListResponse<ProjectSummary> = serde_json::from_value(legacy).unwrap();
+        let current: ProjectListResponse<ProjectSummary> =
+            serde_json::from_value(classified.clone()).unwrap();
+        let server: ProjectListResponse = serde_json::from_value(classified).unwrap();
+        assert_eq!(legacy, current);
+        assert_eq!(server.projects[0].data_class, "c1");
+    }
 
     fn read(content: Option<&str>) -> RecordRead {
         RecordRead {

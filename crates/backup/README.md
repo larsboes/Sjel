@@ -23,9 +23,12 @@ and the timing policy; sjel-status links it the way it already links `crates/dev
 | `GET /api/sjel-status/backups` | age from the receipt, **plus `attempt`** — what the last run actually did |
 | `POST /api/sjel-status/capabilities/{name}/backup` | run one capability, optionally against a named `{ "target" }` |
 | `GET /api/sjel-status/backup/targets` | declared targets: kind, coordinates, presence, last rehearsal verdict, interval |
-| `GET /api/sjel-status/backup/runs?limit=N` | every attempt, newest first, failures included |
+| `GET /api/sjel-status/backup/runs?limit=N` | ledger attempts, newest first, with failures and trigger |
 | `POST /api/sjel-status/backup/policy` | `{ "target", "interval_hours" }` — set, change, or `null` for off |
 | `POST /api/sjel-status/backup/verify` | `{ "target" }` — hash the newest recorded archive and restore it in isolation |
+
+The run trigger is `timer` for scheduled starts and `manual` for starts requested through the
+API. Earlier ledger entries report `unknown`.
 
 Four things the receipts could not carry, and this does:
 

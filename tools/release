@@ -69,11 +69,18 @@ else
   NOTES_FROM="$(git -C "$SJEL_ROOT" rev-list --max-parents=0 HEAD | tail -1)"; FIRST=1
 fi
 
-gen_notes() {  # gen_notes <version> > <file>
-  echo "$1"
-  echo
-  [ "$FIRST" -eq 1 ] && { echo "First tagged release."; echo; }
-  print_manifest_delta "$NOTES_FROM" HEAD
+gen_notes() {
+  if [ -f "$SJEL_ROOT/docs/releases/$1.md" ]; then
+    bun --no-env-file "$TOOLS_DIR/work.ts" notes "$1"
+    printf '\n<details><summary>Technical changes</summary>\n\n'
+    print_manifest_delta "$NOTES_FROM" HEAD
+    printf '\n</details>\n'
+  else
+    echo "$1"
+    echo
+    [ "$FIRST" -eq 1 ] && { echo "First tagged release."; echo; }
+    print_manifest_delta "$NOTES_FROM" HEAD
+  fi
 }
 
 if [ "$NOTES_ONLY" -eq 1 ]; then
@@ -95,11 +102,14 @@ if [ -n "$LATEST_TAG" ] && ! ver_gt "$(norm_ver "$VERSION")" "$(norm_ver "$LATES
   echo "release: $VERSION is not greater than the latest release $LATEST_TAG" >&2; exit 1
 fi
 
+# Acceptance is required even when the CI/checkout gate is explicitly bypassed.
+bun --no-env-file "$TOOLS_DIR/work.ts" release-check "$VERSION" HEAD
+
 # The gate — a tag is only trustworthy if the tree it points at is clean and green.
 gate() {
   local fail=0 br behind
   if [ -n "$(git -C "$SJEL_ROOT" status --porcelain)" ]; then
-    echo "release: working tree not clean — commit or stash first." >&2; fail=1
+    echo "release: working tree not clean — commit this task or wait for concurrent work." >&2; fail=1
   fi
   br="$(git -C "$SJEL_ROOT" branch --show-current)"
   if [ "$br" != "main" ]; then

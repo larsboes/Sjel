@@ -1,7 +1,9 @@
 //! Projects, Records, Notes & Tasks shell client methods.
 
 use super::*;
-use projects_api::reads::{ProjectReadResponse, RecordListResponse, RecordReadResponse};
+use projects_api::reads::{
+    ProjectListResponse, ProjectReadResponse, RecordListResponse, RecordReadResponse,
+};
 use projects_api::{
     proxy_route_mail_decision, AddNoteRequest, AddProjectRequest, AddTaskRequest,
     InventoryLinkDecisionRequest, MailDecisionRequest, RemoveRecordRequest, RenameRecordRequest,
@@ -102,11 +104,7 @@ impl Shell {
     }
 
     pub async fn projects(&self) -> ShellResult<Vec<ProjectSummary>> {
-        #[derive(Deserialize)]
-        struct List {
-            projects: Vec<ProjectSummary>,
-        }
-        let list: List = self
+        let list: ProjectListResponse<ProjectSummary> = self
             .json(Method::GET, PROXY_ROUTE_PROJECTS, None, 5)
             .await?;
         Ok(list.projects)

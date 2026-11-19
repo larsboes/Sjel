@@ -10,6 +10,8 @@ const pages = workflow("pages");
 const security = workflow("security");
 const codeql = workflow("codeql");
 const distribution = workflow("distribution");
+const cliDistribution = workflow("cli-distribution");
+const bunCompatibility = workflow("bun-latest");
 const step = (job: any, name: string) => job.steps.find((entry: any) => entry.name === name);
 
 for (const [name, definition, outputs] of [
@@ -25,8 +27,6 @@ for (const [name, definition, outputs] of [
       const checkout = plan.steps.find((entry: any) => entry.uses?.startsWith("actions/checkout@"));
       expect(checkout.with["fetch-depth"]).toBe(0);
       expect(checkout.with.ref).toBeUndefined();
-      const bun = plan.steps.find((entry: any) => entry.uses?.startsWith("oven-sh/setup-bun@"));
-      expect(bun.with["bun-version"]).toBe("latest");
       const planner = plan.steps.find((entry: any) => entry.id === "plan");
       expect(planner.if).toBeUndefined();
       expect(planner.env.GH_TOKEN).toBe("${{ github.token }}");
@@ -48,7 +48,7 @@ for (const [name, definition, outputs] of [
 }
 
 test("workflow shell scripts parse without running builds or scanners", () => {
-  for (const definition of [pages, security, codeql, distribution]) {
+  for (const definition of [pages, security, codeql, distribution, cliDistribution, bunCompatibility]) {
     for (const job of Object.values(definition.jobs) as any[]) {
       for (const entry of job.steps ?? []) {
         if (!entry.run) continue;
@@ -58,6 +58,21 @@ test("workflow shell scripts parse without running builds or scanners", () => {
       }
     }
   }
+});
+
+test("CI and artifact workflows share the Bun pin while the canary runs the CLI packaging suite", () => {
+  const pin = readFileSync(join(import.meta.dir, "../.bun-version"), "utf8").trim();
+  expect(pin).toMatch(/^\d+\.\d+\.\d+$/);
+  for (const definition of [workflow("ci"), pages, security, codeql, distribution, cliDistribution]) {
+    const bunSteps = Object.values(definition.jobs).flatMap((job: any) => job.steps ?? [])
+      .filter((entry: any) => entry.uses?.startsWith("oven-sh/setup-bun@"));
+    expect(bunSteps.length).toBeGreaterThan(0);
+    for (const entry of bunSteps) expect(entry.with).toEqual({ "bun-version-file": ".bun-version" });
+  }
+  expect(bunCompatibility.on.schedule).toHaveLength(1);
+  expect(bunCompatibility.jobs["cli-packaging"].steps[1].with).toEqual({ "bun-version": "latest" });
+  expect(step(bunCompatibility.jobs["cli-packaging"], "Test archive preparation and CLI lifecycle").run)
+    .toBe(step(cliDistribution.jobs.cli, "Test archive preparation and lifecycle without the source-build preload").run);
 });
 
 test("Pages gates build and deploy without permitting PR, schedule or release deployments", () => {

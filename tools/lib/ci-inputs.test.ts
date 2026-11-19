@@ -329,7 +329,7 @@ describe("gates and full verification", () => {
       "tools/check-doc-self-references.sh", "tools/check-doc-links.sh", "tools/check-skill-metadata.sh", "tools/check-skill-metadata.test.sh",
       "tools/check-presentations-theme-contract.sh", "tools/check-presentations-theme-contract.test.sh", "tools/skill-eval check --all",
       "tools/check-publication-hygiene.sh", "tools/check-bun-install-policy.sh", "tools/check-store-transactions.sh",
-      "tools/check-obsidian-plugins.sh", "tools/self check", "tools/persistence-orphans.test.sh",
+      "tools/check-obsidian-plugins.sh", "tools/check-work.sh", "tools/self check", "tools/persistence-orphans.test.sh",
     ].sort());
   });
 

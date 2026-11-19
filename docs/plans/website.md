@@ -1,27 +1,14 @@
 # Public website
 
-`website/build` generates the site from tracked TypeScript and Markdown. Build and layout
-contracts live in `website/README.md`; generated output is not edited directly.
-
-## Shipped
-
-- Landing page, connected scenarios, privacy illustration, theme control, brand assets and
-  contrast checks: `40a916c4`. Implementation detail stays in the website sources.
-- The build launcher disables environment-file loading for every Bun generator and server.
-  Verification: scratch generation, internal links and payload checks pass. Browser rendering
-  was not checked in this change.
-- `docs/` is the one home for documentation; the site renders it, area plans included, and owns
-  no content: `91b7c987`. Not checked: the Plans section in a browser.
+[website/README.md](../../website/README.md) owns build and layout contracts.
+Generated output is not edited directly.
 
 ## Open
 
-1. Verify navigation and horizontal overflow at 768px and 800px in both color themes.
-   Done when neither viewport overflows and navigation remains reachable.
-2. Select app screenshots and animations after native acceptance, using the seeded demo.
-   Done when published media shows synthetic data and matches the current app.
+- [Accept website navigation](../tasks/website-navigation.md).
+- [Publish accepted app screenshots](../tasks/website-demo-media.md).
 
 ## Acceptance
 
-The build's link and payload checks pass. Navigation and content work without JavaScript;
-reduced-motion preference disables animation. Public claims match implementation or a
-reproducible measurement, and illustrative examples are identified as such.
+Navigation and content work without JavaScript. Reduced-motion preference disables animation.
+Public claims match implementation or a reproducible measurement; illustrative examples are labeled.

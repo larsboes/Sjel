@@ -187,6 +187,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         }
         "search" => search::run(root, rest),
         "maintenance" => maintenance::run(root, rest),
+        "work" => exec(Command::new(tool("tools/work")).args(rest)),
         // Native macOS application bundles (GPUI desktop and menu bar).
         "app" => app::run(root, rest),
         // In-process since 2026-10-02: tools/doctor is a launcher for this same entry point.
@@ -287,6 +288,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         // listed `apply` and `prune` after both had become `reclaim`.
         "storage" => return exec(Command::new(root.join("tools/storage/storage")).arg("-h")),
         "cv" => return exec(Command::new(root.join("crates/cv/cv")).arg("--help")),
+        "work" => return exec(Command::new(root.join("tools/work")).arg("--help")),
         "update" => help::UPDATE,
         "mirror" => help::MIRROR,
         "setup" => help::SETUP,

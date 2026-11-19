@@ -10,17 +10,6 @@
 
 <p align="center"><b>A private layer under the tools you already use. It connects the areas of your life and keeps them on your own machines.</b></p>
 
-## Install the CLI
-
-macOS ARM64 and Linux x86-64/ARM64. **Awaiting public release: this URL is not live yet.**
-
-~~~sh
-curl -LsSf https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh
-~~~
-
-No source checkout or Rust toolchain is needed. This installs the CLI and coding resources, not
-the desktop app or node services. [wget, pinned versions and setup details](#install).
-
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
   <a href="https://github.com/larsboes/Sjel/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/larsboes/Sjel/actions/workflows/ci.yml/badge.svg"></a>
@@ -32,7 +21,7 @@ the desktop app or node services. [wget, pinned versions and setup details](#ins
 <p align="center">
   <a href="#where-it-stands">Where it stands</a> ·
   <a href="#how-it-works">How it works</a> ·
-  <a href="#install-the-cli">Install</a> ·
+  <a href="#install">Install</a> ·
   <a href="#measured">Measured</a> ·
   <a href="research/README.md">Research</a> ·
   <a href="PLAN.md">Plan</a>
@@ -69,29 +58,20 @@ wanted features fast
 What's left has good ideas, some well-built parts and some sloppy ones. I want to clean it up.
 Expect AI-polished text throughout, because I trust my drafts more after an AI pass.
 
+<a id="state"></a>
+
 ## Where it stands
 
-Sjel is one native Rust app in [`apps/gpui`](apps/gpui/README.md):
-[GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) draws the Mac and
-[NSH](https://github.com/longbridge/nsh) draws the iPhone with UIKit views, over one shared core.
-Linux, Windows and Android come later from the same code.
+| Surface | Current scope | Open acceptance |
+|---|---|---|
+| CLI | Checkout-free preview archives for macOS ARM64 and Ubuntu 24.04-class Linux x86-64 and ARM64. | [Clean-user CLI installation](docs/tasks/cli-preview-acceptance.md). |
+| Mac | [Native GPUI app](apps/gpui/README.md#native-renderers-shared-models). | [Mac daily workflows](docs/plans/gpui.md#mac-daily-workflows) and [clean-user installation](docs/tasks/distribution-clean-mac.md). |
+| iPhone | [NSH app with a local replica](apps/gpui/README.md#workspace-and-the-ios-app). | [Paired-phone navigation](docs/tasks/gpui-phone-navigation.md), [agent sessions](docs/tasks/agent-client-phone.md), [remote terminal](docs/tasks/agent-terminal-phone.md) and [TestFlight delivery](docs/tasks/distribution-testflight.md). |
+| Website | [Technical documentation and roadmap](https://larsboes.github.io/Sjel/). | [App screenshots and demo media](docs/tasks/website-demo-media.md). |
 
-| Part | Today |
-|---|---|
-| CLI and coding tooling | Checkout-free preview for macOS ARM64 and Ubuntu 24.04-class Linux x86-64/ARM64. See [Install](#install). |
-| Mac app | 25 main pages. Travel, Map, Inventory and Wishlist are partly built ([route matrix](docs/plans/gpui.md#1-route-matrix)). |
-| iPhone app | NSH screens inside a Swift host, sharing the Mac app's Rust core, on TestFlight as `Sjel Life`. It pairs with the Mac over Bonjour and keeps a local LibSQL copy that syncs both ways. |
-| Public page | [larsboes.github.io/Sjel](https://larsboes.github.io/Sjel/). Screenshots of the native app are open ([`restructure.md` §4](docs/plans/restructure.md#4-the-public-page)). |
-| Capabilities | 27 of the 48 directories in `capabilities/` are Rust crates. Most of the rest are manifests around a timer or an external tool. |
-
-Not everything becomes Rust. The menu bar companion and the CloudKit relay in `apps/mac` are
-Swift, and so is the iOS host that owns the window. The `tools/` scripts are a mix of shell and
-TypeScript.
-
-The current priority is unification and less maintenance, then finishing the daily workflows
-([`PLAN.md`](PLAN.md#priority-1-unify-and-reduce-maintenance)). The phone is the daily tool for
-six areas: the Sjel agent, other coding agents through a terminal on the Mac, travel, documents,
-mail and calendar.
+[The plan](PLAN.md) sets priorities. The [product guide](docs/product.md) describes the intended
+scope, and the [security contract](docs/architecture/security.md) describes the implemented data
+and agent access boundaries.
 
 ## Two surfaces: calm on the glass, open in the terminal
 
@@ -139,116 +119,16 @@ smart. Using and maintaining it may not require that smartness.
 - No setup step that only its author remembers. If a step must be done by hand, a tool does it
   (`tools/setup-secret.sh`) and `tools/doctor` reports it when it is missing.
 
-## State
-
-| Feature | State |
-|---|---|
-| Typed people, places, trips, money, home and calendar, with a source on every value | Built |
-| Native Mac app (GPUI) | Built. Most pages are ported. See [Where it stands](#where-it-stands). |
-| Native iPhone app (NSH) with a local copy, paired by device key | Built. Tabs: Today, Mail, Documents, Calendar, Travel, Agent. The NSH build has not passed simulator rendering or a device check yet ([`gpui.md` §11](docs/plans/gpui.md#11-ui-stack)). Offline timing is not measured. |
-| Sjel agent on the phone: sessions, approvals, three access tiers, a command policy | Built, not yet tested on a device ([`agent.md`](docs/plans/agent.md)). |
-| Terminal on the Mac from the phone, behind Face ID | Built, not yet tested on a device. |
-| Same Wi-Fi, Tailscale and own-server connections | Connection paths implemented. Listener, credentials and deployment setup are required. |
-| Pseudonymizer in front of cloud model calls and admitted agent reads | Implemented for `comms` cloud calls and capabilities that admit the agent gate. The [access policy](docs/architecture/security.md#agent-access-policy) controls admission. |
-| Data about other people sent to a cloud model pseudonymized, or synced end-to-end encrypted | Target |
-| Model selection: device model or local decision engine, with heuristic fallback | Selection and fallback paths implemented. Available models depend on the device and configured services. |
-| Small install with optional downloadable capabilities | CLI-only preview archives are built and smoke-tested. Mac DMG, node and native iOS delivery remain preparation paths. First-run setup and clean-user acceptance remain open ([#235](https://github.com/larsboes/Sjel/issues/235)). |
-| iCloud connection, encrypted by Sjel | Relay built and tested (`apps/mac`). Nothing syncs through it yet. |
+<a id="install-the-cli"></a>
 
 ## Install
 
-### CLI and coding tooling (preview)
-
-The CLI installs without a source checkout or Rust toolchain. It includes coding Packs and
-harness integration helpers, not the desktop app, node services, model weights or credentials.
-Pi, Claude Code and other harness executables must be installed and authenticated separately.
-
-#### Standalone installer
-
-The next CLI preview adds a standalone installer for macOS and Linux. **These URLs require a
-published release containing `install.sh`; the current `v0.0.2` draft does not contain it.**
-
-~~~sh
-curl -LsSf https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh
-~~~
-
-Without curl, use wget. The installer supports either downloader for its archive downloads too:
-
-~~~sh
-wget -qO- https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh
-~~~
-
-A version-specific URL defaults to that exact release rather than resolving latest again:
-
-~~~sh
-curl -LsSf https://github.com/larsboes/Sjel/releases/download/v0.0.3/install.sh | sh
-~~~
-
-The installer checks prerequisites, selects the host archive and verifies its SHA-256. Bash and
-standard Unix tools are required; Git and a Rust toolchain are not. It prints PATH instructions
-without editing shell configuration. [Installation options and recovery](docs/operations/index.md#cli-only-coding-installation)
-include custom directories and explicit updates.
-
-<details>
-<summary>Maintainer installation from the existing v0.0.2 draft</summary>
-
-`v0.0.2` is a [draft release](https://github.com/larsboes/Sjel/releases), not a public download.
-The following example requires GitHub CLI authentication with maintainer access to the draft.
-It selects macOS ARM64; the [CLI installation guide](docs/operations/index.md#cli-only-coding-installation)
-lists Linux archives, system requirements and installation options.
-
-~~~sh
-archive=sjel-cli-v0.0.2-aarch64-apple-darwin.tar.gz
-gh release download v0.0.2 --repo larsboes/Sjel \
-  --pattern "$archive" --pattern cli-install.sh --pattern SHA256SUMS \
-  --dir sjel-cli-preview
-cd sjel-cli-preview
-digest=$(awk -v name="$archive" '$2 == name {print $1}' SHA256SUMS)
-bash cli-install.sh --archive "$archive" --sha256 "$digest"
-export PATH="$HOME/.local/bin:$PATH"
-sjel --version
-sjel harnesses list
-~~~
-
-</details>
-
-The PATH change applies to the current shell. For later shells, add `~/.local/bin` to the shell
-configuration if it is not already present. Installation does not change harness settings.
-After Pi is installed, `sjel pack use pi coding-harness` explicitly activates its coding profile.
-Other harnesses use `sjel harnesses use coding-harness --harness <id>`.
-
-`sjel self status` inspects the installation and `sjel self rollback` restores a retained runtime.
-`sjel self check` and `sjel self update` use the public release channel, which is not available
-while the release remains a draft. Local-archive updates and recovery limits are documented in
-the installation guide. There is no anonymous one-command installation until a public release
-exists.
-
-### Source-based node
-
-To prepare a node with capability services on macOS or Linux:
-
-~~~sh
-git clone https://github.com/larsboes/Sjel.git
-cd Sjel
-tools/install.sh
-~~~
-
-Setup creates or connects private configuration outside this repository and offers capability
-selection. Follow the [shell-only installation workflow](docs/operations/index.md#install-a-shell-only-node)
-for prerequisites, authentication, startup and reboot checks. Enabling an optional capability does
-not start it or remove unused code from the checkout.
-
-### Desktop and iPhone
-
-The CLI preview does not install either app. From a source checkout, build the Mac app:
-
-~~~sh
-cd apps/gpui
-./install    # ~/Applications/Sjel Desktop.app
-~~~
-
-The iPhone app is on TestFlight for invited testers. `apps/gpui/ios/run-sim` runs it in the iOS
-Simulator. See [the GPUI README](apps/gpui/README.md#workspace-and-the-ios-app).
+- [CLI preview](docs/operations/index.md#cli-only-coding-installation) covers supported hosts,
+  release availability, draft installation, updates and rollback.
+- [Shell-only node](docs/operations/index.md#install-a-shell-only-node) covers source setup,
+  capability selection and startup checks.
+- The app guide covers the [Mac build](apps/gpui/README.md#running-it) and
+  [iPhone simulator](apps/gpui/README.md#workspace-and-the-ios-app).
 
 ## Measured
 

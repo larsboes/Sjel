@@ -6,6 +6,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 import { CONTENT, renderMarkdown, type Rendered } from "./markdown.ts";
 import { esc, page, REPO } from "./style.ts";
+import { loadWork } from "../../tools/lib/work.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 
@@ -21,6 +22,7 @@ const SECTIONS: Array<[string, string]> = [
 interface Doc { rel: string; from: string; page: string; rendered: Rendered }
 
 export function collect(root = ROOT): Doc[] {
+  const work = loadWork(root);
   const dir = join(root, CONTENT);
   return readdirSync(dir, { recursive: true })
     .map(String)
@@ -28,7 +30,15 @@ export function collect(root = ROOT): Doc[] {
     .map((rel) => {
       const from = `${CONTENT}/${rel}`;
       const page = `docs/${rel.replace(/\.md$/, ".html")}`;
-      return { rel, from, page, rendered: renderMarkdown(readFileSync(join(dir, rel), "utf8"), from, page) };
+      const rendered = renderMarkdown(readFileSync(join(dir, rel), "utf8"), from, page);
+      const outcome = work.outcomes.find(item => item.path === from);
+      if (outcome) {
+        rendered.html += `<h2>Required tasks</h2><ul>${outcome.tasks.map(id => {
+          const task = work.tasks.find(item => item.id === id)!;
+          return `<li><a href="${esc(posix.relative(posix.dirname(page), task.path.replace(/\.md$/, ".html")))}">${esc(task.title)}</a> — ${esc(task.state)}</li>`;
+        }).join("")}</ul>`;
+      }
+      return { rel, from, page, rendered };
     });
 }
 
@@ -37,6 +47,7 @@ function section(rel: string): string {
 }
 
 export function sidebar(docs: Doc[], current: string): string {
+  docs = docs.filter(d => !/^(tasks|roadmap|releases)\//.test(d.rel) || d.rel.endsWith("/index.md"));
   const known = new Set(SECTIONS.map(([key]) => key));
   const extra = [...new Set(docs.map((d) => section(d.rel)))].filter((s) => !known.has(s)).sort();
   const groups = [...SECTIONS, ...extra.map((s) => [s, s] as [string, string])];
@@ -78,6 +89,7 @@ function breadcrumbs(doc: Doc, root: string): string {
 }
 
 function orderedDocs(docs: Doc[]): Doc[] {
+  docs = docs.filter(d => !/^(tasks|roadmap|releases)\//.test(d.rel) || d.rel.endsWith("/index.md"));
   const known = new Set(SECTIONS.map(([key]) => key));
   const extra = [...new Set(docs.map((d) => section(d.rel)))].filter((s) => !known.has(s)).sort();
   const groups = [...SECTIONS, ...extra.map((s) => [s, s] as [string, string])];

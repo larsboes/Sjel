@@ -1,0 +1,23 @@
+name: Bun latest compatibility
+
+on:
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cli-packaging:
+    name: CLI packaging on latest Bun
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - name: Test archive preparation and CLI lifecycle
+        working-directory: tools/distribution
+        run: bun test prepare.test.ts cli-install.test.ts publish-draft.test.ts cli-notices.test.ts

@@ -75,6 +75,17 @@ pub struct RunRow {
     pub archive: Option<ArchiveIdentity>,
     pub detail: String,
     pub log_path: String,
+    #[serde(default)]
+    pub trigger: RunTrigger,
+}
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RunTrigger {
+    #[default]
+    Unknown,
+    Manual,
+    Timer,
 }
 
 impl RunRow {
@@ -189,6 +200,18 @@ impl BackupStore {
             );
             "
         ))?;
+        let runs = format!("{prefix}_runs");
+        let has_trigger: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info(?1) WHERE name = 'trigger')",
+            [&runs],
+            |row| row.get(0),
+        )?;
+        if !has_trigger {
+            conn.execute_batch(&format!(
+                "ALTER TABLE {runs} ADD COLUMN trigger TEXT NOT NULL DEFAULT 'unknown'
+                 CHECK (trigger IN ('unknown', 'manual', 'timer'));"
+            ))?;
+        }
         Ok(())
     }
 }
@@ -288,11 +311,35 @@ impl BackupStore {
         target: &str,
         log_path: &str,
     ) -> Fallible<Option<i64>> {
+        self.claim_run(capability, target, log_path, RunTrigger::Manual)
+    }
+
+    pub(crate) fn try_start_scheduled_run(
+        &self,
+        capability: &str,
+        target: &str,
+        log_path: &str,
+    ) -> Fallible<Option<i64>> {
+        self.claim_run(capability, target, log_path, RunTrigger::Timer)
+    }
+
+    fn claim_run(
+        &self,
+        capability: &str,
+        target: &str,
+        log_path: &str,
+        trigger: RunTrigger,
+    ) -> Fallible<Option<i64>> {
+        let trigger = match trigger {
+            RunTrigger::Manual => "manual",
+            RunTrigger::Timer => "timer",
+            RunTrigger::Unknown => "unknown",
+        };
         let conn = self.conn()?;
         let inserted = conn.execute(
             &format!(
-                "INSERT INTO {p}_runs (capability, target, started_at, log_path)
-                 SELECT ?1, ?2, {NOW}, ?3
+                "INSERT INTO {p}_runs (capability, target, started_at, log_path, trigger)
+                 SELECT ?1, ?2, {NOW}, ?3, ?4
                   WHERE NOT EXISTS (
                     SELECT 1 FROM {p}_runs WHERE capability = ?1
                       AND finished_at IS NULL
@@ -300,7 +347,7 @@ impl BackupStore {
                   )",
                 p = self.prefix
             ),
-            params![capability, target, log_path],
+            params![capability, target, log_path, trigger],
         )?;
         Ok((inserted == 1).then(|| conn.last_insert_rowid()))
     }
@@ -361,6 +408,11 @@ impl BackupStore {
             }),
             detail: row.get(11)?,
             log_path: row.get(12)?,
+            trigger: match row.get::<_, String>(13)?.as_str() {
+                "manual" => RunTrigger::Manual,
+                "timer" => RunTrigger::Timer,
+                _ => RunTrigger::Unknown,
+            },
         })
     }
 
@@ -369,7 +421,7 @@ impl BackupStore {
     const RUN_COLUMNS: &'static str = "id, capability, target, started_at, \
          CAST(strftime('%s', started_at) AS INTEGER), finished_at, \
          CAST(strftime('%s', finished_at) AS INTEGER), exit_code, \
-         archive_name, archive_bytes, archive_sha256, detail, log_path";
+         archive_name, archive_bytes, archive_sha256, detail, log_path, trigger";
 
     pub fn runs(&self, limit: i64) -> Fallible<Vec<RunRow>> {
         let conn = self.conn()?;
@@ -712,6 +764,7 @@ mod db_tests {
         let runs = store.latest_runs().unwrap();
         assert_eq!(runs.len(), 1);
         assert!(runs[0].failed(), "a non-zero exit must read as failed");
+        assert_eq!(runs[0].trigger, RunTrigger::Manual);
         assert!(
             runs[0].detail.contains("iCloud account"),
             "the reason survives the run: {}",
@@ -754,6 +807,15 @@ mod db_tests {
             1,
             "a failed run leaves the target due after backoff"
         );
+    }
+
+    #[test]
+    fn a_scheduled_run_records_timer_at_claim() {
+        let (store, _path) = store("timer-trigger");
+        store.try_start_scheduled_run("store", "t", "").unwrap();
+        let run = &store.runs(1).unwrap()[0];
+        assert_eq!(run.trigger, RunTrigger::Timer);
+        assert_eq!(run.finished_at, None);
     }
 
     #[test]

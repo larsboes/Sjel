@@ -39,7 +39,7 @@ skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", 
 
 [[profile]]
 name = "home"
-description = "Retired — the home stack lives with the household's deployment now"
+description = "Legacy empty selection for clearing a harness's Sjel Pack profile"
 packs = []
 
 [[profile]]
@@ -80,13 +80,13 @@ skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
 name = "full"
-description = "All selected owned Packs"
+description = "All eligible Packs with a three-skill Writing selection"
 packs = ["*"]
 except = ["skills", "anatomy"]
 skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
 name = "everything"
-description = "All owned Packs, dormant ones included"
+description = "All eligible Packs with the full eligible Writing skill set"
 packs = ["*"]
 except = ["skills", "anatomy"]

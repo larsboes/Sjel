@@ -38,7 +38,7 @@ To run a minimal node, follow the shell-only quickstart:
     <span>Operations</span>
     <span class="chevron" aria-hidden="true">→</span>
   </a>
-  <a class="section-card" href="../reference/index.html">
+  <a class="section-card" href="https://larsboes.github.io/Sjel/reference/">
     <span>API Reference</span>
     <span class="chevron" aria-hidden="true">→</span>
   </a>
@@ -53,8 +53,8 @@ Each guide starts with one practical job:
     <div class="guide-tag">Release & Friends</div>
     <h4>Prepare a release or friend trial</h4>
     <div class="guide-actions">
-      <a class="btn-guide primary" href="operations/index.md#release-preparation-and-later-testing">Release preparation →</a>
-      <a class="btn-guide secondary" href="https://github.com/larsboes/Sjel/issues/235">Open acceptance work (#235)</a>
+      <a class="btn-guide primary" href="operations/release-preparation.md">Release preparation →</a>
+      <a class="btn-guide secondary" href="tasks/distribution-clean-mac.md">Clean-user acceptance</a>
     </div>
   </div>
 
@@ -81,7 +81,7 @@ Each guide starts with one practical job:
     <h4>Design the optional feature manager</h4>
     <div class="guide-actions">
       <a class="btn-guide primary" href="architecture/feature-manager.md">Feature manager →</a>
-      <a class="btn-guide secondary" href="operations/index.md#release-preparation-and-later-testing">Release preparation</a>
+      <a class="btn-guide secondary" href="operations/release-preparation.md">Release preparation</a>
     </div>
   </div>
 
@@ -108,7 +108,7 @@ Each guide starts with one practical job:
     <h4>Projects & Generative UI</h4>
     <div class="guide-actions">
       <a class="btn-guide primary" href="architecture/projects-ui.md">Projects UI →</a>
-      <a class="btn-guide secondary" href="../../CONTRIBUTING.md#product-rules">Engineering doctrine</a>
+      <a class="btn-guide secondary" href="architecture/engineering.md#product-rules">Engineering doctrine</a>
     </div>
   </div>
 
@@ -123,7 +123,7 @@ Each guide starts with one practical job:
 </div>
 
 <div class="note">
-Engineering rules live in <a href="../../CONTRIBUTING.md#engineering-doctrine">CONTRIBUTING.md</a>.
-<a href="../../ARCHITECTURE.md">ARCHITECTURE.md</a> lists declared structure. The repository plan
+See the <a href="architecture/engineering.md">engineering doctrine</a> for repository-wide rules.
+<a href="../ARCHITECTURE.md">ARCHITECTURE.md</a> lists declared structure. The repository plan
 tracks open work. A capability or Pack README explains its purpose and design choices.
 </div>

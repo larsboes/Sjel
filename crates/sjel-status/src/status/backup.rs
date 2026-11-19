@@ -197,7 +197,7 @@ pub(crate) fn backup_state(age_secs: Option<u64>, c: &BackupContract) -> &'stati
 /// personal value, and a restore check compares the digest.
 const PUBLIC_FIELDS: [(&str, &str); 1] = [(
     sjel_server::agent::PUBLIC_FIELDS_HEADER,
-    "last_success, sha256, started_at, finished_at, seen_at, verified_at, verified_verdict",
+    "last_success, sha256, started_at, finished_at, seen_at, verified_at, verified_verdict, trigger",
 )];
 
 type Public = ([(&'static str, &'static str); 1], Json<Value>);

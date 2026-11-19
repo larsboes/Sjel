@@ -1,190 +1,68 @@
-// website/scripts/roadmap.ts — the public Sjel roadmap, styled after Obsidian's roadmap
-// with Active, Planned, and Launched milestone timelines.
-//
-//   bun website/scripts/roadmap.ts --out <site>     write <site>/roadmap/index.html
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { esc, page, REPO } from "./style.ts";
+import { dirname, join, posix } from "node:path";
+import { isOpen, loadWork, outcomeState, type Work, type Outcome } from "../../tools/lib/work.ts";
+import { renderMarkdown } from "./markdown.ts";
+import { esc, page } from "./style.ts";
 
 const ROOT = join(import.meta.dir, "../..");
+const docLink = (path: string, from: string) => posix.relative(posix.dirname(from), path.replace(/\.md$/, ".html"));
 
-interface Item {
-  title: string;
-  badge: string;
-  desc: string;
-  href: string;
+function card(outcome: Outcome, from: string): string {
+  return `<a class="roadmap-card" href="${esc(docLink(outcome.path, from))}"><span class="roadmap-card-title">${esc(outcome.title)}</span><p class="roadmap-card-desc">${esc(outcome.summary)}</p></a>`;
+}
+function section(title: string, content: string): string {
+  return `<section class="roadmap-section"><div class="roadmap-status"><h2>${esc(title)}</h2></div><div class="roadmap-cards">${content}</div></section>`;
 }
 
-interface MonthGroup {
-  month: string;
-  items: Item[];
+/** Render only current outcomes; accepted work and publication history stay distinct. */
+export function renderRoadmap(work = loadWork(ROOT)): string {
+  const ordered = [...work.outcomes].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+  const groups = [["active", "Active"], ["planned", "Planned"], ["awaiting-release", "Awaiting release"]] as const;
+  const sections = groups.map(([state, title]) => {
+    const outcomes = ordered.filter(o => outcomeState(work, o) === state);
+    return outcomes.length ? section(title, outcomes.map(o => card(o, "roadmap/index.html")).join("")) : "";
+  }).join("");
+  return `<div class="roadmap-wrap"><h1>Roadmap</h1><p>What is being built and what comes next. Plans may change.</p><p><a href="delivered/index.html">Delivered</a> · <a href="../releases/index.html">Releases</a> · <a href="../docs/tasks/index.html">Open tasks</a></p>${sections || "<p>No upcoming outcomes are selected.</p>"}</div>`;
 }
 
-const ACTIVE_ITEMS: Item[] = [
-  {
-    title: "GPUI Desktop & Mobile Port (Ongoing)",
-    badge: "Core UI",
-    desc: "Unifying all macOS and iOS surfaces in Zed's native GPUI Rust framework. Delivering sub-10ms rendering, offline trip itineraries, calendar rescheduling, and session approvals.",
-    href: "../docs/plans/gpui.html",
-  },
-  {
-    title: "Agent Containment & Privacy Gates",
-    badge: "Security",
-    desc: "Isolating coding agents by provider trust. Sandboxing untrusted providers, capping data access, and limiting hosted-model inputs to public data or admitted pseudonymized derivatives. Data classes c2 and c3 have no cloud representation.",
-    href: "../docs/architecture/security.html",
-  },
-  {
-    title: "Flat Workspace Consolidation",
-    badge: "Architecture",
-    desc: "Restructuring Sjel into a lean, single Cargo workspace with flat crates/, eliminating lingering dashboard dependencies and trimming codebase footprint.",
-    href: "../docs/plans/restructure.html",
-  },
-];
-
-const PLANNED_ITEMS: Item[] = [
-  {
-    title: "Offline-First Replica Sync (Turso)",
-    badge: "Storage",
-    desc: "Decoupled SQLite database per capability with offline-first local replicas on macOS and iPhone synced via Turso/libsql.",
-    href: "../docs/architecture/storage.html",
-  },
-  {
-    title: "Always-On Home Server Node",
-    badge: "Hardware",
-    desc: "Offloading continuous background ingestion, travel alerts, and c2/c3 local model inference to a dedicated Mac mini home server.",
-    href: `${REPO}/blob/main/PLAN.md#decisions`,
-  },
-  {
-    title: "Turnkey Mac DMG & TestFlight Distribution",
-    badge: "Distribution",
-    desc: "Notarized macOS installer and TestFlight distribution enabling household members and friends to run Sjel without dev toolchains (#235).",
-    href: `${REPO}/issues/235`,
-  },
-  {
-    title: "Transit Corridor Reliability Ingest",
-    badge: "Travel",
-    desc: "Automated punctuality collection and delay monitoring for regional rail corridors while the Mac is closed.",
-    href: "../docs/plans/transit.html",
-  },
-];
-
-const LAUNCHED_GROUPS: MonthGroup[] = [
-  {
-    month: "Initial Milestones",
-    items: [
-      {
-        title: "Single Native GPUI Foundation",
-        badge: "Core UI",
-        desc: "Consolidated desktop and mobile clients onto Zed's GPUI framework, retiring the former web dashboard and desktop shell.",
-        href: `${REPO}/commit/41d6e6a2`,
-      },
-      {
-        title: "Autonomous Rail Fare Tracker",
-        badge: "Travel",
-        desc: "Background sparpreis rail price monitoring with local notifications on iPhone whenever a new lowest fare is observed.",
-        href: `${REPO}/blob/main/capabilities/sparpreis-watch/README.md`,
-      },
-      {
-        title: "Targeted Wishlist Price Comparisons",
-        badge: "Inventory",
-        desc: "Robots-compliant daily product price tracking, need-based candidate comparisons, and automated alert thresholds.",
-        href: `${REPO}/blob/main/capabilities/wish-prices/README.md`,
-      },
-      {
-        title: "Deterministic Relational Storage",
-        badge: "Storage",
-        desc: "Unified SQLite storage layer with WAL mode, immediate write locking, and isolated backup/restore verification.",
-        href: "../docs/architecture/storage.html",
-      },
-    ],
-  },
-];
-
-function renderCard(item: Item): string {
-  const isExt = item.href.startsWith("http");
-  return `
-    <a class="roadmap-card" href="${esc(item.href)}"${isExt ? ' target="_blank" rel="noopener"' : ""}>
-      <div class="roadmap-card-head">
-        <span class="roadmap-card-title">${esc(item.title)}${isExt ? ' <span class="ext" aria-hidden="true">↗</span>' : ""}</span>
-        <span class="roadmap-badge">${esc(item.badge)}</span>
-      </div>
-      <p class="roadmap-card-desc">${esc(item.desc)}</p>
-    </a>`;
+function delivered(work: Work): string {
+  const groups = [...work.receipts].sort((a, b) => b.published_at.localeCompare(a.published_at)).map(receipt => {
+    const release = work.releases.find(r => r.version === receipt.version)!;
+    const outcomes = work.outcomes.filter(o => outcomeState(work, o) === "delivered" && o.tasks.some(id => release.tasks.includes(id))
+      && !work.receipts.some(later => later.published_at > receipt.published_at && work.releases.find(r => r.version === later.version)!.tasks.some(id => o.tasks.includes(id))));
+    return section(receipt.version, `<p><time datetime="${esc(receipt.published_at)}">${esc(receipt.published_at.slice(0, 10))}</time> · <a href="../../releases/${receipt.version}/index.html">Release notes</a></p>${outcomes.map(o => card(o, "roadmap/delivered/index.html")).join("")}`);
+  }).join("");
+  return `<div class="roadmap-wrap"><h1>Delivered</h1><p>Outcomes backed by published releases.</p><p><a href="../index.html">Upcoming work</a></p>${groups || "<p>No published releases have verified delivery records yet.</p>"}</div>`;
 }
 
-export function renderRoadmap(): string {
-  const activeHtml = `
-    <section class="roadmap-section">
-      <div class="roadmap-status active">
-        <h2><span aria-hidden="true">●</span> Active</h2>
-      </div>
-      <div class="roadmap-cards">
-        ${ACTIVE_ITEMS.map(renderCard).join("")}
-      </div>
-    </section>`;
-
-  const plannedHtml = `
-    <section class="roadmap-section">
-      <div class="roadmap-status planned">
-        <h2><span aria-hidden="true">⌛</span> Planned</h2>
-      </div>
-      <div class="roadmap-cards">
-        ${PLANNED_ITEMS.map(renderCard).join("")}
-      </div>
-    </section>`;
-
-  const launchedHtml = `
-    <section class="roadmap-section">
-      <div class="roadmap-status launched">
-        <h2><span aria-hidden="true">🚀</span> Launched</h2>
-      </div>
-      <div class="roadmap-timeline">
-        ${LAUNCHED_GROUPS.map(
-          (grp) => `
-          <div class="timeline-group">
-            <div class="timeline-date">${esc(grp.month)}</div>
-            <div class="roadmap-cards">
-              ${grp.items.map(renderCard).join("")}
-            </div>
-          </div>`,
-        ).join("")}
-      </div>
-    </section>`;
-
-  return `
-    <div class="roadmap-wrap">
-      <div class="roadmap-hero">
-        <nav class="crumbs" aria-label="Breadcrumb">
-          <a href="../index.html">Sjel</a><span class="sep">/</span><span class="current">Roadmap</span>
-        </nav>
-        <h1>Roadmap</h1>
-        <p>We're building the personal sovereign system for local memory, feeds, and client apps. Track active development, planned priorities, and shipped milestones below.</p>
-        <div class="subtext">For concrete work packages and architectural decisions, read the <a href="${REPO}/blob/main/PLAN.md">Sjel Plan</a>. Issues and friend trials are tracked on <a href="${REPO}/issues">GitHub</a>.</div>
-      </div>
-      ${activeHtml}
-      ${plannedHtml}
-      ${launchedHtml}
-    </div>`;
-}
-
-export function build(out: string): void {
-  const html = page({
-    title: "Roadmap — Sjel",
-    description: "Sjel roadmap: active development, planned work, and launched milestones.",
-    root: "../",
-    current: "roadmap",
-    body: renderRoadmap(),
-    footer: `<p>Tracked in <code>PLAN.md</code> and <code>docs/plans/</code> · <a href="${REPO}/blob/main/PLAN.md">View Sjel Plan</a></p>`,
+/** Build static views from the same records used by work checks and release preparation. */
+export function build(out: string, root = ROOT): void {
+  const work = loadWork(root);
+  const write = (path: string, title: string, body: string) => {
+    const prefix = "../".repeat(path.split("/").length - 1);
+    const html = page({ title: `${title} — Sjel`, description: title, root: prefix, current: "roadmap", body,
+      footer: `<p>Built from repository Markdown · <a href="${prefix}roadmap/index.html">Roadmap</a></p>` });
+    const file = join(out, path); mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, html);
+  };
+  write("roadmap/index.html", "Roadmap", renderRoadmap(work));
+  write("roadmap/delivered/index.html", "Delivered", delivered(work));
+  const releases = [...work.releases].sort((a, b) => {
+    const av = a.version.slice(1).split(".").map(Number), bv = b.version.slice(1).split(".").map(Number);
+    return bv[0] - av[0] || bv[1] - av[1] || bv[2] - av[2];
   });
-  const file = join(out, "roadmap/index.html");
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, html);
+  write("releases/index.html", "Releases", `<h1>Releases</h1>${releases.length ? `<ul>${releases.map(r => `<li><a href="${r.version}/index.html">${esc(r.title)}</a> — ${work.receipts.some(p => p.version === r.version) ? "Published" : "Draft; not available"}</li>`).join("")}</ul>` : "<p>No release records yet. A source tag or draft alone does not establish delivery.</p>"}`);
+  for (const release of releases) {
+    const path = `releases/${release.version}/index.html`;
+    const receipt = work.receipts.find(p => p.version === release.version);
+    const availability = receipt ? `<p>Published ${esc(receipt.published_at.slice(0, 10))} · <a href="${esc(receipt.url)}">Download release</a></p>` : "<p>Draft. Not published or available for installation.</p>";
+    const tasks = release.tasks.map(id => work.tasks.find(t => t.id === id)!);
+    write(path, release.title, `${availability}${renderMarkdown(release.body, release.path, path).html}<h2>${receipt ? "Delivered work" : "Intended scope"}</h2><ul>${tasks.map(t => `<li><a href="${docLink(t.path, path)}">${esc(t.title)}</a>${!receipt && t.state !== "done" ? " — acceptance pending" : ""}</li>`).join("")}</ul>`);
+  }
+  write("docs/tasks/index.html", "Open tasks", `<h1>Open tasks</h1><p>Actionable work. Completed and cancelled tasks are excluded.</p><ul>${work.tasks.filter(isOpen).sort((a, b) => a.priority - b.priority || a.title.localeCompare(b.title)).map(t => `<li><a href="${posix.basename(t.path, ".md")}.html">${esc(t.title)}</a> — P${t.priority}, ${esc(t.state)}${t.blocked_by ? `; blocked: ${esc(t.blocked_by)}` : ""}</li>`).join("")}</ul>`);
 }
 
 if (import.meta.main) {
-  const args = process.argv.slice(2);
-  const outIdx = args.indexOf("--out");
-  const out = outIdx >= 0 ? args[outIdx + 1] : join(ROOT, "site");
-  build(out);
-  console.log(`roadmap: wrote ${join(out, "roadmap/index.html")}`);
+  const args = process.argv.slice(2), index = args.indexOf("--out");
+  build(index < 0 ? join(ROOT, "site") : args[index + 1]);
+  console.log("roadmap: built upcoming, delivered, release and task views");
 }

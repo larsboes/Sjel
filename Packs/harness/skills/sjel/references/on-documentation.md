@@ -18,8 +18,10 @@ Keep each fact with its owner:
 - Skill reference: reusable agent procedure or slow-changing decision test.
 - Runtime tool: ports, inventories, health, issue state, graph size, and other changing facts.
 
-- `PLAN.md`: the order of work, and nothing else.
-- `docs/plans/<area>.md`: open work with a done-when check.
+- `docs/tasks/<slug>.md`: canonical outcome, acceptance, dependencies and evidence.
+- `docs/roadmap/<slug>.md`: public outcome and required task IDs; derive display state.
+- `docs/releases/<version>.md`: release scope and upgrade notes; receipts establish delivery.
+- `PLAN.md` and `docs/plans/<area>.md`: priority entry points and links to canonical tasks.
 - `docs/capabilities/<name>.md`: a capability's technical manual (interface contracts, data
   flows, Mermaid diagrams, guarantees). The capability README stays a lean entry point with the
   why and a link to the manual.
@@ -31,7 +33,7 @@ comments or config comments. Put them in the commit message.
 Sjel planning lives in the repository. The Obsidian vault keeps only what cannot be public:
 private reasoning and vault law. When you move planning out of the vault, replace the vault copy
 with a link to the repository file. Agent memory notes are not a planning surface either: write a
-durable rule into the skill or the area plan that owns it.
+durable rule into its owning code, skill or architecture contract.
 
 ## Code comments
 
@@ -52,10 +54,14 @@ durable rule into the skill or the area plan that owns it.
 
 ## Plans
 
-- A shipped work package shrinks to one line that names its commit. The commit holds the detail.
-- Plans live in `PLAN.md` (order) and one file per area in `docs/plans/` (open work). A
-  README or manifest describes what is built and why. It holds no open-work list: move that to the
-  area plan or an issue.
+- Active plans contain no completed entries, including commit breadcrumbs. Completed task records
+  remain addressable; default views exclude them. Delivered history requires publication receipts.
+- Use `tools/work list` and the repository's `docs/architecture/work-tracking.md` contract.
+  GitHub Issues provide intake and discussion, not task or roadmap authority.
+- Transfer existing area-plan sections in reviewed batches. Preserve every unresolved acceptance
+  check before removing its source list; implementation is not live acceptance.
+- Keep task prose short: concrete outcome, observable checks and links to needed design.
+  Current interfaces belong in owner manuals; history belongs in Git and release records.
 
 ## Register
 

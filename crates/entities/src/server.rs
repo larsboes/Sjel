@@ -108,14 +108,14 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     route_manifest::get(
         "GET",
-        "/api/graph",
+        entities_api::ROUTE_GRAPH,
         "People and the operator as nodes, with company, and their exact links as edges: \
          introduced (a introduced b) and conversation (shared a group conversation, at = latest \
          day). A shared company is a node value, not an edge.",
     ),
     route_manifest::Route {
         method: "POST",
-        path: "/api/edges",
+        path: entities_api::ROUTE_EDGES,
         summary:
             "Link two entities: { a, b, kind: introduced|conversation, at?, note?, source? }. \
                   An existing link keeps the later day. Returns the stored edge.",
@@ -123,7 +123,7 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     route_manifest::Route {
         method: "POST",
-        path: "/api/edges/remove",
+        path: entities_api::ROUTE_EDGES_REMOVE,
         summary: "Remove one link: { a, b, kind }. 204 when removed, 404 when there was none.",
         request_schema: Some(route_manifest::schema_of::<RemoveEdgeRequest>),
     },
@@ -749,9 +749,9 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/duplicates", get(duplicates))
         .route("/api/resolve", post(resolve))
         .route("/api/duplicates/distinct", post(mark_distinct))
-        .route("/api/graph", get(graph))
-        .route("/api/edges", post(add_edge))
-        .route("/api/edges/remove", post(remove_edge))
+        .route(entities_api::ROUTE_GRAPH, get(graph))
+        .route(entities_api::ROUTE_EDGES, post(add_edge))
+        .route(entities_api::ROUTE_EDGES_REMOVE, post(remove_edge))
         .route("/api/entities/{id}/merge", post(merge_entity))
         .route("/api/entities/{id}/self", post(make_self))
         // Below every route: `layer` wraps only what is registered before it

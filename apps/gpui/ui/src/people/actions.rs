@@ -61,6 +61,9 @@ impl PeoplePage {
         let (Some(shell), Some(id)) = (self.writer(), self.selected_id.clone()) else {
             return;
         };
+        if self.person(&id).is_none() {
+            return;
+        }
         if self.confirm_remove.as_deref() != Some(id.as_str()) {
             self.confirm_remove = Some(id);
             cx.notify();
@@ -99,6 +102,14 @@ impl PeoplePage {
                     .entity_fact_add(&id, body)
                     .await
                     .map(|_| Saved::Person(id)),
+                Work::Introduce { from, to, note } => shell
+                    .people_link(&from, &to, "introduced", note.as_deref())
+                    .await
+                    .map(|()| Saved::Person(to)),
+                Work::UnlinkIntroduction { from, to } => shell
+                    .people_unlink(&from, &to, "introduced")
+                    .await
+                    .map(|()| Saved::Links),
                 Work::RemoveFact(id, fact) => shell
                     .entity_fact_delete(&id, &fact)
                     .await
@@ -128,7 +139,7 @@ impl PeoplePage {
                         match saved {
                             Saved::Person(id) => page.selected_id = Some(id),
                             Saved::Removed => page.selected_id = None,
-                            Saved::Fields => {}
+                            Saved::Fields | Saved::Links => {}
                             Saved::Pair => page.load_duplicates(cx),
                         }
                         page.load(cx);
@@ -149,50 +160,35 @@ impl PeoplePage {
     }
 
     pub(super) fn on_next(&mut self, _: &Next, _: &mut Window, cx: &mut Context<Self>) {
-        self.sync_derived();
-        if self.derived.filtered_indices.is_empty() {
-            return;
-        }
-        let at = self.selected_id.as_ref().and_then(|id| {
-            self.derived
-                .filtered_indices
-                .iter()
-                .position(|&ix| self.derived.parsed.get(ix).is_some_and(|p| &p.id == id))
-        });
-        let next_idx = match at {
-            Some(i) if i + 1 < self.derived.filtered_indices.len() => i + 1,
-            _ => 0,
-        };
-        if let Some(&person_ix) = self.derived.filtered_indices.get(next_idx) {
-            if let Some(person) = self.derived.parsed.get(person_ix) {
-                self.selected_id = Some(person.id.clone());
-                self.people_list.scroll_to_reveal_item(next_idx);
-                cx.notify();
-            }
-        }
+        self.step_selection(true, cx);
     }
 
     pub(super) fn on_previous(&mut self, _: &Previous, _: &mut Window, cx: &mut Context<Self>) {
+        self.step_selection(false, cx);
+    }
+
+    pub(super) fn step_selection(&mut self, forward: bool, cx: &mut Context<Self>) {
         self.sync_derived();
-        if self.derived.filtered_indices.is_empty() {
+        let indices = &self.derived.filtered_indices;
+        let count = indices.len();
+        if count == 0 {
             return;
         }
-        let at = self.selected_id.as_ref().and_then(|id| {
-            self.derived
-                .filtered_indices
+        let at = self.selected_id.as_deref().and_then(|id| {
+            indices
                 .iter()
-                .position(|&ix| self.derived.parsed.get(ix).is_some_and(|p| &p.id == id))
+                .position(|&i| self.derived.parsed[i].id == id)
         });
-        let prev_idx = match at {
-            Some(i) if i > 0 => i - 1,
-            _ => self.derived.filtered_indices.len().saturating_sub(1),
+        let next = match (at, forward) {
+            (Some(i), true) => (i + 1) % count,
+            (Some(i), false) if i > 0 => i - 1,
+            (_, true) => 0,
+            (_, false) => count - 1,
         };
-        if let Some(&person_ix) = self.derived.filtered_indices.get(prev_idx) {
-            if let Some(person) = self.derived.parsed.get(person_ix) {
-                self.selected_id = Some(person.id.clone());
-                self.people_list.scroll_to_reveal_item(prev_idx);
-                cx.notify();
-            }
+        let id = self.derived.parsed[indices[next]].id.clone();
+        self.select_person(Some(id), cx);
+        if !self.show_network {
+            self.people_list.scroll_to_reveal_item(next);
         }
     }
 

@@ -7,7 +7,10 @@
 mod actions;
 mod detail;
 mod forms;
+mod network;
 
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -20,6 +23,7 @@ use gpui_kit::{
     div, point, prelude::*, px, rgb, rgba, Context, Entity, FocusHandle, FontWeight, IntoElement,
     Render, ScrollHandle, SharedString, Subscription, Window,
 };
+use sjel_gpui_core::people::graph::{company_key, Layout};
 use sjel_gpui_core::people::{view_people, Order, Origin, Person};
 use sjel_gpui_core::shell::{self, DuplicatePair, EntityField, EntityRecord, Shell, ShellError};
 
@@ -40,7 +44,7 @@ pub mod page {
 pub(super) struct PeopleDerived {
     pub(super) people_at: Option<Option<Instant>>,
     pub(super) parsed: Vec<Person>,
-    pub(super) filter_key: Option<(Option<Instant>, u64)>,
+    pub(super) filter_key: Option<(Option<Instant>, u64, chrono::NaiveDate)>,
     pub(super) filtered_indices: Vec<usize>,
     /// People under each `Origin::ALL` entry, before the search narrows them.
     pub(super) origin_counts: [usize; 4],
@@ -56,10 +60,15 @@ pub struct PeoplePage {
     /// Probable duplicates, read when the Duplicates view opens.
     pub(super) duplicates: Remote<Vec<DuplicatePair>>,
     pub(super) show_duplicates: bool,
+    pub(super) show_network: bool,
+    graph: Remote<Rc<Layout>>,
+    graph_request: u64,
+    network_bounds: Rc<Cell<Option<gpui_kit::Bounds<gpui_kit::Pixels>>>>,
     /// The open form, when one is.
     pub(super) form: Option<Form>,
     /// The person whose removal the next press confirms.
     pub(super) confirm_remove: Option<String>,
+    confirm_unlink: Option<(String, String)>,
     /// A write that failed with no form open to show it.
     pub(super) write_error: Option<SharedString>,
     pub selected_id: Option<String>,
@@ -70,6 +79,9 @@ pub struct PeoplePage {
     pub(super) derived: PeopleDerived,
     pub(super) people_list: gpui::ListState,
     search_input: Option<(Entity<TextInput>, Subscription)>,
+    company_input: Option<(Entity<TextInput>, Subscription)>,
+    company_query: String,
+    overdue_only: bool,
     pub(super) form_scroll: ScrollHandle,
     pub(super) detail_scroll: ScrollHandle,
     focus: FocusHandle,
@@ -90,8 +102,13 @@ impl PeoplePage {
             fields: Remote::default(),
             duplicates: Remote::default(),
             show_duplicates: false,
+            show_network: false,
+            graph: Remote::default(),
+            graph_request: 0,
+            network_bounds: Default::default(),
             form: None,
             confirm_remove: None,
+            confirm_unlink: None,
             write_error: None,
             selected_id: None,
             search_query: String::new(),
@@ -101,6 +118,9 @@ impl PeoplePage {
             derived: PeopleDerived::default(),
             people_list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
             search_input: None,
+            company_input: None,
+            company_query: String::new(),
+            overdue_only: false,
             form_scroll: ScrollHandle::new(),
             detail_scroll: ScrollHandle::new(),
             focus: cx.focus_handle(),
@@ -145,15 +165,29 @@ impl PeoplePage {
             self.derived.origin_counts =
                 Origin::ALL.map(|o| parsed.iter().filter(|p| p.has_origin(o)).count());
         }
-        let filter_key = (self.people.loaded_at, self.filter_rev);
+        let today = chrono::Local::now().date_naive();
+        let filter_key = (self.people.loaded_at, self.filter_rev, today);
         if self.derived.filter_key != Some(filter_key) {
             self.derived.filter_key = Some(filter_key);
             let filtered = view_people(
                 &self.derived.parsed,
                 &self.search_query,
-                self.origin,
+                if self.show_network {
+                    Origin::All
+                } else {
+                    self.origin
+                },
                 self.order,
-            );
+            )
+            .into_iter()
+            .filter(|person| {
+                self.show_network
+                    || ((!self.overdue_only || person.is_overdue(today))
+                        && (self.company_query.is_empty()
+                            || person.company.as_deref().is_some_and(|company| {
+                                company_key(company).contains(&self.company_query)
+                            })))
+            });
             let base = self.derived.parsed.as_ptr() as usize;
             let stride = std::mem::size_of::<Person>();
             let indices: Vec<usize> = if stride > 0 {
@@ -196,6 +230,7 @@ impl PeoplePage {
     }
 
     pub fn load(&mut self, cx: &mut Context<Self>) {
+        self.load_graph(cx);
         let Ok(shell) = self.repo.shell() else {
             return;
         };
@@ -209,7 +244,12 @@ impl PeoplePage {
             let res = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |page, cx| {
                 if let Ok(records) = &res {
-                    if page.selected_id.is_none() {
+                    if !page.show_network
+                        && page
+                            .selected_id
+                            .as_ref()
+                            .is_none_or(|id| !records.iter().any(|record| &record.id == id))
+                    {
                         page.selected_id = records.first().map(|r| r.id.clone());
                     }
                 }
@@ -263,6 +303,33 @@ impl PeoplePage {
             .cloned()
     }
 
+    pub(super) fn select_person(&mut self, id: Option<String>, cx: &mut Context<Self>) {
+        if self.selected_id != id {
+            self.selected_id = id;
+            self.form = None;
+            self.confirm_remove = None;
+            self.confirm_unlink = None;
+            self.detail_scroll.set_offset(point(px(0.), px(0.)));
+            cx.notify();
+        }
+    }
+
+    fn company_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
+        if let Some((input, _)) = &self.company_input {
+            return input.clone();
+        }
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Filter by company…"));
+        let subscription = cx.subscribe_in(&input, window, |page, input, event, _, cx| {
+            if matches!(event, InputEvent::Changed) {
+                page.company_query = company_key(input.read(cx).text());
+                page.filter_rev = page.filter_rev.wrapping_add(1);
+                cx.notify();
+            }
+        });
+        self.company_input = Some((input.clone(), subscription));
+        input
+    }
+
     pub(super) fn search_field(
         &mut self,
         window: &mut Window,
@@ -272,13 +339,25 @@ impl PeoplePage {
             return input.clone();
         }
         let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Search people…"));
-        let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
-            if matches!(event, InputEvent::Changed) {
-                view.search_query = input.read(cx).text().trim().to_lowercase();
-                view.filter_rev = view.filter_rev.wrapping_add(1);
-                cx.notify();
-            }
-        });
+        let subscription =
+            cx.subscribe_in(&input, window, |view, input, event, _, cx| match event {
+                InputEvent::Changed => {
+                    view.search_query = input.read(cx).text().trim().to_lowercase();
+                    view.filter_rev = view.filter_rev.wrapping_add(1);
+                    if view.show_network && !view.search_query.is_empty() {
+                        view.sync_derived();
+                        let first = view
+                            .derived
+                            .filtered_indices
+                            .first()
+                            .map(|&i| view.derived.parsed[i].id.clone());
+                        view.select_person(first, cx);
+                    }
+                    cx.notify();
+                }
+                InputEvent::Submit if view.show_network => view.step_selection(true, cx),
+                _ => {}
+            });
         self.search_input = Some((input.clone(), subscription));
         input
     }
@@ -326,17 +405,27 @@ impl Render for PeoplePage {
                     .child(sub_tabs(
                         "people-view-tabs",
                         vec![
-                            ("Directory", Some(total_contacts), !self.show_duplicates),
+                            (
+                                "Directory",
+                                Some(total_contacts),
+                                !self.show_duplicates && !self.show_network,
+                            ),
                             ("Duplicates", dup_count, self.show_duplicates),
+                            ("Network", None, self.show_network),
                         ],
                         move |ix, _, cx| {
                             tab_entity.update(cx, |page, cx| {
-                                let next_dup = ix == 1;
-                                if page.show_duplicates != next_dup {
-                                    page.show_duplicates = next_dup;
+                                let (dup, net) = (ix == 1, ix == 2);
+                                if (page.show_duplicates, page.show_network) != (dup, net) {
+                                    page.show_duplicates = dup;
+                                    page.show_network = net;
                                     page.form = None;
-                                    if page.show_duplicates {
+                                    page.filter_rev = page.filter_rev.wrapping_add(1);
+                                    if dup {
                                         page.load_duplicates(cx);
+                                    }
+                                    if net && !page.graph.loading && page.graph.value.is_none() {
+                                        page.load_graph(cx);
                                     }
                                     cx.notify();
                                 }
@@ -375,6 +464,8 @@ impl Render for PeoplePage {
         let write_error = self.write_error.clone();
 
         let order = self.order;
+        let today = chrono::Local::now().date_naive();
+        let search = self.search_field(window, cx);
         let view_entity = cx.entity();
         let search_box = div()
             .w_full()
@@ -385,7 +476,7 @@ impl Render for PeoplePage {
                 div()
                     .flex_1()
                     .min_w_0()
-                    .child(Input::new(&self.search_field(window, cx)).size(ControlSize::Sm)),
+                    .child(Input::new(&search).size(ControlSize::Sm)),
             )
             .child(
                 Button::new("people-order", format!("↕ {}", order.label()))
@@ -411,16 +502,40 @@ impl Render for PeoplePage {
         );
 
         // Left List Pane
-        let mut list_pane = div()
-            .w(px(320.))
-            .min_h_0()
-            .min_w_0()
-            .flex_none()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(search_box)
-            .child(origin_tabs);
+        let mut list_pane =
+            div()
+                .w(px(320.))
+                .min_h_0()
+                .min_w_0()
+                .flex_none()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(search_box)
+                .child(origin_tabs)
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(div().flex_1().min_w_0().child(
+                            Input::new(&self.company_field(window, cx)).size(ControlSize::Sm),
+                        ))
+                        .child(
+                            Button::new("people-overdue", "Overdue only")
+                                .size(ControlSize::Sm)
+                                .variant(if self.overdue_only {
+                                    ButtonVariant::Primary
+                                } else {
+                                    ButtonVariant::Ghost
+                                })
+                                .on_click(cx.listener(|page, _, _, cx| {
+                                    page.overdue_only = !page.overdue_only;
+                                    page.filter_rev = page.filter_rev.wrapping_add(1);
+                                    cx.notify();
+                                })),
+                        ),
+                );
 
         if is_empty {
             list_pane = list_pane.child(
@@ -456,6 +571,7 @@ impl Render for PeoplePage {
                             .flatten()
                             .collect::<Vec<_>>()
                             .join(" · ");
+                        let overdue = person.is_overdue(today);
                         let day = page
                             .order
                             .key()
@@ -486,11 +602,7 @@ impl Render for PeoplePage {
                                     })
                                     .cursor_pointer()
                                     .on_click(cx.listener(move |page, _, _, cx| {
-                                        page.selected_id = Some(pid.clone());
-                                        page.form = None;
-                                        page.confirm_remove = None;
-                                        page.detail_scroll.set_offset(point(px(0.), px(0.)));
-                                        cx.notify();
+                                        page.select_person(Some(pid.clone()), cx);
                                     }))
                                     .child(initials_badge(&initials, palette))
                                     .child(
@@ -518,6 +630,15 @@ impl Render for PeoplePage {
                                                 )
                                             }),
                                     )
+                                    .when(overdue, |el| {
+                                        el.child(
+                                            div()
+                                                .flex_none()
+                                                .text_xs()
+                                                .text_color(rgb(palette.amber))
+                                                .child("Overdue"),
+                                        )
+                                    })
                                     .when_some(day, |el, day| {
                                         el.child(
                                             div()
@@ -560,6 +681,7 @@ impl Render for PeoplePage {
             FormKind::New => "New Person",
             FormKind::Edit(_) => "Edit Person",
             FormKind::Fact(_) => "Add Place Fact",
+            FormKind::Introduction(_) => "Record Introduction",
             FormKind::Field => "Declare Registry Field",
         });
         let form_sheet = self
@@ -602,6 +724,8 @@ impl Render for PeoplePage {
             .on_action(cx.listener(|page, _: &CloseForm, _, cx| {
                 if page.form.is_some() {
                     page.close_form(cx);
+                } else if page.confirm_unlink.take().is_some() {
+                    cx.notify();
                 }
             }))
             .size_full()
@@ -627,8 +751,14 @@ impl Render for PeoplePage {
                     .flex_1()
                     .min_h_0()
                     .min_w_0()
-                    .child(list_pane)
-                    .child(detail_pane),
+                    .map(|body| {
+                        if self.show_network {
+                            body.child(self.render_network(&search, palette, cx))
+                                .child(div().w(px(320.)).flex_none().flex().child(detail_pane))
+                        } else {
+                            body.child(list_pane).child(detail_pane)
+                        }
+                    }),
             )
             .children(form_sheet)
             .when(!self.density.is_mobile(), |el| {
@@ -648,6 +778,72 @@ impl Render for PeoplePage {
 mod tests {
     use super::*;
     use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn network_node_click_and_keyboard_move_the_contact_inspector(cx: &mut TestAppContext) {
+        use sjel_gpui_core::people::graph::{layout, EntityEdge, GraphNode, PeopleGraph};
+        let (view, cx) =
+            crate::test_support::mount_root(cx, Some(gpui::size(px(1100.), px(800.))), |_, cx| {
+                let mut page = PeoplePage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+                let records: Vec<_> = [("ada", "Ada Lovelace"), ("grace", "Grace Hopper")]
+                    .into_iter()
+                    .map(|(id, name)| EntityRecord {
+                        id: id.into(),
+                        name: name.into(),
+                        kind: "person".into(),
+                        ..Default::default()
+                    })
+                    .collect();
+                let nodes = records
+                    .iter()
+                    .map(|p| GraphNode {
+                        id: p.id.clone(),
+                        name: p.name.clone(),
+                        kind: p.kind.clone(),
+                        company: Some("Computing".into()),
+                    })
+                    .collect();
+                let edges = vec![EntityEdge {
+                    a: "ada".into(),
+                    b: "grace".into(),
+                    kind: "introduced".into(),
+                    source: "operator".into(),
+                    at: None,
+                    note: None,
+                }];
+                page.people.settle(Ok(records));
+                page.graph
+                    .settle(Ok(Rc::new(layout(&PeopleGraph { nodes, edges }))));
+                page.selected_id = Some("ada".into());
+                page
+            });
+        cx.update(|_, cx| bind_keys(cx));
+        let tabs = cx
+            .debug_bounds("people-view-tabs-tabs")
+            .expect("People tabs rendered");
+        let network_tab = tabs.origin + point(tabs.size.width - px(20.), tabs.size.height / 2.);
+        cx.simulate_click(network_tab, gpui::Modifiers::none());
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let target = view.read_with(cx, |page, _| {
+            assert!(page.show_network);
+            let bounds = page.network_bounds.get().expect("canvas painted");
+            let (cx, cy, side) = network::frame_of(&bounds);
+            assert!(side > 50.);
+            let grace = &page.graph.value.as_ref().unwrap().nodes[1];
+            point(px(cx + grace.x * side), px(cy + grace.y * side))
+        });
+        cx.simulate_click(target, gpui::Modifiers::none());
+        cx.run_until_parked();
+        view.read_with(cx, |page, _| {
+            assert_eq!(page.selected_id.as_deref(), Some("grace"))
+        });
+        cx.simulate_keystrokes("k");
+        cx.run_until_parked();
+        view.read_with(cx, |page, _| {
+            assert_eq!(page.selected_id.as_deref(), Some("ada"))
+        });
+    }
 
     #[gpui::test]
     fn people_selection(cx: &mut TestAppContext) {

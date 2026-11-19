@@ -1,4 +1,5 @@
-//! entities HTTP surface (port 8097), and the `sync-journal` / `sync-google` commands.
+//! entities HTTP surface (port 8097), and the `sync-journal`, `sync-google` and `sync-linkedin`
+//! commands.
 //!
 //! Same shape as `crates/traveler`: blocking store work in `spawn_blocking`, `/ready`
 //! proves the database, `/routes` serves the manifest the tests check against this file.
@@ -666,9 +667,22 @@ fn run_sync(
     config: &Config,
     store: &EntitiesStore,
     system: &str,
+    file: Option<&str>,
     dry_run: bool,
 ) -> Result<(), String> {
     let (records, managed): (Vec<entities::sync::Incoming>, &[&str]) = match system {
+        "linkedin" => {
+            let path = file.ok_or("sync-linkedin needs the path of Connections.csv")?;
+            let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+            let parsed = entities::linkedin::parse(&text).map_err(|e| format!("{path}: {e}"))?;
+            if parsed.skipped > 0 {
+                println!(
+                    "sync-linkedin: {} rows without a name or profile URL skipped",
+                    parsed.skipped
+                );
+            }
+            (parsed.records, entities::linkedin::MANAGED)
+        }
         "google" => {
             let people = entities::google::fetch()?;
             let skipped = people.len();
@@ -731,7 +745,21 @@ fn main() {
     match args.first().map(String::as_str) {
         Some("sync-google") => {
             let dry_run = args.iter().any(|a| a == "--dry-run");
-            if let Err(error) = run_sync(&config, &store, "google", dry_run) {
+            if let Err(error) = run_sync(&config, &store, "google", None, dry_run) {
+                eprintln!("entities: {error}");
+                std::process::exit(1);
+            }
+        }
+        Some("sync-linkedin") => {
+            let dry_run = args.iter().any(|a| a == "--dry-run");
+            let file = args.iter().skip(1).find(|a| !a.starts_with("--"));
+            if let Err(error) = run_sync(
+                &config,
+                &store,
+                "linkedin",
+                file.map(String::as_str),
+                dry_run,
+            ) {
                 eprintln!("entities: {error}");
                 std::process::exit(1);
             }
@@ -772,7 +800,7 @@ fn main() {
             .block_on(serve(config, store)),
         Some(other) => {
             eprintln!(
-                "usage: entities-server [names | sync-journal|sync-google [--dry-run]] (got {other:?})"
+                "usage: entities-server [names | sync-journal|sync-google [--dry-run] | sync-linkedin <Connections.csv> [--dry-run]] (got {other:?})"
             );
             std::process::exit(64);
         }

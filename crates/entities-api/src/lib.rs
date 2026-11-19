@@ -62,6 +62,7 @@ pub const SOURCES: &[&str] = &[
     "places-register",
     "import",
     "journal",
+    "linkedin",
 ];
 
 pub const FACT_PREDICATES: &[&str] = &["home_base", "away"];
@@ -222,6 +223,8 @@ pub fn builtin_fields() -> Vec<EntityField> {
         person("skills", "Skills", "tags", &[]),
         person("socials", "Socials", "tags", &[]),
         person("last_contact", "Last contact", "date", &[]),
+        person("linkedin", "LinkedIn", "url", &[]),
+        person("connected_on", "Connected on", "date", &[]),
         organisation("notes", "Notes", "longtext", "C2"),
         organisation("relation", "Relation", "text", "C2"),
         organisation("website", "Website", "text", "C0"),

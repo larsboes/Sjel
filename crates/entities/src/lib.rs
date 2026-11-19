@@ -8,6 +8,7 @@ pub mod config;
 pub mod duplicates;
 pub mod google;
 pub mod journal;
+pub mod linkedin;
 pub mod model;
 pub mod names;
 pub mod places;

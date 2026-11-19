@@ -57,6 +57,7 @@ receipts still describe what previously shipped.
 
 ```sh
 tools/work list                 # open tasks, ordered by priority
+tools/work list --area gpui --state verify
 tools/work list --all --json     # all task records
 tools/work show <id>
 tools/work new <area> <title>
@@ -65,6 +66,9 @@ tools/work inventory            # every remaining plan section; no writes
 tools/work inventory --json     # includes original section text
 tools/work render --out <dir>   # roadmap, delivered, release and task-index pages
 ```
+
+`--area` and `--state` can be combined. An explicit state also selects completed or cancelled
+tasks when requested. `--all` removes the default open-task filter.
 
 The static site build renders task detail through the existing documentation renderer.
 `tools/work render` renders indexes and release views; it is not a replacement for `website/build`.

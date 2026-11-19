@@ -2,11 +2,13 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { AREAS, document, inventory, isOpen, loadWork, validateReceipt, type Receipt, type Release } from "./lib/work.ts";
+import { parseArgs } from "node:util";
+import { AREAS, STATES, document, inventory, isOpen, loadWork, validateReceipt, type Receipt, type Release } from "./lib/work.ts";
 
 const ROOT = resolve(import.meta.dir, "..");
 export const USAGE = `tools/work <command>
-  list [--all] [--json]       Open tasks, in priority order
+  list [--area <area>] [--state <state>] [--all] [--json]
+                             Tasks in priority order (open by default)
   show <id>                  Task, outcome or release source
   check                      Validate task graph and publication receipts offline
   inventory [--json]         Inventory unmigrated planning sections; no writes
@@ -104,9 +106,17 @@ export async function run(args: string[], root = ROOT): Promise<string> {
   }
   const work = loadWork(root);
   if (command === "list") {
-    if (rest.some(arg => !["--all", "--json"].includes(arg))) throw new Error(USAGE);
-    const tasks = work.tasks.filter(t => rest.includes("--all") || isOpen(t)).sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id));
-    return rest.includes("--json") ? JSON.stringify(tasks, null, 2) : tasks.map(t => `P${t.priority}\t${t.state}${t.blocked_by ? " (blocked)" : ""}\t${t.id}\t${t.title}`).join("\n") || "No open tasks.";
+    const { values: { all, json, area, state } } = parseArgs({ args: rest, options: {
+      all: { type: "boolean" }, json: { type: "boolean" }, area: { type: "string" }, state: { type: "string" },
+    } });
+    if (area !== undefined && !AREAS.some(candidate => candidate === area)) throw new Error(`Unknown area '${area}'. Choose from ${AREAS.join(", ")}.`);
+    if (state !== undefined && !STATES.some(candidate => candidate === state)) throw new Error(`Unknown state '${state}'. Choose from ${STATES.join(", ")}.`);
+    const tasks = work.tasks.filter(task => (area === undefined || task.area === area)
+      && (state === undefined ? all || isOpen(task) : task.state === state))
+      .sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id));
+    if (json) return JSON.stringify(tasks, null, 2);
+    if (!tasks.length) return area !== undefined || state !== undefined || all ? "No matching tasks." : "No open tasks.";
+    return tasks.map(t => `P${t.priority}\t${t.state}${t.blocked_by ? " (blocked)" : ""}\t${t.id}\t${t.title}`).join("\n");
   }
   if (command === "show" && rest.length === 1) {
     const record = [...work.tasks, ...work.outcomes, ...work.releases].find(r => ("id" in r ? r.id : r.version) === rest[0]);

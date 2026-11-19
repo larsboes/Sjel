@@ -28,6 +28,20 @@ describe("canonical work graph", () => {
   test("empty graph and CLI have honest empty states", async () => {
     const root = fixture(); expect(loadWork(root).tasks).toEqual([]); expect(await run(["list"], root)).toBe("No open tasks.");
   });
+  test("area and state filters compose for text and JSON", async () => {
+    const root = fixture();
+    put(root, "docs/tasks/a.md", task("task-alpha", "", "verify"));
+    put(root, "docs/tasks/b.md", task("task-beta", "", "verify").replace("area: storage", "area: gpui"));
+    put(root, "docs/tasks/c.md", task("task-gamma", "evidence: [Fixture passed]\n", "done"));
+    const selected = JSON.parse(await run(["list", "--area", "storage", "--state", "verify", "--json"], root));
+    expect(selected.map((record: { id: string }) => record.id)).toEqual(["task-alpha"]);
+    expect(await run(["list", "--area", "storage"], root)).not.toContain("task-gamma");
+    expect(await run(["list", "--area", "storage", "--all"], root)).toContain("task-gamma");
+    expect(await run(["list", "--state", "done"], root)).toContain("task-gamma");
+    expect(await run(["list", "--area", "gpui", "--state", "done"], root)).toBe("No matching tasks.");
+    await expect(run(["list", "--area", "missing"], root)).rejects.toThrow("Unknown area");
+    await expect(run(["list", "--state", "missing"], root)).rejects.toThrow("Unknown state");
+  });
   test("reads YAML and derives roadmap state", () => {
     const root = fixture(); put(root, "docs/tasks/alpha.md", task()); put(root, "docs/roadmap/notes.md", outcome());
     const work = loadWork(root); expect(work.tasks[0].body).toStartWith("# Find"); expect(outcomeState(work, work.outcomes[0])).toBe("planned");

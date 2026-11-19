@@ -161,6 +161,8 @@ pub(super) fn render_person_detail(
         .flatten()
         .collect::<Vec<_>>()
         .join(" at ");
+    let network = person.network_rows();
+    let origins = person.origins().into_iter().collect::<Vec<_>>().join(", ");
 
     let header_card = div()
         .p_6()
@@ -223,6 +225,13 @@ pub(super) fn render_person_detail(
     }
     if let Some(note) = person.note_ref {
         contact_fields = contact_fields.child(detail_row("NOTE", note, palette));
+    }
+
+    for (label, value) in network {
+        contact_fields = contact_fields.child(detail_row(&label.to_uppercase(), value, palette));
+    }
+    if !origins.is_empty() {
+        contact_fields = contact_fields.child(detail_row("SOURCES", origins, palette));
     }
 
     for (k, v) in person.custom_fields {

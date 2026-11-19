@@ -266,6 +266,9 @@ fn person_fields(person: &Person) -> Vec<(String, String)> {
             fields.push((label.to_owned(), value.clone()));
         }
     }
+    for (label, value) in person.network_rows() {
+        fields.push((label.to_uppercase(), value));
+    }
     for (key, value) in &person.custom_fields {
         fields.push((key.to_uppercase(), value.clone()));
     }

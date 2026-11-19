@@ -18,9 +18,12 @@ when you last spoke, and who is due for a follow-up.
 
 ## Acceptance
 
-- The list searches name, company, role, aliases and source in one field. It filters by source,
-  company and overdue follow-up.
-- Each person shows its sources (Google, LinkedIn, operator) and `connected_on`.
+- Done in code: the list filters by origin (All, LinkedIn, Google, Added by you) with counts,
+  and sorts by name, last contact or connected day (`view_people` in
+  `apps/gpui/core/src/people.rs`). The row shows the day that the sort uses.
+- Done in code: Mac and phone detail show LinkedIn, Connected, Last contact and Sources rows.
+- Open: check both in the installed app with the real import. Not run.
+- Open: search also matches aliases. Filter by company and by overdue follow-up.
 - How we met: a person can name the event, project or person that introduced them. An
   introduction by a person is an edge to that entity, not free text.
 - Last contact reads the existing `last_contact` value (`crates/entities/src/journal.rs`). Mail

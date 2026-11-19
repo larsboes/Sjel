@@ -190,5 +190,34 @@ if [ -n "$interior" ]; then
     echo 'Interior served the owner catalogue and accepted only the owned RoomPlan link across separate files.'
 fi
 
+sqlite3 -bail owner.db <<'SQL'
+INSERT INTO inventory_item(id, kind, label, created_at, updated_at)
+VALUES ('cli/probe +?', 'gear', 'Price CLI fixture', '2000-01-01', '2000-01-01');
+-- Keep the scheduled runner on local fixtures during the rehearsal.
+UPDATE inventory_item SET link = NULL WHERE id IN (SELECT item_id FROM inventory_wish_group_item);
+SQL
+start_service price-cli
+inventory_cli() {
+    env -i PATH="$PATH" SJEL_PERSONAL_ROOT="$work" SJEL_DB_PATH="$work/cli-must-not-open.db" \
+        SJEL_INVENTORY_DB_PATH="$work/cli-must-not-open.db" SJEL_INVENTORY_URL="$base" \
+        "$inventory" "$@"
+}
+inventory_cli compare sjel-turso-rehearsal-group > compare.log
+grep -q 'sjel-turso-rehearsal-group' compare.log
+test "$(inventory_cli prices refresh)" = '0 read, 0 failed'
+inventory_cli specs 'cli/probe +?' memory_gb=32 >/dev/null
+inventory_cli needs sjel-turso-rehearsal-group memory_gb=24 >/dev/null
+inventory_cli alternatives sjel-turso-rehearsal-group yes >/dev/null
+inventory_cli price 'cli/probe +?' 79.90 --source rehearsal --on 2000-01-03 > price.log
+inventory_cli price 'cli/probe +?' 81.00 --source rehearsal --on 2000-01-03 > price-retry.log
+grep -q 'nothing written' price-retry.log
+stop_service
+test ! -e cli-must-not-open.db
+test "$(sqlite3 -readonly owner.db "SELECT price_cents FROM inventory_price_observation WHERE item_id='cli/probe +?' AND source='rehearsal'")" = 7990
+test "$(sqlite3 -readonly owner.db "SELECT count(*) FROM inventory_wish_spec WHERE item_id='cli/probe +?' AND key='memory_gb' AND value=32;")" = 1
+test "$(sqlite3 -readonly owner.db "SELECT count(*) FROM inventory_wish_group_need WHERE group_id='sjel-turso-rehearsal-group' AND key='memory_gb' AND value=24;")" = 1
+test "$(sqlite3 -readonly owner.db "SELECT alternatives FROM inventory_wish_group WHERE id='sjel-turso-rehearsal-group';")" = 1
+echo 'The comparison CLI used the owner, preserved the first price on retry, and opened no local database.'
+
 test "$(shasum -a 256 "$source_db")" = "$source_sha"
 echo 'Inventory served the restored revision, kept the Turso receipt, rejected a stale edit, and retained the new revision after restart.'

@@ -147,6 +147,10 @@ Pass the Interior binary as the fifth argument to verify its model and RoomPlan 
 against the isolated Inventory service. The Interior file holds the link and has no Inventory
 tables. The Interior CLI also loads the model from Inventory over loopback.
 
+The comparison CLI points at the isolated Inventory service. The rehearsal verifies the scheduled
+reader, compare output, specs, needs, alternatives and a price retry. The CLI's sentinel database
+path remains absent and the first price remains recorded on the service.
+
 The Rust binding probe injects a receipt insert failure after a revision update. Turso 0.8.3
 defers drop-triggered rollback, and a prepared statement on the writer can still see the edit.
 With explicit rollback, both connections see revision 3 and no receipt. Retrying records revision 4

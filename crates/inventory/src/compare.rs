@@ -11,19 +11,11 @@
 //! no later one is: the alert means "the limit was reached", not "the price moved".
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
 
 use super::{Error, Item, Store};
 
 pub use inventory_api::{Candidate, GroupComparison, PriceObservation as Observation, Spec};
-
-/// What recording an observation did.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct Recorded {
-    /// False when this wish already has an observation from this source on this day.
-    pub added: bool,
-    pub alert: bool,
-}
+pub use inventory_api::PriceRecorded as Recorded;
 
 /// The tables, created next to the item tables. Idempotent.
 pub(super) fn migrate(conn: &Connection, prefix: &str) -> Result<(), Error> {

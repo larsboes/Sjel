@@ -20,7 +20,7 @@ use std::sync::Arc;
 use crate::store::{Item, Store, SyncWriteOutcome, WriteOutcome, LEGACY_FIELDS};
 
 pub use inventory_api::{
-    RecordPriceRequest, SaveWishGroupRequest, SetNeedsRequest, SetSpecsRequest,
+    RecordPriceRequest, SaveWishGroupRequest, SetAlternativesRequest, SetNeedsRequest, SetSpecsRequest,
     SetWishGroupItemsRequest,
 };
 
@@ -129,6 +129,12 @@ const ROUTES: &[route_manifest::Route] = &[
         path: "/api/wish-groups/{id}/items",
         summary: "Set the items assigned to a wish group.",
         request_schema: Some(route_manifest::schema_of::<SetWishGroupItemsRequest>),
+    },
+    route_manifest::Route {
+        method: "PUT",
+        path: inventory_api::ROUTE_WISH_GROUP_ALTERNATIVES,
+        summary: "Choose whether the group's members compete for one purchase.",
+        request_schema: Some(route_manifest::schema_of::<SetAlternativesRequest>),
     },
     r(
         "GET",
@@ -396,6 +402,15 @@ async fn api_put_needs(
     Json(body): Json<SetNeedsRequest>,
 ) -> Result<impl IntoResponse, HttpError> {
     store(&s)?.set_needs(&id, &body.needs).map_err(refused)?;
+    Ok(StatusCode::OK)
+}
+
+async fn api_put_alternatives(
+    State(s): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<SetAlternativesRequest>,
+) -> Result<StatusCode, HttpError> {
+    store(&s)?.set_alternatives(&id, body.alternatives).map_err(refused)?;
     Ok(StatusCode::OK)
 }
 
@@ -914,6 +929,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/wish-groups/{id}", delete(api_delete_wish_group))
         .route("/api/wish-groups/{id}/items", put(api_put_wish_group_items))
         .route("/api/wish-groups/{id}/needs", put(api_put_needs))
+        .route(inventory_api::ROUTE_WISH_GROUP_ALTERNATIVES, put(api_put_alternatives))
         .route("/api/wish-comparison", get(api_wish_comparison))
         .route("/api/items/{id}/specs", put(api_put_specs))
         .route("/api/items/{id}/prices", post(api_post_price))

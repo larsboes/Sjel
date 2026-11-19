@@ -111,3 +111,26 @@ Turso's FTS replacement matched the exact term on the synthetic Documents fixtur
 existing prefix and prefix-OR matches, even when filtering by status after the search. The pinned
 Rust binding's arm64 iOS build with `fts` enabled also failed to compile on stable Rust with an
 allocator type mismatch. The earlier build exercised the feature-disabled binding.
+
+## Inventory owner-only rehearsal
+
+```sh
+sh research/benchmarks/storage-engine/inventory-rehearsal.sh "$restored_db" "$tursodb" "$scratch/inventory"
+```
+
+The source is a restored shared-store backup. The rehearsal exports the ten Inventory tables,
+their indexes and sequence counters to a separate file and checks the logical dump and declared
+foreign keys. The same SQL runs on SQLite and Turso 0.8.3 over separate copies. It exercises item
+revisions, stale writes, state history, wish groups and price observations. It also exercises an
+atomic edit and operation receipt with a duplicate retry. That transaction is a rehearsal contract;
+the current HTTP handler commits the item and its operation receipt separately.
+
+Turso WAL matches the SQLite acknowledgements and rejects an orphan wish-group membership. After
+the candidate closes, SQLite backs up and restores the candidate's latest file, including the
+acknowledged revision and its operation receipt. Integrity, foreign keys and the complete logical
+dump match the SQLite control. Reopening the pre-cutover file alone would omit those writes.
+
+Switching the imported database to MVCC fails to insert Inventory history and price records. Turso
+reports missing backing tables for its converted `AUTOINCREMENT` sequences. A fresh MVCC table
+allocates IDs in increasing order after deletion, so the observed failure is in conversion. Full
+HTTP acceptance on Turso and recovery during concurrent live writes remain open.

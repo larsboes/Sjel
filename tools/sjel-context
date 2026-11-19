@@ -91,10 +91,15 @@ unit_from_target() {
 }
 
 context_on() {
-  local normalized unit
+  local normalized unit dir status_path
   echo "mode=on"
   echo "repo=$SJEL_ROOT"
-  git -C "$SJEL_ROOT" status --short --branch
+  git -C "$SJEL_ROOT" status --porcelain=v1 --branch --untracked-files=all | awk '
+    /^## / { print "branch=" substr($0, 4); next }
+    /^\?\? / { untracked++; next }
+    { tracked++ }
+    END { printf "changes=tracked:%d untracked:%d\n", tracked, untracked }
+  '
   if [ -z "$target" ]; then
     "$SJEL_ROOT/tools/self" status
     echo "read=README.md"
@@ -110,7 +115,15 @@ context_on() {
     echo "target=$target"
   fi
   "$SJEL_ROOT/tools/self" explain "$unit" --json 2>/dev/null || echo "self=unavailable-for-$unit"
-  local dir; dir="$(unit_dir "$unit")"
+  dir="$(unit_dir "$unit")"
+  status_path="$normalized"
+  if [ ! -e "$SJEL_ROOT/$status_path" ] && [ -n "$dir" ]; then
+    status_path="$dir"
+  fi
+  git -C "$SJEL_ROOT" --literal-pathspecs status --porcelain=v1 --untracked-files=all -- "$status_path" | awk '
+    NR <= 12 { print "change=" $0 }
+    END { if (NR > 12) printf "changes_omitted=%d\n", NR - 12 }
+  '
   print_path_if_present "$dir/README.md"
   print_path_if_present "$dir/service.toml"
   print_path_if_present "$dir/Cargo.toml"

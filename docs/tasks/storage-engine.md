@@ -29,6 +29,12 @@ files, including read-only opens. The default CLI also refused a second process 
 held a write transaction. The process-crash test preserved the committed row and rolled back the
 uncommitted row.
 
-Keep libSQL for the unchanged-file migration path. A production-store copy, same-process Turso
-writers, power-loss recovery and an iOS build remain unverified. Revisit with the owner if Turso
-accepts the existing index schema or a separately reviewed migration can rebuild it.
+Dropping the legacy index under libSQL lets Turso open the resulting WAL file without changing
+its bytes. All stored embeddings and exact cosine results match. Turso's experimental sparse
+index rejected the existing dense embeddings. In one process, WAL needed a retry and MVCC committed
+both overlapping writes on distinct keys. Both modes preserved only committed data after process
+death. The local-only Rust probe built and linked for arm64 iOS with Turso's default features disabled.
+
+Keep libSQL for the unchanged-file migration path. A production-store copy and power-loss
+recovery remain unverified. Revisit with the owner if Turso accepts the existing index schema or
+a separate migration can meet the search contract with a replacement.

@@ -22,9 +22,30 @@ GitHub's build provenance verified against the upstream release workflow and sou
 | WAL | Query matches, bytes unchanged | Query matches, bytes unchanged |
 | Rollback journal with vector index | Schema parse error, bytes unchanged | Schema parse error, bytes change |
 | WAL with vector index | Schema parse error, bytes unchanged | Schema parse error, bytes unchanged |
+| WAL after libSQL drops the index | Query matches, bytes unchanged | Query matches, bytes unchanged |
 
-The query returns `3|4|1` for recursive reachability, `json_each` and exact vector ranking. On the
-unindexed WAL fixture, the second CLI process encountered a file lock while the first held a write
-transaction. After the first process was killed, the committed row survived and its uncommitted row
-was absent. This test covers process death and the default CLI file locking. Same-process writers,
-power loss, a production-store copy and iOS remain outside the measured scope.
+The query returns `3|4|1` for recursive reachability, `json_each` and exact vector ranking. Under WAL
+and MVCC, the second CLI process encountered a file lock while the first held a write transaction.
+After killing the first process, the committed row survived and the uncommitted row was absent in
+both modes.
+
+The deindexed fixture retains all embedding bytes and returns the same exact cosine ranking.
+The candidate's experimental `toy_vector_sparse_ivf` index rejects those dense embeddings.
+Its [documented similarity function](https://github.com/tursodatabase/turso/blob/v0.8.3/core/index_method/toy_vector_sparse_ivf.rs#L26-L31)
+is Jaccard, which changes the ranking contract.
+
+Run the Rust binding probe against the reviewed upstream checkout after its dependencies are
+available in the local Cargo cache. It has two connections to one database handle and also builds
+the same probe for arm64 iOS.
+
+```sh
+sh research/benchmarks/storage-engine/binding-probe.sh "$turso_source" "$scratch/binding"
+```
+
+With WAL and `BEGIN IMMEDIATE`, the second connection returned busy, then succeeded on retry after
+the first committed. With MVCC and `BEGIN CONCURRENT`, two transactions writing distinct keys
+overlapped and both committed. The arm64 iOS probe executable linked against the iPhoneOS SDK with
+default Turso features disabled. It was not run on a phone.
+
+The probe uses synthetic data and does not measure power-loss recovery, search latency at production
+scale or compatibility with a copy of the deployed store.

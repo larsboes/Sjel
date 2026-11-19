@@ -13,7 +13,7 @@ docker run --rm --pull never --network none --read-only --cap-drop ALL \
     --mount "type=bind,src=$2,dst=/tursodb,readonly" \
     debian:trixie-slim sh -c '
 query=$(cat /fixtures/query.sql)
-for name in plain indexed plain-wal indexed-wal; do
+for name in plain indexed plain-wal indexed-wal deindexed-wal; do
     for mode in readonly readwrite; do
         copy="/work/$name-$mode.db"
         cp "/fixtures/$name.db" "$copy"
@@ -27,24 +27,47 @@ for name in plain indexed plain-wal indexed-wal; do
     done
 done
 
-printf "\nwriter contention and process crash on plain-wal:\n"
-cp /fixtures/plain-wal.db /work/crash.db
-mkfifo /work/writer.sql
-/tursodb --quiet --vfs syscall --output-mode list /work/crash.db </work/writer.sql >/work/writer.out 2>&1 &
-writer=$!
-exec 3>/work/writer.sql
-printf "CREATE TABLE recovery (id INTEGER PRIMARY KEY);\nINSERT INTO recovery VALUES (1);\nBEGIN IMMEDIATE;\nINSERT INTO recovery VALUES (2);\nSELECT 987654321;\n" >&3
-attempt=0
-until grep -qx 987654321 /work/writer.out; do
-    attempt=$((attempt + 1))
-    if [ "$attempt" -ge 50 ]; then cat /work/writer.out >&2; kill "$writer"; exit 1; fi
-    sleep 0.1
-done
+printf "\nvector bytes after libSQL removes the index:\n"
+/tursodb --quiet --vfs syscall --readonly --output-mode list /work/deindexed-wal-readonly.db \
+    "SELECT id, hex(embedding) FROM nodes ORDER BY id;" >/work/turso-vectors.txt
+cmp /fixtures/expected-vectors.txt /work/turso-vectors.txt
+printf "match\n"
+
+printf "\nexperimental sparse index using the existing dense vectors:\n"
+cp /fixtures/deindexed-wal.db /work/experimental.db
 status=0
-timeout 5 /tursodb --quiet --vfs syscall /work/crash.db "INSERT INTO recovery VALUES (3);" || status=$?
-printf "contending_writer_exit=%s\n" "$status"
-kill -KILL "$writer"
-wait "$writer" 2>/dev/null || true
-exec 3>&-
-/tursodb --quiet --vfs syscall --output-mode list /work/crash.db "SELECT id FROM recovery ORDER BY id;"
+/tursodb --quiet --vfs syscall --experimental-index-method /work/experimental.db \
+    "CREATE INDEX nodes_vector_idx ON nodes USING toy_vector_sparse_ivf (embedding);" || status=$?
+printf "rebuild_exit=%s\n" "$status"
+
+probe_recovery() {
+    journal=$1
+    begin=$2
+    printf "\nwriter contention and process crash in %s:\n" "$journal"
+    copy="/work/crash-$journal.db"
+    fifo="/work/writer-$journal.sql"
+    log="/work/writer-$journal.out"
+    cp /fixtures/plain-wal.db "$copy"
+    mkfifo "$fifo"
+    /tursodb --quiet --vfs syscall --output-mode list "$copy" <"$fifo" >"$log" 2>&1 &
+    writer=$!
+    exec 3>"$fifo"
+    printf "PRAGMA journal_mode = %s;\nCREATE TABLE recovery (id INTEGER PRIMARY KEY);\nINSERT INTO recovery VALUES (1);\n%s;\nINSERT INTO recovery VALUES (2);\nSELECT 987654321;\n" "$journal" "$begin" >&3
+    attempt=0
+    until grep -qx 987654321 "$log"; do
+        attempt=$((attempt + 1))
+        if [ "$attempt" -ge 50 ]; then cat "$log" >&2; kill "$writer"; exit 1; fi
+        sleep 0.1
+    done
+    status=0
+    timeout 5 /tursodb --quiet --vfs syscall "$copy" "INSERT INTO recovery VALUES (3);" || status=$?
+    printf "contending_writer_exit=%s\n" "$status"
+    kill -KILL "$writer"
+    wait "$writer" 2>/dev/null || true
+    exec 3>&-
+    /tursodb --quiet --vfs syscall --output-mode list "$copy" "SELECT id FROM recovery ORDER BY id;"
+}
+
+probe_recovery wal "BEGIN IMMEDIATE"
+probe_recovery mvcc "BEGIN CONCURRENT"
 '

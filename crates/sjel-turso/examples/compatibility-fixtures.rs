@@ -1,6 +1,6 @@
 //! Create disposable libSQL databases with and without a native vector index.
 
-use std::path::PathBuf;
+use std::{fmt::Write as _, path::PathBuf};
 
 const FIXTURE: &str = "
     CREATE TABLE nodes (
@@ -33,11 +33,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .ok_or("provide a new fixture directory")?;
     std::fs::create_dir(&directory)?;
     std::fs::write(directory.join("query.sql"), QUERY)?;
-    for (name, indexed, wal) in [
-        ("plain", false, false),
-        ("indexed", true, false),
-        ("plain-wal", false, true),
-        ("indexed-wal", true, true),
+    for (name, indexed, wal, drop_index) in [
+        ("plain", false, false, false),
+        ("indexed", true, false, false),
+        ("plain-wal", false, true, false),
+        ("indexed-wal", true, true, false),
+        ("deindexed-wal", true, true, true),
     ] {
         let conn = sjel_turso::open_local(directory.join(format!("{name}.db"))).await?;
         if wal {
@@ -50,6 +51,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 (),
             )
             .await?;
+        }
+        if drop_index {
+            conn.execute("DROP INDEX nodes_vector_idx", ()).await?;
+            let mut vectors = conn
+                .query("SELECT id, hex(embedding) FROM nodes ORDER BY id", ())
+                .await?;
+            let mut output = String::new();
+            while let Some(row) = vectors.next().await? {
+                writeln!(output, "{}|{}", row.get::<i64>(0)?, row.get::<String>(1)?)?;
+            }
+            std::fs::write(directory.join("expected-vectors.txt"), output)?;
         }
         let mut rows = conn.query(QUERY, ()).await?;
         let row = rows

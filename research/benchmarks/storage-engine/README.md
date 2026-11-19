@@ -116,6 +116,7 @@ allocator type mismatch. The earlier build exercised the feature-disabled bindin
 
 ```sh
 sh research/benchmarks/storage-engine/inventory-rehearsal.sh "$restored_db" "$tursodb" "$scratch/inventory"
+sh research/benchmarks/storage-engine/inventory-service-rollback.sh "$scratch/inventory/db/wal-restored.db" "$inventory_bin" "$scratch/rollback"
 ```
 
 The source is a restored shared-store backup. The rehearsal exports the ten Inventory tables,
@@ -129,6 +130,12 @@ Turso WAL matches the SQLite acknowledgements and rejects an orphan wish-group m
 the candidate closes, SQLite backs up and restores the candidate's latest file, including the
 acknowledged revision and its operation receipt. Integrity, foreign keys and the complete logical
 dump match the SQLite control. Reopening the pre-cutover file alone would omit those writes.
+
+The rollback rehearsal starts the Inventory service with the restored file and a separate empty
+Devices registry. It reads revision 3, verifies an edit returns revision 4 and its ETag, and checks
+that a stale edit returns a conflict. After restart, revision 4 and the original Turso write receipt
+survive. SQLite reports valid integrity and foreign keys, the Devices file has no Inventory tables,
+and the input checksum stays unchanged.
 
 Switching the imported database to MVCC fails to insert Inventory history and price records. Turso
 reports missing backing tables for its converted `AUTOINCREMENT` sequences. A fresh MVCC table

@@ -20,7 +20,7 @@ UPDATE inventory_item SET label = 'Stale write', revision = revision + 1
 WHERE id = 'sjel-turso-rehearsal-item' AND revision = 1 RETURNING revision;
 COMMIT;
 
--- Rehearse a proposed atomic application and retry. The current HTTP handler uses separate writes.
+-- Rehearse the atomic edit and operation receipt with a duplicate retry.
 BEGIN IMMEDIATE;
 UPDATE inventory_item SET label = 'Acknowledged fixture', revision = revision + 1
 WHERE id = 'sjel-turso-rehearsal-item' AND revision = 2

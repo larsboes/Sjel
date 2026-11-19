@@ -31,6 +31,17 @@ Finder routes local Inventory search through the owner. The SQLite sync path com
 operation receipt together. A failure-injection test verifies rollback before retrying. Inventory
 can select an owner file independently of the shared device registry.
 
-The Inventory service still uses SQLite. Before the live file switch, pass the owner API suite
-against a Turso WAL adapter and rehearse migration and rollback with the running service. The
-SQL-level WAL rehearsal does not exercise the adapter or service lifecycle.
+The rollback rehearsal ran the Inventory service on the restored file. It read revision 3, wrote
+revision 4, rejected a stale edit, and found revision 4 after restarting. The Turso operation receipt
+survived and the input file checksum matched.
+
+## Remaining migration gates
+
+- Route the wishlist's monthly balance through Finance before splitting the Inventory file.
+- Run the owner API suite against a Turso WAL adapter, then rehearse the cutover and rollback
+  with the adapter running. Register and restore the owner backup before accepting live writes.
+- Keep Documents on its current search implementation until a replacement passes prefix,
+  diacritic, status and pagination parity. The [engine measurements](storage-engine.md) record
+  the FTS and iOS results.
+- Any MVCC cutover requires recovery with the logical log and proof that backups preserve
+  committed writes during concurrent use. Keep the original database through rollback acceptance.

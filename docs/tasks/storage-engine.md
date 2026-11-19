@@ -1,11 +1,14 @@
 ---
 id: storage-engine
 title: "Measure one database engine"
-state: verify
+state: done
 area: storage
 kind: investigation
 priority: 2
 spec: docs/plans/storage.md
+evidence:
+  - "The compatibility probes exercised recursive queries, JSON, vectors, concurrent writers, crash recovery and arm64 iOS builds."
+  - "Inventory WAL replay and SQLite restore matched all ten owner tables and the acknowledged write receipt."
 ---
 
 # Measure one database engine
@@ -52,16 +55,8 @@ Rust binding fails to compile on arm64 iOS with stable Rust. A generated MVCC sn
 open connection preserved the intended commit boundary. Concurrent-write backup, power-loss
 recovery and physical iPhone behavior remain unverified.
 
-## Migration preparation
+## Decision
 
-- Route cross-owner reads through capability contracts before splitting files. Start with Inventory
-  and keep Documents on its current search implementation until a replacement passes prefix,
-  diacritic, status and pagination parity.
-- On an owner-only copy, replay the same reads and writes against both engines. Compare stable
-  IDs, relationships, durable writes, restart behavior and the owner backup and restore path.
-- Before enabling live writes, rehearse rollback with writes committed after the cutover. For
-  MVCC, verify recovery with the logical log and prove the backup path under concurrent writes.
-  Keep the original database until the rollback window closes.
-
-Keep libSQL for the shared store while these gates remain open. The owner sequence and its
-acceptance are in [Split capability databases](storage-files.md).
+Use Turso WAL for the Inventory pilot. The owner-only copy passed the SQL replay and restored to
+SQLite with acknowledged writes intact. MVCC conversion of the existing `AUTOINCREMENT` tables
+failed. Keep the shared-store engine until the [owner cutover gates](storage-files.md) pass.

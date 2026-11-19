@@ -20,7 +20,7 @@ use gpui_kit::{
     div, point, prelude::*, px, rgb, rgba, Context, Entity, FocusHandle, FontWeight, IntoElement,
     Render, ScrollHandle, SharedString, Subscription, Window,
 };
-use sjel_gpui_core::people::{filter_people, Person};
+use sjel_gpui_core::people::{view_people, Order, Origin, Person};
 use sjel_gpui_core::shell::{self, DuplicatePair, EntityField, EntityRecord, Shell, ShellError};
 
 use crate::data::{Remote, Repo};
@@ -42,6 +42,8 @@ pub(super) struct PeopleDerived {
     pub(super) parsed: Vec<Person>,
     pub(super) filter_key: Option<(Option<Instant>, u64)>,
     pub(super) filtered_indices: Vec<usize>,
+    /// People under each `Origin::ALL` entry, before the search narrows them.
+    pub(super) origin_counts: [usize; 4],
 }
 
 pub struct PeoplePage {
@@ -62,6 +64,8 @@ pub struct PeoplePage {
     pub(super) write_error: Option<SharedString>,
     pub selected_id: Option<String>,
     pub search_query: String,
+    pub(super) origin: Origin,
+    pub(super) order: Order,
     filter_rev: u64,
     pub(super) derived: PeopleDerived,
     pub(super) people_list: gpui::ListState,
@@ -91,6 +95,8 @@ impl PeoplePage {
             write_error: None,
             selected_id: None,
             search_query: String::new(),
+            origin: Origin::All,
+            order: Order::Name,
             filter_rev: 0,
             derived: PeopleDerived::default(),
             people_list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
@@ -135,11 +141,19 @@ impl PeoplePage {
                 .iter()
                 .map(Person::from_record)
                 .collect();
+            let parsed = &self.derived.parsed;
+            self.derived.origin_counts =
+                Origin::ALL.map(|o| parsed.iter().filter(|p| p.has_origin(o)).count());
         }
         let filter_key = (self.people.loaded_at, self.filter_rev);
         if self.derived.filter_key != Some(filter_key) {
             self.derived.filter_key = Some(filter_key);
-            let filtered = filter_people(&self.derived.parsed, &self.search_query);
+            let filtered = view_people(
+                &self.derived.parsed,
+                &self.search_query,
+                self.origin,
+                self.order,
+            );
             let base = self.derived.parsed.as_ptr() as usize;
             let stride = std::mem::size_of::<Person>();
             let indices: Vec<usize> = if stride > 0 {
@@ -152,6 +166,16 @@ impl PeoplePage {
             };
             self.people_list.reset(indices.len());
             self.derived.filtered_indices = indices;
+        }
+    }
+
+    /// Shows the people under `origin`, in `order`.
+    pub(super) fn set_view(&mut self, origin: Origin, order: Order, cx: &mut Context<Self>) {
+        if (self.origin, self.order) != (origin, order) {
+            self.origin = origin;
+            self.order = order;
+            self.filter_rev = self.filter_rev.wrapping_add(1);
+            cx.notify();
         }
     }
 
@@ -350,9 +374,41 @@ impl Render for PeoplePage {
 
         let write_error = self.write_error.clone();
 
+        let order = self.order;
+        let view_entity = cx.entity();
         let search_box = div()
             .w_full()
-            .child(Input::new(&self.search_field(window, cx)).size(ControlSize::Sm));
+            .flex()
+            .items_center()
+            .gap_2()
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .child(Input::new(&self.search_field(window, cx)).size(ControlSize::Sm)),
+            )
+            .child(
+                Button::new("people-order", format!("↕ {}", order.label()))
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        page.set_view(page.origin, order.next(), cx)
+                    })),
+            );
+        let origin_tabs = sub_tabs(
+            "people-origin-tabs",
+            Origin::ALL
+                .iter()
+                .zip(self.derived.origin_counts)
+                .map(|(o, n)| (o.label(), Some(n), *o == self.origin))
+                .collect(),
+            move |ix, _, cx| {
+                view_entity.update(cx, |page, cx| {
+                    let origin = Origin::ALL.get(ix).copied().unwrap_or_default();
+                    page.set_view(origin, page.order, cx);
+                });
+            },
+        );
 
         // Left List Pane
         let mut list_pane = div()
@@ -363,7 +419,8 @@ impl Render for PeoplePage {
             .flex()
             .flex_col()
             .gap_2()
-            .child(search_box);
+            .child(search_box)
+            .child(origin_tabs);
 
         if is_empty {
             list_pane = list_pane.child(
@@ -399,6 +456,10 @@ impl Render for PeoplePage {
                             .flatten()
                             .collect::<Vec<_>>()
                             .join(" · ");
+                        let day = page
+                            .order
+                            .key()
+                            .and_then(|key| person.values.get(key).cloned());
 
                         div()
                             .pb_1()
@@ -456,7 +517,16 @@ impl Render for PeoplePage {
                                                         .child(subtitle),
                                                 )
                                             }),
-                                    ),
+                                    )
+                                    .when_some(day, |el, day| {
+                                        el.child(
+                                            div()
+                                                .flex_none()
+                                                .text_xs()
+                                                .text_color(rgb(palette.muted))
+                                                .child(day),
+                                        )
+                                    }),
                             )
                             .into_any_element()
                     })

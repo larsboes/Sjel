@@ -9,7 +9,7 @@
 //! spellings are accepted here because the registry has written both: the values table is text, and
 //! an import or an operator edit can have put either in it.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -125,6 +125,7 @@ impl Person {
                 "role" | "title" | "position" => role = Some(str_val),
                 "location" | "city" | "place" => location = Some(str_val),
                 "tags" => {}
+                key if NETWORK_ROWS.iter().any(|(k, _)| *k == key) => {}
                 _ => custom_fields.push((key.clone(), str_val)),
             }
         }
@@ -152,6 +153,131 @@ impl Person {
     pub fn value(&self, key: &str) -> String {
         self.values.get(key).cloned().unwrap_or_default()
     }
+    /// The day-valued or link fields that say how the operator knows this person, labelled, in
+    /// display order. Absent fields are left out.
+    pub fn network_rows(&self) -> Vec<(&'static str, String)> {
+        NETWORK_ROWS
+            .iter()
+            .filter_map(|(key, label)| self.values.get(*key).map(|v| (*label, v.clone())))
+            .collect()
+    }
+
+    /// Every source that wrote a value for this person.
+    pub fn origins(&self) -> BTreeSet<&str> {
+        self.sources.values().map(String::as_str).collect()
+    }
+
+    /// Whether this person belongs under `origin`. `Manual` means no import wrote any value.
+    pub fn has_origin(&self, origin: Origin) -> bool {
+        let origins = self.origins();
+        match origin {
+            Origin::All => true,
+            Origin::Linkedin => origins.contains("linkedin"),
+            Origin::Google => origins.contains("google"),
+            Origin::Manual => !origins.contains("linkedin") && !origins.contains("google"),
+        }
+    }
+}
+
+/// Registry keys that `network_rows` shows, with their labels.
+const NETWORK_ROWS: &[(&str, &str)] = &[
+    ("linkedin", "LinkedIn"),
+    ("connected_on", "Connected"),
+    ("last_contact", "Last contact"),
+];
+
+/// Which people the list shows, by the source that wrote their values.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Origin {
+    #[default]
+    All,
+    Linkedin,
+    Google,
+    Manual,
+}
+
+impl Origin {
+    pub const ALL: [Origin; 4] = [
+        Origin::All,
+        Origin::Linkedin,
+        Origin::Google,
+        Origin::Manual,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Origin::All => "All",
+            Origin::Linkedin => "LinkedIn",
+            Origin::Google => "Google",
+            Origin::Manual => "Added by you",
+        }
+    }
+}
+
+/// How the list is ordered. The date orders put the most recent first and people without the
+/// date last.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Order {
+    #[default]
+    Name,
+    LastContact,
+    Connected,
+}
+
+impl Order {
+    pub fn label(self) -> &'static str {
+        match self {
+            Order::Name => "Name",
+            Order::LastContact => "Last contact",
+            Order::Connected => "Connected",
+        }
+    }
+
+    /// The next order, for a button that cycles.
+    pub fn next(self) -> Self {
+        match self {
+            Order::Name => Order::LastContact,
+            Order::LastContact => Order::Connected,
+            Order::Connected => Order::Name,
+        }
+    }
+
+    /// The registry key this order sorts by, or `None` for the name.
+    pub fn key(self) -> Option<&'static str> {
+        match self {
+            Order::Name => None,
+            Order::LastContact => Some("last_contact"),
+            Order::Connected => Some("connected_on"),
+        }
+    }
+}
+
+/// The list as shown: `filter_people`, narrowed to `origin`, in `order`.
+pub fn view_people<'a>(
+    people: &'a [Person],
+    query: &str,
+    origin: Origin,
+    order: Order,
+) -> Vec<&'a Person> {
+    let mut shown: Vec<&Person> = filter_people(people, query)
+        .into_iter()
+        .filter(|p| p.has_origin(origin))
+        .collect();
+    let by_name = |a: &&Person, b: &&Person| a.name.to_lowercase().cmp(&b.name.to_lowercase());
+    match order.key() {
+        None => shown.sort_by(by_name),
+        Some(key) => shown.sort_by(|a, b| {
+            // Days are `YYYY-MM-DD`, so text order is date order; `None` sorts after any day.
+            let (x, y) = (a.values.get(key), b.values.get(key));
+            match (x, y) {
+                (Some(x), Some(y)) => y.cmp(x).then_with(|| by_name(a, b)),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => by_name(a, b),
+            }
+        }),
+    }
+    shown
 }
 
 /// Compute initials from a name (e.g. "Ada Lovelace" -> "AL", "Linus" -> "L").
@@ -201,6 +327,98 @@ pub fn filter_people<'a>(people: &'a [Person], query: &str) -> Vec<&'a Person> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sourced(name: &str, values: &[(&str, &str, &str)]) -> Person {
+        let values = values
+            .iter()
+            .map(|(k, v, source)| {
+                (
+                    k.to_string(),
+                    serde_json::json!({ "value": v, "source": source, "updated_at": "2026-11-19" }),
+                )
+            })
+            .collect();
+        Person::from_record(&EntityRecord {
+            id: name.into(),
+            kind: "person".into(),
+            name: name.into(),
+            note_ref: None,
+            revision: 1,
+            values,
+            facts: Vec::new(),
+        })
+    }
+
+    #[test]
+    fn origin_narrows_and_date_orders_put_recent_first() {
+        let people = vec![
+            sourced("Cy", &[("company", "Acme", "operator")]),
+            sourced(
+                "Ada",
+                &[
+                    ("company", "Acme", "linkedin"),
+                    ("connected_on", "2024-03-15", "linkedin"),
+                    ("last_contact", "2026-01-02", "linkedin"),
+                ],
+            ),
+            sourced(
+                "Bo",
+                &[
+                    ("connected_on", "2025-06-01", "linkedin"),
+                    ("emails", "bo@example.org", "google"),
+                ],
+            ),
+        ];
+        let names = |shown: Vec<&Person>| shown.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
+        assert_eq!(
+            names(view_people(&people, "", Origin::All, Order::Name)),
+            ["Ada", "Bo", "Cy"]
+        );
+        assert_eq!(
+            names(view_people(&people, "", Origin::Linkedin, Order::Name)),
+            ["Ada", "Bo"]
+        );
+        assert_eq!(
+            names(view_people(&people, "", Origin::Google, Order::Name)),
+            ["Bo"]
+        );
+        assert_eq!(
+            names(view_people(&people, "", Origin::Manual, Order::Name)),
+            ["Cy"]
+        );
+        assert_eq!(
+            names(view_people(&people, "", Origin::All, Order::Connected)),
+            ["Bo", "Ada", "Cy"]
+        );
+        assert_eq!(
+            names(view_people(
+                &people,
+                "acme",
+                Origin::All,
+                Order::LastContact
+            )),
+            ["Ada", "Cy"]
+        );
+    }
+
+    #[test]
+    fn network_fields_are_labelled_rows_not_custom_fields() {
+        let ada = sourced(
+            "Ada",
+            &[
+                ("last_contact", "2026-01-02", "journal"),
+                ("linkedin", "https://www.linkedin.com/in/ada", "linkedin"),
+            ],
+        );
+        assert!(ada.custom_fields.is_empty());
+        assert_eq!(
+            ada.network_rows(),
+            vec![
+                ("LinkedIn", "https://www.linkedin.com/in/ada".to_string()),
+                ("Last contact", "2026-01-02".to_string()),
+            ]
+        );
+    }
     use std::collections::BTreeMap;
 
     /// The shape the registry actually writes: `emails` and `phones` as arrays, from

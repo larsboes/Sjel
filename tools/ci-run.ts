@@ -92,7 +92,7 @@ async function main() {
       for (const dir of bunInstallDirs(root)) {
         if (!run(root, ["bun", "install", "--frozen-lockfile", "--ignore-scripts"], join(root, dir))) ok = false;
       }
-      if (ok && !run(root, ["bun", "test", "--no-env-file", ...plan.bun.map((file) => `./${file}`)])) ok = false;
+      if (ok && !run(root, ["bun", "test", "--no-env-file", "--parallel", ...plan.bun.map((file) => `./${file}`)])) ok = false;
     }
     if (!await shellTests(root, plan.shell)) ok = false;
   } else if (job === "ui-check") {

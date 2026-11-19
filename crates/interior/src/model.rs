@@ -600,6 +600,13 @@ pub fn default_flat() -> Result<String, ModelError> {
 
 impl Model {
     pub fn load(flat: &str) -> Result<Self, ModelError> {
+        Self::load_with_catalogue(flat, sjel_inventory::client::catalogue)
+    }
+
+    pub fn load_with_catalogue(
+        flat: &str,
+        read_catalogue: impl FnOnce() -> Result<sjel_inventory::client::Catalogue, Box<dyn std::error::Error>>,
+    ) -> Result<Self, ModelError> {
         let root = data_dir()?;
         let flat_dir = root.join("flats").join(flat);
         let mut room: Room = read_toml(&flat_dir.join("room.toml"))?;
@@ -608,13 +615,7 @@ impl Model {
         }
         let rules: Rules = read_toml(&flat_dir.join("rules.toml"))?;
 
-        // The catalogue comes from the store (SJEL_DB_PATH, else the overlay). An empty one is no error
-        // here; it fails where a layout names a missing piece, with the better message.
-        let store = crate::store::Store::open(&sjel_config::database_path())
-            .map_err(|e| ModelError::Store(e.to_string()))?;
-        let rows = store
-            .catalogue()
-            .map_err(|e| ModelError::Store(e.to_string()))?;
+        let rows = read_catalogue().map_err(|e| ModelError::Store(e.to_string()))?;
 
         let mut catalogue = Catalogue::new();
         let mut states = BTreeMap::new();

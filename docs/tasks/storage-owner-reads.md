@@ -28,3 +28,5 @@ the desktop reader and the mirror remain in scope.
 
 Inventory and Interior obtain monthly balance from Finance's owner route. The wishlist rehearsal
 used separate Inventory, Finance and Devices files and exercised an unavailable Finance service.
+Interior uses Inventory's owner catalogue for model and RoomPlan requests. The separate-file
+rehearsal verified model loading and confirmed that only the owned item could be linked.

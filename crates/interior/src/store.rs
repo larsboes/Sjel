@@ -1,8 +1,7 @@
 //! Where pieces stand in a flat, in the shared SQLite file. The items themselves belong to
-//! `inventory` and are read through its store, so there is one schema and one migration.
+//! Inventory and are read through its API.
 
 use rusqlite::{params, Connection, OptionalExtension};
-use std::collections::BTreeMap;
 use std::path::Path;
 
 pub use sjel_inventory::store::{Item, Kind, Side, State};
@@ -15,7 +14,6 @@ pub use interior_api::{
 pub struct Store {
     pool: sjel_store::Pool,
     prefix: String,
-    items: sjel_inventory::store::Store,
 }
 
 type Error = Box<dyn std::error::Error>;
@@ -37,18 +35,14 @@ impl Store {
         Self::open_with_prefix(database_path, "interior")
     }
 
-    /// Opens inventory's store on the same file too: it creates and migrates the item tables, so
-    /// `interior check` works on a file inventory never opened.
     pub fn open_with_prefix(database_path: &Path, prefix: &str) -> Result<Self, Error> {
         validate_prefix(prefix)?;
-        let items = sjel_inventory::store::Store::open(database_path)?;
         let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
             pool,
             prefix: prefix.to_string(),
-            items,
         })
     }
 
@@ -526,15 +520,13 @@ impl Store {
         space_id: &str,
         revision_id: &str,
         observation_id: &str,
-        item_id: &str,
+        item: &Item,
+        state: Option<State>,
     ) -> Result<(), Error> {
-        let catalogue = self.items.catalogue()?;
-        let Some((item, state)) = catalogue.get(item_id) else {
-            return Err("Inventory item was not found".into());
-        };
         if item.kind == Kind::Slot || matches!(state, Some(State::Wanted | State::Gone)) {
             return Err("RoomPlan observations can link only to owned inventory items".into());
         }
+        let item_id = &item.id;
         let p = &self.prefix;
         let conn = self.conn()?;
         conn.execute(
@@ -576,10 +568,5 @@ impl Store {
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
-    }
-
-    /// Every item with its current state.
-    pub fn catalogue(&self) -> Result<BTreeMap<String, (Item, Option<State>)>, Error> {
-        self.items.catalogue()
     }
 }

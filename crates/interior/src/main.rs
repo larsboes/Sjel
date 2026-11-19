@@ -153,15 +153,14 @@ fn write_layout(model: &Model, name: &str, layout: &Layout, note: &str) -> std::
     std::fs::write(model.layouts_dir().join(format!("{name}.toml")), s)
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let Some(cmd) = argv.first().map(String::as_str) else {
         usage()
     };
 
     if cmd == "serve" {
-        interior_serve().await;
+        interior_serve();
         return;
     }
 
@@ -488,6 +487,7 @@ async fn main() {
     }
 }
 
+#[tokio::main]
 async fn interior_serve() {
     // The port comes from service.toml as SJEL_PORT; 8092 is the predecessor's port, so old
     // bookmarks still work.

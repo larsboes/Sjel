@@ -43,10 +43,12 @@ The wishlist reads the monthly balance from Finance over loopback. A two-service
 separate files confirmed the balance and wishlist totals. When Finance stopped, the wishlist
 still returned its items and prices. The Interior purchase order uses the same Finance read.
 
+Interior reads the catalogue and validates RoomPlan links through Inventory. The separate-file
+rehearsal matched the catalogue count, accepted an owned item, and refused a wanted item. Interior
+created no Inventory tables in its database.
+
 ## Remaining migration gates
 
-- Verify consumer routes against the split owner file. Interior still opens Inventory's store
-  on the shared file for layout catalogue reads and RoomPlan link validation.
 - Run the owner API suite against a Turso WAL adapter. Roll back failed transactions explicitly
   before reusing their connections. Turso 0.8.3 prepared statements can run before drop-triggered
   rollback. Rehearse cutover and rollback with the adapter running, and register and restore the

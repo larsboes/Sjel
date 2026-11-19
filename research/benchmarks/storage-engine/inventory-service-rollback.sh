@@ -2,8 +2,8 @@
 set -eu
 umask 077
 
-if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
-    echo 'usage: sh inventory-service-rollback.sh <wal-restored.db> <inventory binary> <new private scratch directory> [finance binary]' >&2
+if [ "$#" -lt 3 ] || [ "$#" -gt 5 ]; then
+    echo 'usage: sh inventory-service-rollback.sh <wal-restored.db> <inventory binary> <new private scratch directory> [finance binary [interior binary]]' >&2
     exit 2
 fi
 
@@ -11,9 +11,15 @@ source_db=$(cd "$(dirname "$1")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$1
 inventory=$(cd "$(dirname "$2")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$2")")
 test -x "$inventory"
 finance=
-if [ "$#" -eq 4 ]; then
+if [ "$#" -ge 4 ]; then
     finance=$(cd "$(dirname "$4")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$4")")
     test -x "$finance"
+fi
+interior=
+if [ "$#" -eq 5 ]; then
+    interior=$(cd "$(dirname "$5")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$5")")
+    test -x "$interior"
+    fixture_data=$(cd "$(dirname "$0")/../../../crates/interior/tests/fixtures/overlay/data" && pwd -P)
 fi
 test ! -s "$source_db-wal"
 source_sha=$(shasum -a 256 "$source_db")
@@ -30,7 +36,7 @@ printf '%s\n' "$fixture" > fixture-bearer
 printf 'SJEL_INBOUND_TOKEN_FILE=%s/fixture-bearer\n' "$work" > config/deployment.env
 
 pid=
-finance_pid=
+aux_pid=
 finance_url=
 stop_service() {
     if [ -n "$pid" ]; then
@@ -39,14 +45,14 @@ stop_service() {
         pid=
     fi
 }
-stop_finance() {
-    if [ -n "$finance_pid" ]; then
-        kill "$finance_pid" 2>/dev/null || :
-        wait "$finance_pid" 2>/dev/null || :
-        finance_pid=
+stop_auxiliary() {
+    if [ -n "$aux_pid" ]; then
+        kill "$aux_pid" 2>/dev/null || :
+        wait "$aux_pid" 2>/dev/null || :
+        aux_pid=
     fi
 }
-trap 'stop_service; stop_finance' EXIT
+trap 'stop_service; stop_auxiliary' EXIT
 trap 'exit 1' HUP INT TERM
 
 request() {
@@ -117,8 +123,8 @@ if [ -n "$finance" ]; then
     finance_url="http://127.0.0.1:$finance_port"
     env -i PATH="$PATH" SJEL_PERSONAL_ROOT="$work" SJEL_DB_PATH="$work/finance.db" \
         SJEL_PORT="$finance_port" "$finance" > finance.log 2>&1 &
-    finance_pid=$!
-    wait_for_service "$finance_pid" "$finance_url" finance
+    aux_pid=$!
+    wait_for_service "$aux_pid" "$finance_url" finance
     request --fail "$finance_url/api/monthly-balance" | jq -e '. == null' >/dev/null
     sqlite3 -bail finance.db <<'SQL'
 INSERT INTO finance_transaction_projection
@@ -138,13 +144,50 @@ SQL
         and .months_to_pay == (.total_low_cents / 15000)
         and any(.items[]; .id == "rehearsal-wish" and .price_cents == 30000)
     ' >/dev/null
-    stop_finance
+    stop_auxiliary
     request --fail "$base/api/wishlist" | jq -e '
         .monthly_balance == null and .months_to_pay == null and any(.items[]; .id == "rehearsal-wish")
     ' >/dev/null
     stop_service
     test "$(sqlite3 -readonly owner.db "SELECT count(*) FROM sqlite_schema WHERE name GLOB 'finance_*'")" = 0
     echo 'Wishlist used the Finance balance across separate files and stayed available after Finance stopped.'
+fi
+
+if [ -n "$interior" ]; then
+    start_service interior-owner
+    inventory_url=$base
+    mkdir -p data
+    cp -R "$fixture_data/interior" data/
+    capture=data/interior/captures/muster/revision-fixture
+    mkdir -p "$capture"
+    printf '%s\n' '{"draft_id":"revision-fixture","room":{"objects":[{"id":"object-fixture"}]}}' > "$capture/draft.json"
+    touch "$capture/captured-room.usdz"
+    interior_port=$(available_port)
+    interior_url="http://127.0.0.1:$interior_port"
+    env -i PATH="$PATH" SJEL_PERSONAL_ROOT="$work" SJEL_DB_PATH="$work/interior.db" \
+        SJEL_INVENTORY_URL="$inventory_url" SJEL_INTERIOR_FLAT=muster SJEL_PORT="$interior_port" \
+        "$interior" serve > interior.log 2>&1 &
+    aux_pid=$!
+    wait_for_service "$aux_pid" "$interior_url" interior
+    catalogue_size=$(sqlite3 -readonly owner.db 'SELECT count(*) FROM inventory_item')
+    request --fail "$interior_url/api/model" |
+        jq -e --argjson size "$catalogue_size" '.catalogue_size == $size' >/dev/null
+    request --fail -H 'Content-Type: application/json' --data '{"revision_id":"revision-fixture"}' \
+        "$interior_url/api/roomplan/spaces" | jq -e '.space_id == "space-revision-fixture"' >/dev/null
+    link="$interior_url/api/roomplan/spaces/space-revision-fixture/links"
+    test "$(request --output /dev/null --write-out '%{http_code}' -X PUT \
+        -H 'Content-Type: application/json' \
+        --data '{"revision_id":"revision-fixture","observation_id":"object-fixture","item_id":"rehearsal-wish"}' "$link")" = 409
+    request --fail -X PUT -H 'Content-Type: application/json' \
+        --data '{"revision_id":"revision-fixture","observation_id":"object-fixture","item_id":"sjel-turso-rehearsal-item"}' "$link" |
+        jq -e '.item_id == "sjel-turso-rehearsal-item"' >/dev/null
+    env -i PATH="$PATH" SJEL_PERSONAL_ROOT="$work" SJEL_DB_PATH="$work/interior.db" \
+        SJEL_INVENTORY_URL="$inventory_url" SJEL_INTERIOR_FLAT=muster "$interior" model >/dev/null
+    stop_auxiliary
+    stop_service
+    test "$(sqlite3 -readonly interior.db "SELECT count(*) FROM sqlite_schema WHERE name GLOB 'inventory_*'")" = 0
+    test "$(sqlite3 -readonly interior.db "SELECT item_id FROM interior_roomplan_object_link")" = "$item"
+    echo 'Interior served the owner catalogue and accepted only the owned RoomPlan link across separate files.'
 fi
 
 test "$(shasum -a 256 "$source_db")" = "$source_sha"

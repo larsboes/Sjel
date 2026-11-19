@@ -1,6 +1,8 @@
 //! What is on the sheet must be readable. Checked against the sample flat; the real one lives in
 //! the overlay.
 
+mod support;
+
 use interior::model::Model;
 use interior::plan;
 use std::sync::Once;
@@ -22,7 +24,7 @@ fn model() -> Model {
         sjel_inventory::import::inventory(&store, &fixture.join("data/interior/inventory"))
             .expect("the sample inventory imports");
     });
-    Model::load(FLAT).unwrap_or_else(|e| panic!("{FLAT}: {e}"))
+    support::load_model(FLAT).unwrap_or_else(|e| panic!("{FLAT}: {e}"))
 }
 
 fn draw(layout: &str) -> String {

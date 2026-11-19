@@ -4,6 +4,8 @@
 //! reaches the obliquity of the ecliptic at the solstices. A wrong equation of time, a swapped axis
 //! or a sign error in the declination fails one of these.
 
+mod support;
+
 use interior::sun::sun_position;
 
 /// The obliquity of the ecliptic: not a parameter of this code, but the value it must reproduce.
@@ -110,7 +112,7 @@ use std::sync::Once;
 
 fn model() -> Model {
     fixture_overlay();
-    Model::load("muster").unwrap_or_else(|e| panic!("muster: {e}"))
+    support::load_model("muster").unwrap_or_else(|e| panic!("muster: {e}"))
 }
 
 fn fixture_overlay() {

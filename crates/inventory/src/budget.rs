@@ -1,90 +1,54 @@
-//! What the open wishlist costs, measured against what is left at the end of a month.
-//!
-//! Read straight from `finance_transaction_projection` in the shared store: finance requires an
-//! inbound token over HTTP, and the number sits in the same file.
-//!
-//! There is no budget here. Nobody set a ceiling; this reports one measurement and leaves the
-//! judgement to the reader.
+//! Compare the open wishlist with the monthly balance reported by Finance.
 
-use rusqlite::Connection;
+use std::io::Read;
+use std::time::Duration;
+
+pub use inventory_api::MonthlyBalance;
 
 type Error = Box<dyn std::error::Error>;
 
-/// Completed months in the window. Twelve, so one yearly cycle (insurance, holidays, utility
-/// settlements) is inside it once.
-pub const WINDOW_MONTHS: usize = 12;
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct MonthlyBalance {
-    /// Median of income minus expenses per month, in cents. Negative means nothing is left.
-    pub median_cents: i64,
-    /// How many completed months were actually measured.
-    pub months: usize,
-    /// First and last month in the window, as `YYYY-MM`.
-    pub from: String,
-    pub to: String,
+/// Fetch the optional balance from Finance. Call from a CLI or blocking worker.
+pub fn monthly_balance() -> Option<MonthlyBalance> {
+    let base_url = sjel_config::env_var("SJEL_FINANCE_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8090".into());
+    match fetch_monthly_balance(&base_url) {
+        Ok(balance) => balance,
+        Err(_) => {
+            eprintln!("Finance monthly balance unavailable");
+            None
+        }
+    }
 }
 
-/// The monthly balance from finance's projection, or `None` when finance has written nothing on
-/// this machine.
-///
-/// Transfers are left out: a move between own accounts is neither income nor expense. The current
-/// month is left out because it is incomplete. The median, not the mean, so one month with a
-/// yearly payment does not move the answer by hundreds of euros.
-pub fn monthly_balance(conn: &Connection) -> Result<Option<MonthlyBalance>, Error> {
-    let present: i64 = conn.query_row(
-        "SELECT count(*) FROM sqlite_master
-          WHERE type='table' AND name='finance_transaction_projection'",
-        [],
-        |row| row.get(0),
-    )?;
-    if present == 0 {
-        return Ok(None);
+fn fetch_monthly_balance(base_url: &str) -> Result<Option<MonthlyBalance>, Error> {
+    let client = sjel_http::loopback_builder(
+        sjel_http::Purpose::new("finance-monthly-balance"),
+        Duration::from_secs(1),
+    )
+    .build()?;
+    let mut url = client.get(base_url).build()?.url().clone();
+    if url.host_str() == Some("localhost") {
+        url.set_host(Some("127.0.0.1"))?;
     }
-
-    let mut stmt = conn.prepare(
-        "SELECT substr(booked_at, 1, 7) AS month,
-                sum(CASE WHEN kind = 'income'  THEN amount_cents ELSE 0 END)
-              - sum(CASE WHEN kind = 'expense' THEN amount_cents ELSE 0 END) AS balance
-           FROM finance_transaction_projection
-          WHERE kind IN ('income', 'expense')
-            AND substr(booked_at, 1, 7) < strftime('%Y-%m', 'now')
-          GROUP BY month
-          ORDER BY month DESC
-          LIMIT ?1",
-    )?;
-    let rows = stmt.query_map([WINDOW_MONTHS as i64], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-    })?;
-    let mut months: Vec<(String, i64)> = rows.collect::<Result<_, _>>()?;
-    if months.is_empty() {
-        return Ok(None);
+    if !matches!(url.host_str(), Some("127.0.0.1" | "[::1]"))
+        || !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err("Finance URL must use a loopback address".into());
     }
-    months.sort_by(|a, b| a.0.cmp(&b.0));
-    let from = months.first().unwrap().0.clone();
-    let to = months.last().unwrap().0.clone();
-
-    let mut balances: Vec<i64> = months.iter().map(|(_, b)| *b).collect();
-    balances.sort_unstable();
-    let n = balances.len();
-    let median_cents = if n % 2 == 1 {
-        balances[n / 2]
-    } else {
-        (balances[n / 2 - 1] + balances[n / 2]) / 2
-    };
-
-    Ok(Some(MonthlyBalance {
-        median_cents,
-        months: n,
-        from,
-        to,
-    }))
+    url.set_path("/api/monthly-balance");
+    url.set_query(None);
+    url.set_fragment(None);
+    let request = sjel_server::InboundAuth::with_loopback_auth(client.get(url.clone()), url.as_str());
+    let response = request.send()?.error_for_status()?;
+    if !response.status().is_success() {
+        return Err("unexpected Finance response status".into());
+    }
+    Ok(serde_json::from_reader(response.take(4096))?)
 }
 
-/// How many monthly balances the open wishlist costs.
-///
-/// `None` when the median is zero or negative: nothing accrues from a balance that is not
-/// positive, and "-3.2 months" would be a number that answers nothing.
+/// An open wishlist can only be funded from a positive balance.
 pub fn months_to_pay(open_cents: i64, balance: &MonthlyBalance) -> Option<f64> {
     if balance.median_cents <= 0 {
         return None;

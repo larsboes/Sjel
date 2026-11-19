@@ -615,7 +615,7 @@ impl Store {
         Ok(self.pool.get()?)
     }
 
-    /// A connection for a query beyond this prefix: `budget::monthly_balance` reads finance.
+    /// A connection for Inventory queries implemented in other modules.
     pub fn borrow_connection(&self) -> Result<sjel_store::PooledClient, Error> {
         self.conn()
     }

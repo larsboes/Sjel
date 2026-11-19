@@ -966,10 +966,7 @@ fn cmd_declarations(model: &Model, argv: &[String]) -> i32 {
 /// Which need first, and when it is affordable.
 fn cmd_purchase_order(model: &Model, argv: &[String]) -> i32 {
     // The order runs without a balance too: it is an order, and the timeline is the extra.
-    let balance = interior::store::Store::open(&sjel_config::database_path())
-        .ok()
-        .and_then(|s| s.borrow_connection().ok())
-        .and_then(|conn| interior::budget::monthly_balance(&conn).ok().flatten());
+    let balance = interior::budget::monthly_balance();
     let r = match interior::budget::purchase_order(model, balance) {
         Ok(r) => r,
         Err(e) => {

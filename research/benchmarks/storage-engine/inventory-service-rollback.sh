@@ -2,14 +2,19 @@
 set -eu
 umask 077
 
-if [ "$#" -ne 3 ]; then
-    echo 'usage: sh inventory-service-rollback.sh <wal-restored.db> <inventory binary> <new private scratch directory>' >&2
+if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
+    echo 'usage: sh inventory-service-rollback.sh <wal-restored.db> <inventory binary> <new private scratch directory> [finance binary]' >&2
     exit 2
 fi
 
 source_db=$(cd "$(dirname "$1")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$1")")
 inventory=$(cd "$(dirname "$2")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$2")")
 test -x "$inventory"
+finance=
+if [ "$#" -eq 4 ]; then
+    finance=$(cd "$(dirname "$4")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$4")")
+    test -x "$finance"
+fi
 test ! -s "$source_db-wal"
 source_sha=$(shasum -a 256 "$source_db")
 mkdir -m 700 "$3"
@@ -25,6 +30,8 @@ printf '%s\n' "$fixture" > fixture-bearer
 printf 'SJEL_INBOUND_TOKEN_FILE=%s/fixture-bearer\n' "$work" > config/deployment.env
 
 pid=
+finance_pid=
+finance_url=
 stop_service() {
     if [ -n "$pid" ]; then
         kill "$pid" 2>/dev/null || :
@@ -32,7 +39,14 @@ stop_service() {
         pid=
     fi
 }
-trap stop_service EXIT
+stop_finance() {
+    if [ -n "$finance_pid" ]; then
+        kill "$finance_pid" 2>/dev/null || :
+        wait "$finance_pid" 2>/dev/null || :
+        finance_pid=
+    fi
+}
+trap 'stop_service; stop_finance' EXIT
 trap 'exit 1' HUP INT TERM
 
 request() {
@@ -40,23 +54,31 @@ request() {
         -H "Authorization: Bearer $fixture" "$@"
 }
 
-start_service() {
-    port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
-    base="http://127.0.0.1:$port"
-    env -i PATH="$PATH" SJEL_PERSONAL_ROOT="$work" SJEL_DB_PATH="$work/devices.db" \
-        SJEL_INVENTORY_DB_PATH="$work/owner.db" SJEL_PORT="$port" \
-        "$inventory" serve > "$1.log" 2>&1 &
-    pid=$!
+available_port() {
+    python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'
+}
+
+wait_for_service() {
     tries=0
-    until request --fail "$base/health" >/dev/null 2>&1; do
-        if ! kill -0 "$pid" 2>/dev/null || [ "$tries" -eq 50 ]; then
-            echo "Inventory did not start. See $work/$1.log." >&2
+    until request --fail "$2/health" >/dev/null 2>&1; do
+        if ! kill -0 "$1" 2>/dev/null || [ "$tries" -eq 50 ]; then
+            echo "Service did not start. See $work/$3.log." >&2
             return 1
         fi
         tries=$((tries + 1))
         sleep 0.1
     done
-    kill -0 "$pid"
+    kill -0 "$1"
+}
+
+start_service() {
+    port=$(available_port)
+    base="http://127.0.0.1:$port"
+    env -i PATH="$PATH" SJEL_PERSONAL_ROOT="$work" SJEL_DB_PATH="$work/devices.db" \
+        SJEL_INVENTORY_DB_PATH="$work/owner.db" SJEL_PORT="$port" SJEL_FINANCE_URL="$finance_url" \
+        "$inventory" serve > "$1.log" 2>&1 &
+    pid=$!
+    wait_for_service "$pid" "$base" "$1"
 }
 
 item=sjel-turso-rehearsal-item
@@ -89,5 +111,41 @@ test -z "$(sqlite3 -readonly owner.db 'PRAGMA foreign_key_check')"
 test "$(sqlite3 -readonly owner.db "SELECT label FROM inventory_item WHERE id='sjel-turso-rehearsal-item' AND revision=4")" = 'Restored service edit'
 test "$(sqlite3 -readonly owner.db "SELECT revision FROM inventory_sync_operation WHERE operation_id='sjel-turso-rehearsal-op'")" = 3
 test "$(sqlite3 -readonly devices.db "SELECT count(*) FROM sqlite_schema WHERE name GLOB 'inventory_*'")" = 0
+
+if [ -n "$finance" ]; then
+    finance_port=$(available_port)
+    finance_url="http://127.0.0.1:$finance_port"
+    env -i PATH="$PATH" SJEL_PERSONAL_ROOT="$work" SJEL_DB_PATH="$work/finance.db" \
+        SJEL_PORT="$finance_port" "$finance" > finance.log 2>&1 &
+    finance_pid=$!
+    wait_for_service "$finance_pid" "$finance_url" finance
+    request --fail "$finance_url/api/monthly-balance" | jq -e '. == null' >/dev/null
+    sqlite3 -bail finance.db <<'SQL'
+INSERT INTO finance_transaction_projection
+    (id, booked_at, description, kind, account, category, amount_cents, currency)
+VALUES ('income', '2000-01-01', '', 'income', '', '', 20000, 'EUR'),
+       ('expense', '2000-01-02', '', 'expense', '', '', 5000, 'EUR');
+SQL
+    sqlite3 -bail owner.db <<'SQL'
+INSERT INTO inventory_item(id, kind, label, price_cents, created_at, updated_at)
+VALUES ('rehearsal-wish', 'gear', 'Rehearsal wish', 30000, '2000-01-01', '2000-01-01');
+INSERT INTO inventory_item_state(item_id, state, since)
+VALUES ('rehearsal-wish', 'wanted', '2000-01-01');
+SQL
+    start_service wishlist
+    request --fail "$base/api/wishlist" | jq -e '
+        .monthly_balance == {median_cents: 15000, months: 1, from: "2000-01", to: "2000-01"}
+        and .months_to_pay == (.total_low_cents / 15000)
+        and any(.items[]; .id == "rehearsal-wish" and .price_cents == 30000)
+    ' >/dev/null
+    stop_finance
+    request --fail "$base/api/wishlist" | jq -e '
+        .monthly_balance == null and .months_to_pay == null and any(.items[]; .id == "rehearsal-wish")
+    ' >/dev/null
+    stop_service
+    test "$(sqlite3 -readonly owner.db "SELECT count(*) FROM sqlite_schema WHERE name GLOB 'finance_*'")" = 0
+    echo 'Wishlist used the Finance balance across separate files and stayed available after Finance stopped.'
+fi
+
 test "$(shasum -a 256 "$source_db")" = "$source_sha"
 echo 'Inventory served the restored revision, kept the Turso receipt, rejected a stale edit, and retained the new revision after restart.'

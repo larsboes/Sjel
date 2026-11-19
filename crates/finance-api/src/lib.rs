@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 // ============================================================================
 
 pub const ROUTE_DASHBOARD: &str = "/api/dashboard";
+pub const ROUTE_MONTHLY_BALANCE: &str = "/api/monthly-balance";
 pub const ROUTE_SUBSCRIPTIONS: &str = "/api/subscriptions";
 pub const ROUTE_SUBSCRIPTIONS_BURN: &str = "/api/subscriptions/burn";
 pub const ROUTE_SUBSCRIPTION_PRICE: &str = "/api/subscriptions/{id}/price";
@@ -35,8 +36,9 @@ pub const ROUTE_TRIP_SPENDING: &str = "/api/trips/{id}/spending";
 pub const ROUTE_LINKS: &str = "/api/links";
 
 /// Every route constant above. The server test checks each one against its manifest.
-pub const ALL_ROUTES: [&str; 22] = [
+pub const ALL_ROUTES: [&str; 23] = [
     ROUTE_DASHBOARD,
+    ROUTE_MONTHLY_BALANCE,
     ROUTE_SUBSCRIPTIONS,
     ROUTE_SUBSCRIPTIONS_BURN,
     ROUTE_SUBSCRIPTION_PRICE,
@@ -62,6 +64,14 @@ pub const ALL_ROUTES: [&str; 22] = [
 
 /// The path prefix under which the status proxy serves these routes.
 pub const PROXY_PREFIX: &str = "/finance";
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MonthlyBalance {
+    pub median_cents: i64,
+    pub months: usize,
+    pub from: String,
+    pub to: String,
+}
 
 #[cfg(test)]
 mod route_tests {

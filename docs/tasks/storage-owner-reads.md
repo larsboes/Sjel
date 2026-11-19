@@ -25,3 +25,6 @@ Route reads through owners through the existing owner, without treating implemen
 Finder gets local Inventory results from Inventory's bounded search route. The route checks the
 same words and returns the same hit fields without returning matching notes. Other Finder sources,
 the desktop reader and the mirror remain in scope.
+
+Inventory and Interior obtain monthly balance from Finance's owner route. The wishlist rehearsal
+used separate Inventory, Finance and Devices files and exercised an unavailable Finance service.

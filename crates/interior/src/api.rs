@@ -2204,9 +2204,9 @@ async fn api_purchase_order(
     State(s): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    let st = store(&s)?;
-    let conn = st.borrow_connection().map_err(boom)?;
-    let balance = crate::budget::monthly_balance(&conn).map_err(boom)?;
+    let balance = tokio::task::spawn_blocking(crate::budget::monthly_balance)
+        .await
+        .map_err(boom)?;
     Ok(Json(
         crate::budget::purchase_order(&model, balance).map_err(boom)?,
     ))

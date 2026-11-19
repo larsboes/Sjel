@@ -213,6 +213,11 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        finance_api::ROUTE_MONTHLY_BALANCE,
+        "Median cash flow for up to twelve completed months with bookings.",
+    ),
+    r(
+        "GET",
         "/api/portfolio",
         "Positions with price freshness, share in basis points and drift against the configured targets. Optional ?currency=EUR, default EUR.",
     ),
@@ -1641,6 +1646,19 @@ fn rebuild_projection(
     Ok(rows.len())
 }
 
+async fn monthly_balance(State(state): State<AppState>) -> ApiResponse {
+    match sjel_server::blocking(move || {
+        FinanceStore::open(&state.database_path)
+            .and_then(|store| store.monthly_balance())
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(balance) => response(StatusCode::OK, balance),
+        Err(error) => failed(error),
+    }
+}
+
 async fn dashboard_projection(
     State(state): State<AppState>,
     Query(filter): Query<AnalyticsFilter>,
@@ -2965,6 +2983,7 @@ fn build_router(state: AppState) -> Router {
         .route("/api/ledger/check", get(check_ledger))
         .route("/api/ledger/rebuild", post(rebuild_ledger))
         .route("/api/dashboard", get(dashboard_projection))
+        .route(finance_api::ROUTE_MONTHLY_BALANCE, get(monthly_balance))
         .route("/api/portfolio", get(portfolio))
         .route("/api/prices/status", get(prices_status))
         .route(sjel_server::FRESHNESS_PATH, get(freshness))
@@ -3275,6 +3294,46 @@ mod tests {
             let _ = std::fs::remove_file(format!("{}{tail}", path.display()));
         }
         path
+    }
+
+    #[tokio::test]
+    async fn monthly_balance_route_measures_only_completed_months_with_cash_flow() {
+        use tower::ServiceExt;
+
+        let database = scratch_database("monthly-balance");
+        let router = build_router(state_on(database.clone()));
+        let read = || async {
+            let request = axum::http::Request::get(finance_api::ROUTE_MONTHLY_BALANCE)
+                .body(axum::body::Body::empty())
+                .unwrap();
+            let response = router.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let bytes = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+            serde_json::from_slice::<Option<finance_api::MonthlyBalance>>(&bytes).unwrap()
+        };
+        assert_eq!(read().await, None);
+
+        let conn = rusqlite::Connection::open(database).unwrap();
+        conn.execute_batch(
+            "INSERT INTO finance_transaction_projection
+                (id, booked_at, description, kind, account, category, amount_cents, currency)
+             VALUES
+                ('a', '2000-01-01', '', 'income', '', '', 20000, 'EUR'),
+                ('b', '2000-01-02', '', 'expense', '', '', 5000, 'EUR'),
+                ('c', '2000-01-03', '', 'transfer', '', '', 90000, 'EUR'),
+                ('d', '2000-03-01', '', 'expense', '', '', 5000, 'EUR'),
+                ('e', date('now'), '', 'expense', '', '', 999900, 'EUR');",
+        )
+        .unwrap();
+        assert_eq!(
+            read().await,
+            Some(finance_api::MonthlyBalance {
+                median_cents: 5_000,
+                months: 2,
+                from: "2000-01".into(),
+                to: "2000-03".into(),
+            })
+        );
     }
 
     /// The three refusals that happen before anything is written, and the one

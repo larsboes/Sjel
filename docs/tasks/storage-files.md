@@ -39,9 +39,14 @@ The native Rust binding passed the WAL transaction and retry probe on the restor
 An explicit rollback left both connections at revision 3 after a refused receipt. Native reopen
 and SQLite backup preserved the once-committed revision 4 and its receipt.
 
+The wishlist reads the monthly balance from Finance over loopback. A two-service rehearsal with
+separate files confirmed the balance and wishlist totals. When Finance stopped, the wishlist
+still returned its items and prices. The Interior purchase order uses the same Finance read.
+
 ## Remaining migration gates
 
-- Route the wishlist's monthly balance through Finance before splitting the Inventory file.
+- Verify consumer routes against the split owner file. Interior still opens Inventory's store
+  on the shared file for layout catalogue reads and RoomPlan link validation.
 - Run the owner API suite against a Turso WAL adapter. Roll back failed transactions explicitly
   before reusing their connections. Turso 0.8.3 prepared statements can run before drop-triggered
   rollback. Rehearse cutover and rollback with the adapter running, and register and restore the

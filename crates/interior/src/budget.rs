@@ -1,4 +1,4 @@
-//! The purchase order of the open needs, measured against inventory's monthly balance.
+//! The purchase order of open needs, measured against the Finance monthly balance.
 
 pub use sjel_inventory::budget::{monthly_balance, months_to_pay, MonthlyBalance};
 

@@ -138,6 +138,11 @@ that a stale edit returns a conflict. After restart, revision 4 and the original
 survive. SQLite reports valid integrity and foreign keys, the Devices file has no Inventory tables,
 and the input checksum stays unchanged.
 
+Pass the Finance server binary as the fourth argument to rehearse wishlist composition. The
+rehearsal starts Finance on its own file, seeds a monthly balance, and verifies the Inventory
+wishlist uses that balance for its affordability calculation. It then stops Finance and confirms
+the wishlist remains available with an absent balance.
+
 The Rust binding probe injects a receipt insert failure after a revision update. Turso 0.8.3
 defers drop-triggered rollback, and a prepared statement on the writer can still see the edit.
 With explicit rollback, both connections see revision 3 and no receipt. Retrying records revision 4

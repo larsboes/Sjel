@@ -56,11 +56,6 @@ impl Store {
         Ok(self.pool.get()?)
     }
 
-    /// A connection for a query beyond this prefix: `budget::monthly_balance` reads finance.
-    pub fn borrow_connection(&self) -> Result<sjel_store::PooledClient, Error> {
-        self.conn()
-    }
-
     /// `item_id` has no foreign key: the items belong to another capability, and a key across
     /// two prefixes would make one capability's deletes fail on the other's rows.
     fn run_migration(conn: &Connection, prefix: &str) -> Result<(), Error> {

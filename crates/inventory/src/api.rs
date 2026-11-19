@@ -306,8 +306,9 @@ async fn api_wishlist(State(s): State<Arc<AppState>>) -> Result<impl IntoRespons
         .filter(|i| i.price_cents.is_none() && i.cost_min_cents.is_none())
         .count();
 
-    let conn = st.borrow_connection().map_err(boom)?;
-    let balance = crate::budget::monthly_balance(&conn).map_err(boom)?;
+    let balance = tokio::task::spawn_blocking(crate::budget::monthly_balance)
+        .await
+        .map_err(boom)?;
     let months = balance
         .as_ref()
         .and_then(|b| crate::budget::months_to_pay(total_low, b));

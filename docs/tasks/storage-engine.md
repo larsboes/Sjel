@@ -41,6 +41,11 @@ workload had no consistent gain with Turso. Turso WAL files reopened in libSQL. 
 copy required a Turso conversion to WAL before libSQL could read it. SQLite backup and restore
 checks passed for both WAL states.
 
+The registered shared-store backup passed receipt, integrity and row-count checks in isolation.
+Its schema contained no libSQL vector indexes. Turso 0.8.3 opened that copy read-only and could
+enumerate the catalog, but returned missing-table errors on some objects catalogued by SQLite.
+Matching catalog counts alone do not establish deployed-store compatibility.
+
 Keep libSQL for the shared store. Turso MVCC merits a pilot on a rebuildable, single-owner
 projection after measuring distinct-key write contention in that workload. Live MVCC backup,
-power-loss recovery, physical iPhone behavior and the deployed-store schema remain unverified.
+power-loss recovery and physical iPhone behavior remain unverified.

@@ -451,6 +451,16 @@ buttons work directly in the sidebar. Selecting the current mode's name opens th
 When the timer is clear, the mini player can repeat the last timed session from the beginning.
 **Settings ▸ Appearance ▸ Soundscape mini player** controls its visibility.
 
+Select **Sleep ▸ Bedside** to choose Rain behind glass, Far shore or Warm fan. Soft chords
+fade into the room over 25 minutes. **Fade out** ends after 45 minutes. **All night** runs for
+12 hours. **Until morning** ends at the next selected local time and can brighten the room
+gradually over its final 12 minutes. **Back to sleep** starts at the settled room level and
+fades out after 20 minutes.
+
+The player dims when Bedside starts. Click the dark surface or choose **Show controls** to
+reveal it. **Dim player** restores the dark view. Bedside recalls its last room and listening
+volume. The sidebar can restart the last session with **Repeat**.
+
 ### Why there is a synthesizer in this app
 
 The dashboard makes this sound in the browser, and `crates/soundscape/README.md` explains why

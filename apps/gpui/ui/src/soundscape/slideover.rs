@@ -16,7 +16,8 @@ use sjel_gpui_core::shell::{
     self, SoundscapeLayers, SoundscapeParams, SoundscapeSession, SoundscapeState,
 };
 use sjel_gpui_core::soundscape::{
-    self, LayerName, ListeningContext, ParamName, Preset, Scenario, Visual,
+    self, BedsideFrame, BedsideOptions, LayerName, ListeningContext, ParamName, Preset, Scenario,
+    SleepRoom, Visual,
 };
 
 use crate::data::{self, Busy};
@@ -29,6 +30,8 @@ use crate::ely::theme::ControlSize;
 use crate::feedback::WindowToastExt;
 use crate::theme::{Palette, ThemeContext};
 use crate::viz::{self, Field};
+
+mod bedside;
 
 actions!(
     soundscape,
@@ -114,6 +117,10 @@ enum Write {
 enum SessionStart {
     Scenario(Scenario),
     Repeat,
+    Bedside {
+        options: BedsideOptions,
+        back_to_sleep: bool,
+    },
 }
 
 /// The two channels the audio thread reads, and nothing else: the device itself lives in the app
@@ -158,6 +165,9 @@ pub struct SoundscapeSlideover {
     listening_context: ListeningContext,
     last_context_read: Option<Instant>,
     session_write: Busy,
+    bedside_edit: Option<BedsideOptions>,
+    dark_room: Option<SleepRoom>,
+    dark_focus: [FocusHandle; 2],
 }
 
 impl SoundscapeSlideover {
@@ -197,6 +207,9 @@ impl SoundscapeSlideover {
             listening_context: ListeningContext::at(Local::now().hour(), false),
             last_context_read: None,
             session_write: Busy::default(),
+            bedside_edit: None,
+            dark_room: None,
+            dark_focus: std::array::from_fn(|_| cx.focus_handle().tab_stop(true)),
         };
         view.read_state(cx);
         view.start_polling(cx);
@@ -329,6 +342,11 @@ impl SoundscapeSlideover {
         self.audio.control.set_energy(state.energy);
         self.audio.control.set_seed(state.seed);
         let timing = state.session.as_ref().map(session_timing);
+        let bedside = state
+            .session
+            .as_ref()
+            .and_then(|session| BedsideFrame::at(session, wall_clock_ms()));
+        self.audio.control.set_bedside(bedside);
         self.audio
             .control
             .set_session_progress(timing.map(|(progress, _)| progress));
@@ -539,11 +557,21 @@ impl SoundscapeSlideover {
                         shell.start_soundscape_scenario(scenario).await
                     }
                     SessionStart::Repeat => shell.repeat_soundscape_session().await,
+                    SessionStart::Bedside {
+                        options,
+                        back_to_sleep,
+                    } => shell.start_bedside(options, back_to_sleep).await,
                 }
             },
             |view, updated, cx| {
                 if let Some(state) = updated {
                     view.push(&state);
+                    view.dark_room = state
+                        .session
+                        .as_ref()
+                        .and_then(|session| session.bedside)
+                        .map(|options| options.room);
+                    view.bedside_edit = None;
                     view.state.value = Some(state);
                 }
                 cx.notify();
@@ -552,6 +580,10 @@ impl SoundscapeSlideover {
     }
 
     fn clear_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let bedside = self
+            .current()
+            .and_then(|state| state.session.as_ref())
+            .is_some_and(|session| session.bedside.is_some());
         self.last_write = Some(Instant::now());
         let repo = self.repo.clone();
         data::write(
@@ -560,7 +592,13 @@ impl SoundscapeSlideover {
             self,
             &repo,
             data::Press::quiet("Session cleared."),
-            move |shell| async move { shell.set_soundscape_session(None).await },
+            move |shell| async move {
+                if bedside {
+                    shell.stop_bedside().await
+                } else {
+                    shell.set_soundscape_session(None).await
+                }
+            },
             |view, updated, cx| {
                 if let Some(state) = updated {
                     view.state.value = Some(state);
@@ -629,10 +667,11 @@ impl SoundscapeSlideover {
             .current()
             .map(|state| state.preset())
             .unwrap_or_else(|| self.audio.visual.preset());
-        let moving = self
-            .field
-            .borrow_mut()
-            .advance(&self.audio.visual, preset, dt);
+        let moving = self.dark_room.is_none()
+            && self
+                .field
+                .borrow_mut()
+                .advance(&self.audio.visual, preset, dt);
         if (moving || sliding) && !reduce_motion {
             window.request_animation_frame();
             return true;
@@ -651,6 +690,12 @@ impl Render for SoundscapeSlideover {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = ThemeContext::of(window, cx).palette;
         self.adopt();
+        if self
+            .current()
+            .is_some_and(|state| state.preset() != Preset::Sleep)
+        {
+            self.dark_room = None;
+        }
         self.animate(window, cx);
         if std::mem::take(&mut self.refocus) {
             self.previous_focus = window.focused(cx).filter(|focus| focus != &self.focus);
@@ -665,6 +710,7 @@ impl Render for SoundscapeSlideover {
 
         let state = self.current();
         let playing = self.audio.control.playing();
+        let dark_room = self.dark_room;
         let preset = state
             .map(|state| state.preset())
             .unwrap_or_else(|| self.audio.visual.preset());
@@ -703,7 +749,11 @@ impl Render for SoundscapeSlideover {
             .max_w(gpui_kit::relative(0.9))
             .flex()
             .flex_col()
-            .bg(rgba(palette.panel()))
+            .bg(if dark_room.is_some() {
+                rgb(0x090b0f)
+            } else {
+                rgba(palette.panel())
+            })
             .border_l_1()
             .border_color(rgba(palette.border))
             // A page on white and a panel on near-white are one rectangle without this: the shadow
@@ -734,24 +784,28 @@ impl Render for SoundscapeSlideover {
             .on_action(cx.listener(|view, _: &NarrowDrawer, _, cx| {
                 view.resize(view.measured_width.get() - KEY_RESIZE_STEP, cx);
             }))
-            .child(self.header(palette, cx))
-            .child(
-                div()
-                    .id("soundscape-controls")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(14.))
-                            .px(px(16.))
-                            .pb(px(16.))
-                            .child(field)
-                            .child(self.controls(cx, palette, playing, preset)),
-                    ),
-            )
+            .when_some(dark_room, |drawer, room| {
+                drawer.child(self.dark_player(room, playing, cx))
+            })
+            .when(dark_room.is_none(), |drawer| {
+                drawer.child(self.header(palette, cx)).child(
+                    div()
+                        .id("soundscape-controls")
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(14.))
+                                .px(px(16.))
+                                .pb(px(16.))
+                                .child(field)
+                                .child(self.controls(cx, palette, playing, preset)),
+                        ),
+                )
+            })
             .child(self.resize_grip(palette, cx))
             .into_any_element()
     }
@@ -932,7 +986,11 @@ impl SoundscapeSlideover {
                                 )
                                 .child(quiet_button(
                                     "session-clear",
-                                    "Remove timer",
+                                    if session.bedside.is_some() {
+                                        "Stop session"
+                                    } else {
+                                        "Remove timer"
+                                    },
                                     cx,
                                     |view, window, cx| {
                                         view.clear_session(window, cx);
@@ -995,6 +1053,29 @@ impl SoundscapeSlideover {
                     }),
                 )),
         );
+
+        if preset == Preset::Sleep {
+            let bedside = session.and_then(|session| session.bedside);
+            if session.is_none() {
+                strip = strip.child(self.bedside_controls(palette, cx));
+            } else if let Some(options) = bedside {
+                strip = strip.child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .child(self.back_to_sleep(options, cx))
+                        .child(quiet_button(
+                            "bedside-dim-again",
+                            "Dim player",
+                            cx,
+                            move |view, _, cx| {
+                                view.dark_room = Some(options.room);
+                                cx.notify();
+                            },
+                        )),
+                );
+            }
+        }
 
         if session.is_none() {
             let suggestion = self.listening_context;
@@ -1404,6 +1485,41 @@ mod tests {
     use super::*;
 
     #[gpui::test]
+    fn clicking_the_dark_bedside_surface_reveals_controls(cx: &mut gpui_kit::TestAppContext) {
+        let (player, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui_kit::size(px(900.), px(740.))),
+            |_, cx| {
+                let mut player = SoundscapeSlideover::new_with_handles(
+                    Repo::new(Err(shell::ShellError::NotSetUp)),
+                    Arc::new(soundscape::Control::new()),
+                    Arc::new(Visual::new()),
+                    Some("Test output".into()),
+                    None,
+                    cx,
+                );
+                player.state.value = Some(SoundscapeState {
+                    preset: Preset::Sleep.key().into(),
+                    ..SoundscapeState::default()
+                });
+                player.open = true;
+                player.slide = 1.;
+                player.dark_room = Some(SleepRoom::Shore);
+                player
+            },
+        );
+        let surface = cx
+            .debug_bounds("bedside-dark-surface")
+            .expect("dark surface");
+        cx.simulate_click(
+            gpui_kit::point(surface.center().x, surface.origin.y + px(40.)),
+            Default::default(),
+        );
+        cx.run_until_parked();
+        assert!(player.read_with(cx, |player, _| player.dark_room.is_none()));
+    }
+
+    #[gpui::test]
     fn the_drawer_resizes_from_its_edge_and_closes_with_escape(cx: &mut gpui_kit::TestAppContext) {
         cx.update(|cx| cx.bind_keys(SoundscapeSlideover::keys()));
         let (player, cx) = crate::test_support::mount_root(
@@ -1473,6 +1589,8 @@ mod tests {
                         duration_ms: 3_000_000,
                         elapsed_ms: 1_500_000,
                         running_since_ms: None,
+                        bedside: None,
+                        deadline_ms: None,
                     }),
                     ..SoundscapeState::default()
                 });

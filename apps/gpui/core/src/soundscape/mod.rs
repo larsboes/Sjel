@@ -4,6 +4,7 @@
 //! device drives this engine against its own sample clock.
 
 pub mod analyser;
+mod bedside;
 pub mod control;
 pub mod engine;
 pub mod fx;
@@ -14,11 +15,13 @@ pub mod steps;
 pub mod synth;
 
 pub use analyser::Analyser;
+pub use bedside::BedsideFrame;
 pub use control::{Control, Visual, BANDS};
 pub use engine::Engine;
 pub use music::{ArcPhase, Arrangement, LayerName, Layers, ParamName, Params, Preset};
 pub use rng::{format_seed, parse_seed, Mulberry32};
 pub use session::{ListeningContext, Scenario};
+pub use soundscape_api::bedside::{BedsideOptions, SleepEnding, SleepRoom};
 pub use steps::{play_step, Events, Sequence};
 pub use synth::{VoiceSpec, Voices};
 

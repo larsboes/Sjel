@@ -47,7 +47,8 @@ known list, because that one is a real disagreement about what exists.
 
 `{"repeat_last_session": true}` starts a fresh timer with the saved duration, preset, scene
 parameters and energy. It returns a conflict when a timer is active or the conductor has no saved
-session. Send it on its own with an optional `origin`.
+session. Send it on its own with an optional `origin`. When repeating a Bedside session set to
+Until morning, the client supplies `repeat_morning_duration_ms` for the next local morning time.
 
 ## Port
 
@@ -64,3 +65,5 @@ window, so a dragged slider is one disk update. Without an overlay, state stays 
 Playback never resumes on process start. A running session is restored as paused with its
 elapsed time preserved. Pausing playback freezes the session clock. Resuming continues from its
 checkpoint. The starting settings for the latest timed session remain available after completion.
+Bedside saves its room, ending and volume with playback state. A morning ending anchors to the
+wall clock and keeps that deadline through pauses.

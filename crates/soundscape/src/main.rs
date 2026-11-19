@@ -24,6 +24,7 @@ use axum::{
     Router,
 };
 use serde_json::json;
+use soundscape_api::bedside::{SleepEnding, BEDSIDE, MORNING_LIMIT_MS};
 use tokio::sync::broadcast;
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
@@ -314,7 +315,8 @@ async fn post_state(
     let now = now_ms();
     let origin = patch.origin.take();
     let repeat = std::mem::take(&mut patch.repeat_last_session);
-    if repeat && patch != Patch::default() {
+    let morning_duration = patch.repeat_morning_duration_ms.take();
+    if (repeat && patch != Patch::default()) || (!repeat && morning_duration.is_some()) {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({"error": "repeat cannot be combined with other state updates"})),
@@ -339,6 +341,7 @@ async fn post_state(
                     "error": "invalid soundscape session",
                     "known_scenarios": SCENARIOS,
                     "max_duration_ms": MAX_SESSION_MS,
+                    "max_bedside_duration_ms": MORNING_LIMIT_MS,
                 })),
             ));
         }
@@ -346,6 +349,18 @@ async fn post_state(
 
     {
         let mut scape = app.scape_write();
+        if patch
+            .session
+            .as_ref()
+            .and_then(|session| session.as_ref())
+            .is_some_and(|session| session.bedside.is_some())
+            && patch.preset.as_deref().unwrap_or(&scape.preset) != Preset::Sleep.key()
+        {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Bedside sessions require the sleep preset"})),
+            ));
+        }
         if repeat {
             if scape
                 .session
@@ -363,10 +378,29 @@ async fn post_state(
                     Json(json!({"error": "there is no timed session to repeat"})),
                 ));
             };
+            let mut timer = saved.timer();
+            if let Some(duration) = morning_duration {
+                timer.duration_ms = duration;
+                if timer.scenario != BEDSIDE
+                    || !timer
+                        .bedside
+                        .is_some_and(|options| options.ending == SleepEnding::UntilMorning)
+                    || !timer.is_valid(now)
+                {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"error": "invalid morning timer for the saved session"})),
+                    ));
+                }
+            }
+            timer.anchor_morning(now);
+            if timer.bedside.is_some() {
+                scape.volume = scape.bedside_volume.unwrap_or(scape.volume);
+            }
             scape.preset = saved.preset.key().into();
             scape.params = saved.params.clamped();
             scape.energy = clamp01(saved.energy);
-            scape.session = Some(saved.timer());
+            scape.session = Some(timer);
             scape.playing = true;
         }
         if let Some(preset) = patch.preset {
@@ -390,11 +424,28 @@ async fn post_state(
         if let Some(energy) = patch.energy {
             scape.energy = clamp01(energy);
         }
-        if let Some(session) = patch.session {
-            if let Some(session) = session.as_ref() {
+        if let Some(mut session) = patch.session {
+            if let Some(session) = session.as_mut() {
+                session.anchor_morning(now);
+                if let Some(options) = session.bedside {
+                    if patch.volume.is_none() {
+                        scape.volume = scape.bedside_volume.unwrap_or(scape.volume);
+                    }
+                    scape.bedside_volume = Some(scape.volume);
+                    if session.scenario == BEDSIDE || scape.bedside_options.is_none() {
+                        scape.bedside_options = Some(options);
+                    }
+                }
                 scape.remember_session(session);
             }
             scape.session = session;
+        } else if patch.volume.is_some()
+            && scape
+                .session
+                .as_ref()
+                .is_some_and(|session| session.bedside.is_some())
+        {
+            scape.bedside_volume = Some(scape.volume);
         }
         let playing = scape.playing;
         if let Some(session) = scape.session.as_mut() {
@@ -778,6 +829,8 @@ mod tests {
                 duration_ms: 60_000,
                 elapsed_ms: 5_000,
                 running_since_ms: Some(before.saturating_sub(10_000)),
+                bedside: None,
+                deadline_ms: None,
             }),
             ..Scape::default()
         };
@@ -897,6 +950,73 @@ mod tests {
             .unwrap_err();
         assert_eq!(duplicate.0, StatusCode::CONFLICT);
         assert_eq!(app.scape_read().session.as_ref(), Some(&session));
+    }
+
+    #[tokio::test]
+    async fn bedside_remembers_night_volume_and_reanchors_the_morning_on_repeat() {
+        let app = test_app();
+        let start: Patch = serde_json::from_value(json!({
+            "preset": "sleep",
+            "playing": true,
+            "session": {
+                "scenario": "bedside", "duration_ms": 43_200_000, "elapsed_ms": 0,
+                "bedside": { "room": "shore", "ending": "until-morning", "dawn": true }
+            }
+        }))
+        .unwrap();
+        let started = post_state(State(app.clone()), Json(start))
+            .await
+            .unwrap()
+            .0
+            .scape;
+        let timer = started.session.unwrap();
+        assert_eq!(
+            timer.deadline_ms.unwrap() - timer.running_since_ms.unwrap(),
+            43_200_000
+        );
+        let pause = Patch {
+            playing: Some(false),
+            volume: Some(0.28),
+            ..Patch::default()
+        };
+        let paused = post_state(State(app.clone()), Json(pause))
+            .await
+            .unwrap()
+            .0
+            .scape;
+        assert_eq!(
+            paused
+                .session
+                .unwrap()
+                .remaining_at(timer.deadline_ms.unwrap()),
+            0
+        );
+
+        let clear = Patch {
+            session: Some(None),
+            volume: Some(0.8),
+            ..Patch::default()
+        };
+        let cleared = post_state(State(app.clone()), Json(clear))
+            .await
+            .unwrap()
+            .0
+            .scape;
+        *app.scape_write() = restore(&serde_json::to_string(&cleared).unwrap()).unwrap();
+        let repeat = Patch {
+            repeat_last_session: true,
+            repeat_morning_duration_ms: Some(28_800_000),
+            ..Patch::default()
+        };
+        let repeated = post_state(State(app), Json(repeat)).await.unwrap().0.scape;
+        assert_eq!(repeated.volume, 0.28);
+        assert_eq!(repeated.bedside_options, started.bedside_options);
+        let timer = repeated.session.unwrap();
+        assert_eq!(timer.duration_ms, 28_800_000);
+        assert_eq!(
+            timer.deadline_ms.unwrap() - timer.running_since_ms.unwrap(),
+            28_800_000
+        );
     }
 
     #[test]

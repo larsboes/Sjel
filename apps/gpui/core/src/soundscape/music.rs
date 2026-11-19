@@ -125,6 +125,7 @@ pub struct Arrangement {
     /// Smoothed activity input, with 0.3 as the neutral mix.
     pub activity: f32,
     pub session_progress: Option<f32>,
+    pub bedside_music: Option<f32>,
 }
 
 impl Arrangement {
@@ -137,6 +138,7 @@ impl Arrangement {
             elapsed: 0.,
             activity: 0.3,
             session_progress: None,
+            bedside_music: None,
         }
     }
 
@@ -192,6 +194,15 @@ impl Arrangement {
 
     /// Layer levels as actually played: what the operator set, scaled by the arc.
     pub fn mix(&self) -> Layers {
+        if let (Preset::Sleep, Some(music)) = (self.preset, self.bedside_music) {
+            return Layers {
+                drums: 0.,
+                bass: self.layers.bass * music * 0.18,
+                pads: self.layers.pads * music * 0.56,
+                melody: 0.,
+                ..self.layers
+            };
+        }
         if !self.is_scape() {
             return self.layers;
         }

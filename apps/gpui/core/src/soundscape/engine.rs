@@ -14,6 +14,7 @@ use super::fx::{Duck, Echo, Master, Room};
 use super::music::{Arrangement, LayerName, ParamName, Preset};
 use super::steps::{play_step, Events, Sequence};
 use super::synth::Voices;
+use super::{BedsideFrame, SleepRoom};
 
 /// Sixteenths per bar. Everything here counts steps of this size.
 const STEPS_PER_BAR: u64 = 16;
@@ -106,6 +107,8 @@ pub struct Engine {
     master: Master,
     vinyl: Bed,
     texture: Bed,
+    night: [Bed; 3],
+    bedside: Option<BedsideFrame>,
     analyser: Analyser,
     /// The global step counter. It never resets, so a preset change can restart its own grid
     /// (`step - step_base`) while the bar the change waits for keeps running.
@@ -170,6 +173,8 @@ impl Engine {
             master: Master::new(sample_rate),
             vinyl: Bed::new(0x1b56_c4e9, sample_rate),
             texture: Bed::new(0x6a09_e667, sample_rate),
+            night: [0x91e1_0da5, 0x345b_3d91, 0xac16_12b7].map(|seed| Bed::new(seed, sample_rate)),
+            bedside: None,
             analyser: Analyser::new(sample_rate),
             step: 0,
             step_base: 0,
@@ -250,6 +255,16 @@ impl Engine {
         self.arrangement.layers = control.layers();
         self.arrangement.energy = control.energy();
         self.arrangement.session_progress = control.session_progress();
+        let bedside = if control.preset() == Preset::Sleep {
+            control.bedside()
+        } else {
+            None
+        };
+        if self.bedside != bedside {
+            self.bedside = bedside;
+            self.arrangement.bedside_music = bedside.map(|frame| frame.music);
+            self.beds_dirty = true;
+        }
         let target = if control.adapt() {
             control.activity()
         } else {
@@ -327,6 +342,8 @@ impl Engine {
         if self.beds_dirty {
             self.update_beds();
         }
+        let night_audible =
+            self.bedside.is_some() || self.night.iter().any(|bed| bed.gain > 0.00001);
 
         for frame in 0..frames {
             // The gate: a paused transport fades out instead of stopping dead, and a faded-out
@@ -359,6 +376,11 @@ impl Engine {
                 dry[0] += beds;
                 dry[1] += beds;
                 reverb_send += beds * 0.3;
+                if night_audible {
+                    let [front, room, distant] = self.night.each_mut().map(Bed::sample);
+                    dry[0] += 0.92 * front + 0.72 * room + 0.44 * distant;
+                    dry[1] += 0.66 * front + 0.78 * room + 0.88 * distant;
+                }
             }
 
             for (channel, low) in self.duck_low.iter_mut().enumerate() {
@@ -470,7 +492,7 @@ impl Engine {
     fn update_beds(&mut self) {
         self.beds_dirty = false;
         let brightness = self.arrangement.eff(ParamName::Brightness);
-        let texture_level = if self.arrangement.is_scape() {
+        let texture_level = if self.arrangement.is_scape() && self.bedside.is_none() {
             self.arrangement.layers.get(LayerName::Texture)
         } else {
             0.
@@ -492,6 +514,54 @@ impl Engine {
             0.
         };
         self.vinyl.set_filters(4200., 600., self.sample_rate);
+        self.update_night();
+    }
+
+    fn update_night(&mut self) {
+        let Some(frame) = self.bedside else {
+            for bed in &mut self.night {
+                bed.target_gain = 0.;
+            }
+            return;
+        };
+
+        let t = f64::from(self.arrangement.elapsed);
+        let swell = (0.5 + 0.3 * (t * 0.29).sin() + 0.2 * (t * 0.17 + 1.4).sin()) as f32;
+        let (front, body, distant) = match frame.room {
+            SleepRoom::Rain => (
+                (
+                    2200.,
+                    480.,
+                    0.30 + (0.021 * (t * 1.17).sin() + 0.014 * (t * 1.83 + 0.7).sin()) as f32,
+                ),
+                (460., 65., 0.34),
+                (220., 32., 0.18 * swell),
+            ),
+            SleepRoom::Shore => (
+                (1000., 190., 0.30 * (0.45 + swell)),
+                (290., 45., 0.31),
+                (155., 23., 0.31 * swell),
+            ),
+            SleepRoom::Fan => (
+                (1450., 105., 0.34 + 0.02 * swell),
+                (190., 48., 0.40),
+                (480., 90., 0.07),
+            ),
+        };
+        let texture = self.arrangement.layers.texture * frame.floor;
+        let dawn = frame.dawn;
+        for (bed, (high, low, gain)) in self.night.iter_mut().zip([
+            (
+                front.0 + 1800. * dawn,
+                front.1,
+                front.2 * (1. + 0.16 * dawn),
+            ),
+            (body.0, body.1, body.2 * (1. - 0.44 * dawn)),
+            (distant.0, distant.1, distant.2 * (1. - 0.32 * dawn)),
+        ]) {
+            bed.set_filters(high, low, self.sample_rate);
+            bed.target_gain = gain * texture;
+        }
     }
 
     fn publish(&mut self, visual: &Visual) {
@@ -543,6 +613,66 @@ mod tests {
 
     fn energy(buffer: &[f32]) -> f32 {
         buffer.iter().map(|sample| sample.abs()).sum::<f32>() / buffer.len() as f32
+    }
+
+    #[test]
+    fn bedside_rooms_are_distinct_and_render_without_pitched_voices_after_wind_down() {
+        let mut rooms = Vec::new();
+        for room in SleepRoom::ALL {
+            let control = Control::new();
+            let visual = Visual::new();
+            let mut engine = Engine::new(48_000.);
+            control.set_preset(Preset::Sleep);
+            control.set_playing(true);
+            let frame = BedsideFrame {
+                room,
+                music: 0.,
+                floor: 1.,
+                dawn: 0.,
+            };
+            control.set_bedside(Some(frame));
+            render(&mut engine, &control, &visual, 48_000);
+            let settled = render(&mut engine, &control, &visual, 48_000);
+            assert!(settled
+                .iter()
+                .all(|sample| sample.is_finite() && sample.abs() < 0.5));
+            assert!(energy(&settled) > 0.003, "{room:?} was too quiet");
+            assert_eq!(visual.voices(), 0);
+            rooms.push(settled);
+
+            control.set_bedside(Some(BedsideFrame { floor: 0., ..frame }));
+            render(&mut engine, &control, &visual, 96_000);
+            assert!(energy(&render(&mut engine, &control, &visual, 4_800)) < 0.0001);
+        }
+        assert_ne!(rooms[0], rooms[1]);
+        assert_ne!(rooms[1], rooms[2]);
+        assert_ne!(rooms[0], rooms[2]);
+    }
+
+    #[test]
+    fn dawn_opens_the_rain_spectrum_without_adding_pitched_voices() {
+        let render_rain = |dawn| {
+            let control = Control::new();
+            let visual = Visual::new();
+            let mut engine = Engine::new(48_000.);
+            control.set_preset(Preset::Sleep);
+            control.set_playing(true);
+            control.set_bedside(Some(BedsideFrame {
+                room: SleepRoom::Rain,
+                music: 0.,
+                floor: 1.,
+                dawn,
+            }));
+            render(&mut engine, &control, &visual, 48_000);
+            let samples = render(&mut engine, &control, &visual, 48_000);
+            assert_eq!(visual.voices(), 0);
+            samples
+                .windows(3)
+                .map(|samples| (samples[2] - samples[0]).abs())
+                .sum::<f32>()
+                / (samples.len() as f32 * energy(&samples))
+        };
+        assert!(render_rain(1.) > render_rain(0.));
     }
 
     #[test]

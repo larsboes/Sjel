@@ -35,7 +35,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1" }
 libsql = { version = "0.10.0", default-features = false, features = ["core"] }
-zeroize = "=1.9.1"
+zeroize = "=1.9.2"
 
 [features]
 native-maps = ["sjel-gpui-ui/native-maps"]

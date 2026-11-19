@@ -47,6 +47,10 @@ Interior reads the catalogue and validates RoomPlan links through Inventory. The
 rehearsal matched the catalogue count, accepted an owned item, and refused a wanted item. Interior
 created no Inventory tables in its database.
 
+A same-process Turso WAL snapshot ran while a second connection had an uncommitted Inventory
+write. SQLite verified the ten-table snapshot at revision 4 and the later shutdown restore at
+revision 5. The receipt for revision 5 appears only in the shutdown restore.
+
 ## Remaining migration gates
 
 - Run the owner API suite against a Turso WAL adapter. Roll back failed transactions explicitly

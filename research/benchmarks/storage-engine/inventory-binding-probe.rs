@@ -5,6 +5,7 @@ use turso::{Builder, Connection, params};
 
 const ITEM: &str = "sjel-turso-rehearsal-item";
 const OPERATION: &str = "sjel-turso-native-op";
+const BACKUP_OVERLAP: &str = "sjel-turso-backup-overlap";
 
 async fn read_revisions(conn: &Connection) -> turso::Result<(i64, Option<i64>)> {
     let row = conn
@@ -97,9 +98,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(database);
 
     let reopened = Builder::new_local(&path).build().await?;
-    assert_eq!(read_revisions(&reopened.connect()?).await?, (4, Some(4)));
+    let reader = reopened.connect()?;
+    assert_eq!(read_revisions(&reader).await?, (4, Some(4)));
     println!(
         "Native Rust WAL rolled back a refused receipt, replayed once, and reopened at revision 4."
     );
+
+    let mut writer = reopened.connect()?;
+    let transaction = writer
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .await?;
+    assert_eq!(
+        transaction
+            .execute(
+                "UPDATE inventory_item SET revision = revision + 1 WHERE id = ?1 AND revision = 4",
+                params![ITEM],
+            )
+            .await?,
+        1
+    );
+    transaction
+        .execute(
+            "INSERT INTO inventory_sync_operation(operation_id, revision, processed_at)
+             VALUES (?1, 5, datetime('now'))",
+            params![BACKUP_OVERLAP],
+        )
+        .await?;
+    reader.execute("VACUUM INTO 'online.db'", ()).await?;
+    transaction.commit().await?;
+    assert_eq!(read_revisions(&reader).await?, (5, Some(4)));
+    println!("Native Turso completed a WAL snapshot while a second connection held an open write.");
     Ok(())
 }

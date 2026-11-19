@@ -81,14 +81,28 @@ target_dir=${CARGO_TARGET_DIR:-target}
 if [ "${3:-}" = inventory ]; then
     "$target_dir/debug/turso-binding-probe" "$PWD/owner.db"
     sqlite3 -bail owner.db '.backup restored.db'
-    test ! -s restored.db-wal
-    snapshot='file:restored.db?immutable=1'
-    test "$(sqlite3 -readonly "$snapshot" 'PRAGMA integrity_check')" = ok
-    test -z "$(sqlite3 -readonly "$snapshot" 'PRAGMA foreign_key_check')"
-    test "$(sqlite3 -readonly "$snapshot" "SELECT revision FROM inventory_item WHERE id='sjel-turso-rehearsal-item'; SELECT revision FROM inventory_sync_operation WHERE operation_id='sjel-turso-native-op';")" = '4
+    read_edits() {
+        sqlite3 -readonly "$1" "SELECT revision FROM inventory_item WHERE id='sjel-turso-rehearsal-item';
+            SELECT revision FROM inventory_sync_operation WHERE operation_id='sjel-turso-native-op';
+            SELECT revision FROM inventory_sync_operation WHERE operation_id='sjel-turso-backup-overlap';"
+    }
+    for database in online.db restored.db; do
+        test ! -s "$database-wal"
+        snapshot="file:$database?immutable=1"
+        test "$(sqlite3 -readonly "$snapshot" 'PRAGMA integrity_check')" = ok
+        test -z "$(sqlite3 -readonly "$snapshot" 'PRAGMA foreign_key_check')"
+        test "$(sqlite3 -readonly "$snapshot" "SELECT count(*) FROM sqlite_schema WHERE type='table' AND name GLOB 'inventory_*';")" = 10
+    done
+    test "$(read_edits 'file:online.db?immutable=1')" = '4
 4'
+    test "$(read_edits 'file:restored.db?immutable=1')" = '5
+4
+5'
+    sequences='SELECT name, seq FROM sqlite_sequence ORDER BY name;'
+    test "$(sqlite3 -readonly 'file:online.db?immutable=1' "$sequences")" = \
+        "$(sqlite3 -readonly 'file:restored.db?immutable=1' "$sequences")"
     test "$(shasum -a 256 "$inventory_source")" = "$source_sha"
-    echo 'SQLite restored both native Rust acknowledgements and the input checksum stayed unchanged.'
+    echo 'SQLite verified the committed-only snapshot and restored both acknowledged revisions after shutdown.'
     exit 0
 fi
 "$target_dir/debug/turso-binding-probe" "$PWD/databases"

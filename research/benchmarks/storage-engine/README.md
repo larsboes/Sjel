@@ -150,7 +150,13 @@ tables. The Interior CLI also loads the model from Inventory over loopback.
 The Rust binding probe injects a receipt insert failure after a revision update. Turso 0.8.3
 defers drop-triggered rollback, and a prepared statement on the writer can still see the edit.
 With explicit rollback, both connections see revision 3 and no receipt. Retrying records revision 4
-once. A new Turso connection and the SQLite backup both read revision 4 and its receipt.
+once. A new Turso connection reads revision 4 and its receipt.
+
+From that connection, `VACUUM INTO` runs while a writer holds the next edit and receipt
+uncommitted. The closed snapshot contains revision 4. A separate restore after the writer commits
+and closes contains revision 5. SQLite checks both files for integrity and foreign keys and matches
+all ten owner tables and the sequence counters. This covers overlapping an open write in one
+process. The scheduled backup path still needs an owner-side snapshot and restore rehearsal.
 
 Switching the imported database to MVCC fails to insert Inventory history and price records. Turso
 reports missing backing tables for its converted `AUTOINCREMENT` sequences. A fresh MVCC table

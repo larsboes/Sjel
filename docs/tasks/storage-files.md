@@ -27,6 +27,10 @@ matches the ten-table export, SQLite control acknowledgements, and the complete 
 after restoring the latest Turso WAL file into SQLite. The rehearsal preserves an acknowledged
 edit and its operation receipt. Converted MVCC fails on existing `AUTOINCREMENT` sequences.
 
-Before a live file switch, move Finder's direct `inventory_item` read to the owning capability,
-make the HTTP sync edit and operation receipt atomic, and pass the Inventory API suite against the
-Turso adapter with a rehearsed backup and rollback. The existing API suite passes on SQLite.
+Finder routes local Inventory search through the owner. The SQLite sync path commits the edit and
+operation receipt together. A failure-injection test verifies rollback before retrying. Inventory
+can select an owner file independently of the shared device registry.
+
+The Inventory service still uses SQLite. Before the live file switch, pass the owner API suite
+against a Turso WAL adapter and rehearse migration and rollback with the running service. The
+SQL-level WAL rehearsal does not exercise the adapter or service lifecycle.

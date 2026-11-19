@@ -19,3 +19,9 @@ Route reads through owners through the existing owner, without treating implemen
 - Finder search uses capability search routes; desktop Repo uses API crates.
 - Mirror building requests owner exports instead of reading shared tables.
 - Cover all three readers before file splitting.
+
+## Verification
+
+Finder gets local Inventory results from Inventory's bounded search route. The route checks the
+same words and returns the same hit fields without returning matching notes. Other Finder sources,
+the desktop reader and the mirror remain in scope.

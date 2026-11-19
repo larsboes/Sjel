@@ -510,6 +510,11 @@ pub enum WriteOutcome {
     Stale(Box<Item>, Option<State>),
 }
 
+pub(crate) enum SyncWriteOutcome {
+    Duplicate(i64),
+    Edit(WriteOutcome),
+}
+
 /// A group of wishes sharing a common constraint or goal (e.g. "travel-friendly, fewer but better").
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WishGroup {
@@ -1045,6 +1050,18 @@ impl Store {
     /// Compare and write are one statement, so there is no window in which a second writer wins
     /// silently. When it matches no row, a read afterwards tells missing from stale.
     pub fn update_item_if_revision(&self, it: &Item, expected: i64) -> Result<WriteOutcome, Error> {
+        let conn = self.conn()?;
+        let written = self.write_item_revision(&conn, it, expected)?;
+        drop(conn);
+        self.write_outcome(&it.id, written)
+    }
+
+    fn write_item_revision(
+        &self,
+        conn: &Connection,
+        it: &Item,
+        expected: i64,
+    ) -> Result<Option<i64>, Error> {
         let p = &self.prefix;
         let now = sjel_store::now_offset("'+0 seconds'");
         let set = WRITE_COLUMNS
@@ -1056,8 +1073,7 @@ impl Store {
             .join(", ");
         let mut values = write_params(it)?;
         values.push(Box::new(expected));
-        let conn = self.conn()?;
-        let written: Option<i64> = conn
+        Ok(conn
             .query_row(
                 &format!(
                     "UPDATE {p}_item SET {set}, revision = revision + 1, updated_at = {now}
@@ -1068,12 +1084,14 @@ impl Store {
                 rusqlite::params_from_iter(values.iter()),
                 |row| row.get(0),
             )
-            .optional()?;
-        drop(conn);
+            .optional()?)
+    }
+
+    fn write_outcome(&self, id: &str, written: Option<i64>) -> Result<WriteOutcome, Error> {
         if let Some(revision) = written {
             return Ok(WriteOutcome::Written(revision));
         }
-        Ok(match self.item(&it.id)? {
+        Ok(match self.item(id)? {
             Some((current, state)) => WriteOutcome::Stale(Box::new(current), state),
             None => WriteOutcome::Missing,
         })
@@ -1107,6 +1125,10 @@ impl Store {
     /// The revision recorded for a sync operation that was already applied.
     pub fn sync_operation_revision(&self, operation_id: &str) -> Result<Option<i64>, Error> {
         let conn = self.conn()?;
+        self.sync_revision(&conn, operation_id)
+    }
+
+    fn sync_revision(&self, conn: &Connection, operation_id: &str) -> Result<Option<i64>, Error> {
         Ok(conn
             .query_row(
                 &format!(
@@ -1119,25 +1141,67 @@ impl Store {
             .optional()?)
     }
 
-    /// Records an applied operation. The primary key makes a retry visible instead of applying
-    /// the same mutation twice.
-    pub fn record_sync_operation(&self, operation_id: &str, revision: i64) -> Result<(), Error> {
-        let conn = self.conn()?;
-        conn.execute(
-            &format!(
-                "INSERT INTO {}_sync_operation (operation_id, revision, processed_at)
-                 VALUES (?1, ?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-                self.prefix
-            ),
-            params![operation_id, revision],
-        )?;
-        Ok(())
+    /// A retry can see the receipt only after the corresponding edit has committed.
+    pub(crate) fn apply_sync_item(
+        &self,
+        operation_id: &str,
+        item: &Item,
+        expected: i64,
+    ) -> Result<SyncWriteOutcome, Error> {
+        let mut conn = self.conn()?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
+        if let Some(revision) = self.sync_revision(&tx, operation_id)? {
+            return Ok(SyncWriteOutcome::Duplicate(revision));
+        }
+        let written = self.write_item_revision(&tx, item, expected)?;
+        if let Some(revision) = written {
+            tx.execute(
+                &format!(
+                    "INSERT INTO {}_sync_operation (operation_id, revision, processed_at)
+                     VALUES (?1, ?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+                    self.prefix
+                ),
+                params![operation_id, revision],
+            )?;
+        }
+        tx.commit()?;
+        drop(conn);
+        self.write_outcome(&item.id, written)
+            .map(SyncWriteOutcome::Edit)
     }
 
     pub fn item_count(&self) -> Result<i64, Error> {
         let p = &self.prefix;
         let conn = self.conn()?;
         Ok(conn.query_row(&format!("SELECT COUNT(*) FROM {p}_item"), [], |r| r.get(0))?)
+    }
+
+    pub(crate) fn search_items(&self, query: &str) -> Result<Vec<(String, String)>, Error> {
+        let query: String = query.chars().take(200).collect();
+        let patterns: Vec<_> = query
+            .split_whitespace()
+            .take(6)
+            .map(|word| {
+                let escaped = word.to_lowercase().replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+                format!("%{escaped}%")
+            })
+            .collect();
+        if patterns.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conditions = (1..=patterns.len())
+            .map(|index| format!("lower(label || ' ' || coalesce(category, '') || ' ' || coalesce(notes, '')) LIKE ?{index} ESCAPE '\\'"))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        let conn = self.conn()?;
+        let mut statement = conn.prepare(&format!(
+            "SELECT label, coalesce(category, kind) FROM {}_item WHERE {conditions} ORDER BY length(label) LIMIT 5",
+            self.prefix,
+        ))?;
+        let rows = statement.query_map(rusqlite::params_from_iter(patterns), |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
     pub fn item(&self, id: &str) -> Result<Option<(Item, Option<State>)>, Error> {
@@ -1460,6 +1524,29 @@ pub fn collisions(categories: &[(String, i64)]) -> Vec<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sync_receipt_failure_rolls_back_revision_and_allows_a_retry() {
+        let path = std::env::temp_dir().join(format!("inventory-sync-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let store = Store::open(&path).unwrap();
+        let mut item = Item { id: "lamp".into(), label: "Before".into(), ..Item::default() };
+        assert_eq!(store.upsert_item(&item).unwrap(), 1);
+        store.conn().unwrap().execute_batch(
+            "CREATE TRIGGER refuse_receipt BEFORE INSERT ON inventory_sync_operation
+             BEGIN SELECT RAISE(ABORT, 'receipt unavailable'); END;",
+        ).unwrap();
+        item.label = "After".into();
+        assert!(store.apply_sync_item("op", &item, 1).is_err());
+        let (persisted, _) = store.item(&item.id).unwrap().unwrap();
+        assert_eq!((persisted.label.as_str(), persisted.revision), ("Before", 1));
+        assert_eq!(store.sync_operation_revision("op").unwrap(), None);
+        store.conn().unwrap().execute_batch("DROP TRIGGER refuse_receipt;").unwrap();
+        assert!(matches!(store.apply_sync_item("op", &item, 1).unwrap(), SyncWriteOutcome::Edit(WriteOutcome::Written(2))));
+        assert!(matches!(store.apply_sync_item("op", &item, 1).unwrap(), SyncWriteOutcome::Duplicate(2)));
+        assert_eq!(store.item(&item.id).unwrap().unwrap().0.revision, 2);
+        let _ = std::fs::remove_file(&path);
+    }
 
     fn category(name: &str, count: i64) -> (String, i64) {
         (name.to_string(), count)

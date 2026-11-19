@@ -70,7 +70,7 @@ fn import_dir() -> Option<std::path::PathBuf> {
 }
 
 fn open() -> Result<Store, String> {
-    Store::open(&sjel_config::database_path()).map_err(|e| format!("database not reachable: {e}"))
+    Store::open(&sjel_inventory::database_path()).map_err(|e| format!("database not reachable: {e}"))
 }
 
 macro_rules! or_exit {

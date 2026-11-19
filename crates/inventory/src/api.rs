@@ -17,7 +17,7 @@ use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::store::{Item, Store, WriteOutcome, LEGACY_FIELDS};
+use crate::store::{Item, Store, SyncWriteOutcome, WriteOutcome, LEGACY_FIELDS};
 
 pub use inventory_api::{
     RecordPriceRequest, SaveWishGroupRequest, SetNeedsRequest, SetSpecsRequest,
@@ -68,6 +68,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/health", "Liveness."),
     r("GET", "/routes", "This catalogue."),
     r("GET", "/api/inventory", "Every entry with its state."),
+    r("GET", "/api/search", "Find at most five items by query words in ?q=."),
     r(
         "GET",
         "/api/item-refs/{reference}",
@@ -229,6 +230,32 @@ async fn api_inventory(State(s): State<Arc<AppState>>) -> Result<impl IntoRespon
         )
         .collect();
     Ok(Json(out))
+}
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    #[serde(default)]
+    q: String,
+}
+
+async fn api_search(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(query): axum::extract::Query<SearchQuery>,
+) -> Result<Json<serde_json::Value>, HttpError> {
+    let hits = tokio::task::spawn_blocking(move || {
+        let items = store(&state)?.search_items(&query.q).map_err(boom)?;
+        Ok::<_, HttpError>(items
+            .into_iter()
+            .map(|(title, detail)| {
+                serde_json::json!({
+                    "kind": "item", "title": title, "detail": detail, "link": "sjel://inventory"
+                })
+            })
+            .collect::<Vec<_>>())
+    })
+    .await
+    .map_err(boom)??;
+    Ok(Json(serde_json::json!({ "hits": hits })))
 }
 
 async fn api_item_ref(
@@ -779,12 +806,19 @@ async fn api_sync(
         )?;
         merged.id = mutation.entity_id.clone();
         match st
-            .update_item_if_revision(&merged, expected)
+            .apply_sync_item(&operation_id, &merged, expected)
             .map_err(boom)?
         {
-            WriteOutcome::Written(revision) => {
-                st.record_sync_operation(&mutation.operation_id, revision)
-                    .map_err(boom)?;
+            SyncWriteOutcome::Duplicate(revision) => {
+                response.acknowledgements.push(sync::Acknowledgement {
+                    operation_id,
+                    status: "duplicate",
+                    revision: Some(revision.to_string()),
+                    processed_at,
+                    error: None,
+                });
+            }
+            SyncWriteOutcome::Edit(WriteOutcome::Written(revision)) => {
                 response.acknowledgements.push(sync::Acknowledgement {
                     operation_id,
                     status: "accepted",
@@ -793,10 +827,10 @@ async fn api_sync(
                     error: None,
                 });
             }
-            WriteOutcome::Missing => response
+            SyncWriteOutcome::Edit(WriteOutcome::Missing) => response
                 .acknowledgements
                 .push(rejected("item does not exist")),
-            WriteOutcome::Stale(actual, _) => {
+            SyncWriteOutcome::Edit(WriteOutcome::Stale(actual, _)) => {
                 let canonical = serde_json::to_value(&*actual).unwrap_or(serde_json::Value::Null);
                 response.conflicts.push(serde_json::json!({
                     "conflict_id": mutation.operation_id,
@@ -839,6 +873,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/health", get(health))
         .route("/routes", get(routes))
         .route("/api/inventory", get(api_inventory))
+        .route("/api/search", get(api_search))
         .route("/api/item-refs/{reference}", get(api_item_ref))
         .route(
             "/api/item-refs/{reference}/aliases",
@@ -904,6 +939,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
     sjel_server::agent_policy::AgentRoutes {
         closed: &[
+            ("GET", "/api/search"),
             ("POST", "/api/item-aliases"),
             ("POST", "/api/item-aliases/{id}/revoke"),
             ("GET", "/api/item-refs/{reference}/aliases"),
@@ -923,12 +959,11 @@ pub async fn serve() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(8101);
-    let database = sjel_config::database_path();
-    let device_store = devices::store::DevicesStore::open(&database)
+    let device_store = devices::store::DevicesStore::open(&sjel_config::database_path())
         .unwrap_or_else(|error| panic!("inventory: cannot open device registry: {error}"));
     let state = Arc::new(AppState {
         device_store,
-        database,
+        database: crate::database_path(),
     });
     sjel_server::serve_local_with("inventory", port, build_router(state), AGENT_ROUTES).await;
 }
@@ -1074,6 +1109,23 @@ mod revision_tests {
 
     fn wardrobe(label: &str) -> Value {
         json!({ "id": "wardrobe", "kind": "piece", "label": label, "width": 100 })
+    }
+
+    #[tokio::test]
+    async fn finder_search_matches_all_words_and_treats_percent_as_literal() {
+        let (r, path) = router("finder-search");
+        let mut item = wardrobe("100% Wool");
+        item["notes"] = json!("winter storage");
+        let (status, _, _) = send(&r, "PUT", "/api/items/wardrobe", None, item).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _, result) = send(&r, "GET", "/api/search?q=%25+winter", None, Value::Null).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(result, json!({ "hits": [{
+            "kind": "item", "title": "100% Wool", "detail": "piece", "link": "sjel://inventory"
+        }] }));
+        let (_, _, result) = send(&r, "GET", "/api/search?q=%25+summer", None, Value::Null).await;
+        assert_eq!(result, json!({ "hits": [] }));
+        let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test]

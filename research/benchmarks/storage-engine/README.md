@@ -122,8 +122,8 @@ The source is a restored shared-store backup. The rehearsal exports the ten Inve
 their indexes and sequence counters to a separate file and checks the logical dump and declared
 foreign keys. The same SQL runs on SQLite and Turso 0.8.3 over separate copies. It exercises item
 revisions, stale writes, state history, wish groups and price observations. It also exercises an
-atomic edit and operation receipt with a duplicate retry. That transaction is a rehearsal contract;
-the current HTTP handler commits the item and its operation receipt separately.
+atomic edit and operation receipt with a duplicate retry. The Inventory HTTP handler now has
+that transaction on its SQLite path. The SQL probe does not exercise the HTTP adapter on Turso.
 
 Turso WAL matches the SQLite acknowledgements and rejects an orphan wish-group membership. After
 the candidate closes, SQLite backs up and restores the candidate's latest file, including the

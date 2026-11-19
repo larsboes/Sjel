@@ -662,6 +662,38 @@ fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
+/// `name` inside an export folder, or the file itself when `given` is not a folder.
+fn linkedin_file(given: Option<&str>, name: &str) -> Result<std::path::PathBuf, String> {
+    let given = given.ok_or("sync-linkedin needs the export folder or its Connections.csv")?;
+    let path = std::path::Path::new(given);
+    Ok(if path.is_dir() {
+        path.join(name)
+    } else {
+        path.to_path_buf()
+    })
+}
+
+/// Sets `last_contact` from `messages.csv`, when the export folder has one.
+fn run_linkedin_messages(store: &EntitiesStore, folder: &str, dry_run: bool) -> Result<(), String> {
+    let path = std::path::Path::new(folder).join("messages.csv");
+    if !path.is_file() {
+        return Ok(());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let latest =
+        entities::linkedin::last_messages(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let report = entities::linkedin::apply_last_contact(store, &latest, dry_run)
+        .map_err(|e| e.to_string())?;
+    println!(
+        "sync-linkedin messages{}: {} profiles, {} linked to a person, {} last contacts set",
+        if dry_run { " (dry run)" } else { "" },
+        report.profiles,
+        report.linked,
+        report.updated,
+    );
+    Ok(())
+}
+
 /// Runs one adapter's inbound sync and prints what it did.
 fn run_sync(
     config: &Config,
@@ -672,9 +704,11 @@ fn run_sync(
 ) -> Result<(), String> {
     let (records, managed): (Vec<entities::sync::Incoming>, &[&str]) = match system {
         "linkedin" => {
-            let path = file.ok_or("sync-linkedin needs the path of Connections.csv")?;
-            let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-            let parsed = entities::linkedin::parse(&text).map_err(|e| format!("{path}: {e}"))?;
+            let path = linkedin_file(file, "Connections.csv")?;
+            let text =
+                std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let parsed =
+                entities::linkedin::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
             if parsed.skipped > 0 {
                 println!(
                     "sync-linkedin: {} rows without a name or profile URL skipped",
@@ -753,13 +787,14 @@ fn main() {
         Some("sync-linkedin") => {
             let dry_run = args.iter().any(|a| a == "--dry-run");
             let file = args.iter().skip(1).find(|a| !a.starts_with("--"));
-            if let Err(error) = run_sync(
-                &config,
-                &store,
-                "linkedin",
-                file.map(String::as_str),
-                dry_run,
-            ) {
+            let file = file.map(String::as_str);
+            let result = run_sync(&config, &store, "linkedin", file, dry_run).and_then(|()| {
+                match file.filter(|f| std::path::Path::new(f).is_dir()) {
+                    Some(folder) => run_linkedin_messages(&store, folder, dry_run),
+                    None => Ok(()),
+                }
+            });
+            if let Err(error) = result {
                 eprintln!("entities: {error}");
                 std::process::exit(1);
             }
@@ -800,7 +835,7 @@ fn main() {
             .block_on(serve(config, store)),
         Some(other) => {
             eprintln!(
-                "usage: entities-server [names | sync-journal|sync-google [--dry-run] | sync-linkedin <Connections.csv> [--dry-run]] (got {other:?})"
+                "usage: entities-server [names | sync-journal|sync-google [--dry-run] | sync-linkedin <export folder|Connections.csv> [--dry-run]] (got {other:?})"
             );
             std::process::exit(64);
         }

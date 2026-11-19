@@ -117,6 +117,7 @@ allocator type mismatch. The earlier build exercised the feature-disabled bindin
 ```sh
 sh research/benchmarks/storage-engine/inventory-rehearsal.sh "$restored_db" "$tursodb" "$scratch/inventory"
 sh research/benchmarks/storage-engine/inventory-service-rollback.sh "$scratch/inventory/db/wal-restored.db" "$inventory_bin" "$scratch/rollback"
+sh research/benchmarks/storage-engine/binding-probe.sh "$turso_source" "$scratch/native-inventory" inventory "$scratch/inventory/db/wal-restored.db"
 ```
 
 The source is a restored shared-store backup. The rehearsal exports the ten Inventory tables,
@@ -136,6 +137,11 @@ Devices registry. It reads revision 3, verifies an edit returns revision 4 and i
 that a stale edit returns a conflict. After restart, revision 4 and the original Turso write receipt
 survive. SQLite reports valid integrity and foreign keys, the Devices file has no Inventory tables,
 and the input checksum stays unchanged.
+
+The Rust binding probe injects a receipt insert failure after a revision update. Turso 0.8.3
+defers drop-triggered rollback, and a prepared statement on the writer can still see the edit.
+With explicit rollback, both connections see revision 3 and no receipt. Retrying records revision 4
+once. A new Turso connection and the SQLite backup both read revision 4 and its receipt.
 
 Switching the imported database to MVCC fails to insert Inventory history and price records. Turso
 reports missing backing tables for its converted `AUTOINCREMENT` sequences. A fresh MVCC table

@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 3 ] || { [ "$#" -eq 3 ] && [ "$3" != workload ]; }; then
-    echo "usage: sh binding-probe.sh <clean Turso v0.8.3 checkout> <new scratch directory> [workload]" >&2
+if ! { [ "$#" -eq 2 ] || { [ "$#" -eq 3 ] && [ "$3" = workload ]; } || { [ "$#" -eq 4 ] && [ "$3" = inventory ]; }; }; then
+    echo "usage: sh binding-probe.sh <clean Turso v0.8.3 checkout> <new scratch directory> [workload | inventory <wal-restored.db>]" >&2
     exit 2
 fi
 
@@ -14,6 +14,12 @@ if [ "$(git -C "$upstream" rev-parse HEAD)" != 607bff9fd0e547a25a97b3bf06e83bcc5
     exit 1
 fi
 
+if [ "${3:-}" = inventory ]; then
+    inventory_source=$(cd "$(dirname "$4")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$4")")
+    test ! -s "$inventory_source-wal"
+fi
+
+umask 077
 mkdir -m 700 "$2"
 cd "$2"
 mkdir src .cargo
@@ -58,12 +64,32 @@ EOF
     exit 0
 fi
 
-cp "$source_dir/binding-probe.rs" src/main.rs
+if [ "${3:-}" = inventory ]; then
+    cp "$source_dir/inventory-binding-probe.rs" src/main.rs
+    source_sha=$(shasum -a 256 "$inventory_source")
+    cp "$inventory_source" owner.db
+    chmod 600 owner.db
+else
+    cp "$source_dir/binding-probe.rs" src/main.rs
+fi
 cat >> Cargo.toml <<'EOF'
 tokio = { version = "=1.54.1", features = ["macros", "rt"] }
 EOF
 
 rustup run stable cargo build --offline
 target_dir=${CARGO_TARGET_DIR:-target}
+if [ "${3:-}" = inventory ]; then
+    "$target_dir/debug/turso-binding-probe" "$PWD/owner.db"
+    sqlite3 -bail owner.db '.backup restored.db'
+    test ! -s restored.db-wal
+    snapshot='file:restored.db?immutable=1'
+    test "$(sqlite3 -readonly "$snapshot" 'PRAGMA integrity_check')" = ok
+    test -z "$(sqlite3 -readonly "$snapshot" 'PRAGMA foreign_key_check')"
+    test "$(sqlite3 -readonly "$snapshot" "SELECT revision FROM inventory_item WHERE id='sjel-turso-rehearsal-item'; SELECT revision FROM inventory_sync_operation WHERE operation_id='sjel-turso-native-op';")" = '4
+4'
+    test "$(shasum -a 256 "$inventory_source")" = "$source_sha"
+    echo 'SQLite restored both native Rust acknowledgements and the input checksum stayed unchanged.'
+    exit 0
+fi
 "$target_dir/debug/turso-binding-probe" "$PWD/databases"
 rustup run stable cargo build --offline --locked --target aarch64-apple-ios

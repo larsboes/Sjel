@@ -35,11 +35,17 @@ The rollback rehearsal ran the Inventory service on the restored file. It read r
 revision 4, rejected a stale edit, and found revision 4 after restarting. The Turso operation receipt
 survived and the input file checksum matched.
 
+The native Rust binding passed the WAL transaction and retry probe on the restored owner file.
+An explicit rollback left both connections at revision 3 after a refused receipt. Native reopen
+and SQLite backup preserved the once-committed revision 4 and its receipt.
+
 ## Remaining migration gates
 
 - Route the wishlist's monthly balance through Finance before splitting the Inventory file.
-- Run the owner API suite against a Turso WAL adapter, then rehearse the cutover and rollback
-  with the adapter running. Register and restore the owner backup before accepting live writes.
+- Run the owner API suite against a Turso WAL adapter. Roll back failed transactions explicitly
+  before reusing their connections. Turso 0.8.3 prepared statements can run before drop-triggered
+  rollback. Rehearse cutover and rollback with the adapter running, and register and restore the
+  owner backup before accepting live writes.
 - Keep Documents on its current search implementation until a replacement passes prefix,
   diacritic, status and pagination parity. The [engine measurements](storage-engine.md) record
   the FTS and iOS results.

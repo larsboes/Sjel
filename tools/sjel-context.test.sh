@@ -7,8 +7,9 @@ trap 'rm -rf "$repo"' EXIT
 
 git -C "$repo" init -q -b main
 mkdir "$repo/tools" "$repo/docs"
+mkdir -p "$repo/Packs/example"
 cp "$tools_dir/sjel-context" "$repo/tools/sjel-context"
-touch "$repo/docs/guide.md" "$repo/other.md"
+touch "$repo/docs/guide.md" "$repo/other.md" "$repo/Packs/example/README.md"
 git -C "$repo" add -- .
 git -C "$repo" -c core.hooksPath=/dev/null -c user.name=Fixture \
   -c user.email=fixture@example.invalid commit -qm fixture
@@ -29,5 +30,10 @@ file_context="$("$repo/tools/sjel-context" on docs/guide.md)"
 grep -qx 'change= M docs/guide.md' <<< "$file_context"
 [[ "$(grep -c '^change=' <<< "$file_context")" -eq 1 ]]
 [[ "$file_context" != *changes_omitted=* ]]
+
+printf 'changed\n' > "$repo/Packs/example/README.md"
+pack_context="$("$repo/tools/sjel-context" on example)"
+grep -qx 'change= M Packs/example/README.md' <<< "$pack_context"
+[[ "$(grep -c '^change=' <<< "$pack_context")" -eq 1 ]]
 
 printf 'sjel-context target status passed\n'

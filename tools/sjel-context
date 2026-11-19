@@ -91,7 +91,7 @@ unit_from_target() {
 }
 
 context_on() {
-  local normalized unit dir status_path
+  local normalized unit dir status_path candidate
   echo "mode=on"
   echo "repo=$SJEL_ROOT"
   git -C "$SJEL_ROOT" status --porcelain=v1 --branch --untracked-files=all | awk '
@@ -117,8 +117,13 @@ context_on() {
   "$SJEL_ROOT/tools/self" explain "$unit" --json 2>/dev/null || echo "self=unavailable-for-$unit"
   dir="$(unit_dir "$unit")"
   status_path="$normalized"
-  if [ ! -e "$SJEL_ROOT/$status_path" ] && [ -n "$dir" ]; then
-    status_path="$dir"
+  if [ ! -e "$SJEL_ROOT/$status_path" ]; then
+    for candidate in "$dir" "libs/$unit" "Packs/$unit"; do
+      if [ -n "$candidate" ] && [ -d "$SJEL_ROOT/$candidate" ]; then
+        status_path="$candidate"
+        break
+      fi
+    done
   fi
   git -C "$SJEL_ROOT" --literal-pathspecs status --porcelain=v1 --untracked-files=all -- "$status_path" | awk '
     NR <= 12 { print "change=" $0 }

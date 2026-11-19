@@ -13,6 +13,8 @@ use std::time::Instant;
 
 use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::layout::Sheet;
+use crate::ely::primitives::Place;
 use crate::ely::theme::ControlSize;
 use gpui_kit::{
     div, point, prelude::*, px, rgb, rgba, Context, Entity, FocusHandle, FontWeight, IntoElement,
@@ -22,7 +24,7 @@ use sjel_gpui_core::people::{filter_people, Person};
 use sjel_gpui_core::shell::{self, DuplicatePair, EntityField, EntityRecord, Shell, ShellError};
 
 use crate::data::{Remote, Repo};
-use crate::primitives::{key_bar, virtual_list};
+use crate::primitives::{key_bar, sub_tabs, virtual_list};
 use crate::theme::{Density, Palette, ThemeContext};
 
 use actions::*;
@@ -277,6 +279,9 @@ impl Render for PeoplePage {
             .and_then(|id| self.derived.parsed.iter().find(|p| &p.id == id))
             .cloned();
 
+        let dup_count = self.duplicates.value.as_ref().map(Vec::len);
+        let tab_entity = cx.entity();
+
         let header = div()
             .flex()
             .items_center()
@@ -286,7 +291,7 @@ impl Render for PeoplePage {
                 div()
                     .flex()
                     .items_center()
-                    .gap_3()
+                    .gap_4()
                     .child(
                         div()
                             .text_2xl()
@@ -294,12 +299,26 @@ impl Render for PeoplePage {
                             .text_color(rgb(palette.text))
                             .child("People"),
                     )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(rgb(palette.muted))
-                            .child(format!("{total_contacts} contacts")),
-                    ),
+                    .child(sub_tabs(
+                        "people-view-tabs",
+                        vec![
+                            ("Directory", Some(total_contacts), !self.show_duplicates),
+                            ("Duplicates", dup_count, self.show_duplicates),
+                        ],
+                        move |ix, _, cx| {
+                            tab_entity.update(cx, |page, cx| {
+                                let next_dup = ix == 1;
+                                if page.show_duplicates != next_dup {
+                                    page.show_duplicates = next_dup;
+                                    page.form = None;
+                                    if page.show_duplicates {
+                                        page.load_duplicates(cx);
+                                    }
+                                    cx.notify();
+                                }
+                            });
+                        },
+                    )),
             )
             .child(
                 div()
@@ -320,26 +339,6 @@ impl Render for PeoplePage {
                             .on_click(cx.listener(|page, _, window, cx| {
                                 page.open_form(FormKind::Field, window, cx)
                             })),
-                    )
-                    .child(
-                        Button::new(
-                            "people-duplicates",
-                            if self.show_duplicates {
-                                "Close duplicates"
-                            } else {
-                                "Duplicates"
-                            },
-                        )
-                        .size(ControlSize::Sm)
-                        .variant(ButtonVariant::Ghost)
-                        .on_click(cx.listener(|page, _, _, cx| {
-                            page.show_duplicates = !page.show_duplicates;
-                            page.form = None;
-                            if page.show_duplicates {
-                                page.load_duplicates(cx);
-                            }
-                            cx.notify();
-                        })),
                     )
                     .child(
                         Button::new("people-refresh", "↻ Refresh")
@@ -466,9 +465,7 @@ impl Render for PeoplePage {
         }
 
         // Right Detail Pane
-        let detail_pane = if let Some(form) = self.render_form(palette, window, cx) {
-            form
-        } else if self.show_duplicates {
+        let detail_pane = if self.show_duplicates {
             self.render_duplicates(palette, cx)
         } else if let Some(p) = selected_person {
             self.render_person_detail(p, palette, cx)
@@ -488,6 +485,23 @@ impl Render for PeoplePage {
                 .child("Select a contact to view details")
                 .into_any_element()
         };
+
+        let form_sheet_title = self.form.as_ref().map(|f| match f.kind {
+            FormKind::New => "New Person",
+            FormKind::Edit(_) => "Edit Person",
+            FormKind::Fact(_) => "Add Place Fact",
+            FormKind::Field => "Declare Registry Field",
+        });
+        let form_sheet = self
+            .render_form(palette, window, cx)
+            .zip(form_sheet_title)
+            .map(|(form_el, title)| {
+                let close_entity = cx.entity();
+                Sheet::new("people-form-sheet", Place::Right, title, move |_, cx| {
+                    close_entity.update(cx, |page, cx| page.close_form(cx));
+                })
+                .child(form_el)
+            });
 
         div()
             .key_context("PeoplePage")
@@ -546,6 +560,7 @@ impl Render for PeoplePage {
                     .child(list_pane)
                     .child(detail_pane),
             )
+            .children(form_sheet)
             .when(!self.density.is_mobile(), |el| {
                 el.child(key_bar(
                     &[

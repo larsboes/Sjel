@@ -1,11 +1,16 @@
 //! Person detail view, contact properties, place facts timeline, and duplicate merger.
+use std::rc::Rc;
+
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, ScrollHandle, SharedString,
+    div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, FontWeight, ScrollHandle,
+    SharedString,
 };
 use sjel_gpui_core::people::Person;
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction};
 use crate::ely::theme::ControlSize;
 use crate::theme::{tint, Palette};
 
@@ -298,51 +303,58 @@ pub(super) fn render_person_detail(
                 .child(contact_fields),
         )
         .when(!person.facts.is_empty(), |el| {
-            let facts = person
-                .facts
-                .iter()
-                .fold(div().flex().flex_col().gap_2(), |rows, fact| {
-                    let summary = [
-                        Some(fact.predicate.as_str()),
-                        Some(fact.place.as_str()),
-                        fact.valid_from.as_deref(),
-                        fact.valid_to.as_deref(),
-                        fact.note.as_deref(),
-                    ]
-                    .into_iter()
-                    .flatten()
-                    .filter(|part| !part.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" · ");
-                    let fact_id = fact.id.clone();
-                    rows.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .text_sm()
-                                    .text_color(rgb(palette.text))
-                                    .child(summary),
-                            )
-                            .child(
-                                Button::new(
-                                    SharedString::from(format!("remove-fact-{}", fact.id)),
-                                    "Remove",
-                                )
-                                .size(ControlSize::Sm)
-                                .variant(ButtonVariant::Ghost)
-                                .on_click(cx.listener(
-                                    move |page, _, window, cx| {
-                                        page.remove_fact(&fact_id, window, cx)
-                                    },
-                                )),
-                            ),
-                    )
-                });
+            let columns = vec![
+                Column::new("predicate", "PREDICATE").width(rems(8.)),
+                Column::new("place", "PLACE").min_width(rems(10.)),
+                Column::new("window", "WINDOW").width(rems(12.)),
+                Column::new("note", "NOTE").min_width(rems(10.)),
+                Column::new("actions", "")
+                    .width(rems(6.))
+                    .actions([RowAction::new("remove", "Remove")]),
+            ];
+            let rows: Rc<Vec<Row>> = Rc::new(
+                person
+                    .facts
+                    .iter()
+                    .map(|fact| {
+                        let window = match (fact.valid_from.as_deref(), fact.valid_to.as_deref()) {
+                            (Some(from), Some(to)) => format!("{from} → {to}"),
+                            (Some(from), None) => format!("from {from}"),
+                            (None, Some(to)) => format!("until {to}"),
+                            (None, None) => "Always".into(),
+                        };
+                        Row::new(
+                            fact.id.clone(),
+                            [
+                                Cell::Tag(fact.predicate.clone().into(), Tone::Accent),
+                                Cell::Text(fact.place.clone().into()),
+                                Cell::Text(window.into()),
+                                Cell::Text(
+                                    fact.note
+                                        .as_deref()
+                                        .unwrap_or("—")
+                                        .replace(['\r', '\n'], " ")
+                                        .into(),
+                                ),
+                                Cell::Actions(vec!["remove".into()]),
+                            ],
+                        )
+                    })
+                    .collect(),
+            );
+            let on_act = cx.entity();
+            let facts_table = DataTable::new("person-place-facts-table", columns)
+                .label("Place facts")
+                .rows(rows)
+                .on_action(move |key, action, window, cx| {
+                    if action.as_ref() == "remove" {
+                        let fact_id = key.to_string();
+                        on_act.update(cx, |page, cx| {
+                            page.remove_fact(&fact_id, window, cx);
+                        });
+                    }
+                })
+                .empty("No place facts recorded.");
             el.child(
                 div()
                     .flex_none()
@@ -362,7 +374,7 @@ pub(super) fn render_person_detail(
                             .text_color(rgb(palette.muted))
                             .child("PLACE FACTS"),
                     )
-                    .child(facts),
+                    .child(facts_table),
             )
         })
         .into_any_element()

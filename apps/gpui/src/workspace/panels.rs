@@ -63,11 +63,20 @@ impl Workspace {
             .unwrap_or(Preset::Edm);
         let next =
             Preset::from_key(PRESETS[(current.index() + 1) % PRESETS.len()]).unwrap_or(Preset::Edm);
+        self.choose_soundscape_preset(next, window, cx);
+    }
+
+    pub(crate) fn choose_soundscape_preset(
+        &mut self,
+        preset: sjel_gpui_core::soundscape::Preset,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(state) = self.soundscape.value.as_mut() {
-            state.preset = next.key().to_owned();
+            state.preset = preset.key().to_owned();
         }
         let panel = self.soundscape_panel(window, cx);
-        panel.update(cx, |panel, cx| panel.choose_preset(next, window, cx));
+        panel.update(cx, |panel, cx| panel.choose_preset(preset, window, cx));
         cx.notify();
     }
 

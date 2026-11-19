@@ -116,6 +116,17 @@ pub(super) fn appearance(
             };
             view.set_appearance(AppearanceSettings { glass, ..settings }, cx);
         }));
+    let soundscape_mini_player = Switch::new("soundscape-mini-player-setting")
+        .checked(settings.soundscape_mini_player)
+        .on_click(cx.listener(|view, on: &bool, _, cx| {
+            view.set_appearance(
+                AppearanceSettings {
+                    soundscape_mini_player: *on,
+                    ..view.appearance_settings
+                },
+                cx,
+            );
+        }));
     vec![
         group(
             "THEME",
@@ -154,6 +165,12 @@ pub(super) fn appearance(
                     "Left sidebar opacity",
                     Some("Set the navigation surface separately from the canvas."),
                     sidebar_opacity,
+                    palette,
+                ),
+                row(
+                    "Soundscape mini player",
+                    Some("Show playback controls in the sidebar."),
+                    soundscape_mini_player,
                     palette,
                 ),
                 row(

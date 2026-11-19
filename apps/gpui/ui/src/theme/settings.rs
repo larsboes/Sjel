@@ -257,6 +257,8 @@ pub struct AppearanceSettings {
     pub accent: AccentColor,
     pub theme_mode: ThemeMode,
     pub density: Density,
+    /// Show the desktop Soundscape mini player in the navigation sidebar.
+    pub soundscape_mini_player: bool,
     /// The terminal grid's own background: a tone (`System` follows the theme) and how much of
     /// what is behind it shows through.
     pub terminal_tone: BackgroundTone,
@@ -281,6 +283,7 @@ impl Default for AppearanceSettings {
             accent: AccentColor::default(),
             theme_mode: ThemeMode::default(),
             density: Density::default(),
+            soundscape_mini_player: true,
             terminal_tone: BackgroundTone::default(),
             terminal_opacity: default_panel_opacity(),
             terminal_font: TerminalFont::default(),

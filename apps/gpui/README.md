@@ -440,19 +440,15 @@ App Store Connect key can and cannot do, and the one-time steps in the web UI, a
 
 ## Soundscape: a slideover with its own synth
 
-`⌘0`, `⌘⇧M`, the sidebar's ♪ row, or **Window ▸ Soundscape** slides a 400-point panel in from the right
-edge of the window. The player pairs a live field with the selected mode, play or pause, the
-session countdown and volume. Focus, Relax and Sleep lead the mode selector. Ambient, Lo-fi and
-EDM remain available below it. Timed scenarios and the adaptive mix sit above the mixer. The same
-keystroke, `esc`, the `×`, or the same row in the sidebar slides it away again, and the music keeps
-playing -- the audio device lives in an app global, not in the panel.
+`⌘0`, `⌘⇧M` or **Window ▸ Soundscape** opens the player over the page column. Drag its left edge
+to resize it, or double-click the edge to reset the width. The player pairs the live field with
+playback, session progress and volume. Timed
+scenarios and the adaptive mix sit above the mixer. Closing the player restores the previous
+focus and playback continues.
 
-It is a panel and not a destination, because a soundscape is something you leave on beside a note.
-It is a panel and not a window because a second window takes focus from that note, has to be found
-in the window list, and its size was never the size of the thing it held: the player was 980 by 700
-of mostly empty field, and between that and nothing there was no third option. The panel moves over
-the page column and never over the navigation, so the way out of a page stays reachable while the
-music is showing.
+The sidebar mini player shows the current mode and session progress. Play, pause and the mode
+buttons work directly in the sidebar. Selecting the current mode's name opens the full player.
+**Settings ▸ Appearance ▸ Soundscape mini player** controls its visibility.
 
 ### Why there is a synthesizer in this app
 
@@ -490,13 +486,14 @@ intent and says so in the header -- it writes nothing, and it never becomes a se
 | `⇧⌘N` | Next preset |
 | `m` | Open or fold the mixer |
 | `⌘0` or `⌘⇧M` | Slide the panel in, or away |
-| `esc` | Slide it away; the music keeps playing |
+| `Esc` | Close the player and keep listening |
+| `⌥←` or `⌥→` | Widen or narrow the focused player |
 
 A bar is its own control: press anywhere on the track to set the value, drag to sweep it. A dragged
 value reaches the synth immediately and the conductor at most every 180 ms, so the sound never lags
 the hand and a sweep is one write rather than dozens.
 
-The sidebar's ♪ row, the finder and the global keys (`⌥⌘Space`, `⌥⌘P`) write play and preset
+The sidebar mini player, the finder and the global keys (`⌥⌘Space`, `⌥⌘P`) write play and preset
 through the panel, so the panel is the one writer of both and its guard against a stale poll covers
 every surface.
 

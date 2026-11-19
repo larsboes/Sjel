@@ -4,6 +4,11 @@ use sjel_gpui_core::area::Area;
 
 use crate::route::Page;
 use crate::workspace::{OpenPalette, OpenSettings, ToggleSoundscapePanel, Workspace};
+use sjel_gpui_core::soundscape::Preset;
+use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
+use sjel_gpui_ui::ely::motion::ProgressBar;
+use sjel_gpui_ui::ely::primitives::IconName;
+use sjel_gpui_ui::ely::theme::ControlSize;
 use sjel_gpui_ui::theme::{tint, Palette};
 
 /// One row per area and, when it is away from its default tab, the tab it will return to.
@@ -57,7 +62,7 @@ pub fn nav(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> V
         .collect()
 }
 
-/// The mini player, shown only while the soundscape capability answers or has answered.
+/// The optional sidebar player for an available soundscape capability.
 pub fn soundscape(
     view: &Workspace,
     palette: Palette,
@@ -65,102 +70,114 @@ pub fn soundscape(
     cx: &mut Context<Workspace>,
 ) -> impl IntoElement {
     let state = view.soundscape.value.as_ref();
-    let is_up = view
+    let available = view
         .health
         .value
         .as_ref()
-        .map(|h| {
-            h.capabilities
-                .get("soundscape")
-                .map(|c| c.up)
-                .unwrap_or(false)
-        })
-        .unwrap_or(false);
-
-    if !is_up && state.is_none() {
+        .and_then(|health| health.capabilities.get("soundscape"))
+        .is_some_and(|capability| capability.up);
+    if !view.appearance_settings.soundscape_mini_player || (!available && state.is_none()) {
         return div().into_any_element();
     }
 
-    let playing = state.map(|s| s.playing).unwrap_or(false);
-    let preset = state.map(|s| s.preset.as_str()).unwrap_or("edm");
-    // Whether the panel is on screen is the one thing this row cannot show by itself, and it is
-    // what decides whether a click is "show me the player" or "it is already there".
-    let panel_open = view
-        .soundscape_panel
-        .as_ref()
-        .map(|panel| panel.read(cx).is_open())
-        .unwrap_or(false);
+    let playing = state.is_some_and(|state| state.playing);
+    let preset = state
+        .and_then(|state| Preset::from_key(&state.preset))
+        .unwrap_or(Preset::Edm);
+    let timing = state
+        .and_then(|state| state.session.as_ref())
+        .map(|session| {
+            let now = chrono::Utc::now().timestamp_millis().max(0) as u64;
+            let remaining = session.remaining_at(now);
+            let progress = session.duration_ms.saturating_sub(remaining) as f32
+                / session.duration_ms.max(1) as f32;
+            (remaining.div_ceil(60_000), (progress * 100.).floor() / 100.)
+        });
 
     div()
         .id("soundscape-mini-player")
+        .debug_selector(|| "soundscape-mini-player".into())
         .mx_1()
         .mb_1()
-        .px_2()
-        .py(px(5.))
-        .rounded(px(7.))
-        .bg(rgba(if panel_open {
-            tint(palette.accent, 0x1c)
-        } else {
-            palette.raised
-        }))
+        .p_2()
+        .rounded(px(8.))
+        .border_1()
+        .border_color(rgba(palette.border))
+        .bg(rgba(palette.raised))
         .flex()
-        .items_center()
-        .justify_between()
-        .gap_2()
-        .text_xs()
+        .flex_col()
+        .gap_1()
         .child(
             div()
                 .flex()
                 .items_center()
+                .justify_between()
                 .gap_1()
-                .min_w_0()
-                .child(equalizer_indicator(playing, palette))
                 .child(
-                    div()
-                        .id("soundscape-preset-btn")
-                        .cursor_pointer()
-                        .truncate()
-                        .text_color(rgb(palette.text))
-                        .hover(move |s| s.text_color(rgb(palette.accent)))
-                        .on_click(cx.listener(|view, _, window, cx| {
-                            // The row is the way into the player: the strip can cycle a preset, but
-                            // only the panel shows what is playing.
-                            view.open_soundscape(window, cx);
-                            view.cycle_soundscape_preset(window, cx);
-                        }))
-                        .child(format!("♪ {preset}")),
+                    Button::new("soundscape-open-player", preset.label())
+                        .variant(ButtonVariant::Ghost)
+                        .size(ControlSize::Sm)
+                        .trailing_icon(IconName::ArrowUpRight)
+                        .on_click(
+                            cx.listener(|view, _, window, cx| view.open_soundscape(window, cx)),
+                        ),
+                )
+                .child(
+                    Button::new(
+                        "soundscape-mini-transport",
+                        if playing { "Pause" } else { "Play" },
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(if playing {
+                        ButtonVariant::Subtle
+                    } else {
+                        ButtonVariant::Secondary
+                    })
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        view.toggle_soundscape(!playing, window, cx);
+                    })),
                 ),
         )
         .child(
             div()
-                .id("soundscape-toggle-btn")
-                .flex_none()
+                .flex()
+                .items_center()
+                .gap_2()
                 .px_2()
-                .py(px(2.))
-                .rounded(px(4.))
-                .bg(rgba(if playing {
-                    tint(palette.accent, 0x24)
-                } else {
-                    palette.raised
-                }))
-                .text_color(rgb(if playing {
-                    palette.accent
-                } else {
-                    palette.muted
-                }))
-                .cursor_pointer()
-                .hover(move |s| s.text_color(rgb(palette.text)))
-                .on_click(cx.listener(move |view, _, window, cx| {
-                    view.open_soundscape(window, cx);
-                    view.toggle_soundscape(!playing, window, cx);
-                }))
-                .child(if playing { "Pause" } else { "Play" }),
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child(equalizer_indicator(playing, palette))
+                .child(match (playing, timing) {
+                    (true, Some((minutes, _))) => format!("{minutes} min left"),
+                    (false, Some((minutes, _))) => format!("Paused · {minutes} min left"),
+                    (true, None) => "Playing".into(),
+                    (false, None) => "Paused".into(),
+                })
+                .child(div().flex_1())
+                .children(
+                    Kbd::binding_for_action(&ToggleSoundscapePanel, None, window)
+                        .map(|kbd| kbd.appearance(false)),
+                ),
         )
-        // The player is ⌘0, listed after the nine areas.
-        .children(
-            Kbd::binding_for_action(&ToggleSoundscapePanel, None, window)
-                .map(|kbd| kbd.appearance(false)),
-        )
+        .when_some(timing, |player, (_, progress)| {
+            player.child(ProgressBar::new("soundscape-mini-progress", progress))
+        })
+        .when(window.viewport_size().height >= px(640.), |player| {
+            player.child(div().flex().justify_between().gap_1().children(
+                [Preset::Focus, Preset::Relax, Preset::Sleep].map(|mode| {
+                    Button::new(mode.key(), mode.label())
+                        .size(ControlSize::Sm)
+                        .variant(if mode == preset {
+                            ButtonVariant::Subtle
+                        } else {
+                            ButtonVariant::Ghost
+                        })
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            view.choose_soundscape_preset(mode, window, cx);
+                        }))
+                }),
+            ))
+        })
         .into_any_element()
 }
 

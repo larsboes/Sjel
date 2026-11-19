@@ -1,6 +1,6 @@
 //! Desktop Soundscape player and conductor controls.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -30,12 +30,22 @@ use crate::viz::{self, Field};
 
 actions!(
     soundscape,
-    [ToggleTransport, NextPreset, CloseDrawer, ToggleMix]
+    [
+        ToggleTransport,
+        NextPreset,
+        CloseDrawer,
+        ToggleMix,
+        WidenDrawer,
+        NarrowDrawer
+    ]
 );
 
 /// How wide the panel is. Narrow enough that the page behind it still reads as work in progress,
 /// wide enough for two columns of labelled bars.
 pub const WIDTH: f32 = 400.;
+const MIN_WIDTH: f32 = 320.;
+const MAX_WIDTH: f32 = 760.;
+const KEY_RESIZE_STEP: f32 = 32.;
 
 /// How often a poll reads the conductor, so another surface's change shows up here without the
 /// operator doing anything.
@@ -128,9 +138,13 @@ pub struct SoundscapeSlideover {
     last_frame: Instant,
     /// Somewhere to put the focus on the next render: `set_open` has no window.
     refocus: bool,
+    previous_focus: Option<FocusHandle>,
     /// Whether the panel is asked to be on screen, and how far in it has slid (0..1).
     open: bool,
     slide: f32,
+    width: f32,
+    measured_width: Rc<Cell<f32>>,
+    resize_start: Option<(f32, f32)>,
     /// The twelve-value mixer, folded away by default. A 400-point column cannot hold fourteen
     /// values and a picture without becoming a wall of small type.
     mix_open: bool,
@@ -166,8 +180,12 @@ impl SoundscapeSlideover {
             focus: cx.focus_handle(),
             last_frame: Instant::now(),
             refocus: false,
+            previous_focus: None,
             open: false,
             slide: 0.,
+            width: WIDTH,
+            measured_width: Rc::new(Cell::new(WIDTH)),
+            resize_start: None,
             mix_open: false,
             listening_context: ListeningContext::at(Local::now().hour(), false),
             last_context_read: None,
@@ -185,10 +203,10 @@ impl SoundscapeSlideover {
             return;
         }
         self.open = open;
+        self.refocus = open;
         if open {
             // The panel is about to be looked at, so it takes the keys: space is play/pause. The
             // focus call needs the window, so it happens on the next render.
-            self.refocus = true;
             self.read_context(cx);
         }
         cx.notify();
@@ -538,8 +556,16 @@ impl SoundscapeSlideover {
 
     /// How far the panel has to sit from the window's right edge at a given amount of arrival: 0
     /// when it is open, its own width when it is fully away.
-    fn offset(slide: f32) -> f32 {
-        -(1. - slide.clamp(0., 1.)) * WIDTH
+    fn offset(slide: f32, width: f32) -> f32 {
+        -(1. - slide.clamp(0., 1.)) * width
+    }
+
+    fn resize(&mut self, width: f32, cx: &mut Context<Self>) {
+        let width = width.clamp(MIN_WIDTH, MAX_WIDTH);
+        if self.width != width {
+            self.width = width;
+            cx.notify();
+        }
     }
 
     /// Advance the field and the slide, and decide whether another frame is needed.
@@ -598,7 +624,14 @@ impl Render for SoundscapeSlideover {
         self.adopt();
         self.animate(window, cx);
         if std::mem::take(&mut self.refocus) {
+            self.previous_focus = window.focused(cx).filter(|focus| focus != &self.focus);
             window.focus(&self.focus, cx);
+        } else if !self.open {
+            if let Some(previous) = self.previous_focus.take() {
+                if self.focus.contains_focused(window, cx) {
+                    window.focus(&previous, cx);
+                }
+            }
         }
 
         let state = self.current();
@@ -610,8 +643,9 @@ impl Render for SoundscapeSlideover {
             return div().into_any_element();
         }
 
+        let field_height = FIELD_HEIGHT + (self.width - WIDTH).max(0.) * 0.2;
         let field = div()
-            .h(px(FIELD_HEIGHT))
+            .h(px(field_height))
             .flex_none()
             .rounded(px(10.))
             .overflow_hidden()
@@ -622,13 +656,22 @@ impl Render for SoundscapeSlideover {
             )));
 
         div()
+            .on_children_prepainted({
+                let measured_width = self.measured_width.clone();
+                move |children, _, _| {
+                    if let Some(header) = children.first() {
+                        measured_width.set(f32::from(header.size.width) + 1.);
+                    }
+                }
+            })
             .key_context("Soundscape")
             .track_focus(&self.focus)
             .absolute()
             .top_0()
             .bottom_0()
-            .right(px(SoundscapeSlideover::offset(self.slide)))
-            .w(px(WIDTH))
+            .right(px(Self::offset(self.slide, self.width)))
+            .w(px(self.width))
+            .max_w(gpui_kit::relative(0.9))
             .flex()
             .flex_col()
             .bg(rgba(palette.panel()))
@@ -656,6 +699,12 @@ impl Render for SoundscapeSlideover {
                 view.mix_open = !view.mix_open;
                 cx.notify();
             }))
+            .on_action(cx.listener(|view, _: &WidenDrawer, _, cx| {
+                view.resize(view.measured_width.get() + KEY_RESIZE_STEP, cx);
+            }))
+            .on_action(cx.listener(|view, _: &NarrowDrawer, _, cx| {
+                view.resize(view.measured_width.get() - KEY_RESIZE_STEP, cx);
+            }))
             .child(self.header(palette, cx))
             .child(
                 div()
@@ -674,11 +723,49 @@ impl Render for SoundscapeSlideover {
                             .child(self.controls(cx, palette, playing, preset)),
                     ),
             )
+            .child(self.resize_grip(palette, cx))
             .into_any_element()
     }
 }
 
 impl SoundscapeSlideover {
+    fn resize_grip(&self, palette: Palette, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("soundscape-resize")
+            .debug_selector(|| "soundscape-resize".into())
+            .absolute()
+            .left_0()
+            .top_0()
+            .bottom_0()
+            .w(px(8.))
+            .cursor_col_resize()
+            .hover(move |style| style.bg(rgba(crate::theme::tint(palette.accent, 0x26))))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|view, event: &MouseDownEvent, _, cx| {
+                    if event.click_count == 2 {
+                        view.resize_start = None;
+                        view.resize(WIDTH, cx);
+                    } else {
+                        view.resize_start =
+                            Some((f32::from(event.position.x), view.measured_width.get()));
+                    }
+                    cx.stop_propagation();
+                }),
+            )
+            .on_drag(ResizeDrawer, |_, _, _, cx| cx.new(|_| gpui_kit::EmptyView))
+            .on_drag_move(
+                cx.listener(|view, event: &DragMoveEvent<ResizeDrawer>, _, cx| {
+                    if let Some((start_x, initial_width)) = view.resize_start {
+                        view.resize(
+                            initial_width + start_x - f32::from(event.event.position.x),
+                            cx,
+                        );
+                    }
+                }),
+            )
+    }
+
     /// The top of the panel: what this is, what it is playing through, and the way out.
     fn header(&self, palette: Palette, cx: &mut Context<Self>) -> gpui_kit::Div {
         let conductor_down = self.state.error.is_some();
@@ -722,12 +809,12 @@ impl SoundscapeSlideover {
                             }),
                     ),
             )
-            .child(quiet_button(
-                "soundscape-close",
-                "Close",
-                cx,
-                |view, _, cx| view.set_open(false, cx),
-            ))
+            .child(
+                quiet_button("soundscape-close", "Close", cx, |view, _, cx| {
+                    view.set_open(false, cx)
+                })
+                .shortcut("escape"),
+            )
     }
 
     /// Playback controls, timed sessions, and the disclosed mix.
@@ -1192,6 +1279,9 @@ impl SoundscapeSlideover {
 #[derive(Clone, Copy)]
 struct DragKnob(Knob);
 
+#[derive(Clone, Copy)]
+struct ResizeDrawer;
+
 impl Render for DragKnob {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div().size_0()
@@ -1258,12 +1348,14 @@ where
 impl SoundscapeSlideover {
     /// Bindings the panel carries. Registered once at launch, because a key binding belongs to the
     /// app and the context it names ("Soundscape") is only carried by the panel's root.
-    pub fn keys() -> [gpui_kit::KeyBinding; 4] {
+    pub fn keys() -> [gpui_kit::KeyBinding; 6] {
         [
             gpui_kit::KeyBinding::new("space", ToggleTransport, Some("Soundscape")),
             gpui_kit::KeyBinding::new("shift-cmd-n", NextPreset, Some("Soundscape")),
             gpui_kit::KeyBinding::new("escape", CloseDrawer, Some("Soundscape")),
             gpui_kit::KeyBinding::new("m", ToggleMix, Some("Soundscape")),
+            gpui_kit::KeyBinding::new("alt-left", WidenDrawer, Some("Soundscape")),
+            gpui_kit::KeyBinding::new("alt-right", NarrowDrawer, Some("Soundscape")),
         ]
     }
 }
@@ -1280,6 +1372,55 @@ fn device_line(error: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn the_drawer_resizes_from_its_edge_and_closes_with_escape(cx: &mut gpui_kit::TestAppContext) {
+        cx.update(|cx| cx.bind_keys(SoundscapeSlideover::keys()));
+        let (player, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui_kit::size(px(900.), px(740.))),
+            |_, cx| {
+                let mut player = SoundscapeSlideover::new_with_handles(
+                    Repo::new(Err(shell::ShellError::NotSetUp)),
+                    Arc::new(soundscape::Control::new()),
+                    Arc::new(Visual::new()),
+                    None,
+                    None,
+                    cx,
+                );
+                player.open = true;
+                player.slide = 1.;
+                player.refocus = true;
+                player
+            },
+        );
+        let left_edge = cx
+            .debug_bounds("soundscape-resize")
+            .expect("resize grip")
+            .center();
+        cx.simulate_mouse_down(left_edge, MouseButton::Left, Default::default());
+        for offset in [16., 80.] {
+            cx.simulate_mouse_move(
+                gpui_kit::point(left_edge.x - px(offset), left_edge.y),
+                MouseButton::Left,
+                Default::default(),
+            );
+        }
+        cx.simulate_mouse_up(
+            gpui_kit::point(left_edge.x - px(80.), left_edge.y),
+            MouseButton::Left,
+            Default::default(),
+        );
+        cx.run_until_parked();
+        assert_eq!(player.read_with(cx, |player, _| player.width), WIDTH + 80.);
+        cx.simulate_keystrokes("alt-right");
+        assert_eq!(
+            player.read_with(cx, |player, _| player.width),
+            WIDTH + 80. - KEY_RESIZE_STEP
+        );
+        cx.simulate_keystrokes("escape");
+        assert!(!player.read_with(cx, |player, _| player.is_open()));
+    }
 
     #[gpui::test]
     fn session_progress_renders_and_adaptation_keeps_the_preset(cx: &mut gpui_kit::TestAppContext) {
@@ -1376,15 +1517,15 @@ mod tests {
     /// motion is one number and the two ends are the two states.
     #[test]
     fn the_panel_slides_from_off_the_edge_to_flush() {
-        assert_eq!(SoundscapeSlideover::offset(0.), -WIDTH);
-        assert_eq!(SoundscapeSlideover::offset(1.), 0.);
+        assert_eq!(SoundscapeSlideover::offset(0., WIDTH), -WIDTH);
+        assert_eq!(SoundscapeSlideover::offset(1., WIDTH), 0.);
         assert!(
-            SoundscapeSlideover::offset(0.5) < 0.,
+            SoundscapeSlideover::offset(0.5, WIDTH) < 0.,
             "halfway is still outside"
         );
         // Clamped, so a bad value cannot push the panel over the page it sits on.
-        assert_eq!(SoundscapeSlideover::offset(2.), 0.);
-        assert_eq!(SoundscapeSlideover::offset(-1.), -WIDTH);
+        assert_eq!(SoundscapeSlideover::offset(2., WIDTH), 0.);
+        assert_eq!(SoundscapeSlideover::offset(-1., WIDTH), -WIDTH);
     }
 
     /// The panel has to be narrower than the window it slides over, or there is no page left to
@@ -1392,6 +1533,6 @@ mod tests {
     #[test]
     fn the_panel_leaves_the_page_most_of_the_window() {
         const { assert!(WIDTH < 760., "the window's own minimum width") };
-        assert_eq!(SoundscapeSlideover::keys().len(), 4);
+        assert_eq!(SoundscapeSlideover::keys().len(), 6);
     }
 }

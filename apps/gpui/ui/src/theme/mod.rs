@@ -226,6 +226,7 @@ mod tests {
             accent: AccentColor::Emerald,
             theme_mode: ThemeMode::Dark,
             density: Density::Comfortable,
+            soundscape_mini_player: false,
             terminal_tone: BackgroundTone::MidnightSlate,
             terminal_opacity: WindowOpacity::SoftGlass,
             terminal_font: TerminalFont::Menlo,
@@ -235,6 +236,8 @@ mod tests {
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: AppearanceSettings = serde_json::from_str(&json).unwrap();
         assert_eq!(original, deserialized);
+        let before_mini_player: AppearanceSettings = serde_json::from_str("{}").unwrap();
+        assert!(before_mini_player.soundscape_mini_player);
     }
 
     #[test]

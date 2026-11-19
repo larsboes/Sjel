@@ -167,7 +167,7 @@ async fn one_pass(
             .join("backup")
             .join("logs")
             .join(format!("{}-policy.log", runner::now_epoch()));
-        let Some(run_id) = store.try_start_run(
+        let Some(run_id) = store.try_start_scheduled_run(
             &decision.capability,
             &decision.target,
             &log_path.to_string_lossy(),

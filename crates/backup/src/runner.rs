@@ -124,9 +124,16 @@ pub fn run(root: &Path, overlay: &Path, capability: &str, target: &str) -> Outco
             let detail = if code == 0 {
                 String::new()
             } else {
-                // The log is where the reason is; a shell tool's last line is its message.
                 fs::read_to_string(&log_path)
-                    .map(|text| last_line(&text))
+                    .map(|text| {
+                        text.lines()
+                            .rev()
+                            .find(|line| {
+                                line.starts_with("backup.sh: target '")
+                                    && line.contains("' path does not exist:")
+                            })
+                            .map_or_else(|| last_line(&text), ToOwned::to_owned)
+                    })
                     .unwrap_or_default()
             };
             (code, detail)

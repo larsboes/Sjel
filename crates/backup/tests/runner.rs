@@ -57,10 +57,17 @@ fn an_old_receipt_cannot_turn_a_noop_into_a_success() {
 
 #[test]
 fn a_missing_target_failure_retains_its_reason_in_the_attempt() {
-    let fixture = Fixture::new("target", "echo 'target volume is not mounted' >&2\nexit 1");
+    let fixture = Fixture::new(
+        "target",
+        "echo \"backup.sh: target 'local' path does not exist: /absent\" >&2\n\
+         echo 'Attach the volume it lives on.' >&2\nexit 1",
+    );
     let outcome = fixture.run();
     assert_eq!(outcome.exit_code, 1);
-    assert_eq!(outcome.detail, "target volume is not mounted");
+    assert_eq!(
+        outcome.detail,
+        "backup.sh: target 'local' path does not exist: /absent"
+    );
     let attempt = fixture.attempt();
     assert_eq!(attempt["target"], "local");
     assert_eq!(attempt["detail"], outcome.detail);

@@ -1,7 +1,7 @@
 ---
 id: storage-engine
 title: "Measure one database engine"
-state: backlog
+state: verify
 area: storage
 kind: investigation
 priority: 2
@@ -22,9 +22,13 @@ Measure one database engine through the existing owner, without treating impleme
 
 ## Verification
 
-The existing libSQL suite passes local open, pragmas, transaction rollback, concurrent writers,
-and indexed vector search. [Turso's compatibility notes](https://github.com/tursodatabase/turso/blob/main/COMPAT.md)
-document JSON and exact vector functions. The [Turso roadmap](https://github.com/tursodatabase/turso/blob/main/README.md#features-and-roadmap)
-still lists approximate vector indexing, so a candidate must prove unchanged opening of a copy
-with the libSQL index schema before an engine choice. Candidate execution, crash recovery, and an
-iOS build remain unverified.
+The [compatibility probe](../../research/benchmarks/storage-engine/README.md) compared libSQL 0.10.0
+with Turso Database 0.8.3 on generated files. Recursive queries, `json_each` and exact vector
+ranking matched on both unindexed files. Turso rejected `libsql_vector_idx` on open for both indexed
+files, including read-only opens. The default CLI also refused a second process while the first
+held a write transaction. The process-crash test preserved the committed row and rolled back the
+uncommitted row.
+
+Keep libSQL for the unchanged-file migration path. A production-store copy, same-process Turso
+writers, power-loss recovery and an iOS build remain unverified. Revisit with the owner if Turso
+accepts the existing index schema or a separately reviewed migration can rebuild it.

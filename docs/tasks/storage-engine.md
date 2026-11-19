@@ -42,10 +42,26 @@ copy required a Turso conversion to WAL before libSQL could read it. SQLite back
 checks passed for both WAL states.
 
 The registered shared-store backup passed receipt, integrity and row-count checks in isolation.
-Its schema contained no libSQL vector indexes. Turso 0.8.3 opened that copy read-only and could
-enumerate the catalog, but returned missing-table errors on some objects catalogued by SQLite.
-Matching catalog counts alone do not establish deployed-store compatibility.
+Its schema contained no libSQL vector indexes. The missing-table errors begin at the Documents
+FTS5 table in catalog order and reproduce on a generated schema. After removing that derived
+index and its triggers from a restored copy, all ordinary table counts match. SQLite reopened
+the Turso-written copy, rebuilt and verified the FTS5 index, and passed integrity checking.
 
-Keep libSQL for the shared store. Turso MVCC merits a pilot on a rebuildable, single-owner
-projection after measuring distinct-key write contention in that workload. Live MVCC backup,
-power-loss recovery and physical iPhone behavior remain unverified.
+Turso FTS misses the Documents prefix results in the comparison fixture. Its feature-enabled
+Rust binding fails to compile on arm64 iOS with stable Rust. A generated MVCC snapshot from an
+open connection preserved the intended commit boundary. Concurrent-write backup, power-loss
+recovery and physical iPhone behavior remain unverified.
+
+## Migration preparation
+
+- Route cross-owner reads through capability contracts before splitting files. Start with Inventory
+  and keep Documents on its current search implementation until a replacement passes prefix,
+  diacritic, status and pagination parity.
+- On an owner-only copy, replay the same reads and writes against both engines. Compare stable
+  IDs, relationships, durable writes, restart behavior and the owner backup and restore path.
+- Before enabling live writes, rehearse rollback with writes committed after the cutover. For
+  MVCC, verify recovery with the logical log and prove the backup path under concurrent writes.
+  Keep the original database until the rollback window closes.
+
+Keep libSQL for the shared store while these gates remain open. The owner sequence and its
+acceptance are in [Split capability databases](storage-files.md).

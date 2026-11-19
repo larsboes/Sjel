@@ -83,5 +83,31 @@ the MVCC file as a database. With the engine closed, the probe copies the main f
 sidecars, opens that copy with Turso, switches it to WAL, and checks the counters and vector
 results in libSQL. SQLite's `.backup` then produces readable snapshots of both WAL files.
 `quick_check` returns `ok` and the restored counters, edge count and embedding count match.
-The rehearsal covers closed-file recovery and rollback. A live MVCC backup, a power cut, a
-physical iPhone, and a deployed-store fixture remain outside the measured scope.
+The rehearsal covers closed-file recovery and rollback. On a separate generated MVCC file,
+`VACUUM INTO` from an open connection retained the commit before the snapshot and excluded the
+commit after it. Concurrent-write backup, a power cut and a physical iPhone remain unverified.
+
+## Shared-store rehearsal and Documents search
+
+Run against a private database extracted by `tools/restore.sh` from a verified store backup. Pass
+the database file, the reviewed CLI and a new scratch directory as absolute paths.
+
+```sh
+sh research/benchmarks/storage-engine/store-rehearsal.sh "$restored_db" "$tursodb" "$scratch/store"
+sh research/benchmarks/storage-engine/documents-search-probe.sh "$tursodb" "$scratch/documents"
+```
+
+The first missing table in catalog order was Documents' SQLite FTS5 virtual table. The synthetic
+Documents probe reproduces the failure with an ordinary table before and after FTS5. Turso 0.8.3
+reads the first and reports `no such table` on the second. The engine's [compatibility reference](https://github.com/tursodatabase/turso/blob/v0.8.3/COMPAT.md#full-text-search-fts)
+documents the FTS5 incompatibility.
+
+On the restored copy, removing FTS5 and its maintenance triggers let Turso match SQLite's row
+counts across all ordinary tables. SQLite reopened the Turso-written copy, rebuilt the FTS5 index
+from its external content table, verified that index against the content, and passed integrity
+checking. The original restored file's checksum stayed unchanged.
+
+Turso's FTS replacement matched the exact term on the synthetic Documents fixture but missed the
+existing prefix and prefix-OR matches, even when filtering by status after the search. The pinned
+Rust binding's arm64 iOS build with `fts` enabled also failed to compile on stable Rust with an
+allocator type mismatch. The earlier build exercised the feature-disabled binding.

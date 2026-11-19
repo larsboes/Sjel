@@ -510,14 +510,35 @@ reset_run
 expect_fail_with "archive requires an explicit source root" "backup_source_root is required" "$BACKUP" archive
 mkdir -p "$SCRATCH/archive-source/archive" "$SCRATCH/remote/archive"
 printf 'PRESERVED\n' > "$SCRATCH/archive-source/archive/note.md"
+mkdir -p "$SCRATCH/archive-source/archive/links"
+ln -s .. "$SCRATCH/archive-source/archive/links/parent"
+ln -s /absent "$SCRATCH/archive-source/archive/links/broken"
 printf '\n[capability.archive]\nbackup_source_root = "%s"\n' "$SCRATCH/archive-source" \
   >> "$OVERLAY/config/machine.toml"
+printf '\n[same-filesystem]\nkind = "local"\npath = "%s"\n' "$SCRATCH/remote" \
+  >> "$OVERLAY/config/systems.local.toml"
+expect_fail_with "archive refuses a target on the source filesystem" "same filesystem" \
+  "$BACKUP" --target same-filesystem archive
 reset_run
 export MOCK_TIMESTAMP=20260105T020202Z
 expect_pass "archive uses its configured source root" "$BACKUP" archive
 archive_file="$(find "$SCRATCH/remote/archive" -name 'archive-*.tar.gz' | head -1)"
 [ "$(tar -xOzf "$archive_file" ./archive/note.md)" = 'PRESERVED' ] \
   || fail "archive backup did not contain the configured source"
+link_metadata="$(tar -xOzf "$archive_file" ./archive-symlinks.json)"
+[ "$link_metadata" = '{"links/broken": "/absent", "links/parent": ".."}' ] \
+  || fail "archive backup did not preserve the symbolic link paths and targets"
+staging_left="$(find "$OVERLAY/backup/staging" -mindepth 1 -name 'archive.*' -print -quit)"
+[ -z "$staging_left" ] || fail "archive backup left a staging directory"
+expect_pass "archive restore matches source files and links" env \
+  SJEL_RESTORE_MANIFEST="$FIXTURE/capabilities/archive/service.toml" \
+  "$ROOT/tools/restore.sh" archive "$archive_file" --destination "$SCRATCH/restored-archive" \
+  --compare-archive-source "$SCRATCH/archive-source/archive"
+printf 'CHANGED\n' > "$SCRATCH/archive-source/archive/note.md"
+expect_fail_with "archive comparison catches changed bytes" "restored file bytes differ" env \
+  SJEL_RESTORE_MANIFEST="$FIXTURE/capabilities/archive/service.toml" \
+  "$ROOT/tools/restore.sh" archive "$archive_file" --destination "$SCRATCH/changed-archive" \
+  --compare-archive-source "$SCRATCH/archive-source/archive"
 mkdir -p "$SCRATCH/alternate-source/archive"
 printf 'ALTERNATE\n' > "$SCRATCH/alternate-source/archive/note.md"
 reset_run

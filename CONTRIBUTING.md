@@ -24,8 +24,8 @@ adopts. Record no version: every dependency tracks its upstream's latest release
 
 ## Work on one change
 
-Until `PLAN.md` is done, every change goes straight to `main`. Branches, worktrees and pull
-requests start when the plan is done, independently of release tags. Rules: `Packs/harness/skills/sjel/references/on-changes.md`.
+The [branch and commit workflow](Packs/harness/skills/sjel/references/on-changes.md#choose-the-path)
+defines which branch to use, including for cloud sessions.
 
 Keep the diff inside one coherent boundary. Put reusable code and doctrine in Sjel, and use
 synthetic fixtures for data-shaped tests. Never copy an active overlay or a secret value into
@@ -156,10 +156,8 @@ measures, or a script under `tools/`.
 
 ## Open the pull request
 
-Open a draft pull request first. State the outcome, then bound the exact scope. List every
-completed validation command with its result and name the known limits. Keep separable follow-ups
-out of the pull request rather than widening it. A pull request lands as a squash merge: one coherent
-change per commit on `main`, easy to review or revert.
+Follow the [pull request workflow](Packs/harness/skills/sjel/references/on-changes.md#prepare-a-pull-request)
+when the branch path calls for one.
 
 Security findings follow [SECURITY.md](SECURITY.md); never report one in a public issue or pull
 request.

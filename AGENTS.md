@@ -16,9 +16,8 @@ Before editing:
 
 Always:
 
-- Until `PLAN.md` is done, every change goes straight to `main` from the primary checkout: no
-  worktrees, no work-package PRs. They start when the plan is done, independently of release tags. Rules:
-  `Packs/harness/skills/sjel/references/on-changes.md`.
+- Before choosing a branch, worktree, or pull request, check the
+  [branch and commit workflow](Packs/harness/skills/sjel/references/on-changes.md#choose-the-path).
 - Other agent sessions edit the primary checkout at the same time. Never stash, revert, or overwrite
   their changes. Touch and stage only the files of your task.
 - Keep private values, machine state, and secrets in the overlay or the OS keychain. Never

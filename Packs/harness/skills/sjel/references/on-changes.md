@@ -4,16 +4,15 @@ One focused change per commit. **A tracker entry is never a precondition for sta
 
 ## Choose the path
 
-Until `PLAN.md` is done, every change goes straight to `main` from the primary checkout. There
-are no work-package branches, worktrees or pull requests. When the plan is done, the work-package
-path below applies. Release tags are independent: neither a preview nor `v0.1.0` activates this
-workflow or grants permission to create a tag.
+Local changes currently go directly to `main` from the primary checkout. A maintainer activates
+the work-package path by updating this section on `main` to make it the local default. Release
+tags and task completion are independent of that switch. Tag creation requires its own authorization.
 
 A cloud session receives its branch from the harness (`claude/`, `codex/`, `copilot/` and so on).
 That branch is its work branch: the session opens a draft PR from it rather than pushing to
 `main`.
 
-## Work package (after the plan)
+## Work package
 
 1. Create the branch and worktree from current `main`:
    `sjel worktree new <area>-<slug>`. The worktree is
@@ -22,13 +21,19 @@ That branch is its work branch: the session opens a draft PR from it rather than
 2. Work, commit and run checks only inside that worktree. Its first build compiles into its own
    `target/`. Never build a release binary into the primary checkout from a worktree: the
    primary checkout's `target/release/` is what the services run.
-3. Push with `git push -u origin <area>-<slug>` and open a draft PR (CONTRIBUTING.md, "Open the
-   pull request"). Drive CI green, then mark it ready.
+3. Push with `git push -u origin <area>-<slug>`, then follow
+   [the pull request procedure](#prepare-a-pull-request).
 4. The PR lands as a **squash merge**: one commit on `main` per work package, which is the commit
    the area plan names. The agent merges only when the user said so for that work package or in
    the current request. Otherwise it stops at a green, ready PR.
 5. After the merge, `sjel worktree remove <area>-<slug>` removes the worktree and the local branch.
    It refuses uncommitted changes, and commits on no remote unless their PR was merged.
+
+## Prepare a pull request
+
+Open a draft pull request from the work branch. State the outcome and scope. List the completed
+validation commands, their results, and any remaining verification gaps. Keep separate follow-ups
+out of the pull request. Mark it ready once CI passes.
 
 ## Small change on `main`
 

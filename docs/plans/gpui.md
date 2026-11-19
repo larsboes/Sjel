@@ -425,8 +425,8 @@ build was performed for this handoff.
 
 ## 6. One UI crate, every platform
 
-1. **Renderer pins.** The Mac uses `gpui-kit =0.9.1`, `gpui-pre =0.3.12` and
-   `gpui-fast` 0.1.14. The phone uses NSH rev `1894697155` with UIKit. The iOS dependency
+1. **Renderer pins.** The native Cargo workspace owns the Mac's GPUI Kit and engine pins.
+   The phone uses the workspace's shared NSH revision with UIKit. The iOS dependency
    tree contains no GPUI platform or `gpui-mobile`; the shared UI crate gates desktop modules
    behind its `gpui` feature. The phone enables only `nsh`.
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
@@ -705,9 +705,8 @@ NSH screen), `apps/gpui/ios/run-device <udid>` on a cabled or network-paired iPh
 window: `cargo run --release --features nsh-trial` in `apps/gpui` with `SJEL_NSH_TRIAL=1` (or
 `SJEL_NSH_TRIAL=mail`).
 
-NSH comes from git rev `1894697155` (`upstreams.toml`, `nsh`): the published 0.4.0 crates do not
-build for this app. NSH's GPUI backend requires `gpui-fast` 0.1.13 or a compatible later release,
-so it resolves to the Mac app's 0.1.14.
+The NSH revision includes the upstream GPUI Fast compatibility fix. The Mac trial shares the
+same GPUI Fast instance as GPUI Kit, and the phone uses the UIKit backend from that revision.
 
 ### Open, in order
 
@@ -972,9 +971,13 @@ has not run.
 
 When a component lacks required behavior, add it on the fork's `sjel` branch with a focused
 test. Push the fork before updating the dependency revision and lockfile. Upstream PRs remain
-deferred. On GPUI Kit upgrades, update the fork's `gpui-kit` and `gpui-pre-leaks` together and
-merge upstream changes after checking both engines. The dependency manifest owns versions.
+deferred. On GPUI Kit upgrades, align the host and fork on Kit and its selected engines. Keep
+`gpui-pre-leaks` on Kit's `gpui-pre` version. Check the Mac NSH trial when GPUI Fast changes.
+Ely's horizontal tabs reveal the active choice on keyboard and host selection changes.
 The local-fork build tooling gap is tracked in [`tooling.md`](tooling.md).
+
+The Kit 0.10 upgrade compiles with the Mac NSH trial, the Mac `gpui-pre` fallback and
+the iOS simulator. Live keyboard, pointer and narrow-window acceptance remains open.
 
 Use Sjel's shared verification cache; do not export a separate target directory for each run:
 

@@ -544,39 +544,21 @@ pub fn PeopleScreen() -> impl IntoElement {
         snap.with(|s| lines(s, side, &typed))
     });
     let switch = move |side: Register, name: &'static str| {
-        button()
-            .flex_1()
-            .py_2()
-            .items_center()
-            .rounded_lg()
-            .bg(move || {
-                if register.get() == side {
-                    nsh_base::theme().primary
-                } else {
-                    nsh_base::theme().background
-                }
-            })
-            .on_press(move || {
-                register.set(side);
-                query.set(String::new());
-            })
-            .child(
-                text(move || {
-                    let count = snap.with(|s| match side {
-                        Register::People => s.people.len(),
-                        Register::Places => s.places.len(),
-                    });
-                    format!("{name} {count}")
-                })
-                .text_sm()
-                .text_color(move || {
-                    if register.get() == side {
-                        nsh_base::theme().primary_foreground
-                    } else {
-                        nsh_base::theme().foreground
-                    }
-                }),
+        dynamic(move || {
+            let count = snap.with(|s| match side {
+                Register::People => s.people.len(),
+                Register::Places => s.places.len(),
+            });
+            crate::nsh_ui::pill_tab(
+                format!("{name} {count}"),
+                register.get() == side,
+                move || {
+                    register.set(side);
+                    query.set(String::new());
+                },
             )
+            .into_element()
+        })
     };
     let list = move || {
         view()

@@ -106,6 +106,17 @@ describe("owned full local adapters", () => {
     }
   });
 
+  test("the exact runner toolchain refresh is omitted only before an owned full runner", () => {
+    const refresh = "      - name: Use the current stable toolchain\n        run: rustup update --no-self-update stable\n";
+    for (const [id, task, output] of cases) {
+      const text = adapterJob(id, task, `needs.changes.outputs.${output} == 'true'`).replace("      - uses: actions/checkout@v5\n", refresh);
+      expect(parseJobs(text)[0].steps).toEqual([{ name: `bun tools/ci-run.ts ${task}`, script: `bun tools/ci-run.ts ${task} --full` }]);
+      const altered = text.replace("--no-self-update stable", "--no-self-update nightly");
+      expect(parseJobs(altered)[0].steps[0].script).toBe("rustup update --no-self-update nightly");
+      expect(parseJobs(text.replace(refresh, "") + refresh)[0].steps.map((step) => step.script)).toContain("rustup update --no-self-update stable");
+    }
+  });
+
   test("unknown conditions, extra arguments, extra needs and scoped wrappers remain refused", () => {
     for (const [id, task, output] of cases) {
       const condition = `needs.changes.outputs.${output} == 'true'`;

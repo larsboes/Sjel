@@ -47,6 +47,13 @@ function isPlanTransfer(step: unknown): boolean {
     (transfer.env as Record<string, unknown>).GH_TOKEN === "${{ github.token }}";
 }
 
+/** The runner's toolchain refresh. The host keeps its own toolchain current, so replay omits it. */
+function isToolchainRefresh(step: unknown): boolean {
+  if (!step || typeof step !== "object" || Object.keys(step).sort().join(",") !== "name,run") return false;
+  const refresh = step as { name: unknown; run: unknown };
+  return refresh.name === "Use the current stable toolchain" && refresh.run === "rustup update --no-self-update stable";
+}
+
 /** Parse replayable shell steps; reject unsupported execution semantics instead of dropping them.
  * @throws If the workflow has no jobs or declares a step without run or uses.
  */
@@ -86,7 +93,7 @@ export function parseJobs(yamlText: string): WorkflowJob[] {
       : null;
     for (const [i, step] of (job.steps ?? []).entries()) {
       // A full local wrapper recomputes its plan without the CI artifact or token.
-      if (wrapper && i < wrapperIndex && isPlanTransfer(step)) continue;
+      if (wrapper && i < wrapperIndex && (isPlanTransfer(step) || isToolchainRefresh(step))) continue;
       if (step?.if !== undefined || step?.env !== undefined || step?.shell !== undefined || step?.["continue-on-error"] !== undefined ||
         step?.run?.includes("${{") || (step?.["working-directory"] !== undefined && typeof step["working-directory"] !== "string")) {
         unsupported = `step ${i + 1} has execution settings that cannot be replayed faithfully`;

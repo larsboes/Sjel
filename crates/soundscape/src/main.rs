@@ -309,9 +309,17 @@ fn spawn_session_reaper(app: &App) {
 
 async fn post_state(
     State(app): State<App>,
-    Json(patch): Json<Patch>,
+    Json(mut patch): Json<Patch>,
 ) -> Result<Json<StateView>, (StatusCode, Json<serde_json::Value>)> {
     let now = now_ms();
+    let origin = patch.origin.take();
+    let repeat = std::mem::take(&mut patch.repeat_last_session);
+    if repeat && patch != Patch::default() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "repeat cannot be combined with other state updates"})),
+        ));
+    }
     if let Some(preset) = &patch.preset {
         if !PRESETS.contains(&preset.as_str()) {
             return Err((
@@ -336,9 +344,31 @@ async fn post_state(
         }
     }
 
-    let origin = patch.origin;
     {
         let mut scape = app.scape_write();
+        if repeat {
+            if scape
+                .session
+                .as_ref()
+                .is_some_and(|session| session.remaining_at(now) > 0)
+            {
+                return Err((
+                    StatusCode::CONFLICT,
+                    Json(json!({"error": "a timed session is already active"})),
+                ));
+            }
+            let Some(saved) = scape.last_session.clone() else {
+                return Err((
+                    StatusCode::CONFLICT,
+                    Json(json!({"error": "there is no timed session to repeat"})),
+                ));
+            };
+            scape.preset = saved.preset.key().into();
+            scape.params = saved.params.clamped();
+            scape.energy = clamp01(saved.energy);
+            scape.session = Some(saved.timer());
+            scape.playing = true;
+        }
         if let Some(preset) = patch.preset {
             scape.preset = preset;
         }
@@ -361,6 +391,9 @@ async fn post_state(
             scape.energy = clamp01(energy);
         }
         if let Some(session) = patch.session {
+            if let Some(session) = session.as_ref() {
+                scape.remember_session(session);
+            }
             scape.session = session;
         }
         let playing = scape.playing;
@@ -455,6 +488,22 @@ fn restore(body: &str) -> Result<Scape, serde_json::Error> {
     // `playing: true` here would be a claim with no sound behind it.
     scape.playing = false;
     let now = now_ms();
+    if scape
+        .last_session
+        .as_ref()
+        .is_some_and(|saved| !saved.timer().is_valid(now))
+    {
+        scape.last_session = None;
+    }
+    if scape.last_session.is_none() {
+        if let Some(session) = scape
+            .session
+            .clone()
+            .filter(|session| session.is_valid(now))
+        {
+            scape.remember_session(&session);
+        }
+    }
     if let Some(session) = &mut scape.session {
         session.pause_at(now);
         if !session.is_valid(now) || session.remaining_at(now) == 0 {
@@ -734,6 +783,10 @@ mod tests {
         };
         let restored =
             restore(&serde_json::to_string(&saved).expect("serializes")).expect("restores");
+        assert_eq!(
+            restored.last_session.as_ref().unwrap().scenario,
+            "deep-work"
+        );
         let session = restored.session.expect("session survives");
         assert!(session.running_since_ms.is_none());
         assert!((14_000..=16_000).contains(&session.elapsed_ms));
@@ -797,6 +850,53 @@ mod tests {
         let session = resumed.scape.session.unwrap();
         assert_eq!(session.elapsed_ms, checkpoint.elapsed_ms);
         assert!(session.running_since_ms.is_some());
+    }
+
+    #[tokio::test]
+    async fn repeat_restores_a_saved_session_once_without_overwriting_an_active_timer() {
+        let app = test_app();
+        let repeat = || Patch {
+            repeat_last_session: true,
+            ..Patch::default()
+        };
+        let no_history = post_state(State(app.clone()), Json(repeat()))
+            .await
+            .unwrap_err();
+        assert_eq!(no_history.0, StatusCode::CONFLICT);
+
+        let start: Patch = serde_json::from_value(json!({
+            "preset": "focus",
+            "energy": 0.42,
+            "playing": true,
+            "session": { "scenario": "reading", "duration_ms": 1_500_000, "elapsed_ms": 0 }
+        }))
+        .unwrap();
+        let started = post_state(State(app.clone()), Json(start)).await.unwrap().0;
+        let clear: Patch = serde_json::from_value(json!({
+            "session": null, "preset": "edm", "energy": 0.9, "volume": 0.2, "playing": false
+        }))
+        .unwrap();
+        let cleared = post_state(State(app.clone()), Json(clear)).await.unwrap().0;
+        *app.scape_write() = restore(&serde_json::to_string(&cleared.scape).unwrap()).unwrap();
+
+        let repeated = post_state(State(app.clone()), Json(repeat()))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(repeated.scape.preset(), Preset::Focus);
+        assert_eq!(repeated.scape.energy, started.scape.energy);
+        assert_eq!(repeated.scape.volume, cleared.scape.volume);
+        let session = repeated.scape.session.unwrap();
+        assert_eq!(session.scenario, "reading");
+        assert_eq!(session.duration_ms, 1_500_000);
+        assert_eq!(session.elapsed_ms, 0);
+        assert!(session.running_since_ms.is_some());
+
+        let duplicate = post_state(State(app.clone()), Json(repeat()))
+            .await
+            .unwrap_err();
+        assert_eq!(duplicate.0, StatusCode::CONFLICT);
+        assert_eq!(app.scape_read().session.as_ref(), Some(&session));
     }
 
     #[test]

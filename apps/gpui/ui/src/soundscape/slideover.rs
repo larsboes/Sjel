@@ -21,10 +21,12 @@ use sjel_gpui_core::soundscape::{
 
 use crate::data::{self, Busy};
 use crate::ely::buttons::{Button, ButtonVariant, ToggleGroup, ToggleItem};
+use crate::ely::feedback::Toast;
 use crate::ely::forms::Switch;
 use crate::ely::motion::ProgressBar;
 use crate::ely::primitives::IconName;
 use crate::ely::theme::ControlSize;
+use crate::feedback::WindowToastExt;
 use crate::theme::{Palette, ThemeContext};
 use crate::viz::{self, Field};
 
@@ -107,6 +109,11 @@ enum Write {
     Energy(f32),
     Layers(SoundscapeLayers),
     Params(SoundscapeParams),
+}
+
+enum SessionStart {
+    Scenario(Scenario),
+    Repeat,
 }
 
 /// The two channels the audio thread reads, and nothing else: the device itself lives in the app
@@ -500,7 +507,21 @@ impl SoundscapeSlideover {
         );
     }
 
-    fn start_session(&mut self, scenario: Scenario, window: &mut Window, cx: &mut Context<Self>) {
+    /// Start the last timed session from its original settings.
+    pub fn repeat_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.device.is_none() {
+            let message = self
+                .device_error
+                .as_deref()
+                .map(device_line)
+                .unwrap_or_else(|| "No sound output is available".into());
+            window.push_toast(Toast::new(message), cx);
+            return;
+        }
+        self.start_session(SessionStart::Repeat, window, cx);
+    }
+
+    fn start_session(&mut self, start: SessionStart, window: &mut Window, cx: &mut Context<Self>) {
         if self.device.is_none() {
             return;
         }
@@ -512,7 +533,14 @@ impl SoundscapeSlideover {
             self,
             &repo,
             data::Press::once(|view| &mut view.session_write, "start", ""),
-            move |shell| async move { shell.start_soundscape_scenario(scenario).await },
+            move |shell| async move {
+                match start {
+                    SessionStart::Scenario(scenario) => {
+                        shell.start_soundscape_scenario(scenario).await
+                    }
+                    SessionStart::Repeat => shell.repeat_soundscape_session().await,
+                }
+            },
             |view, updated, cx| {
                 if let Some(state) = updated {
                     view.push(&state);
@@ -542,7 +570,8 @@ impl SoundscapeSlideover {
         );
     }
 
-    fn current(&self) -> Option<&SoundscapeState> {
+    /// Current playback and session details for the drawer and sidebar.
+    pub fn current(&self) -> Option<&SoundscapeState> {
         self.state.value.as_ref()
     }
 
@@ -884,10 +913,7 @@ impl SoundscapeSlideover {
             .when_some(session, |player, session| {
                 let (progress, remaining_ms) = session_timing(session);
                 let minutes = remaining_ms.div_ceil(60_000);
-                let label = Scenario::ALL
-                    .iter()
-                    .find(|scenario| scenario.key == session.scenario)
-                    .map_or("Timer", |scenario| scenario.label);
+                let label = Scenario::label_for(&session.scenario);
                 player.child(
                     div()
                         .flex()
@@ -1017,7 +1043,11 @@ impl SoundscapeSlideover {
                                 )
                                 .on_click(cx.listener(
                                     move |view, _, window, cx| {
-                                        view.start_session(scenario, window, cx);
+                                        view.start_session(
+                                            SessionStart::Scenario(scenario),
+                                            window,
+                                            cx,
+                                        );
                                     },
                                 ))
                             })),

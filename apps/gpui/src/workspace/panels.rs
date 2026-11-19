@@ -24,6 +24,21 @@ impl Workspace {
         }
         let repo = self.repo.clone();
         let panel = cx.new(|cx| crate::soundscape::new(repo, cx));
+        cx.observe(&panel, |view, panel, cx| {
+            if let Some(state) = panel.read(cx).current() {
+                if view.soundscape.value.as_ref() != Some(state) {
+                    view.soundscape.value = Some(state.clone());
+                    cx.notify();
+                } else if state
+                    .session
+                    .as_ref()
+                    .is_some_and(|session| session.running_since_ms.is_some())
+                {
+                    cx.notify();
+                }
+            }
+        })
+        .detach();
         let _ = window;
         cx.notify();
         self.soundscape_panel = Some(panel.clone());
@@ -35,6 +50,16 @@ impl Workspace {
     pub fn open_soundscape(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let panel = self.soundscape_panel(window, cx);
         panel.update(cx, |panel, cx| panel.set_open(true, cx));
+    }
+
+    /// Repeat a timed session from the sidebar without opening the full player.
+    pub(crate) fn repeat_soundscape_session(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let panel = self.soundscape_panel(window, cx);
+        panel.update(cx, |panel, cx| panel.repeat_session(window, cx));
     }
 
     /// The transport, written through the panel: it is the one writer of play and preset, so its

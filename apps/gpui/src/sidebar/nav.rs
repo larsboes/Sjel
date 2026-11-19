@@ -93,6 +93,9 @@ pub fn soundscape(
                 / session.duration_ms.max(1) as f32;
             (remaining.div_ceil(60_000), (progress * 100.).floor() / 100.)
         });
+    let repeat = state
+        .filter(|state| state.session.is_none())
+        .and_then(|state| state.last_session.as_ref());
 
     div()
         .id("soundscape-mini-player")
@@ -161,6 +164,24 @@ pub fn soundscape(
         )
         .when_some(timing, |player, (_, progress)| {
             player.child(ProgressBar::new("soundscape-mini-progress", progress))
+        })
+        .when_some(repeat, |player, saved| {
+            player.child(
+                Button::new(
+                    "soundscape-repeat-session",
+                    format!(
+                        "Repeat {}",
+                        sjel_gpui_core::soundscape::Scenario::label_for(&saved.scenario)
+                    ),
+                )
+                .icon(IconName::Repeat)
+                .variant(ButtonVariant::Ghost)
+                .size(ControlSize::Sm)
+                .full_width()
+                .on_click(cx.listener(|view, _, window, cx| {
+                    view.repeat_soundscape_session(window, cx);
+                })),
+            )
         })
         .when(window.viewport_size().height >= px(640.), |player| {
             player.child(div().flex().justify_between().gap_1().children(

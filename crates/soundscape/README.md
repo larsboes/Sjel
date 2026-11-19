@@ -45,6 +45,10 @@ worst failure mode for an API two clients write to.
 Values outside 0–1 are clamped rather than rejected, but an unknown preset is a 400 with the
 known list, because that one is a real disagreement about what exists.
 
+`{"repeat_last_session": true}` starts a fresh timer with the saved duration, preset, scene
+parameters and energy. It returns a conflict when a timer is active or the conductor has no saved
+session. Send it on its own with an optional `origin`.
+
 ## Port
 
 `8088`, `autostart = false`: nothing depends on this being up, and a soundscape that starts on
@@ -59,4 +63,4 @@ window, so a dragged slider is one disk update. Without an overlay, state stays 
 
 Playback never resumes on process start. A running session is restored as paused with its
 elapsed time preserved. Pausing playback freezes the session clock. Resuming continues from its
-checkpoint.
+checkpoint. The starting settings for the latest timed session remain available after completion.

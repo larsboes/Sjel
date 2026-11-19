@@ -442,6 +442,28 @@ pub struct SoundscapeSession {
 
 pub type Session = SoundscapeSession;
 
+/// Initial settings for the most recently started timed session.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SoundscapeSessionRecipe {
+    pub scenario: String,
+    pub duration_ms: u64,
+    pub preset: Preset,
+    pub params: SoundscapeParams,
+    pub energy: f32,
+}
+
+impl SoundscapeSessionRecipe {
+    /// Start a fresh timer from the recipe.
+    pub fn timer(&self) -> SoundscapeSession {
+        SoundscapeSession {
+            scenario: self.scenario.clone(),
+            duration_ms: self.duration_ms,
+            elapsed_ms: 0,
+            running_since_ms: None,
+        }
+    }
+}
+
 impl SoundscapeSession {
     pub fn remaining_at(&self, now: u64) -> u64 {
         let running = self
@@ -497,6 +519,8 @@ pub struct SoundscapeState {
     pub seed: u32,
     #[serde(default)]
     pub session: Option<SoundscapeSession>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_session: Option<SoundscapeSessionRecipe>,
 }
 
 pub type Scape = SoundscapeState;
@@ -512,11 +536,23 @@ impl Default for SoundscapeState {
             layers: SoundscapeLayers::default(),
             seed: 0,
             session: None,
+            last_session: None,
         }
     }
 }
 
 impl SoundscapeState {
+    /// Save the current timer and its starting sound settings for a future repeat.
+    pub fn remember_session(&mut self, session: &SoundscapeSession) {
+        self.last_session = Some(SoundscapeSessionRecipe {
+            scenario: session.scenario.clone(),
+            duration_ms: session.duration_ms,
+            preset: self.preset(),
+            params: self.params,
+            energy: self.energy,
+        });
+    }
+
     pub fn preset(&self) -> Preset {
         Preset::from_key(&self.preset).unwrap_or(Preset::Edm)
     }
@@ -552,6 +588,8 @@ pub struct SoundscapePatch {
     pub energy: Option<f32>,
     #[serde(default, deserialize_with = "deserialize_session_patch")]
     pub session: Option<Option<SoundscapeSession>>,
+    #[serde(default)]
+    pub repeat_last_session: bool,
     pub origin: Option<String>,
 }
 

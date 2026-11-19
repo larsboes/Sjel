@@ -44,6 +44,14 @@ impl Scenario {
         energy: 0.24,
     };
     pub const ALL: [Self; 4] = [Self::DEEP_WORK, Self::READING, Self::RESET, Self::WIND_DOWN];
+
+    /// Label a saved scenario, including the generic timer.
+    pub fn label_for(key: &str) -> &'static str {
+        Self::ALL
+            .iter()
+            .find(|scenario| scenario.key == key)
+            .map_or("timer", |scenario| scenario.label)
+    }
 }
 
 /// A local recommendation and mix input derived from time and calendar occupancy.
@@ -125,6 +133,16 @@ impl Shell {
             "energy": scenario.energy,
             "playing": true,
             "session": session,
+            "origin": "gpui",
+        });
+        self.json(Method::POST, PROXY_ROUTE_SOUNDSCAPE_STATE, Some(body), 3)
+            .await
+    }
+
+    /// Repeat the conductor's last timed session from the beginning.
+    pub async fn repeat_soundscape_session(&self) -> ShellResult<SoundscapeState> {
+        let body = serde_json::json!({
+            "repeat_last_session": true,
             "origin": "gpui",
         });
         self.json(Method::POST, PROXY_ROUTE_SOUNDSCAPE_STATE, Some(body), 3)

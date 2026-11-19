@@ -448,6 +448,7 @@ focus and playback continues.
 
 The sidebar mini player shows the current mode and session progress. Play, pause and the mode
 buttons work directly in the sidebar. Selecting the current mode's name opens the full player.
+When the timer is clear, the mini player can repeat the last timed session from the beginning.
 **Settings ▸ Appearance ▸ Soundscape mini player** controls its visibility.
 
 ### Why there is a synthesizer in this app

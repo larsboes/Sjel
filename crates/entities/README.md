@@ -15,8 +15,10 @@ People records are C2 data and live in the private overlay's shared store. The s
 Google Contacts synchronization is inbound and read-only. Imported values retain `google` as their source, so later synchronization can distinguish adapter-owned values from facts entered in Sjel.
 
 LinkedIn connections come from `Connections.csv` in LinkedIn's "Get a copy of your data" export.
-`entities-server sync-linkedin <Connections.csv> [--dry-run]` reads the file locally and writes
-through the same sync as Google, with `linkedin` as the source. The profile URL is the external
+`entities-server sync-linkedin <export folder|Connections.csv> [--dry-run]` reads the files
+locally and writes through the same sync as Google, with `linkedin` as the source. Given the
+folder, it also sets `last_contact` from `messages.csv`. It reads only participant URLs and dates,
+never message text, and sets the date only when it is later than the stored one. The profile URL is the external
 ID. A connection matches an existing person by exact name when only one unlinked person has that
 name. LinkedIn never overwrites a value that another source holds, such as a company you entered.
 The export lists only your first-degree connections, so it cannot show who your connections know.

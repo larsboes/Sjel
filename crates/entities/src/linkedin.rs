@@ -2,14 +2,19 @@
 //!
 //! The export lists first-degree connections only: name, profile URL, the email a connection
 //! chose to share, current company and position, and the day the connection was made. It holds
-//! nothing about a connection's own connections. The file is read locally; nothing is sent to
-//! LinkedIn or any other service.
+//! nothing about a connection's own connections. `messages.csv` adds the day of the latest
+//! message with each linked person; only participant URLs and dates are read, never content.
+//! Files are read locally; nothing is sent to LinkedIn or any other service.
 
 use std::collections::BTreeMap;
 
 use serde_json::json;
 
+use crate::store::{EntitiesStore, Patch, StoreError};
 use crate::sync::Incoming;
+
+/// The source of every value this adapter writes, and its external-ID namespace.
+pub const SOURCE: &str = "linkedin";
 
 /// The person fields this adapter writes.
 pub const MANAGED: &[&str] = &["emails", "company", "role", "linkedin", "connected_on"];
@@ -94,6 +99,100 @@ pub fn parse(text: &str) -> Result<Parsed, String> {
         });
     }
     Ok(parsed)
+}
+
+/// The latest message day per participant profile, from the text of `messages.csv`.
+///
+/// # Errors
+/// The text lacks the participant or date columns.
+pub fn last_messages(text: &str) -> Result<BTreeMap<String, String>, String> {
+    let rows = split_rows(text);
+    let Some((header, body)) = rows.split_first() else {
+        return Ok(BTreeMap::new());
+    };
+    let column = |name: &str| header.iter().position(|h| h.trim() == name);
+    let (Some(sender), Some(recipients), Some(date)) = (
+        column("SENDER PROFILE URL"),
+        column("RECIPIENT PROFILE URLS"),
+        column("DATE"),
+    ) else {
+        return Err(
+            "no SENDER PROFILE URL, RECIPIENT PROFILE URLS or DATE column: \
+                    is this a LinkedIn messages.csv?"
+                .into(),
+        );
+    };
+    let mut latest: BTreeMap<String, String> = BTreeMap::new();
+    for row in body {
+        let Some(day) = row
+            .get(date)
+            .and_then(|d| d.trim().get(..10))
+            .filter(|d| entities_api::is_day(d))
+        else {
+            continue;
+        };
+        let urls = row.get(sender).into_iter().chain(row.get(recipients));
+        for url in urls.flat_map(|cell| cell.split([',', ' '])) {
+            let url = url.trim();
+            if url.is_empty() {
+                continue;
+            }
+            let held = latest.entry(profile_key(url)).or_default();
+            if held.as_str() < day {
+                *held = day.to_string();
+            }
+        }
+    }
+    Ok(latest)
+}
+
+/// What a `last_contact` run did.
+#[derive(Debug, Default, PartialEq, serde::Serialize)]
+pub struct ContactReport {
+    pub profiles: usize,
+    pub linked: usize,
+    pub updated: usize,
+}
+
+/// Writes `last_contact` for each person linked to a profile, where the message day is later
+/// than the stored one.
+pub fn apply_last_contact(
+    store: &EntitiesStore,
+    latest: &BTreeMap<String, String>,
+    dry_run: bool,
+) -> Result<ContactReport, StoreError> {
+    let mut report = ContactReport {
+        profiles: latest.len(),
+        ..ContactReport::default()
+    };
+    for (profile, day) in latest {
+        let Some(id) = store.external(SOURCE, profile)? else {
+            continue;
+        };
+        let Some(person) = store.get(&id)?.filter(|e| e.kind == "person") else {
+            continue;
+        };
+        report.linked += 1;
+        let stored = person
+            .values
+            .get("last_contact")
+            .and_then(|v| v.value.as_str());
+        if stored.is_some_and(|s| s >= day.as_str()) {
+            continue;
+        }
+        report.updated += 1;
+        if !dry_run {
+            store.patch(
+                &person.id,
+                &Patch {
+                    values: BTreeMap::from([("last_contact".to_string(), json!(day))]),
+                    source: SOURCE.into(),
+                    ..Patch::default()
+                },
+            )?;
+        }
+    }
+    Ok(report)
 }
 
 /// A profile URL as one key: no query, no trailing slash, lower case, `https`.
@@ -199,6 +298,24 @@ Cy,Nourl,,,,,\r\n";
         assert!(!bo.values.contains_key("emails"));
         assert!(!bo.values.contains_key("company"));
         assert_eq!(bo.values["connected_on"], json!("2019-09-01"));
+    }
+
+    #[test]
+    fn the_latest_message_day_counts_for_every_participant() {
+        let text = "CONVERSATION ID,FROM,SENDER PROFILE URL,TO,RECIPIENT PROFILE URLS,DATE,CONTENT\n\
+c1,Me,https://www.linkedin.com/in/me,Ada,https://www.linkedin.com/in/Ada-Example/,2026-03-01 10:00:00 UTC,hi\n\
+c1,Ada,https://www.linkedin.com/in/ada-example,Me,https://www.linkedin.com/in/me,2026-02-01 09:00:00 UTC,\"a, b\"\n\
+c2,Bo,https://www.linkedin.com/in/bo,\"Me, Cy\",\"https://www.linkedin.com/in/me,https://www.linkedin.com/in/cy\",2025-12-24 08:00:00 UTC,x\n\
+c3,Bo,https://www.linkedin.com/in/bo,Me,https://www.linkedin.com/in/me,undated,x\n";
+        let latest = last_messages(text).unwrap();
+        assert_eq!(
+            latest["https://www.linkedin.com/in/ada-example"],
+            "2026-03-01"
+        );
+        assert_eq!(latest["https://www.linkedin.com/in/bo"], "2025-12-24");
+        assert_eq!(latest["https://www.linkedin.com/in/cy"], "2025-12-24");
+        assert_eq!(latest["https://www.linkedin.com/in/me"], "2026-03-01");
+        assert!(last_messages("a,b\n1,2\n").is_err());
     }
 
     #[test]

@@ -142,7 +142,8 @@ jobs:
       - run: bun tools/ci-run.ts bun-tests
 
   ui-check:
-    name: bun run check (affected UI)
+    # Keep the required check name stable when the verification plan selects a subset.
+    name: bun run check (every discovered UI)
     needs: changes
     if: needs.changes.outputs.ui == 'true'
     runs-on: ubuntu-latest

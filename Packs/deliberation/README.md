@@ -137,7 +137,9 @@ What the port removed, and why:
 
 What the port added: the five council presets, the evidence rule (`[unverified]` marks a claim
 with no pointer and the synthesis reports it), the named minority position, the clerk that makes
-that rule enforceable, the refute-don't-confirm candidate pass in `root-cause`, and the
+that rule enforceable, the refute-don't-confirm candidate pass in `root-cause`, the systems-structure method in
+`root-cause` and the depth passes in `crystallize` (both rewritten from the ideas of LifeOS
+`SystemsThinking` and `IterativeDepth`, no text retained), and the
 progressive-disclosure split — each SKILL.md is a router under 120 lines and every detail sits one
 level down in `references/`.
 

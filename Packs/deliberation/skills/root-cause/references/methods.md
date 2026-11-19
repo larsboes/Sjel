@@ -1,6 +1,6 @@
 # Methods
 
-Six ways to walk from a failure to the condition that allowed it. Pick by the evidence you hold,
+Seven ways to walk from a failure to the condition that allowed it. Pick by the evidence you hold,
 not by the one you know best. Each entry says what it needs, how it runs, and the way it fails —
 every one of these methods has a characteristic wrong answer, and knowing it is most of the skill.
 
@@ -79,6 +79,32 @@ gets its own fix.
 **Fails by:** turning into a narrative with a villain, or into a list of action items nobody sized.
 Every item needs an owner-shaped fix, and the write-up says which of the three parts each one
 addresses.
+
+## Systems structure
+
+**Needs:** a failure that came back after an event-level fix, or a fix that made something else
+worse.
+
+Walk down four layers: the events, the pattern over time, the structure that produces the
+pattern (queues, limits, incentives, feedback), and the assumption that keeps the structure in
+place. Draw the feedback loops that connect the elements. Mark each loop as reinforcing (it
+amplifies change) or balancing (it resists change), and mark every delay. Then match the loops to
+a known shape:
+
+| Shape | Sign | Usual lever |
+|---|---|---|
+| Fixes that fail | The fix works, then a side effect brings the failure back | Trace the side effect before shipping the next fix |
+| Shifting the burden | A workaround removes the pressure to fix the cause | Make the workaround expensive or temporary |
+| Limits to growth | Growth stalls on a constraint nobody named | Find the constraint, not more push |
+| Escalation | Two parties each react to the other | Change one party's goal |
+| Drifting goals | The target moves down to meet performance | Fix the target outside the loop |
+
+Push at the deepest layer that the operator controls. A rule, a goal or a feedback path usually
+moves behavior more than a parameter does. Trace one round of the intervention's own feedback
+before recommending it.
+
+**Fails by:** drawing a diagram instead of a mechanism. Each arrow in a loop needs a fact behind
+it, the same as each link in five whys.
 
 ## Not covered here
 

@@ -394,6 +394,14 @@ pub fn check_value(def: &EntityField, value: &Value) -> Result<Value, String> {
     }
 }
 
+pub fn pair(a: &str, b: &str) -> (String, String) {
+    if a <= b {
+        (a.to_string(), b.to_string())
+    } else {
+        (b.to_string(), a.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -409,13 +417,5 @@ mod tests {
         for bad in [json!(0), json!(-1), json!(1.5), json!("2"), json!(u64::MAX)] {
             assert!(check_value(&field, &bad).is_err(), "accepted {bad}");
         }
-    }
-}
-
-pub fn pair(a: &str, b: &str) -> (String, String) {
-    if a <= b {
-        (a.to_string(), b.to_string())
-    } else {
-        (b.to_string(), a.to_string())
     }
 }

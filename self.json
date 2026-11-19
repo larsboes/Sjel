@@ -290,7 +290,9 @@
       "kind": "capability",
       "service": {
         "kind": "process",
-        "requires": [],
+        "requires": [
+          "inventory"
+        ],
         "port": "8092"
       }
     },
@@ -310,6 +312,16 @@
     {
       "name": "inventory-api",
       "kind": "lib"
+    },
+    {
+      "name": "inventory-wal-backup",
+      "kind": "capability",
+      "service": {
+        "kind": "data",
+        "requires": [
+          "inventory"
+        ]
+      }
     },
     {
       "name": "knowledge",
@@ -609,6 +621,10 @@
     },
     {
       "name": "summarize",
+      "kind": "lib"
+    },
+    {
+      "name": "sync-contract",
       "kind": "lib"
     },
     {
@@ -971,6 +987,16 @@
     {
       "from": "calendar",
       "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/calendar/Cargo.toml"
+      ]
+    },
+    {
+      "from": "calendar",
+      "to": "sync-contract",
       "kinds": [
         "cargo-dep"
       ],
@@ -3812,7 +3838,7 @@
     },
     {
       "name": "turso",
-      "verdict": "watch"
+      "verdict": "evaluate"
     },
     {
       "name": "typst",

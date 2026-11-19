@@ -35,6 +35,20 @@ describe("check-doc-links", () => {
     expect(check(root).broken.map((b) => b.reason)).toEqual(["anchor"]);
   });
 
+  test("HTML anchors use the same file and fragment checks as Markdown links", () => {
+    const root = tree("html", {
+      "a.md": '# Top\n<a href="#top">Top</a> <a HREF=\'b.md#present\'>Present</a>\n'
+        + '<a href="b.md#old-name">Old heading</a> <a href=missing.md>Missing page</a>\n'
+        + '<a title=" href=bogus.md" data-href="also-bogus.md" href="https://example.com">External</a>\n'
+        + '<!-- <a href="comment.md">Comment</a> -->\n\n```html\n<a href="example.md">Example</a>\n```\n',
+      "b.md": "# Present\n",
+    });
+    expect(check(root).broken).toEqual([
+      { file: "a.md", target: "b.md#old-name", reason: "anchor" },
+      { file: "a.md", target: "missing.md", reason: "missing" },
+    ]);
+  });
+
   test("links inside code are examples, and URLs are not checked", () => {
     const root = tree("code", {
       "a.md": "Use `[text](url)` here.\n\n```md\n[x](nowhere.md)\n```\n\n[web](https://example.com/x)\n",
@@ -42,10 +56,11 @@ describe("check-doc-links", () => {
     expect(check(root).broken).toEqual([]);
   });
 
-  test("third-party notices and the overlay template are skipped", () => {
+  test("third-party notices, the overlay template and nested worktrees are skipped", () => {
     const root = tree("skip", {
       "tools/templates/x/README.md": "[up](../Sjel/)\n",
       "tools/distribution/notices/n.md": "[l](LICENSE)\n",
+      ".claude/worktrees/another/docs/index.md": '<a href="not-in-this-checkout.md">Link</a>\n',
       "a.md": "# A\n",
     });
     expect(check(root).broken).toEqual([]);

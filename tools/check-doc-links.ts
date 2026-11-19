@@ -9,7 +9,7 @@ import { dirname, join, normalize, relative } from "node:path";
 
 const SKIP_DIRS = new Set([".git", "node_modules", "target", "vendor", "dist", ".build"]);
 /** Trees whose links resolve somewhere else: third-party notices and the overlay template. */
-const SKIP_PREFIXES = ["tools/distribution/notices/", "tools/templates/"];
+const SKIP_PREFIXES = [".claude/worktrees/", "tools/distribution/notices/", "tools/templates/"];
 
 export type Broken = { file: string; target: string; reason: "missing" | "anchor" };
 
@@ -18,11 +18,13 @@ export function markdownFiles(root: string): string[] {
   const out: string[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      const rel = relative(root, path);
+      if (SKIP_PREFIXES.some(prefix => `${rel}/`.startsWith(prefix))) continue;
       if (entry.isDirectory()) {
-        if (!SKIP_DIRS.has(entry.name)) walk(join(dir, entry.name));
+        if (!SKIP_DIRS.has(entry.name)) walk(path);
       } else if (entry.name.endsWith(".md")) {
-        const rel = relative(root, join(dir, entry.name));
-        if (!SKIP_PREFIXES.some((p) => rel.startsWith(p))) out.push(rel);
+        out.push(rel);
       }
     }
   };
@@ -33,6 +35,16 @@ export function markdownFiles(root: string): string[] {
 /** Removes fenced blocks and inline code, where a link is an example and not a pointer. */
 export function stripCode(text: string): string {
   return text.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, "").replace(/`[^`\n]*`/g, "");
+}
+
+function* linkTargets(text: string): Iterable<string> {
+  for (const link of text.matchAll(/\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)) yield link[1];
+  for (const [tag] of text.matchAll(/<a(?=\s|>)(?:[^'"<>]|"[^"]*"|'[^']*')*>/gi)) {
+    for (const [, name, doubleQuoted, singleQuoted, unquoted] of tag.slice(2, -1).matchAll(/([^\s=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s=<>`]+)))?/g)) {
+      const href = doubleQuoted ?? singleQuoted ?? unquoted;
+      if (name.toLowerCase() === "href" && href?.trim()) yield href.trim();
+    }
+  }
 }
 
 /** GitHub's heading slug: lowercase, drop punctuation, spaces become hyphens, repeats get -n. */
@@ -76,9 +88,8 @@ export function check(root: string): { files: number; broken: Broken[] } {
   const broken: Broken[] = [];
   for (const file of files) {
     const abs = join(root, file);
-    const text = stripCode(readFileSync(abs, "utf8"));
-    for (const m of text.matchAll(/\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)) {
-      const target = m[1];
+    const text = stripCode(readFileSync(abs, "utf8")).replace(/<!--[\s\S]*?-->/g, "");
+    for (const target of linkTargets(text)) {
       if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("//")) continue;
       const [path, fragment] = splitFragment(target);
       const resolved = path ? normalize(join(dirname(abs), decodeURIComponent(path))) : abs;

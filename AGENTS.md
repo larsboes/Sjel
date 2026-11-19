@@ -4,7 +4,7 @@ Load the `sjel` skill (`Packs/harness/skills/sjel/SKILL.md`) for any Sjel operat
 change. It routes to the rules for placement, documentation, verification, data boundaries, and
 commits. For operations, run `sjel help` or `sjel search <task>` before you browse files.
 
-Shared documentation and planning rules live in [CONTRIBUTING.md](CONTRIBUTING.md#documentation).
+Shared documentation and planning rules live in the [engineering guide](docs/architecture/engineering.md#documentation).
 Keep this file as the bootstrap. Link to the owning rule instead of duplicating it here.
 Every harness reads this file, Claude Code included. Do not add a `CLAUDE.md` beside it.
 
@@ -43,10 +43,10 @@ Always:
   sets `autoMemoryEnabled: false`. Machine-specific settings go in `.claude/settings.local.json`.
 - Use Sjel-owned agent behavior or explicitly approved upstream-managed native dependencies.
   Copying does not establish ownership; native approval and activation are separate. Rules:
-  [owned agent components](CONTRIBUTING.md#owned-agent-components).
+  [owned agent components](docs/architecture/engineering.md#owned-agent-components).
 - Reassess repeated routine approvals and wasteful delegation before continuing. Use narrow
   permissions and agents only when they pay for their overhead. Rules:
-  [proportionate approvals and delegation](CONTRIBUTING.md#proportionate-approvals-and-delegation).
+  [proportionate approvals and delegation](docs/architecture/engineering.md#proportionate-approvals-and-delegation).
 - Format replies for low cognitive load, per the `attention-control` skill: the result and its
   verification first, numbered chunks, exact counts and paths, and manual steps in their own
   block with a time estimate.

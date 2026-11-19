@@ -96,6 +96,21 @@ approved runtime components. Retained store snapshots are reference material. Th
 remaining migration work are tracked in [`docs/plans/packs.md`](../../docs/plans/packs.md).
 
 ### Upstream adoption
+### Pack source and attribution
+
+Each Pack keeps its harness-neutral manifest in `pack.toml` and its workflows under `skills/`.
+Adapters own per-harness wiring. They may remove only installations recorded as theirs.
+Claude Code uses `tools/harnesses` and `tools/packs-claude`; the project's tracked settings
+configure hooks and disable automatic memory.
+
+A public skill resolves deployment values at runtime and uses the owning capability's commands
+and contracts. Keep private host details, credentials and presets in the overlay.
+
+Each Pack supplies a README and an SPDX license field. For adaptations and idea-only references,
+record the canonical upstream, reviewed revision or content digest, license, adopted behavior and
+material left upstream. Keep required license and NOTICE texts with the Pack. Preserve lineage
+comments where edits would obscure the source.
+
 
 The [ownership rule](../../CONTRIBUTING.md#owned-agent-components) separates locally maintained
 behavior from reviewed native dependencies. Check the supported native route before rebuilding

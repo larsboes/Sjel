@@ -43,6 +43,7 @@ pub struct Control {
     seed: AtomicU32,
     adapt: AtomicBool,
     activity: AtomicU32,
+    session_progress: AtomicU32,
     params: [AtomicU32; 6],
     layers: [AtomicU32; 5],
 }
@@ -65,6 +66,7 @@ impl Control {
             seed: AtomicU32::new(0),
             adapt: AtomicBool::new(false),
             activity: AtomicU32::new(0.3f32.to_bits()),
+            session_progress: AtomicU32::new(f32::NAN.to_bits()),
             params: std::array::from_fn(|index| {
                 AtomicU32::new(params.get(ParamName::ALL[index]).to_bits())
             }),
@@ -129,6 +131,19 @@ impl Control {
 
     pub fn activity(&self) -> f32 {
         load_f32(&self.activity)
+    }
+
+    /// Publish the conductor's elapsed fraction, or clear it for untimed playback.
+    pub fn set_session_progress(&self, progress: Option<f32>) {
+        let progress = progress.map_or(f32::NAN, |value| value.clamp(0., 1.));
+        self.session_progress
+            .store(progress.to_bits(), Ordering::Relaxed);
+    }
+
+    /// Read the latest elapsed fraction without blocking the audio callback.
+    pub fn session_progress(&self) -> Option<f32> {
+        let progress = load_f32(&self.session_progress);
+        progress.is_finite().then_some(progress)
     }
 
     pub fn set_param(&self, name: ParamName, value: f32) {

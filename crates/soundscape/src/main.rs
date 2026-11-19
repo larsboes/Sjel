@@ -311,6 +311,7 @@ async fn post_state(
     State(app): State<App>,
     Json(patch): Json<Patch>,
 ) -> Result<Json<StateView>, (StatusCode, Json<serde_json::Value>)> {
+    let now = now_ms();
     if let Some(preset) = &patch.preset {
         if !PRESETS.contains(&preset.as_str()) {
             return Err((
@@ -323,7 +324,7 @@ async fn post_state(
         }
     }
     if let Some(Some(session)) = &patch.session {
-        if !session.is_valid(now_ms()) {
+        if !session.is_valid(now) {
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(json!({
@@ -361,6 +362,14 @@ async fn post_state(
         }
         if let Some(session) = patch.session {
             scape.session = session;
+        }
+        let playing = scape.playing;
+        if let Some(session) = scape.session.as_mut() {
+            if playing {
+                session.running_since_ms.get_or_insert(now);
+            } else {
+                session.pause_at(now);
+            }
         }
     }
 
@@ -746,6 +755,48 @@ mod tests {
         let result = post_state(State(app), Json(patch)).await;
         let (status, _) = result.expect_err("unknown session rejected");
         assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn transport_pauses_and_resumes_the_session_clock() {
+        let app = test_app();
+        let start: Patch = serde_json::from_value(json!({
+            "preset": "focus",
+            "playing": true,
+            "session": {
+                "scenario": "deep-work",
+                "duration_ms": 3_000_000,
+                "elapsed_ms": 12_000
+            }
+        }))
+        .expect("start shape");
+        let started = post_state(State(app.clone()), Json(start)).await.unwrap().0;
+        assert_eq!(started.scape.preset, "focus");
+        assert!(started.scape.session.unwrap().running_since_ms.is_some());
+
+        let set_playing = |playing| Patch {
+            playing: Some(playing),
+            ..Patch::default()
+        };
+        let paused = post_state(State(app.clone()), Json(set_playing(false)))
+            .await
+            .unwrap()
+            .0;
+        let checkpoint = paused.scape.session.unwrap();
+        assert!(checkpoint.running_since_ms.is_none());
+        assert!(checkpoint.elapsed_ms >= 12_000);
+        assert_eq!(
+            checkpoint.remaining_at(now_ms().saturating_add(60_000)),
+            checkpoint.remaining_at(now_ms())
+        );
+
+        let resumed = post_state(State(app), Json(set_playing(true)))
+            .await
+            .unwrap()
+            .0;
+        let session = resumed.scape.session.unwrap();
+        assert_eq!(session.elapsed_ms, checkpoint.elapsed_ms);
+        assert!(session.running_since_ms.is_some());
     }
 
     #[test]

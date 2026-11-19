@@ -441,8 +441,9 @@ App Store Connect key can and cannot do, and the one-time steps in the web UI, a
 ## Soundscape: a slideover with its own synth
 
 `⌘0`, `⌘⇧M`, the sidebar's ♪ row, or **Window ▸ Soundscape** slides a 400-point panel in from the right
-edge of the window: a drawn field, the transport, the six presets, volume and energy as full-width
-bars, the twelve-value mixer behind one `mix` disclosure, and the timed scenarios. The same
+edge of the window. The player pairs a live field with the selected mode, play or pause, the
+session countdown and volume. Focus, Relax and Sleep lead the mode selector. Ambient, Lo-fi and
+EDM remain available below it. Timed scenarios and the adaptive mix sit above the mixer. The same
 keystroke, `esc`, the `×`, or the same row in the sidebar slides it away again, and the music keeps
 playing -- the audio device lives in an app global, not in the panel.
 
@@ -461,9 +462,10 @@ oscillators and the clock. A native app has an audio device, so the same contrac
 -- the conductor still owns intent (preset, parameters, layers, seed, session), and
 `core/src/soundscape/` executes it against the device's own sample clock.
 
-- `core/src/soundscape/music.rs` is the browser's musical material, moved to Rust: the chord tables,
-  the EDM motif, the scape scales and roots, the six drift LFOs, the arrangement arc. Two surfaces
-  that sound different while both claiming to play "focus" would be worse than one surface.
+- `core/src/soundscape/music.rs` and `steps.rs` define the native arrangements. Focus uses a soft
+  pulse and a masking bed, Relax holds warmer chords, and Sleep uses sparse low layers. Timed
+  sessions feed elapsed progress into the arrangement. The adaptive mix uses time of day and
+  active committed calendar blocks to adjust density, pulse and brightness within the chosen mode.
 - `synth.rs`, `fx.rs` and `engine.rs` are not a port: voices are fixed slots in an array with a
   closed-form envelope instead of scheduled Web Audio nodes, the room is Freeverb rather than a
   convolution of generated noise (a six-second impulse is a twelve-second FFT), and there is no

@@ -1,13 +1,7 @@
 //! What each preset is made of, and how a scape changes over an hour.
 //!
-//! This is the browser engine's own tables (`crates/soundscape/ui/src/lib/symphony/
-//! audioEngine.ts`), moved to Rust so the plugin and the dashboard play the same piece. The
-//! material is not invented here: chord voicings, motif, scales, roots, the six drift LFOs and
-//! the arrangement arc are all the dashboard's, and a change to one without the other makes two
-//! surfaces that disagree about what a preset is.
-//!
-//! What is *not* ported is the Web Audio graph. Voices, filters and rooms live in `synth.rs` and
-//! `fx.rs`, which say where they deliberately differ.
+//! Fixed performances retain their original scores. Listening modes share the
+//! synthesizer and define their own phrasing and session envelope.
 
 use super::rng::Mulberry32;
 
@@ -128,9 +122,9 @@ pub struct Arrangement {
     pub energy: f32,
     /// Seconds since this preset began, from the audio clock.
     pub elapsed: f32,
-    /// Bring `pace` toward the operator's activity level, when adapting is on.
-    pub adapt: bool,
+    /// Smoothed activity input, with 0.3 as the neutral mix.
     pub activity: f32,
+    pub session_progress: Option<f32>,
 }
 
 impl Arrangement {
@@ -141,8 +135,8 @@ impl Arrangement {
             layers: Layers::default(),
             energy: 0.7,
             elapsed: 0.,
-            adapt: false,
-            activity: 0.,
+            activity: 0.3,
+            session_progress: None,
         }
     }
 
@@ -153,18 +147,29 @@ impl Arrangement {
     /// The slow shape over a scape. Without it a scape is structurally identical at minute 3
     /// and minute 47 -- the only thing moving is six drift LFOs at +-0.08.
     pub fn arc(&self) -> ArcShape {
+        if let Some(progress) = self.session_progress {
+            if self.preset == Preset::Sleep {
+                return sleep_arc(1. - smoothstep(progress));
+            }
+            let arrival = smoothstep(progress / 0.08);
+            let release = smoothstep((progress - 0.86) / 0.14);
+            let energy = (0.34 + 0.48 * arrival) * (1. - 0.82 * release);
+            let mut shape = shape_arc(energy);
+            shape.drums = arrival * (1. - release);
+            shape.phase = if progress < 0.08 {
+                ArcPhase::Settle
+            } else if progress < 0.86 {
+                ArcPhase::Bloom
+            } else {
+                ArcPhase::Ebb
+            };
+            return shape;
+        }
+
         // Sleep does not come back around. It is supposed to end somewhere.
         if self.preset == Preset::Sleep {
             let e = (1. - self.elapsed / 2700.).max(0.);
-            let mut shape = shape_arc(e);
-            shape.phase = if e > 0.66 {
-                ArcPhase::Settle
-            } else if e > 0.33 {
-                ArcPhase::Drift
-            } else {
-                ArcPhase::Still
-            };
-            return shape;
+            return sleep_arc(e);
         }
 
         let cycle = 1080. - 600. * self.params.pace;
@@ -191,8 +196,13 @@ impl Arrangement {
             return self.layers;
         }
         let arc = self.arc();
+        let session_mix = self
+            .session_progress
+            .map_or(1., |_| 0.55 + 0.45 * arc.energy);
         Layers {
             drums: self.layers.drums * arc.drums,
+            bass: self.layers.bass * session_mix,
+            melody: self.layers.melody * session_mix,
             ..self.layers
         }
     }
@@ -203,21 +213,19 @@ impl Arrangement {
         let (rate, phase) = DRIFT[drift_index(name)];
         let mut value = self.params.get(name)
             + 0.08 * (2. * std::f32::consts::PI * rate * self.elapsed + phase).sin();
-        if self.adapt
+        if self.is_scape()
             && matches!(
                 name,
-                ParamName::Density | ParamName::Pace | ParamName::Pulse
+                ParamName::Density | ParamName::Pulse | ParamName::Brightness
             )
         {
             value += (self.activity - 0.3) * 0.18;
         }
         if self.is_scape() {
-            // On top of the drift, never instead of it.
-            let arc = self.arc();
             match name {
-                ParamName::Density => value *= arc.density,
-                ParamName::Pulse => value *= arc.pulse,
-                ParamName::Brightness => value += arc.brightness_add,
+                ParamName::Density => value *= self.arc().density,
+                ParamName::Pulse => value *= self.arc().pulse,
+                ParamName::Brightness => value += self.arc().brightness_add,
                 _ => {}
             }
         }
@@ -309,6 +317,23 @@ impl Arrangement {
     }
 }
 
+fn smoothstep(value: f32) -> f32 {
+    let value = value.clamp(0., 1.);
+    value * value * (3. - 2. * value)
+}
+
+fn sleep_arc(energy: f32) -> ArcShape {
+    let mut shape = shape_arc(energy);
+    shape.phase = if energy > 0.66 {
+        ArcPhase::Settle
+    } else if energy > 0.33 {
+        ArcPhase::Drift
+    } else {
+        ArcPhase::Still
+    };
+    shape
+}
+
 impl Default for Arrangement {
     fn default() -> Self {
         Self::new()
@@ -385,6 +410,24 @@ mod tests {
         arrangement.elapsed = 2700.;
         assert_eq!(arrangement.arc().phase, ArcPhase::Still);
         assert_eq!(arrangement.arc().energy, 0.);
+    }
+
+    #[test]
+    fn a_timed_focus_session_holds_its_mix_then_releases() {
+        let mut arrangement = Arrangement::new();
+        arrangement.preset = Preset::Focus;
+        let shape = |progress| {
+            let mut arrangement = arrangement.clone();
+            arrangement.session_progress = Some(progress);
+            arrangement.arc()
+        };
+        let start = shape(0.);
+        let work = shape(0.35);
+        let end = shape(1.);
+        assert_eq!(work, shape(0.8));
+        assert!(start.energy < work.energy && end.energy < start.energy);
+        assert_eq!(start.drums, 0.);
+        assert_eq!(end.drums, 0.);
     }
 
     #[test]

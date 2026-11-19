@@ -24,7 +24,8 @@ clocks in disagreement about the same bar. `GET /api/soundscape/state` therefore
 phase. The conductor does own a session's duration and elapsed wall time, because every device
 has to agree whether a 50-minute focus session is still running.
 
-**Mood.** Deriving preset and parameters from calendar, presence and activity is separate work.
+**Context suggestions.** The desktop client derives scenario recommendations and optional mix input
+from local time and active committed calendar blocks. The conductor stores the selected playback intent.
 
 ## Endpoints
 
@@ -57,4 +58,5 @@ With `SJEL_PERSONAL_ROOT` configured, the conductor stores the latest scape at
 window, so a dragged slider is one disk update. Without an overlay, state stays in memory.
 
 Playback never resumes on process start. A running session is restored as paused with its
-elapsed time preserved.
+elapsed time preserved. Pausing playback freezes the session clock. Resuming continues from its
+checkpoint.

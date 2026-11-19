@@ -37,6 +37,8 @@ struct Bed {
     /// The previous lowpassed input, which the DC blocker needs and the old version did not keep.
     previous: f32,
     gain: f32,
+    target_gain: f32,
+    gain_step: f32,
 }
 
 impl Bed {
@@ -49,12 +51,15 @@ impl Bed {
             highpass_coefficient: 0.,
             previous: 0.,
             gain: 0.,
+            target_gain: 0.,
+            gain_step: 0.,
         };
         bed.set_filters(900., 0., sample_rate);
         bed
     }
 
     fn set_filters(&mut self, lowpass_hz: f32, highpass_hz: f32, sample_rate: f32) {
+        self.gain_step = 1. - (-1. / (0.25 * sample_rate)).exp();
         self.lowpass_coefficient = 1.
             - (-std::f32::consts::TAU * lowpass_hz.clamp(20., sample_rate * 0.45) / sample_rate)
                 .exp();
@@ -77,6 +82,7 @@ impl Bed {
         let filtered = self.lowpass[1];
         self.highpass = self.highpass_coefficient * (self.highpass + filtered - self.previous);
         self.previous = filtered;
+        self.gain += self.gain_step * (self.target_gain - self.gain);
         self.highpass * self.gain
     }
 }
@@ -239,12 +245,18 @@ impl Engine {
     }
 
     /// Everything the app asked for, read once per block.
-    fn apply_control(&mut self, control: &Control) {
+    fn apply_control(&mut self, control: &Control, seconds: f32) {
         self.arrangement.params = control.params();
         self.arrangement.layers = control.layers();
         self.arrangement.energy = control.energy();
-        self.arrangement.adapt = control.adapt();
-        self.arrangement.activity = control.activity();
+        self.arrangement.session_progress = control.session_progress();
+        let target = if control.adapt() {
+            control.activity()
+        } else {
+            0.3
+        };
+        self.arrangement.activity +=
+            (target - self.arrangement.activity) * (1. - (-seconds / 6.).exp());
         self.master.set_volume(control.volume());
 
         if control.seed() != self.seed {
@@ -307,7 +319,8 @@ impl Engine {
 
     /// Render interleaved frames into `out`, which the device hands over as its own buffer.
     pub fn render(&mut self, out: &mut [f32], channels: usize, control: &Control, visual: &Visual) {
-        self.apply_control(control);
+        let frames = out.len() / channels;
+        self.apply_control(control, frames as f32 / self.sample_rate);
         if self.master.volume() != control.volume() {
             self.master.set_volume(control.volume());
         }
@@ -315,7 +328,6 @@ impl Engine {
             self.update_beds();
         }
 
-        let frames = out.len() / channels;
         for frame in 0..frames {
             // The gate: a paused transport fades out instead of stopping dead, and a faded-out
             // engine retires its voices rather than leaving them to come back mid-note.
@@ -423,13 +435,14 @@ impl Engine {
         self.events.absorb(&played);
 
         // A kick ducks the pads and the bass, which is the whole point of the arrangement.
-        if played.kicks > 0 {
+        if played.kicks > 0 && self.arrangement.preset != Preset::Focus {
             self.duck.trigger();
         }
 
         // The room follows `space` and the echo follows the tempo, once per step: cheap, and
         // frequent enough that a dragged slider is heard within a sixteenth.
         self.tune_effects();
+        self.update_beds();
         self.step += 1;
     }
 
@@ -462,12 +475,18 @@ impl Engine {
         } else {
             0.
         };
-        self.texture.gain = (0.012 + 0.022 * self.arrangement.eff(ParamName::Texture))
+        let (low, high, level) = match self.arrangement.preset {
+            Preset::Focus => (120., 1850. + 1800. * brightness, 1.6),
+            Preset::Relax => (55., 560. + 1250. * brightness, 1.2),
+            Preset::Sleep => (35., 200. + 650. * brightness, 1.25),
+            _ => (0., 250. + 2800. * brightness, 1.),
+        };
+        self.texture.target_gain = level
+            * (0.012 + 0.022 * self.arrangement.eff(ParamName::Texture))
             * texture_level
             * self.arrangement.preset.air();
-        self.texture
-            .set_filters(250. + 2800. * brightness, 0., self.sample_rate);
-        self.vinyl.gain = if self.arrangement.preset == Preset::Lofi {
+        self.texture.set_filters(high, low, self.sample_rate);
+        self.vinyl.target_gain = if self.arrangement.preset == Preset::Lofi {
             0.012 * self.arrangement.layers.get(LayerName::Texture)
         } else {
             0.

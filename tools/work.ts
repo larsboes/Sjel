@@ -84,7 +84,7 @@ export function publication(root: string, version: string, request = gh): Receip
 }
 
 /** Execute local planning operations. Errors are reported by the process boundary. */
-export async function run(args: string[], root = ROOT): Promise<string> {
+export async function run(args: string[], root = ROOT, request = gh): Promise<string> {
   const [command = "list", ...rest] = args;
   if (["--help", "-h", "help"].includes(command)) return USAGE;
   if (command === "inventory") {
@@ -137,7 +137,7 @@ export async function run(args: string[], root = ROOT): Promise<string> {
   }
   if (command === "release-check" && rest.length >= 1 && rest.length <= 2) return `Release acceptance passed at ${checkRelease(root, rest[0], rest[1])}.`;
   if (["receipt", "reconcile"].includes(command) && rest.length === 1) {
-    const receipt = publication(root, rest[0]);
+    const receipt = publication(root, rest[0], request);
     const path = join(root, `docs/releases/receipts/${receipt.version}.json`);
     if (command === "reconcile" || existsSync(path)) {
       const saved = work.receipts.find(r => r.version === receipt.version);

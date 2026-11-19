@@ -49,6 +49,7 @@ remain with [Operations](../operations/index.md#cli-only-coding-installation).
 - [Validate native iOS screens](../tasks/tool-ios-host.md).
 - [Report redacted outgoing findings](../tasks/tool-outgoing-audit.md).
 - [Accept full local CI replay](../tasks/tool-ci-replay.md).
+- [Reuse the website browser smoke check](../tasks/tool-website-browser-smoke.md).
 - [Check an immutable outgoing revision](../tasks/tool-ci-revision.md).
 - [Detect stale repository paths](../tasks/tool-stale-paths.md).
 - [Capture named unpaired phone tabs](../tasks/tool-ios-captures.md).

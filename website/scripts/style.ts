@@ -348,6 +348,8 @@ export function topBar(root: string, current: "home" | "docs" | "reference" | "r
 }
 
 const PAGE_CSS = `
+.skip-link { position: fixed; top: .75rem; left: .75rem; z-index: 110; padding: .5rem .75rem; background: var(--bg); color: var(--fg); }
+.skip-link:not(:focus) { clip-path: inset(50%); }
 main { padding: 2.5rem 0 4rem; }
 .layout { display: grid; grid-template-columns: 17rem minmax(0, 1fr) 15rem; gap: 3.5rem; }
 .layout.two { display: grid; grid-template-columns: 17rem minmax(0, 1fr); gap: 3.5rem; }
@@ -585,13 +587,14 @@ export interface PageOptions {
 }
 
 export function page(opts: PageOptions): string {
+  const article = `<article id="main-content" tabindex="-1">${opts.body}</article>`;
   const main = opts.sidebar
     ? `<div class="layout${opts.toc ? "" : " two"}">
   <aside class="side">${opts.sidebar}</aside>
-  <article>${opts.body}</article>
+  ${article}
   ${opts.toc ? `<aside class="toc">${opts.toc}</aside>` : ""}
 </div>`
-    : `<article>${opts.body}</article>`;
+    : article;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -604,6 +607,7 @@ ${THEME_SCRIPT}
 <style>${TOKENS}${PAGE_CSS}</style>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to content</a>
 ${topBar(opts.root, opts.current)}
 <main><div class="wrap">
 ${main}

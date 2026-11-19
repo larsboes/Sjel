@@ -5,6 +5,18 @@ import { join } from "node:path";
 import { brokenLinks } from "./links.ts";
 import { rewriteHref } from "./markdown.ts";
 import { parseRoutes } from "./routes.ts";
+import { page } from "./style.ts";
+
+test("the skip link precedes navigation and targets the article beyond the sidebar", () => {
+  const html = page({
+    title: "Docs", description: "Docs", root: "../", current: "docs",
+    sidebar: '<nav aria-label="Documentation"></nav>', body: "<h1>Docs</h1>",
+  });
+  const skipLink = '<a class="skip-link" href="#main-content">Skip to content</a>';
+  expect(html.indexOf(skipLink)).toBeGreaterThan(-1);
+  expect(html.indexOf(skipLink)).toBeLessThan(html.indexOf('<nav class="bar"'));
+  expect(html).toContain('<article id="main-content" tabindex="-1"><h1>Docs</h1></article>');
+});
 
 describe("routes", () => {
   test("reads helper calls and Route structs, joins continued lines, and sees a schema", () => {

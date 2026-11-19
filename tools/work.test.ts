@@ -97,14 +97,22 @@ describe("canonical work graph", () => {
     git(root, "add", "."); git(root, "-c", "commit.gpgsign=false", "commit", "-qm", "accepted");
     expect(checkRelease(root, "v0.0.3")).toMatch(/^[0-9a-f]{40}$/);
   });
-  test("publication rejects drafts, missing assets and mismatched tags without writing", () => {
+  test("a published release can be recorded, checked and reconciled without rewriting its receipt", async () => {
     const root = fixture(); put(root, "docs/tasks/a.md", task("task-alpha", "evidence: [Fixture search passed]\n", "done"));
     put(root, "docs/releases/v0.0.3.md", "---\nversion: v0.0.3\ntitle: Notes preview\ntasks: [task-alpha]\nrequired_assets: [sjel.tar.gz]\n---\n# Notes preview\n");
     git(root, "init", "-q"); git(root, "add", "."); git(root, "-c", "commit.gpgsign=false", "commit", "-qm", "accepted");
     git(root, "-c", "tag.gpgsign=false", "tag", "v0.0.3"); const commit = git(root, "rev-parse", "HEAD");
     const remote = { draft: false, tag_name: "v0.0.3", published_at: "2026-11-18T12:00:00Z", html_url: "https://github.com/larsboes/Sjel/releases/tag/v0.0.3", assets: [{ name: "sjel.tar.gz", size: 123, browser_download_url: "https://github.com/larsboes/Sjel/releases/download/v0.0.3/sjel.tar.gz" }] };
     const request = (_root: string, args: string[]) => args[1].includes("git/ref") ? { object: { type: "commit", sha: commit } } : remote;
-    expect(publication(root, "v0.0.3", request).commit).toBe(commit);
+    expect(await run(["receipt", "v0.0.3"], root, request)).toContain("Recorded v0.0.3");
+    const path = join(root, "docs/releases/receipts/v0.0.3.json");
+    const saved = readFileSync(path, "utf8");
+    expect(JSON.parse(saved).commit).toBe(commit);
+    expect(await run(["check"], root)).toContain("1 publication receipts");
+    expect(await run(["reconcile", "v0.0.3"], root, request)).toContain("publication matches its saved receipt");
+    remote.assets[0].size++;
+    await expect(run(["reconcile", "v0.0.3"], root, request)).rejects.toThrow("publication differs from saved receipt");
+    expect(readFileSync(path, "utf8")).toBe(saved);
     remote.draft = true; expect(() => publication(root, "v0.0.3", request)).toThrow("not a published release"); remote.draft = false;
     remote.assets = []; expect(() => publication(root, "v0.0.3", request)).toThrow("receipt");
     expect(() => publication(root, "v0.0.3", (_root, args) => args[1].includes("git/ref") ? { object: { type: "commit", sha: "b".repeat(40) } } : remote)).toThrow("identity differ");

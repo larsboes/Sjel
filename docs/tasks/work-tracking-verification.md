@@ -6,6 +6,7 @@ area: "tooling"
 kind: "maintenance"
 priority: 1
 spec: "docs/architecture/work-tracking.md"
+blocked_by: "No public release is available for live reconciliation"
 ---
 
 # Accept repository work tracking
@@ -23,17 +24,16 @@ Tasks, roadmap views and release preparation share one Markdown authority.
 
 ## Verification
 
-- The isolated repository snapshot validates 261 tasks and 14 outcomes. Relative links resolve
-  across 654 source documents. Website generation, internal links and payload checks pass
-  across 454 generated files.
+- The static site builds from a clean repository snapshot. The generated links, publication
+  payload and all 19 registered repository gates pass.
 - The installed CLI contract passes, including filtered listing by area and state. The focused
   work model, link and CI suites pass 52 tests on Bun 1.4.0. The CLI packaging and lifecycle
   suite passes another 41 tests on that version.
-- Earlier browser checks rendered the roadmap, task metadata and empty Delivered and Releases
-  views, and exercised light and dark themes at desktop width.
+- Chromium verifies Tab and Enter navigation, skip-to-content focus, light and dark themes,
+  and no horizontal overflow at 360, 390, 768, 800 and 1280 CSS pixels. The check covers the
+  roadmap, task index, task detail, Delivered, and documentation navigation.
+- The release fixture writes a receipt for a matching tag and artifact set, reconciles it,
+  and refuses changed remote assets without modifying the saved receipt.
 
-Keyboard activation and narrow-screen layout on the committed site remain unverified. The local
-browser automation engines aborted at startup, and no managed browser session was available.
-Publication reconciliation requires an approved release record and published artifacts. The
-repository currently has no release records or publication receipts. Full repository gates
-remain open.
+Live reconciliation remains open. The repository has no release record or publication receipt,
+and GitHub lists no public release.

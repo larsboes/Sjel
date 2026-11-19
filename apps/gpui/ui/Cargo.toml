@@ -9,6 +9,7 @@ description = "Shared GPUI design system, tokens, and primitives for Sjel deskto
 [features]
 default = ["gpui"]
 gpui = ["dep:gpui-kit", "dep:ely-gpui-component", "dep:image", "dep:mermaid-rs-renderer", "dep:objc2-core-foundation", "dep:objc2-core-graphics"]
+gpui-fast = ["gpui", "ely-gpui-component/gpui-fast"]
 native-maps = ["gpui", "dep:maplibre_native", "dep:metal"]
 # Screens drawn by NSH: UIKit views on the phone, GPUI Fast on the Mac (docs/plans/gpui.md §11).
 nsh = ["dep:nsh-core", "dep:nsh-base"]
@@ -47,20 +48,20 @@ required-features = ["gpui"]
 
 [dependencies.nsh-core]
 git = "https://github.com/longbridge/nsh"
-rev = "1894697155"
+rev = "e2479085c14362f3f42b008a5433c43e4fe16b91"
 optional = true
 
 [dependencies.nsh-base]
 git = "https://github.com/longbridge/nsh"
-rev = "1894697155"
+rev = "e2479085c14362f3f42b008a5433c43e4fe16b91"
 optional = true
 
 [dev-dependencies]
 gpui-kit = { workspace = true, features = ["test-support"] }
 # `ely::init_for_tests`, for window tests that draw Ely components.
 ely-gpui-component = { workspace = true, features = ["test-support"] }
-nsh-engine = { git = "https://github.com/longbridge/nsh", rev = "1894697155", default-features = false }
-nsh-testing = { git = "https://github.com/longbridge/nsh", rev = "1894697155", default-features = false }
+nsh-engine = { git = "https://github.com/longbridge/nsh", rev = "e2479085c14362f3f42b008a5433c43e4fe16b91", default-features = false }
+nsh-testing = { git = "https://github.com/longbridge/nsh", rev = "e2479085c14362f3f42b008a5433c43e4fe16b91", default-features = false }
 # Keeps `Repo` off this machine's real sjel.db in the Projects window tests (core's Cargo.toml).
 sjel-gpui-core = { workspace = true, features = ["test-support"] }
 

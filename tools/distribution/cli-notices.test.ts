@@ -91,14 +91,14 @@ test("HTML converter's source-only archive gets the reviewed grant for its exact
   expect(() => writeRustNotices(root, [{ ...source, license: "Apache-2.0" }], "v0.0.3", "example")).toThrow("no license notice");
 });
 
-test("Xberg's upgraded archive retains its grant and current native-library inventory", () => {
+test.each(["1.4.0", "1.4.2"])("Xberg %s retains its grant and current native-library inventory", (version) => {
   const { root, directory } = fixture();
   rmSync(join(directory, "LICENSE"));
-  writeFileSync(join(directory, "Cargo.toml"), '[package]\nname = "xberg"\nversion = "1.4.0"\nlicense = "MIT"\ninclude = ["/src/**", "/Cargo.toml", "/Cargo.lock", "/LICENSE*", "/README*"]\n');
-  const source = { name: "xberg", version: "1.4.0", license: "MIT", directory };
+  writeFileSync(join(directory, "Cargo.toml"), `[package]\nname = "xberg"\nversion = "${version}"\nlicense = "MIT"\ninclude = ["/src/**", "/Cargo.toml", "/Cargo.lock", "/LICENSE*", "/README*"]\n`);
+  const source = { name: "xberg", version, license: "MIT", directory };
   writeRustNotices(root, [source], "v0.0.3", "example");
-  for (const file of ["xberg-1.3.10.LICENSE", "xberg-1.4.0.THIRD_PARTY_LICENSES.md"]) {
-    expect(readFileSync(join(root, "THIRD_PARTY/rust/xberg-1.4.0", file), "utf8"))
+  for (const file of ["xberg-1.3.10.LICENSE", `xberg-${version}.THIRD_PARTY_LICENSES.md`]) {
+    expect(readFileSync(join(root, `THIRD_PARTY/rust/xberg-${version}`, file), "utf8"))
       .toBe(readFileSync(join(import.meta.dir, "notices", file), "utf8"));
   }
   expect(() => writeRustNotices(root, [{ ...source, version: "1.4.1" }], "v0.0.3", "example")).toThrow("no license notice");

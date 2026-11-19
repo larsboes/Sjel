@@ -9,6 +9,10 @@ Nothing on it runs a capability, and nothing is fetched while a page renders.
 | `/docs/**` | `docs/**/*.md`: user docs and the area plans in `docs/plans/` | `scripts/docs.ts` |
 | `/reference/<unit>.html` | `self.json`, each capability's `const ROUTES` block, the unit's README | `scripts/reference.ts`, `scripts/routes.ts` |
 | `/reference/self-model.html` | `self.json` | `scripts/self-model.ts` |
+| `/roadmap/` | `docs/roadmap/*.md` and canonical tasks | `scripts/roadmap.ts` |
+| `/roadmap/delivered/` | published-release receipts and outcome membership | `scripts/roadmap.ts` |
+| `/releases/` | `docs/releases/*.md` and publication receipts | `scripts/roadmap.ts` |
+| `/docs/tasks/index.html` | open canonical tasks | `scripts/roadmap.ts` |
 
 ## Build and preview
 
@@ -29,8 +33,14 @@ folder's `index.md` comes first, the rest sort by their first heading. Links bet
 relative `.md` paths and become site pages; any other link into the repository becomes the file
 on GitHub. Markdown is rendered by Bun's built-in renderer, so the site has no npm dependency.
 
-The area plans in `docs/plans/` render as the Plans section. `PLAN.md` and `research/` stay on
-GitHub and are linked from the pages.
+The area indexes in `docs/plans/` render as the Plans section and link canonical tasks.
+`PLAN.md` and `research/` stay on GitHub. The [work-tracking contract](../docs/architecture/work-tracking.md)
+defines canonical records. Task pages show metadata and acceptance; individual records stay out
+of the documentation sidebar. The open-task index excludes completed and cancelled work.
+
+Roadmap state derives from required tasks. Delivered history requires a publication receipt;
+a source tag, accepted task or release draft alone never counts as launched. These pages use
+the existing shell and static renderer, without a GitHub API call during the build.
 
 ## Layout
 

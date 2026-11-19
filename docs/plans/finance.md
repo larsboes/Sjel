@@ -1,26 +1,15 @@
-# Finance: investment ideas and research
+# Finance
 
-Ledger, import and price work stays in [data](data.md#5-domain-backlog). Current contracts
-and design rationale belong to [finance](../../crates/finance/README.md).
-
-## Shipped
-
-- Ideas, triggers, research routing, model reviews and the Mac Ideas view are implemented;
-  their write schemas are published (`904c04ff`). The earlier app-implementation task is closed.
-- The first live model review is recorded in `a63cdb6c`; it does not establish recommendation quality.
+Ledger and import work remains in [data](data.md#5-domain-backlog).
+Interfaces and safety rules belong to the [Finance manual](../../crates/finance/README.md).
 
 ## Open
 
-1. Accept the Ideas view in the running app: create, edit, close and reopen an idea; inspect
-   its history, price levels, matched research and review verdict. Compilation does not close
-   this check.
-2. Add Reddit comments and scores only after an operator registers OAuth access and provisions
-   its credential. Until then, the existing public RSS adapter supplies titles and post bodies.
-3. Measure the 30-day and 90-day review track record after enough outcomes exist. Report sample
-   size and distinguish missing prices from scored proposals; do not infer quality from a live call.
+- [Accept the Ideas view](../tasks/finance-ideas-acceptance.md).
+- [Add authenticated Reddit research](../tasks/finance-reddit-access.md).
+- [Measure model-review outcomes](../tasks/finance-review-quality.md).
 
 ## Constraints
 
-Ideas remain finance-owned. Model output is a proposal requiring a human verdict; Sjel places
-no trades. Research must cite supplied source items. Provider access follows the existing
-finance configuration and data-admission rules; this maintenance pass changes neither.
+Ideas remain finance-owned. Model output requires a human verdict; Sjel places no trades.
+Research cites supplied source items. Provider access follows existing data-admission rules.

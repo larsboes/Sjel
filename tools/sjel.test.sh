@@ -26,6 +26,7 @@ contains "$out" "gates"
 contains "$out" "test"
 contains "$out" "cargo <args...>"
 contains "$out" "cv [args...]"
+contains "$out" "work <command>"
 
 # The three pre-push verbs. Each dispatches to a tool that owns the work, so what is
 # asserted here is the contract of the CLI: the verb exists, its help says what it runs,
@@ -78,5 +79,10 @@ contains "$out" "cv linkedin diff"
 contains "$out" "cv linkedin pull"
 [ "$("$SJEL" cv --help)" = "$out" ] || fail "CV help and dispatch disagree"
 contains "$("$SJEL" search cv)" "cv [args...]"
+
+out="$("$SJEL" help work)"
+contains "$out" "release-check"
+contains "$out" "inventory"
+[ "$("$SJEL" work --help)" = "$out" ] || fail "work help and dispatch disagree"
 
 echo "sjel CLI contract passed"

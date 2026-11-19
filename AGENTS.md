@@ -11,8 +11,8 @@ Every harness reads this file, Claude Code included. Do not add a `CLAUDE.md` be
 Before editing:
 
 1. Run `git status --short --branch` and `tools/doctor`.
-2. Derive capabilities, ports, health, and open work from Sjel tools, the area plan in
-   `docs/plans/`, and live metadata. Do not trust remembered prose.
+2. Derive capabilities, ports, health and open work from Sjel tools, `tools/work list`
+   and live metadata. Do not trust remembered prose.
 
 Always:
 
@@ -53,18 +53,19 @@ Always:
 
 ## Working through the plan
 
-[`PLAN.md`](PLAN.md) orders the work by priority. Each area has one plan in
-[`docs/plans/`](docs/plans/) with its state, specs and done-when checks. Rules:
-`Packs/harness/skills/sjel/references/on-documentation.md` (Plans).
+[`PLAN.md`](PLAN.md) owns priority ordering. Canonical tasks and roadmap outcomes follow
+[the work-tracking contract](docs/architecture/work-tracking.md). Area indexes link tasks and
+specifications rather than duplicating task state.
 
 1. Take work from the highest priority in `PLAN.md` that no other session holds. Read its area
    plan before you edit code.
 2. Build to the spec. If the spec is wrong or missing a decision, stop and ask. Do not decide a
    product question in code.
-3. In the same change, update the area plan: shrink shipped work to one line with its commit,
-   record what is still open, and state each check that did not run.
-4. A tooling gap you hit goes to [`docs/plans/tooling.md`](docs/plans/tooling.md) (see Always).
-5. Keep unfinished work and verification gaps current in the area plan. Queue a handoff prompt
+3. In the same change, update the canonical task with acceptance evidence and unrun checks.
+   Completed work leaves active plans; keep no commit breadcrumbs.
+4. A tooling gap gets a canonical task linked from
+   [`docs/plans/tooling.md`](docs/plans/tooling.md).
+5. Keep unfinished work and verification gaps current at their owner. Queue a handoff prompt
    only when requested. Rules: `Packs/harness/skills/sjel/references/on-changes.md`.
 
 A rule the Mac and the phone share goes into a capability or `apps/gpui/core`.

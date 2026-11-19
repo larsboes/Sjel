@@ -28,6 +28,7 @@ Discover Sjel:
   demo up|mac <page>|down        Run the demo stack in a container and screenshot the app on it
 
 Check a change before pushing it:
+  work <command>                 Repository tasks, roadmap and release acceptance
   maintenance [--json] [--unused] [--freshness] [--licenses]
                                  Read-only plan, contract, dependency and license evidence
   check                          Run the quick CI subset for this change (pre-push runs it)

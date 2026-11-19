@@ -15,8 +15,8 @@ health. The [generated architecture](../../ARCHITECTURE.md) describes public dec
 CLI-only preview archives are prepared independently of desktop and node delivery. The target
 app delivery is a notarized Mac DMG, a native iOS app distributed through TestFlight, and a
 prebuilt headless node with optional capability packages. Source installation remains
-the developer path. These release tools prepare files; they do not establish that a new user
-can complete setup. Track the remaining acceptance work in [#235](https://github.com/larsboes/Sjel/issues/235).
+the developer path. Clean-user acceptance is tracked separately for the
+[CLI preview](../tasks/cli-preview-acceptance.md) and [Mac distribution](../tasks/distribution-clean-mac.md).
 
 ### CLI-only coding installation
 

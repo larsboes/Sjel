@@ -5,7 +5,7 @@ new work, make product decisions, publish, deploy, send messages or change acces
 
 ## Preflight with the user present
 
-1. Resolve the task queue, owning area plans, acceptance checks, writable files and exclusions.
+1. Resolve the approved canonical tasks, acceptance checks, writable files and exclusions.
    Agree TDD test seams before starting. A missing spec or product decision blocks that task.
 2. Complete authentication, project trust and required dependency installations. Package changes
    still require approval. Keep all secret guards and capability permission modes enabled.
@@ -30,12 +30,12 @@ Use `pi --session-id <id>` from the same directory to resume that session.
   attended session. Do not convert a recommended answer into consent.
 - Check progress against executable evidence. After three attempts with the same failure and no
   new evidence, stop that task, record the failed assumption and continue only independent work.
-- Checkpoint the owning area plan after each completed task. Finish when the queue is complete,
+- Update the canonical task with evidence after each completed task. Finish when the queue is complete,
   the agreed limit is reached, or every remaining task is blocked. Report checks that did not run.
 
 ## Skill boundaries
 
-Use Sjel's owned coding guidance and the owning area plan for implementation and verification.
+Use Sjel's owned coding guidance and the canonical task for implementation and verification.
 Load named skills through Pi's file reader. Upstream skill snapshots are reference material,
 not runtime instructions; do not load or reactivate held units. Sjel's placement, data,
 verification and Git rules remain in force. Learning tasks use the owned vault-based `teach`

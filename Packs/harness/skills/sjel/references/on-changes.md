@@ -23,8 +23,8 @@ That branch is its work branch: the session opens a draft PR from it rather than
    primary checkout's `target/release/` is what the services run.
 3. Push with `git push -u origin <area>-<slug>`, then follow
    [the pull request procedure](#prepare-a-pull-request).
-4. The PR lands as a **squash merge**: one commit on `main` per work package, which is the commit
-   the area plan names. The agent merges only when the user said so for that work package or in
+4. The PR lands as a **squash merge**: one commit on `main` per work package. The canonical task
+   records acceptance evidence. The agent merges only when the user said so for that work package or in
    the current request. Otherwise it stops at a green, ready PR.
 5. After the merge, `sjel worktree remove <area>-<slug>` removes the worktree and the local branch.
    It refuses uncommitted changes, and commits on no remote unless their PR was merged.
@@ -58,12 +58,12 @@ out of the pull request. Mark it ready once CI passes.
 
 ## Hand off unfinished work
 
-Keep the area plan current as work progresses and before stopping: built work, open work,
-decisions and checks that did not run belong there. Do not automatically queue handoff prompts.
+Keep the canonical task current as work progresses and before stopping: acceptance evidence,
+blocking decisions and checks that did not run belong there. Do not automatically queue handoff prompts.
 When the user requests a handoff:
 
-1. Write the durable part into the area plan first: decisions, work that is built, work that is
-   open, and checks that did not run. The prompt points at the plan. It does not repeat it.
+1. Update the canonical task first: acceptance evidence, unfinished work, blocking decisions
+   and unrun checks. The prompt links the task rather than repeating it.
 2. Put only the volatile part into the prompt: commits that are not pushed, the state of the
    build, files that another session holds, and the first question for the user.
 3. Queue the prompt with `comms prompts add --title "Sjel handoff: <area> (<date>)"`, and pass

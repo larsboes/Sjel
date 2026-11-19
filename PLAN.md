@@ -1,116 +1,73 @@
 # Sjel plan
 
-The one ordered plan for Sjel. It orders the work by priority and names where each area stands.
-It is not a task list and it holds no decisions. What Sjel is and how it is shaped is in
-[`docs/product.md`](docs/product.md). Each area has one file in
-[`docs/plans/`](docs/plans/). Concrete, testable work can also be a GitHub Issue.
+[Canonical tasks](docs/tasks/index.md) own acceptance, state, priority and evidence. Run
+`tools/work list` for open work. [Roadmap outcomes](docs/roadmap/index.md) group public benefits;
+[release records](docs/releases/index.md) own bounded scope and verified delivery. GitHub Issues
+provide intake and discussion, not a second task database.
+
+[Area indexes](docs/plans/index.md) link tasks and longer specifications. Completed work leaves
+active plans; Git history retains it without commit breadcrumbs.
 
 ## Priority 0: concrete failures in existing use
 
 Repair verified data-loss, restore, authorization and publication defects before dependent work.
-Keep existing protections in force. An entire agent or security roadmap is not a Priority 0 gate.
-Backup and restore checks belong to [`storage.md`](docs/plans/storage.md); verification failures
-belong to [`tooling.md`](docs/plans/tooling.md). Diagnose a stale receipt before choosing a fix.
+Diagnose a stale receipt before choosing a fix. An entire agent/security roadmap is not a failure
+gate. [Storage](docs/plans/storage.md) and [Tooling](docs/plans/tooling.md) link the relevant tasks.
 
 ## Priority 1: unify and reduce maintenance
 
-Code unification, cleanup, precision and less repeated work precede agent features. The
-[maintenance review](research/plan-maintenance-review.md) records the evidence and candidate
-tools. The first four items build the shape in the [product page](docs/product.md).
-Finish their remaining work before any other framework or surface is introduced. The linked
-area plans distinguish shipped implementation, outstanding acceptance and undecided scope.
+Finish existing contracts and acceptance before introducing another framework or surface:
 
-1. One registry for `projects`: shipped `a5942b22`
-   ([`data.md`](docs/plans/data.md#registry-derived-project-views)).
-2. One folder of Markdown files for prose: shipped `0cd23b7f`. Installed-app note-path search
-   acceptance is open ([`storage.md`](docs/plans/storage.md#one-vault-for-prose)).
-3. Derived views in the Mac app: shipped `2029238f`, accepted at `627805fd`. The
-   horizontal-gesture check is open ([`gpui.md` §11](docs/plans/gpui.md#derived-views)).
-   Mac pages take their controls from Sjel's Ely fork
-   ([`gpui.md` §11](docs/plans/gpui.md#components-from-ely)).
-4. Audit every capability against the build rule in the
-   [product page](docs/product.md#what-sjel-builds-ingests-and-links-to): build,
-   ingest or link out. A capability that fails the rule shrinks to a connector or a link.
-   Findings and remaining reductions: [`product.md`](docs/plans/product.md).
-5. Reconcile plans with source: remove shipped detail, repair stale paths, keep one owner per
-   open item, and distinguish implemented work from outstanding live acceptance.
-6. Finish shared API contracts and remove remaining client copies and adapters
-   ([`restructure.md`](docs/plans/restructure.md)). Verify existing API crates before extracting
-   more. Directory renames and workspace consolidation need a measured benefit.
-7. Reuse existing UI primitives, readers and platform controls; remove superseded code after
-   equivalent behavior is verified ([`gpui.md`](docs/plans/gpui.md)).
-8. Make routine maintenance automatic: reuse installed dependency scanners, evaluate an upstream
-   skill detector, and reduce repeated review through evidence tied to content and policy
-   ([`tooling.md`](docs/plans/tooling.md)). Scanner adoption does not waive current admission rules.
-9. Remove unused dependencies and confirmed duplication, then shorten owner documentation and
-   comments. Preserve domain boundaries and public contracts; fewer lines alone is insufficient.
+- [Installed note-path search](docs/tasks/storage-note-search.md).
+- [Derived views and shared UI controls](docs/plans/gpui.md#derived-views).
+- [Capability boundaries](docs/plans/product.md).
+- [Work-tracking acceptance](docs/tasks/work-tracking-verification.md).
+- [Shared API contracts](docs/plans/restructure.md).
+- [Maintenance and owner-document reduction](docs/plans/restructure.md).
+
+Directory/workspace changes require measured benefit. Scanner adoption does not waive admission
+rules. Fewer lines alone do not establish better boundaries or equivalent behavior.
 
 ## Priority 2: finish daily workflows
 
-Complete existing behavior and its acceptance checks before expanding the surface:
+- Mac Documents, Mail, Calendar and Travel: [GPUI](docs/plans/gpui.md).
+- Restore proof and domain sync contracts: [Storage](docs/plans/storage.md).
+- Import routing, idempotency and review: [Data](docs/plans/data.md).
+- Existing-result validation: [Transit](docs/plans/transit.md), [Finance](docs/plans/finance.md).
+- Fresh-user CLI installation: [preview acceptance](docs/tasks/cli-preview-acceptance.md).
 
-| Area | Next boundary | Plan |
-|---|---|---|
-| Documents, Mail, Calendar and Travel | Mac acceptance, missing writes and offline correctness | [`gpui.md`](docs/plans/gpui.md) |
-| Storage | Restore proof and domain sync contracts; engine migration only with compatibility evidence | [`storage.md`](docs/plans/storage.md) |
-| Imports and domain data | Correct routing, idempotency and review of existing pipelines | [`data.md`](docs/plans/data.md) |
-| Transit and Finance | Validate existing results before more collection or model features | [`transit.md`](docs/plans/transit.md), [`finance.md`](docs/plans/finance.md) |
-| Installation | Fresh-user installation | [#235](https://github.com/larsboes/Sjel/issues/235) |
-
-Unification required to finish these workflows stays in Priority 1. A live check remains open
-even when compilation and unit tests pass.
+Compilation and unit tests do not close live acceptance. Engine migration requires compatibility
+evidence; public release and publication checks remain separate from source completion.
 
 ## Priority 3: agent features and expansion
 
-- Agent UI, terminal conveniences, plugins, Pi comparison, retrieval and optimization loops:
-  [`agent.md`](docs/plans/agent.md). Saved and live views, which a model composes, follow the
-  derived views of Priority 1 ([`gpui.md` §11](docs/plans/gpui.md#derived-views)).
-  Existing containment remains;
-  additional harness support follows [`containment.md`](docs/plans/containment.md).
-- Pack deployment levels and account synchronization: [`packs.md`](docs/plans/packs.md).
-  Defects in current installation integrity can rise to Priority 0 or 1.
-- Soundscape's calendar and presence join:
-  [`product.md`](docs/plans/product.md#open-boundary-work).
-- New learning surfaces and automation: [`learning.md`](docs/plans/learning.md).
-- New home integrations: [`homes.md`](docs/plans/homes.md).
-- Website polish and media: [`website.md`](docs/plans/website.md).
-- Social post drafting, review and later publishing: [`posts.md`](docs/plans/posts.md).
+[Agent](docs/plans/agent.md), [Containment](docs/plans/containment.md),
+[Packs](docs/plans/packs.md), [Learning](docs/plans/learning.md), [Homes](docs/plans/homes.md),
+[Website](docs/plans/website.md) and [Posts](docs/plans/posts.md).
 
-The priority order here supersedes older area-local ordering. Deferred work retains its
-acceptance check; deferral does not authorize a replacement architecture.
+Existing containment remains in force. Current integrity defects can rise in priority; new
+features do not. [Soundscape's context join](docs/tasks/soundscape-context.md) follows this tier.
 
 ## Priority 4: deferred iPhone work
 
-iPhone-specific implementation and physical-device acceptance follow Priorities 1–3. This
-includes registry views, phone workflows, standalone synchronization and RoomPlan device
-acceptance ([`gpui.md`](docs/plans/gpui.md), [`storage.md`](docs/plans/storage.md),
-[`scanning.md`](docs/plans/scanning.md)). Mac work and shared contracts retain their existing
-priority. Shipped phone implementations keep their outstanding acceptance checks.
-
-## Continuous
-
-- Tooling gaps agents hit while working: [`tooling.md`](docs/plans/tooling.md).
+iPhone-specific implementation and physical-device acceptance follow Priorities 1–3, including
+standalone sync and [Scanning](docs/plans/scanning.md). Mac work and shared contracts retain their
+own priority. Implemented phone paths keep their outstanding device checks.
 
 ## Success measures
 
-Each needs a command or log query that shows its current value.
-
 | Measure | Probe | Threshold |
 |---|---|---|
-| Data about other people leaves the machine only as `trusted_view` to a `c2` provider | `comms egress-log --audit` | 0 C2 violations |
-| A trip is planned fast | One real trip, from request to bookable legs | Under 30 minutes |
-| A question that needs three sources is answered from one place | One real question a week, logged with the sources it joined | No manual lookup in a source tool |
-| A mail that concerns a project appears on that project | Replay of one week of mail against `projects` | No manual step |
+| Other people's data leaves only as trusted_view to a c2 provider | comms egress-log --audit | 0 c2 violations |
+| A trip reaches bookable legs | One real trip | Under 30 minutes |
+| One question joins three sources | One real question weekly, with sources logged | No manual source-tool lookup |
+| Project-relevant mail reaches its project | Replay one week of mail | No manual step |
 
-## Decisions
+<a id="decisions"></a>
 
-This plan holds none. A decision is stated in the document that owns its subject, in the present
-tense: the [product page](docs/product.md) for what Sjel is, a capability's README for
-that capability, the area plan for work that is still open. Git records when it changed.
+## Ownership
 
-## Rules for this plan
-
-- One file per area. A new file earns its place only when no area owns the work.
-- A shipped work package shrinks to one line with its commit.
-- One owner per fact. Link to the owner instead of restating it.
-- History lives in Git. A date appears only on a measurement or a deadline.
+The [product page](docs/product.md) owns product scope. Capability READMEs own capability
+contracts; architecture owns cross-cutting specifications; tasks own work and evidence.
+Decisions live with the subject they govern, not in this priority index. Deferral preserves its
+acceptance check and never authorizes a replacement architecture.

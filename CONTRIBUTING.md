@@ -9,13 +9,12 @@ operator-specific policy.
 Name the consumer and the outcome. An interesting technology without a concrete Sjel consumer
 remains an idea, not an implementation commitment.
 
-Use GitHub Issues for concrete work that a maintainer or contributor can test or complete. Name
-the consumer, outcome, and acceptance check. Use `type:idea` for experiments that may conclude
-not to build.
+GitHub Issues provide reports and discussion. Canonical tasks live in [`docs/tasks/`](docs/tasks/)
+with an outcome and acceptance checks. `tools/work list` shows open work; area indexes link the
+records rather than duplicating them.
 
-Open work that is not yet an issue lives in [`PLAN.md`](PLAN.md) and the area plans in
-[`docs/plans/`](docs/plans/). Move enduring behavior into code, tests, or the owning docs. Comments
-explain local invariants, not dated decisions. Git keeps the history.
+The [work-tracking contract](docs/architecture/work-tracking.md) owns lifecycle, roadmap and
+release rules. Move enduring behavior into code, tests or owner manuals. Git keeps history.
 
 Before external code or adopted design influence enters the tree, record its canonical source in
 `upstreams.toml`. Record the license and verdict there too, then state precisely what Sjel
@@ -187,7 +186,7 @@ technical documents; each rule has one owner. Code comments and READMEs link to 
 ## Product rules
 
 Every change keeps to these. Rules 1, 4 and 5 describe the target behaviour; the README's
-[State](README.md#state) table shows how much of it is built.
+[product status](README.md#where-it-stands) links the remaining acceptance checks.
 
 1. A task runs on the best model the device can reach: its own Apple model, then the Mac's, then
    deterministic rules. The result shows which one answered.
@@ -776,15 +775,13 @@ permanent provenance.
 
 ### Issues and plans
 
-Use GitHub Issues for discrete work that someone can test or complete. State the consumer,
-outcome, and acceptance check. `type:idea` marks an experiment that may end without an
-implementation. Issues remain open to outside reports as well.
+Tasks, roadmap outcomes and release records follow the
+[work-tracking contract](docs/architecture/work-tracking.md). GitHub Issues remain intake and
+discussion; link canonical tasks rather than synchronize task bodies.
 
-[`PLAN.md`](PLAN.md) is the one ordered plan: it orders the work by priority and records the
-decisions that span areas. Each area has one file in [`docs/plans/`](docs/plans/), with its state,
-open work and done-when checks. A plan is not a source of truth.
-Code and tests own implemented behavior. Shipped interfaces belong in the owner's technical manual and are verified by its doctor or
-self-test.
+[`PLAN.md`](PLAN.md) owns priority ordering. Area indexes link canonical tasks and
+specifications. Active plans contain no completed entries, including commit breadcrumbs. Acceptance evidence belongs to task records; delivered history
+comes from published-release receipts. Code, tests and owner manuals describe current behavior.
 
 ## Placement guide
 
@@ -801,9 +798,11 @@ self-test.
 | Machine fact or private state | Active overlay | Resolve it dynamically; never copy it into public prose |
 | Shared operator logic | `tools/lib/` | Source it from every caller |
 | Technical manual & specs | `docs/` | Bounded interface specifications and architecture diagrams |
-| Interesting unjudged lead | Owning README or relevant `docs/` section | Track a runnable experiment in a `type:idea` issue; apply the provenance gate before adoption |
-| Concrete work someone can test or do | GitHub Issue | State the consumer, outcome, and acceptance check |
-| Open work that is not yet an issue | The area plan in `docs/plans/` | Give it a done-when check. Move lasting truth to code, tests, or owner docs once built |
+| Interesting unjudged lead | Owning README or relevant `docs/` section | Track a runnable experiment in an investigation task; apply the provenance gate before adoption |
+| Concrete work someone can test or do | `docs/tasks/<slug>.md` | State the outcome and observable acceptance; link GitHub intake if present |
+| Public roadmap outcome | `docs/roadmap/<slug>.md` | Link required tasks; derive state rather than repeat it |
+| Release scope and upgrade notes | `docs/releases/<version>.md` | Publication receipts establish delivery; a draft does not |
+| Area entry point | `docs/plans/<area>.md` | Link canonical tasks and specifications; do not duplicate lifecycle or acceptance |
 
 ## Control surface
 

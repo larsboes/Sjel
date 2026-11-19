@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# tools/work — canonical tasks, roadmap and release acceptance.
+set -euo pipefail
+exec bun --no-env-file "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/work.ts" "$@"

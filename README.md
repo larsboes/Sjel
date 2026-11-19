@@ -58,29 +58,20 @@ wanted features fast
 What's left has good ideas, some well-built parts and some sloppy ones. I want to clean it up.
 Expect AI-polished text throughout, because I trust my drafts more after an AI pass.
 
+<a id="state"></a>
+
 ## Where it stands
 
-Sjel is one native Rust app in [`apps/gpui`](apps/gpui/README.md):
-[GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) draws the Mac and
-[NSH](https://github.com/longbridge/nsh) draws the iPhone with UIKit views, over one shared core.
-Linux, Windows and Android come later from the same code.
+| Surface | Current scope | Open acceptance |
+|---|---|---|
+| CLI | Checkout-free preview archives for macOS ARM64 and Ubuntu 24.04-class Linux x86-64 and ARM64. | [Clean-user CLI installation](docs/tasks/cli-preview-acceptance.md). |
+| Mac | [Native GPUI app](apps/gpui/README.md#native-renderers-shared-models). | [Mac daily workflows](docs/plans/gpui.md#mac-daily-workflows) and [clean-user installation](docs/tasks/distribution-clean-mac.md). |
+| iPhone | [NSH app with a local replica](apps/gpui/README.md#workspace-and-the-ios-app). | [Paired-phone navigation](docs/tasks/gpui-phone-navigation.md), [agent sessions](docs/tasks/agent-client-phone.md), [remote terminal](docs/tasks/agent-terminal-phone.md) and [TestFlight delivery](docs/tasks/distribution-testflight.md). |
+| Website | [Technical documentation and roadmap](https://larsboes.github.io/Sjel/). | [App screenshots and demo media](docs/tasks/website-demo-media.md). |
 
-| Part | Today |
-|---|---|
-| CLI and coding tooling | Checkout-free preview for macOS ARM64 and Ubuntu 24.04-class Linux x86-64/ARM64. See [Install](#install). |
-| Mac app | 25 main pages. Travel, Map, Inventory and Wishlist are partly built ([route matrix](docs/plans/gpui.md#1-route-matrix)). |
-| iPhone app | NSH screens inside a Swift host, sharing the Mac app's Rust core, on TestFlight as `Sjel Life`. It pairs with the Mac over Bonjour and keeps a local LibSQL copy that syncs both ways. |
-| Public page | [larsboes.github.io/Sjel](https://larsboes.github.io/Sjel/). Screenshots of the native app are open ([`restructure.md` §4](docs/plans/restructure.md#4-the-public-page)). |
-| Capabilities | 27 of the 48 directories in `capabilities/` are Rust crates. Most of the rest are manifests around a timer or an external tool. |
-
-Not everything becomes Rust. The menu bar companion and the CloudKit relay in `apps/mac` are
-Swift, and so is the iOS host that owns the window. The `tools/` scripts are a mix of shell and
-TypeScript.
-
-The current priority is unification and less maintenance, then finishing the daily workflows
-([`PLAN.md`](PLAN.md#priority-1-unify-and-reduce-maintenance)). The phone is the daily tool for
-six areas: the Sjel agent, other coding agents through a terminal on the Mac, travel, documents,
-mail and calendar.
+[The plan](PLAN.md) sets priorities. The [product guide](docs/product.md) describes the intended
+scope, and the [security contract](docs/architecture/security.md) describes the implemented data
+and agent access boundaries.
 
 ## Two surfaces: calm on the glass, open in the terminal
 
@@ -127,22 +118,6 @@ smart. Using and maintaining it may not require that smartness.
   Mac), and everything else holds a reference to it.
 - No setup step that only its author remembers. If a step must be done by hand, a tool does it
   (`tools/setup-secret.sh`) and `tools/doctor` reports it when it is missing.
-
-## State
-
-| Feature | State |
-|---|---|
-| Typed people, places, trips, money, home and calendar, with a source on every value | Built |
-| Native Mac app (GPUI) | Built. Most pages are ported. See [Where it stands](#where-it-stands). |
-| Native iPhone app (NSH) with a local copy, paired by device key | Built. Tabs: Today, Mail, Documents, Calendar, Travel, Agent. The NSH build has not passed simulator rendering or a device check yet ([`gpui.md` §11](docs/plans/gpui.md#11-ui-stack)). Offline timing is not measured. |
-| Sjel agent on the phone: sessions, approvals, three access tiers, a command policy | Built, not yet tested on a device ([`agent.md`](docs/plans/agent.md)). |
-| Terminal on the Mac from the phone, behind Face ID | Built, not yet tested on a device. |
-| Same Wi-Fi, Tailscale and own-server connections | Connection paths implemented. Listener, credentials and deployment setup are required. |
-| Pseudonymizer in front of cloud model calls and admitted agent reads | Implemented for `comms` cloud calls and capabilities that admit the agent gate. The [access policy](docs/architecture/security.md#agent-access-policy) controls admission. |
-| Data about other people sent to a cloud model pseudonymized, or synced end-to-end encrypted | Target |
-| Model selection: device model or local decision engine, with heuristic fallback | Selection and fallback paths implemented. Available models depend on the device and configured services. |
-| Small install with optional downloadable capabilities | CLI-only preview archives are built and smoke-tested. Mac DMG, node and native iOS delivery remain preparation paths. First-run setup and clean-user acceptance remain open ([#235](https://github.com/larsboes/Sjel/issues/235)). |
-| iCloud connection, encrypted by Sjel | Relay built and tested (`apps/mac`). Nothing syncs through it yet. |
 
 <a id="install-the-cli"></a>
 

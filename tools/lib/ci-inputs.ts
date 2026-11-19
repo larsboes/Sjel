@@ -19,6 +19,7 @@ export const GATES: Record<string, { cmd: string[]; inputs: string[]; cheap: boo
   "manifest-integrity": gate("check-manifest-integrity", ["**/service.toml", "crates/*/**", "services/*/**", "capabilities/*/**"]),
   "doc-self-references": gate("check-doc-self-references", ["**/*.md"]),
   "doc-links": gate("check-doc-links", ["**/*.md", "tools/check-doc-links.ts"]),
+  "work": gate("check-work", ["docs/tasks/**", "docs/roadmap/**", "docs/releases/**", "tools/work.ts", "tools/lib/work.ts"]),
   "skill-metadata": gate("check-skill-metadata", METADATA),
   "skill-metadata-test": gate("check-skill-metadata.test", METADATA, false),
   "presentations-theme-contract": gate("check-presentations-theme-contract", PALETTE),

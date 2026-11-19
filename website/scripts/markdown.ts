@@ -4,7 +4,8 @@
 // docs/ becomes the matching page on the site, an in-repository link becomes the
 // file on GitHub, and an external or in-page link is left alone.
 import { posix } from "node:path";
-import { REPO } from "./style.ts";
+import { esc, REPO } from "./style.ts";
+import { document } from "../../tools/lib/work.ts";
 
 export const CONTENT = "docs";
 
@@ -41,7 +42,15 @@ export function rewriteHref(href: string, from: string, page: string): string {
 }
 
 export function renderMarkdown(src: string, from: string, page: string): Rendered {
+  let properties = "";
+  if (src.startsWith("---\n") || src.startsWith("---\r\n")) {
+    const { meta, body } = document(src, from);
+    src = body;
+    const fields = ["id", "state", "area", "kind", "priority", "assignee", "blocked_by", "depends_on", "evidence", "reason", "issue", "spec", "target_release"];
+    properties = `<dl>${fields.filter(key => meta[key] !== undefined).map(key => `<dt>${esc(key.replaceAll("_", " "))}</dt><dd>${esc(Array.isArray(meta[key]) ? (meta[key] as unknown[]).join("; ") : String(meta[key]))}</dd>`).join("")}</dl>`;
+  }
   let html = Bun.markdown.html(src, { headings: { ids: true } });
+  if (properties) html = html.replace(/(<h1[^>]*>[\s\S]*?<\/h1>)/, "$1" + properties);
   html = html.replace(/<!--[\s\S]*?-->/g, "");
   html = html.replace(/(<a\s[^>]*href=")([^"]+)(")/g, (_, a, href, b) => a + rewriteHref(href, from, page) + b);
   html = html.replace(/(<img\s[^>]*src=")([^"]+)(")/g, (_, a, src, b) => {

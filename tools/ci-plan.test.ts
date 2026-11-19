@@ -125,13 +125,13 @@ test("CI triggers preserve an uncancelled daily full run and explicit reusable f
   }
 });
 
-test("planner edits widen every surface and local mode includes untracked files", () => {
+test.each(["tools/ci-plan.ts", ".bun-version"])("local changes to %s require full verification", (path) => {
   const f = fixture();
   try {
-    f.put("tools/ci-plan.ts", "changed planner\n");
+    f.put(path, "changed verification input\n");
     const plan = createPlan(f.root, f.base, false, true);
     expect(plan.full).toBe(true);
-    expect(plan.files).toContain("tools/ci-plan.ts");
+    expect(plan.files).toContain(path);
     expect(plan.security.codeql).toHaveLength(4);
     expect(plan.pages).toBe(true);
     expect(plan.security.deps).toBe(true);

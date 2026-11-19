@@ -77,7 +77,9 @@ planner change or selection failure selects full verification. Actions summaries
 base, selected and skipped surfaces, reasons and recent full-verification history.
 
 The CI workflow runs full verification daily at 03:23 UTC, on published releases and on manual
-dispatch. Distribution preparation calls full CI at the caller revision before building
+dispatch. CI and distribution use [the repository Bun pin](.bun-version). The
+[Bun compatibility workflow](.github/workflows/bun-latest.yml) tests CLI packaging against the
+latest Bun weekly. Distribution preparation calls full CI at the caller revision before building
 artifacts. `tools/release` requires a successful full-verification result for the exact commit;
 an ordinary selective success is insufficient. Security and CodeQL retain weekly full scans
 because advisory databases and query packs change independently of source files.

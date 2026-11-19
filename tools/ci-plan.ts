@@ -48,7 +48,7 @@ export function platformChecks(selected: string[], members: string[]): PlatformC
   ].filter((entry): entry is PlatformCheck => Boolean(entry.check));
 }
 
-const plannerInput = (file: string) => file.startsWith(".github/workflows/ci.") ||
+const plannerInput = (file: string) => file === ".bun-version" || file.startsWith(".github/workflows/ci.") ||
   /^tools\/(ci-(plan|run|impact|changes)(\.|$)|lib\/ci-(inputs|workflow))/.test(file);
 
 /** Create the shared local/CI plan. Missing bases and failed selection widen to full verification.

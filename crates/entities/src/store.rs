@@ -15,8 +15,8 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde_json::Value;
 
 use crate::model::{
-    builtin_fields, check_field, check_one_of, check_value, is_day, Entity, Fact, FieldDef,
-    FieldValue, FACT_PREDICATES, KINDS, SOURCES,
+    builtin_fields, check_field, check_one_of, check_value, edge_is_directed, is_day, Entity,
+    EntityEdge, Fact, FieldDef, FieldValue, EDGE_KINDS, FACT_PREDICATES, KINDS, SOURCES,
 };
 
 pub const PREFIX: &str = "entities";
@@ -190,6 +190,18 @@ impl EntitiesStore {
                 snapshot    TEXT NOT NULL,
                 merged_at   TEXT NOT NULL
             );
+            -- Exact links between two entities. An undirected kind is stored with a < b.
+            CREATE TABLE IF NOT EXISTS {prefix}_edges (
+                a           TEXT NOT NULL REFERENCES {prefix}_entities(id) ON DELETE CASCADE,
+                b           TEXT NOT NULL REFERENCES {prefix}_entities(id) ON DELETE CASCADE,
+                kind        TEXT NOT NULL,
+                source      TEXT NOT NULL,
+                at          TEXT,
+                note        TEXT,
+                created_at  TEXT NOT NULL,
+                PRIMARY KEY (a, b, kind)
+            );
+            CREATE INDEX IF NOT EXISTS idx_{prefix}_edges_b ON {prefix}_edges(b);
             CREATE TABLE IF NOT EXISTS {prefix}_distinct (
                 a           TEXT NOT NULL,
                 b           TEXT NOT NULL,
@@ -704,6 +716,101 @@ impl EntitiesStore {
         .map_err(db)
     }
 
+    /// Adds an exact link, or updates its day to the later one and its note when given.
+    pub fn add_edge(&self, edge: &EntityEdge) -> Result<EntityEdge> {
+        check_one_of("edge kind", &edge.kind, EDGE_KINDS).map_err(StoreError::Invalid)?;
+        check_one_of("source", &edge.source, SOURCES).map_err(StoreError::Invalid)?;
+        if edge.a == edge.b {
+            return Err(StoreError::Invalid(
+                "an edge needs two different entities".into(),
+            ));
+        }
+        if let Some(at) = &edge.at {
+            if !is_day(at) {
+                return Err(StoreError::Invalid(format!(
+                    "{at:?} is not a YYYY-MM-DD date"
+                )));
+            }
+        }
+        let (a, b) = if edge_is_directed(&edge.kind) {
+            (edge.a.clone(), edge.b.clone())
+        } else {
+            crate::duplicates::pair(&edge.a, &edge.b)
+        };
+        let conn = self.conn()?;
+        let p = &self.prefix;
+        for id in [&a, &b] {
+            let found: Option<String> = conn
+                .query_row(
+                    &format!("SELECT kind FROM {p}_entities WHERE id = ?1"),
+                    params![id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(db)?;
+            if found.is_none() {
+                return Err(StoreError::NotFound(format!("no entity {id}")));
+            }
+        }
+        conn.execute(
+            &format!(
+                "INSERT INTO {p}_edges (a, b, kind, source, at, note, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT (a, b, kind) DO UPDATE SET
+                    at = CASE WHEN excluded.at > COALESCE(at, '') THEN excluded.at ELSE at END,
+                    note = COALESCE(excluded.note, note)"
+            ),
+            params![a, b, edge.kind, edge.source, edge.at, edge.note, now()],
+        )
+        .map_err(db)?;
+        Ok(EntityEdge {
+            a,
+            b,
+            ..edge.clone()
+        })
+    }
+
+    /// Removes one exact link. Returns whether it existed.
+    pub fn remove_edge(&self, a: &str, b: &str, kind: &str) -> Result<bool> {
+        let (a, b) = if edge_is_directed(kind) {
+            (a.to_string(), b.to_string())
+        } else {
+            crate::duplicates::pair(a, b)
+        };
+        let conn = self.conn()?;
+        let p = &self.prefix;
+        conn.execute(
+            &format!("DELETE FROM {p}_edges WHERE a = ?1 AND b = ?2 AND kind = ?3"),
+            params![a, b, kind],
+        )
+        .map(|n| n > 0)
+        .map_err(db)
+    }
+
+    /// Every exact link.
+    pub fn edges(&self) -> Result<Vec<EntityEdge>> {
+        let conn = self.conn()?;
+        let p = &self.prefix;
+        let mut statement = conn
+            .prepare(&format!(
+                "SELECT a, b, kind, source, at, note FROM {p}_edges ORDER BY a, b, kind"
+            ))
+            .map_err(db)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok(EntityEdge {
+                    a: row.get(0)?,
+                    b: row.get(1)?,
+                    kind: row.get(2)?,
+                    source: row.get(3)?,
+                    at: row.get(4)?,
+                    note: row.get(5)?,
+                })
+            })
+            .map_err(db)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(db)
+    }
+
     /// Merges `other` into `keep`, in one write transaction, and returns the kept entity.
     ///
     /// - A value `keep` lacks is taken from `other` with its source; a value both have keeps
@@ -809,6 +916,21 @@ impl EntitiesStore {
         run(
             format!("DELETE FROM {p}_distinct WHERE a = ?1 OR b = ?1"),
             &[&other],
+        )?;
+        // Edges move to `keep`; an edge between the two merged records disappears.
+        run(
+            format!(
+                "INSERT OR IGNORE INTO {p}_edges (a, b, kind, source, at, note, created_at)
+                 SELECT CASE WHEN kind = 'introduced' THEN na ELSE min(na, nb) END,
+                        CASE WHEN kind = 'introduced' THEN nb ELSE max(na, nb) END,
+                        kind, source, at, note, created_at
+                 FROM (SELECT CASE WHEN a = ?2 THEN ?1 ELSE a END AS na,
+                              CASE WHEN b = ?2 THEN ?1 ELSE b END AS nb,
+                              kind, source, at, note, created_at
+                       FROM {p}_edges WHERE a = ?2 OR b = ?2)
+                 WHERE na <> nb"
+            ),
+            &[&keep, &other],
         )?;
         run(format!("DELETE FROM {p}_entities WHERE id = ?1"), &[&other])?;
         tx.commit().map_err(db)?;
@@ -1149,6 +1271,70 @@ mod tests {
             .unwrap()
             .iter()
             .any(|f| f.key == "notes"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn edges_order_undirected_pairs_move_on_merge_and_go_with_the_entity() {
+        let (store, dir) = scratch("edges");
+        let person = |name: &str| {
+            store
+                .create("person", name, None, &BTreeMap::new(), "operator")
+                .unwrap()
+                .id
+        };
+        let (ada, bo, cy, bo2) = (person("Ada"), person("Bo"), person("Cy"), person("Bo B"));
+        let edge = |a: &str, b: &str, kind: &str, at: Option<&str>| EntityEdge {
+            a: a.into(),
+            b: b.into(),
+            kind: kind.into(),
+            source: "linkedin".into(),
+            at: at.map(str::to_string),
+            note: None,
+        };
+        store
+            .add_edge(&edge(&cy, &ada, "conversation", Some("2026-01-01")))
+            .unwrap();
+        // The same pair from the other side is the same edge; the later day wins.
+        store
+            .add_edge(&edge(&ada, &cy, "conversation", Some("2026-03-01")))
+            .unwrap();
+        store
+            .add_edge(&edge(&ada, &cy, "conversation", Some("2025-01-01")))
+            .unwrap();
+        store
+            .add_edge(&edge(&bo2, &cy, "introduced", None))
+            .unwrap();
+        assert!(store
+            .add_edge(&edge(&ada, &ada, "conversation", None))
+            .is_err());
+        assert!(store.add_edge(&edge(&ada, &bo, "follows", None)).is_err());
+        assert!(store
+            .add_edge(&edge(&ada, "ent:none", "introduced", None))
+            .is_err());
+
+        let edges = store.edges().unwrap();
+        assert_eq!(edges.len(), 2);
+        let talk = edges.iter().find(|e| e.kind == "conversation").unwrap();
+        assert!(talk.a < talk.b);
+        assert_eq!(talk.at.as_deref(), Some("2026-03-01"));
+
+        // Merging Bo B into Bo keeps the introduction's direction.
+        store.merge(&bo, &bo2, None, &[]).unwrap();
+        let intro = store
+            .edges()
+            .unwrap()
+            .into_iter()
+            .find(|e| e.kind == "introduced")
+            .unwrap();
+        assert_eq!(
+            (intro.a.as_str(), intro.b.as_str()),
+            (bo.as_str(), cy.as_str())
+        );
+
+        assert!(store.remove_edge(&cy, &ada, "conversation").unwrap());
+        store.delete(&cy).unwrap();
+        assert!(store.edges().unwrap().is_empty());
         let _ = std::fs::remove_dir_all(dir);
     }
 

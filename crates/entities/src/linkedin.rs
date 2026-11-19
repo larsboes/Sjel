@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 
 use serde_json::json;
 
+use crate::model::EntityEdge;
 use crate::store::{EntitiesStore, Patch, StoreError};
 use crate::sync::Incoming;
 
@@ -106,23 +107,49 @@ pub fn parse(text: &str) -> Result<Parsed, String> {
 /// # Errors
 /// The text lacks the participant or date columns.
 pub fn last_messages(text: &str) -> Result<BTreeMap<String, String>, String> {
+    let mut latest: BTreeMap<String, String> = BTreeMap::new();
+    for conversation in conversations(text)? {
+        for profile in conversation.profiles {
+            let held = latest.entry(profile).or_default();
+            if *held < conversation.day {
+                held.clone_from(&conversation.day);
+            }
+        }
+    }
+    Ok(latest)
+}
+
+/// One conversation: everyone who wrote or received a message in it, and its latest day.
+#[derive(Debug, Default, PartialEq)]
+pub struct Conversation {
+    pub profiles: std::collections::BTreeSet<String>,
+    pub day: String,
+}
+
+/// The conversations in the text of `messages.csv`, by conversation ID. Messages without a
+/// date are left out.
+///
+/// # Errors
+/// The text lacks the conversation, participant or date columns.
+pub fn conversations(text: &str) -> Result<Vec<Conversation>, String> {
     let rows = split_rows(text);
     let Some((header, body)) = rows.split_first() else {
-        return Ok(BTreeMap::new());
+        return Ok(Vec::new());
     };
     let column = |name: &str| header.iter().position(|h| h.trim() == name);
-    let (Some(sender), Some(recipients), Some(date)) = (
+    let (Some(id), Some(sender), Some(recipients), Some(date)) = (
+        column("CONVERSATION ID"),
         column("SENDER PROFILE URL"),
         column("RECIPIENT PROFILE URLS"),
         column("DATE"),
     ) else {
         return Err(
-            "no SENDER PROFILE URL, RECIPIENT PROFILE URLS or DATE column: \
-                    is this a LinkedIn messages.csv?"
+            "no CONVERSATION ID, SENDER PROFILE URL, RECIPIENT PROFILE URLS or DATE \
+                    column: is this a LinkedIn messages.csv?"
                 .into(),
         );
     };
-    let mut latest: BTreeMap<String, String> = BTreeMap::new();
+    let mut by_id: BTreeMap<String, Conversation> = BTreeMap::new();
     for row in body {
         let Some(day) = row
             .get(date)
@@ -131,19 +158,68 @@ pub fn last_messages(text: &str) -> Result<BTreeMap<String, String>, String> {
         else {
             continue;
         };
+        let key = row.get(id).map_or("", |c| c.trim()).to_string();
+        let conversation = by_id.entry(key).or_default();
+        if conversation.day.as_str() < day {
+            conversation.day = day.to_string();
+        }
         let urls = row.get(sender).into_iter().chain(row.get(recipients));
         for url in urls.flat_map(|cell| cell.split([',', ' '])) {
             let url = url.trim();
-            if url.is_empty() {
-                continue;
-            }
-            let held = latest.entry(profile_key(url)).or_default();
-            if held.as_str() < day {
-                *held = day.to_string();
+            if !url.is_empty() {
+                conversation.profiles.insert(profile_key(url));
             }
         }
     }
-    Ok(latest)
+    Ok(by_id.into_values().collect())
+}
+
+/// What a conversation-edge run did.
+#[derive(Debug, Default, PartialEq, serde::Serialize)]
+pub struct EdgeReport {
+    /// Conversations with at least two linked people besides the operator.
+    pub groups: usize,
+    pub edges: usize,
+}
+
+/// Links every two people who shared a conversation, with its latest day. The operator's own
+/// profile links to no person, so a one-to-one conversation adds no edge.
+pub fn apply_conversations(
+    store: &EntitiesStore,
+    conversations: &[Conversation],
+    dry_run: bool,
+) -> Result<EdgeReport, StoreError> {
+    let mut report = EdgeReport::default();
+    for conversation in conversations {
+        let mut people = Vec::new();
+        for profile in &conversation.profiles {
+            if let Some(id) = store.external(SOURCE, profile)? {
+                if store.get(&id)?.is_some_and(|e| e.kind == "person") {
+                    people.push(id);
+                }
+            }
+        }
+        if people.len() < 2 {
+            continue;
+        }
+        report.groups += 1;
+        for (i, a) in people.iter().enumerate() {
+            for b in &people[i + 1..] {
+                report.edges += 1;
+                if !dry_run {
+                    store.add_edge(&EntityEdge {
+                        a: a.clone(),
+                        b: b.clone(),
+                        kind: "conversation".into(),
+                        source: SOURCE.into(),
+                        at: Some(conversation.day.clone()),
+                        note: None,
+                    })?;
+                }
+            }
+        }
+    }
+    Ok(report)
 }
 
 /// What a `last_contact` run did.
@@ -316,6 +392,19 @@ c3,Bo,https://www.linkedin.com/in/bo,Me,https://www.linkedin.com/in/me,undated,x
         assert_eq!(latest["https://www.linkedin.com/in/cy"], "2025-12-24");
         assert_eq!(latest["https://www.linkedin.com/in/me"], "2026-03-01");
         assert!(last_messages("a,b\n1,2\n").is_err());
+    }
+
+    #[test]
+    fn a_conversation_collects_every_participant_and_its_latest_day() {
+        let text = "CONVERSATION ID,SENDER PROFILE URL,RECIPIENT PROFILE URLS,DATE\n\
+g,https://www.linkedin.com/in/me,\"https://www.linkedin.com/in/ada,https://www.linkedin.com/in/bo\",2026-01-01 10:00:00 UTC\n\
+g,https://www.linkedin.com/in/bo,\"https://www.linkedin.com/in/me,https://www.linkedin.com/in/ada\",2026-02-01 10:00:00 UTC\n\
+o,https://www.linkedin.com/in/cy,https://www.linkedin.com/in/me,2025-05-05 10:00:00 UTC\n";
+        let found = conversations(text).unwrap();
+        assert_eq!(found.len(), 2);
+        let group = found.iter().find(|c| c.profiles.len() == 3).unwrap();
+        assert_eq!(group.day, "2026-02-01");
+        assert!(group.profiles.contains("https://www.linkedin.com/in/bo"));
     }
 
     #[test]

@@ -67,6 +67,15 @@ pub const SOURCES: &[&str] = &[
 
 pub const FACT_PREDICATES: &[&str] = &["home_base", "away"];
 
+/// Exact links between two entities. `introduced` runs from the person who introduced to the
+/// person introduced; `conversation` (shared a group conversation) has no direction.
+pub const EDGE_KINDS: &[&str] = &["introduced", "conversation"];
+
+/// Whether an edge of `kind` has a direction.
+pub fn edge_is_directed(kind: &str) -> bool {
+    kind == "introduced"
+}
+
 // ============================================================================
 // Models
 // ============================================================================
@@ -176,6 +185,38 @@ pub struct DuplicatePair {
     pub reasons: Vec<String>,
     pub keep: String,
     pub merged_name: String,
+}
+
+/// One exact link between two entities (`/entities/api/graph`).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, schemars::JsonSchema)]
+pub struct EntityEdge {
+    pub a: String,
+    pub b: String,
+    pub kind: String,
+    pub source: String,
+    /// The latest day the link was seen, `YYYY-MM-DD`.
+    #[serde(default)]
+    pub at: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// One node of the people graph: a person or the operator, with the values the graph groups by.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, schemars::JsonSchema)]
+pub struct GraphNode {
+    pub id: String,
+    pub kind: String,
+    pub name: String,
+    #[serde(default)]
+    pub company: Option<String>,
+}
+
+/// People as nodes and their exact links as edges. A shared company is a node value, not an
+/// edge: it is a coincidence, and the reader labels it as one.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, schemars::JsonSchema)]
+pub struct PeopleGraph {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<EntityEdge>,
 }
 
 // ============================================================================

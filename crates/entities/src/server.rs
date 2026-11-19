@@ -106,6 +106,27 @@ const ROUTES: &[route_manifest::Route] = &[
          ?limit= (default 10). ?judge=true asks the on-device model about each partial pair in \
          the page; its verdict is advice. Pairs marked distinct are never listed.",
     ),
+    route_manifest::get(
+        "GET",
+        "/api/graph",
+        "People and the operator as nodes, with company, and their exact links as edges: \
+         introduced (a introduced b) and conversation (shared a group conversation, at = latest \
+         day). A shared company is a node value, not an edge.",
+    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/edges",
+        summary:
+            "Link two entities: { a, b, kind: introduced|conversation, at?, note?, source? }. \
+                  An existing link keeps the later day. Returns the stored edge.",
+        request_schema: Some(route_manifest::schema_of::<EdgeRequest>),
+    },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/edges/remove",
+        summary: "Remove one link: { a, b, kind }. 204 when removed, 404 when there was none.",
+        request_schema: Some(route_manifest::schema_of::<RemoveEdgeRequest>),
+    },
     route_manifest::Route {
         method: "POST",
         path: "/api/duplicates/distinct",
@@ -197,6 +218,26 @@ struct FactRequest {
     note: Option<String>,
     #[serde(default)]
     source: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct EdgeRequest {
+    a: String,
+    b: String,
+    kind: String,
+    #[serde(default)]
+    at: Option<String>,
+    #[serde(default)]
+    note: Option<String>,
+    #[serde(default)]
+    source: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct RemoveEdgeRequest {
+    a: String,
+    b: String,
+    kind: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -547,6 +588,63 @@ async fn entity_sources(State(state): State<Arc<AppState>>, Path(id): Path<Strin
     Ok(Json(body))
 }
 
+async fn graph(State(state): State<Arc<AppState>>) -> Reply {
+    blocking(&state, |s| {
+        let nodes = s
+            .store
+            .list(None, None)?
+            .into_iter()
+            .filter(|e| e.kind == "person" || e.kind == "self")
+            .map(|e| entities::model::GraphNode {
+                company: e
+                    .values
+                    .get("company")
+                    .and_then(|v| v.value.as_str())
+                    .map(str::to_string),
+                id: e.id,
+                kind: e.kind,
+                name: e.name,
+            })
+            .collect();
+        Ok(entities::model::PeopleGraph {
+            nodes,
+            edges: s.store.edges()?,
+        })
+    })
+    .await
+    .map(to_json)
+}
+
+async fn add_edge(State(state): State<Arc<AppState>>, Json(body): Json<EdgeRequest>) -> Reply {
+    blocking(&state, move |s| {
+        s.store.add_edge(&entities::model::EntityEdge {
+            a: body.a,
+            b: body.b,
+            kind: body.kind,
+            source: body.source.unwrap_or_else(|| "operator".into()),
+            at: body.at,
+            note: body.note,
+        })
+    })
+    .await
+    .map(to_json)
+}
+
+async fn remove_edge(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<RemoveEdgeRequest>,
+) -> Response {
+    match blocking(&state, move |s| {
+        s.store.remove_edge(&body.a, &body.b, &body.kind)
+    })
+    .await
+    {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(error) => error.into_response(),
+    }
+}
+
 async fn mark_distinct(
     State(state): State<Arc<AppState>>,
     Json(body): Json<DistinctRequest>,
@@ -651,6 +749,9 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/duplicates", get(duplicates))
         .route("/api/resolve", post(resolve))
         .route("/api/duplicates/distinct", post(mark_distinct))
+        .route("/api/graph", get(graph))
+        .route("/api/edges", post(add_edge))
+        .route("/api/edges/remove", post(remove_edge))
         .route("/api/entities/{id}/merge", post(merge_entity))
         .route("/api/entities/{id}/self", post(make_self))
         // Below every route: `layer` wraps only what is registered before it
@@ -680,6 +781,8 @@ fn run_linkedin_messages(store: &EntitiesStore, folder: &str, dry_run: bool) -> 
         return Ok(());
     }
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let found =
+        entities::linkedin::conversations(&text).map_err(|e| format!("{}: {e}", path.display()))?;
     let latest =
         entities::linkedin::last_messages(&text).map_err(|e| format!("{}: {e}", path.display()))?;
     let report = entities::linkedin::apply_last_contact(store, &latest, dry_run)
@@ -690,6 +793,14 @@ fn run_linkedin_messages(store: &EntitiesStore, folder: &str, dry_run: bool) -> 
         report.profiles,
         report.linked,
         report.updated,
+    );
+    let edges = entities::linkedin::apply_conversations(store, &found, dry_run)
+        .map_err(|e| e.to_string())?;
+    println!(
+        "sync-linkedin conversations{}: {} group conversations, {} links between people",
+        if dry_run { " (dry run)" } else { "" },
+        edges.groups,
+        edges.edges,
     );
     Ok(())
 }
@@ -892,6 +1003,52 @@ mod http_tests {
             let _ = axum::serve(listener, router(state)).await;
         });
         (format!("http://{addr}"), dir)
+    }
+
+    #[tokio::test]
+    async fn an_introduction_reaches_the_graph_and_can_be_removed() {
+        let (base, dir) = scratch_server("graph").await;
+        let client = reqwest::Client::new();
+        let mut ids = Vec::new();
+        for (name, company) in [("Ada", "Acme"), ("Bo", "Acme")] {
+            let person: Value = client
+                .post(format!("{base}/api/entities"))
+                .json(&json!({ "kind": "person", "name": name, "values": { "company": company } }))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            ids.push(person["id"].as_str().unwrap().to_string());
+        }
+        let link = json!({ "a": ids[0], "b": ids[1], "kind": "introduced", "note": "conference" });
+        let added = client
+            .post(format!("{base}/api/edges"))
+            .json(&link)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(added.status(), 200);
+        let graph: Value = reqwest::get(format!("{base}/api/graph"))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(graph["nodes"].as_array().unwrap().len(), 2);
+        assert_eq!(graph["nodes"][0]["company"], json!("Acme"));
+        assert_eq!(graph["edges"][0]["a"], json!(ids[0]));
+        assert_eq!(graph["edges"][0]["source"], json!("operator"));
+        let remove = |body: Value| {
+            let client = client.clone();
+            let url = format!("{base}/api/edges/remove");
+            async move { client.post(url).json(&body).send().await.unwrap().status() }
+        };
+        let body = json!({ "a": ids[0], "b": ids[1], "kind": "introduced" });
+        assert_eq!(remove(body.clone()).await, 204);
+        assert_eq!(remove(body).await, 404);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]

@@ -23,22 +23,17 @@ Tasks, roadmap views and release preparation share one Markdown authority.
 
 ## Verification
 
-The focused work-model, roadmap, document-link and CI-selection run passed 135 tests with
-zero failures under an explicitly approved command-scoped On-the-go override. Site generation,
-internal links and payload checks passed after duplicate-task consolidation.
+- The isolated repository snapshot validates 261 tasks and 14 outcomes. Relative links resolve
+  across 654 source documents. Website generation, internal links and payload checks pass
+  across 454 generated files.
+- The installed CLI contract passes, including filtered listing by area and state. The focused
+  work model, link and CI suites pass 52 tests on Bun 1.4.0. The CLI packaging and lifecycle
+  suite passes another 41 tests on that version.
+- Earlier browser checks rendered the roadmap, task metadata and empty Delivered and Releases
+  views, and exercised light and dark themes at desktop width.
 
-The work checker validates 262 tasks, fourteen outcomes and no release records or publication
-receipts. Relative links and compatibility anchors pass across 705 Markdown documents.
-Fresh Rust CLI dispatch passes `sjel work check` and `bash tools/sjel.test.sh`.
-The harness suite passes 71 tests; only the Sjel unit was refreshed on maintained materialized
-harnesses. These checks do not establish product acceptance or public delivery.
-
-Local browser checks render the roadmap, task metadata, Delivered and Releases pages. Light
-and dark backgrounds switch correctly. Empty release history does not claim delivery.
-The measured viewport remained 960 pixels despite window resizing, so narrow-screen acceptance
-is unproven. Trusted keyboard input was unavailable; synthetic input did not navigate, and
-keyboard acceptance remains open. The temporary browser group and preview server were closed.
-
-Remaining acceptance: rendered keyboard and narrow-screen checks; publication reconciliation
-against an actual approved release; full repository gates. The initial doctor failures remain
-unresolved. No public issue, tag, release or installed app was changed.
+Keyboard activation and narrow-screen layout on the committed site remain unverified. The local
+browser automation engines aborted at startup, and no managed browser session was available.
+Publication reconciliation requires an approved release record and published artifacts. The
+repository currently has no release records or publication receipts. Full repository gates
+remain open.

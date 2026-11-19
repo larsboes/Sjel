@@ -1,0 +1,14 @@
+[package]
+name = "sync-contract"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Wire types shared by capability change feeds and offline replay."
+publish = false
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+
+[lints]
+workspace = true

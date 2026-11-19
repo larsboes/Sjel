@@ -10,7 +10,7 @@ The [build rule](../product.md#what-sjel-builds-ingests-and-links-to) owns capab
 
 - [Review retained capability features](../tasks/product-retained-boundaries.md).
 - [Audit private capability boundaries](../tasks/product-overlay-audit.md).
-- [Derive Soundscape from context](../tasks/soundscape-context.md).
+- [Shape Soundscape sessions around listening intent](../tasks/soundscape-context.md).
 
 ## Retained boundaries
 

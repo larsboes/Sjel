@@ -1,0 +1,6 @@
+kind                      = "data"
+name                      = "inventory-wal-backup"
+requires                  = ["inventory"]
+backup_inventory_snapshot = "true"
+backup_sqlite_online      = "data/inventory/snapshots/inventory.db"
+backup_target             = "backup-target"

@@ -2,7 +2,7 @@
 kind           = "process"
 name           = "inventory"
 command        = ["target/release/inventory", "serve"]
-build          = ["cargo", "build", "--locked", "--release", "--bin", "inventory"]
+build          = ["cargo", "build", "--locked", "--release", "--bin", "inventory", "--features", "turso-wal"]
 port           = "8101"
 health_path    = "/health"
 autostart      = "true"

@@ -442,60 +442,60 @@ const WRITE_COLUMNS: [&str; 52] = [
     "traits",
 ];
 
-fn write_params(it: &Item) -> Result<Vec<Box<dyn rusqlite::ToSql>>, Error> {
+pub(crate) fn write_params(it: &Item) -> Result<Vec<rusqlite::types::Value>, Error> {
     Ok(vec![
-        Box::new(it.id.clone()),
-        Box::new(it.kind.as_str()),
-        Box::new(it.label.clone()),
-        Box::new(it.width),
-        Box::new(it.depth),
-        Box::new(it.height),
-        Box::new(it.height_min),
-        Box::new(it.width_unfolded),
-        Box::new(it.depth_unfolded),
-        Box::new(it.length),
-        Box::new(it.count),
-        Box::new(serde_json::to_string(&it.fold_states)?),
-        Box::new(serde_json::to_string(&it.estimated)?),
-        Box::new(it.clearance_zone),
-        Box::new(it.clearance_block),
-        Box::new(it.price_cents),
-        Box::new(it.cost_min_cents),
-        Box::new(it.cost_max_cents),
-        Box::new(it.link.clone()),
-        Box::new(it.sku.clone()),
-        Box::new(it.source.clone()),
-        Box::new(it.measured_at.clone()),
-        Box::new(it.on_move.clone()),
-        Box::new(it.priority.clone()),
-        Box::new(it.based_on.clone()),
-        Box::new(serde_json::to_string(&it.replaces)?),
-        Box::new(serde_json::to_string(&it.variants)?),
-        Box::new(it.target.clone()),
-        Box::new(it.notes.clone()),
-        Box::new(it.reason.clone()),
-        Box::new(it.open_question.clone()),
-        Box::new(it.opens.map(|s| s.as_str())),
-        Box::new(it.open_clear),
-        Box::new(it.wall_ok),
-        Box::new(it.expands_dir.map(|s| s.as_str())),
-        Box::new(it.expands_to),
-        Box::new(it.access_sides),
-        Box::new(it.access_clear),
-        Box::new(it.room_divider),
-        Box::new(it.image.clone()),
-        Box::new(it.disassembles),
-        Box::new(it.weight_g),
-        Box::new(it.category.clone()),
-        Box::new(it.packable),
-        Box::new(it.waterproof),
-        Box::new(it.quick_dry),
-        Box::new(it.pack_location.clone()),
-        Box::new(serde_json::to_string(&it.trip_types)?),
-        Box::new(it.size.clone()),
-        Box::new(it.color.clone()),
-        Box::new(serde_json::to_string(&it.seasons)?),
-        Box::new(serde_json::to_string(&it.traits)?),
+        it.id.clone().into(),
+        it.kind.as_str().to_owned().into(),
+        it.label.clone().into(),
+        it.width.into(),
+        it.depth.into(),
+        it.height.into(),
+        it.height_min.into(),
+        it.width_unfolded.into(),
+        it.depth_unfolded.into(),
+        it.length.into(),
+        it.count.into(),
+        serde_json::to_string(&it.fold_states)?.into(),
+        serde_json::to_string(&it.estimated)?.into(),
+        it.clearance_zone.into(),
+        it.clearance_block.into(),
+        it.price_cents.into(),
+        it.cost_min_cents.into(),
+        it.cost_max_cents.into(),
+        it.link.clone().into(),
+        it.sku.clone().into(),
+        it.source.clone().into(),
+        it.measured_at.clone().into(),
+        it.on_move.clone().into(),
+        it.priority.clone().into(),
+        it.based_on.clone().into(),
+        serde_json::to_string(&it.replaces)?.into(),
+        serde_json::to_string(&it.variants)?.into(),
+        it.target.clone().into(),
+        it.notes.clone().into(),
+        it.reason.clone().into(),
+        it.open_question.clone().into(),
+        it.opens.map(|s| s.as_str().to_owned()).into(),
+        it.open_clear.into(),
+        it.wall_ok.into(),
+        it.expands_dir.map(|s| s.as_str().to_owned()).into(),
+        it.expands_to.into(),
+        it.access_sides.into(),
+        it.access_clear.into(),
+        it.room_divider.into(),
+        it.image.clone().into(),
+        it.disassembles.into(),
+        it.weight_g.into(),
+        it.category.clone().into(),
+        it.packable.into(),
+        it.waterproof.into(),
+        it.quick_dry.into(),
+        it.pack_location.clone().into(),
+        serde_json::to_string(&it.trip_types)?.into(),
+        it.size.clone().into(),
+        it.color.clone().into(),
+        serde_json::to_string(&it.seasons)?.into(),
+        serde_json::to_string(&it.traits)?.into(),
     ])
 }
 
@@ -508,6 +508,11 @@ pub enum WriteOutcome {
     /// Someone wrote in between. The current row, so the caller can show it instead of
     /// overwriting it.
     Stale(Box<Item>, Option<State>),
+}
+
+pub(crate) enum SyncWriteOutcome {
+    Duplicate(i64),
+    Edit(WriteOutcome),
 }
 
 /// A group of wishes sharing a common constraint or goal (e.g. "travel-friendly, fewer but better").
@@ -578,6 +583,229 @@ pub(crate) fn item_snapshot(
     .optional()
 }
 
+pub(crate) fn item_reference_query(prefix: &str) -> String {
+    format!(
+        "SELECT i.revision, (SELECT state FROM {prefix}_item_state
+          WHERE item_id = i.id ORDER BY since DESC, id DESC LIMIT 1)
+         FROM {prefix}_item i WHERE i.id = ?1"
+    )
+}
+
+pub(crate) fn search_query(prefix: &str, query: &str) -> Option<(String, Vec<String>)> {
+    let query: String = query.chars().take(200).collect();
+    let patterns: Vec<_> = query
+        .split_whitespace()
+        .take(6)
+        .map(|word| {
+            let escaped = word
+                .to_lowercase()
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            format!("%{escaped}%")
+        })
+        .collect();
+    if patterns.is_empty() {
+        return None;
+    }
+    let conditions = (1..=patterns.len())
+            .map(|index| format!("lower(label || ' ' || coalesce(category, '') || ' ' || coalesce(notes, '')) LIKE ?{index} ESCAPE '\\'"))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+    let sql = format!(
+        "SELECT label, coalesce(category, kind) FROM {prefix}_item WHERE {conditions} ORDER BY length(label) LIMIT 5"
+    );
+    Some((sql, patterns))
+}
+
+pub(crate) fn item_insert_query(p: &str, replace: bool) -> String {
+    let now = sjel_store::now_offset("'+0 seconds'");
+    let columns = WRITE_COLUMNS.join(", ");
+    let placeholders = (1..=WRITE_COLUMNS.len())
+        .map(|i| format!("?{i}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let take = WRITE_COLUMNS[1..]
+        .iter()
+        .map(|c| format!("{c}=excluded.{c}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let conflict = if replace {
+        format!("DO UPDATE SET {take}, revision = {p}_item.revision + 1, updated_at = {now}")
+    } else {
+        "DO NOTHING".to_owned()
+    };
+    format!(
+        "INSERT INTO {p}_item ({columns}, revision, created_at, updated_at)
+         VALUES ({placeholders}, 1, {now}, {now}) ON CONFLICT(id) {conflict}
+         RETURNING revision"
+    )
+}
+
+pub(crate) fn state_insert_query(p: &str) -> String {
+    format!(
+        "INSERT INTO {p}_item_state (item_id, state, since, note)
+         SELECT ?1, ?2, {now}, ?3
+         WHERE (SELECT state FROM {p}_item_state WHERE item_id = ?1
+                ORDER BY since DESC, id DESC LIMIT 1) IS NOT ?2",
+        now = sjel_store::now_offset("'+0 seconds'")
+    )
+}
+
+pub(crate) fn state_history_query(p: &str) -> String {
+    format!(
+        "SELECT state, since, note FROM {p}_item_state
+         WHERE item_id = ?1 ORDER BY since ASC, id ASC"
+    )
+}
+
+pub(crate) fn item_revision_update(prefix: &str) -> String {
+    let now = sjel_store::now_offset("'+0 seconds'");
+    let set = WRITE_COLUMNS
+        .iter()
+        .enumerate()
+        .skip(1)
+        .map(|(index, column)| format!("{column} = ?{}", index + 1))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "UPDATE {prefix}_item SET {set}, revision = revision + 1, updated_at = {now}
+         WHERE id = ?1 AND revision = ?{n} RETURNING revision",
+        n = WRITE_COLUMNS.len() + 1
+    )
+}
+
+pub(crate) fn catalogue_query(p: &str) -> String {
+    format!("{} ORDER BY i.id", catalogue_select(p))
+}
+
+pub(crate) fn catalogue_select(p: &str) -> String {
+    format!(
+        "SELECT i.id, i.kind, i.label, i.width, i.depth, i.height, i.height_min,
+                    i.width_unfolded, i.depth_unfolded, i.length, i.count, i.fold_states,
+                    i.estimated, i.clearance_zone, i.clearance_block, i.price_cents,
+                    i.cost_min_cents, i.cost_max_cents, i.link, i.sku, i.source, i.measured_at,
+                    i.on_move, i.priority, i.based_on, i.replaces, i.variants, i.target,
+                    i.notes, i.reason, i.open_question,
+                    i.opens, i.open_clear, i.wall_ok, i.expands_dir, i.expands_to,
+                    i.access_sides, i.access_clear, i.room_divider, i.image, i.disassembles,
+                    i.weight_g, i.category, i.packable, i.waterproof, i.quick_dry,
+                    i.pack_location, i.trip_types, i.size, i.color, i.seasons, i.traits, i.revision,
+                    (SELECT s.state FROM {p}_item_state s
+                      WHERE s.item_id = i.id ORDER BY s.since DESC, s.id DESC LIMIT 1)
+             FROM {p}_item i"
+    )
+}
+
+pub(crate) trait CatalogueRow {
+    fn text(&self, index: usize) -> Result<String, Error>;
+    fn optional_text(&self, index: usize) -> Result<Option<String>, Error>;
+    fn integer(&self, index: usize) -> Result<i64, Error>;
+    fn optional_integer(&self, index: usize) -> Result<Option<i64>, Error>;
+
+    fn optional_i32(&self, index: usize) -> Result<Option<i32>, Error> {
+        Ok(self
+            .optional_integer(index)?
+            .map(i32::try_from)
+            .transpose()?)
+    }
+
+    fn optional_bool(&self, index: usize) -> Result<Option<bool>, Error> {
+        Ok(self.optional_integer(index)?.map(|value| value != 0))
+    }
+
+    fn json<T: serde::de::DeserializeOwned>(&self, index: usize) -> Result<T, Error> {
+        serde_json::from_str(&self.text(index)?)
+            .map_err(|error| format!("Inventory catalogue column {index}: {error}").into())
+    }
+}
+
+impl CatalogueRow for rusqlite::Row<'_> {
+    fn text(&self, index: usize) -> Result<String, Error> {
+        Ok(self.get(index)?)
+    }
+
+    fn optional_text(&self, index: usize) -> Result<Option<String>, Error> {
+        Ok(self.get(index)?)
+    }
+
+    fn integer(&self, index: usize) -> Result<i64, Error> {
+        Ok(self.get(index)?)
+    }
+
+    fn optional_integer(&self, index: usize) -> Result<Option<i64>, Error> {
+        Ok(self.get(index)?)
+    }
+}
+
+pub(crate) fn decode_catalogue_row(
+    row: &impl CatalogueRow,
+) -> Result<(Item, Option<State>), Error> {
+    let kind = row.text(1)?;
+    let side = |index| -> Result<Option<Side>, Error> {
+        Ok(row.optional_text(index)?.as_deref().and_then(Side::parse))
+    };
+    let state = row.optional_text(53)?;
+    Ok((
+        Item {
+            id: row.text(0)?,
+            kind: Kind::parse(&kind),
+            label: row.text(2)?,
+            width: row.optional_i32(3)?,
+            depth: row.optional_i32(4)?,
+            height: row.optional_i32(5)?,
+            height_min: row.optional_i32(6)?,
+            width_unfolded: row.optional_i32(7)?,
+            depth_unfolded: row.optional_i32(8)?,
+            length: row.optional_i32(9)?,
+            count: row.optional_i32(10)?,
+            fold_states: row.json(11)?,
+            estimated: row.json(12)?,
+            clearance_zone: row.optional_i32(13)?,
+            clearance_block: row.optional_i32(14)?,
+            price_cents: row.optional_integer(15)?,
+            cost_min_cents: row.optional_integer(16)?,
+            cost_max_cents: row.optional_integer(17)?,
+            link: row.optional_text(18)?,
+            sku: row.optional_text(19)?,
+            source: row.optional_text(20)?,
+            measured_at: row.optional_text(21)?,
+            on_move: row.optional_text(22)?,
+            priority: row.optional_text(23)?,
+            based_on: row.optional_text(24)?,
+            replaces: row.json(25)?,
+            variants: row.json(26)?,
+            target: row.optional_text(27)?,
+            notes: row.optional_text(28)?,
+            reason: row.optional_text(29)?,
+            open_question: row.optional_text(30)?,
+            opens: side(31)?,
+            open_clear: row.optional_i32(32)?,
+            wall_ok: row.optional_bool(33)?,
+            expands_dir: side(34)?,
+            expands_to: row.optional_i32(35)?,
+            access_sides: row.optional_i32(36)?,
+            access_clear: row.optional_i32(37)?,
+            room_divider: row.optional_bool(38)?,
+            image: row.optional_text(39)?,
+            disassembles: row.optional_bool(40)?,
+            weight_g: row.optional_integer(41)?,
+            category: row.optional_text(42)?,
+            packable: row.optional_bool(43)?,
+            waterproof: row.optional_bool(44)?,
+            quick_dry: row.optional_bool(45)?,
+            pack_location: row.optional_text(46)?,
+            trip_types: row.json(47)?,
+            size: row.optional_text(48)?,
+            color: row.optional_text(49)?,
+            seasons: row.json(50)?,
+            traits: row.json(51)?,
+            revision: row.integer(52)?,
+        },
+        state.as_deref().and_then(State::parse),
+    ))
+}
+
 /// The prefix is interpolated into DDL, so it is validated instead of bound.
 fn validate_prefix(prefix: &str) -> Result<(), Error> {
     if !prefix
@@ -610,7 +838,7 @@ impl Store {
         Ok(self.pool.get()?)
     }
 
-    /// A connection for a query beyond this prefix: `budget::monthly_balance` reads finance.
+    /// A connection for Inventory queries implemented in other modules.
     pub fn borrow_connection(&self) -> Result<sjel_store::PooledClient, Error> {
         self.conn()
     }
@@ -1013,27 +1241,46 @@ impl Store {
     /// Insert or update; the later writer wins. `created_at` survives an update. Returns the
     /// revision the row now carries, raised in the same statement so an older client is refused.
     pub fn upsert_item(&self, it: &Item) -> Result<i64, Error> {
-        let p = &self.prefix;
-        let now = sjel_store::now_offset("'+0 seconds'");
-        let columns = WRITE_COLUMNS.join(", ");
-        let placeholders = (1..=WRITE_COLUMNS.len())
-            .map(|i| format!("?{i}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let take = WRITE_COLUMNS[1..]
-            .iter()
-            .map(|c| format!("{c}=excluded.{c}"))
-            .collect::<Vec<_>>()
-            .join(", ");
         let conn = self.conn()?;
+        self.upsert_item_on(&conn, it)
+    }
+
+    pub(crate) fn create_item(
+        &self,
+        item: &Item,
+        state: State,
+        note: Option<&str>,
+    ) -> Result<Option<i64>, Error> {
+        let mut conn = self.conn()?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
+        let revision = self.create_item_on(&tx, item, state, note)?;
+        tx.commit()?;
+        Ok(revision)
+    }
+
+    fn create_item_on(
+        &self,
+        conn: &Connection,
+        item: &Item,
+        state: State,
+        note: Option<&str>,
+    ) -> Result<Option<i64>, Error> {
+        let revision = conn
+            .query_row(
+                &item_insert_query(&self.prefix, false),
+                rusqlite::params_from_iter(write_params(item)?.iter()),
+                |row| row.get(0),
+            )
+            .optional()?;
+        if revision.is_some() && !self.record_state_on(conn, &item.id, state, note)? {
+            return Err("initial item state was not recorded".into());
+        }
+        Ok(revision)
+    }
+
+    fn upsert_item_on(&self, conn: &Connection, it: &Item) -> Result<i64, Error> {
         let revision = conn.query_row(
-            &format!(
-                "INSERT INTO {p}_item ({columns}, revision, created_at, updated_at)
-                 VALUES ({placeholders}, 1, {now}, {now})
-                 ON CONFLICT(id) DO UPDATE SET {take},
-                    revision = {p}_item.revision + 1, updated_at = {now}
-                 RETURNING revision"
-            ),
+            &item_insert_query(&self.prefix, true),
             rusqlite::params_from_iter(write_params(it)?.iter()),
             |row| row.get(0),
         )?;
@@ -1045,35 +1292,34 @@ impl Store {
     /// Compare and write are one statement, so there is no window in which a second writer wins
     /// silently. When it matches no row, a read afterwards tells missing from stale.
     pub fn update_item_if_revision(&self, it: &Item, expected: i64) -> Result<WriteOutcome, Error> {
-        let p = &self.prefix;
-        let now = sjel_store::now_offset("'+0 seconds'");
-        let set = WRITE_COLUMNS
-            .iter()
-            .enumerate()
-            .skip(1)
-            .map(|(i, c)| format!("{c} = ?{}", i + 1))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let mut values = write_params(it)?;
-        values.push(Box::new(expected));
         let conn = self.conn()?;
-        let written: Option<i64> = conn
+        let written = self.write_item_revision(&conn, it, expected)?;
+        drop(conn);
+        self.write_outcome(&it.id, written)
+    }
+
+    fn write_item_revision(
+        &self,
+        conn: &Connection,
+        it: &Item,
+        expected: i64,
+    ) -> Result<Option<i64>, Error> {
+        let mut values = write_params(it)?;
+        values.push(expected.into());
+        Ok(conn
             .query_row(
-                &format!(
-                    "UPDATE {p}_item SET {set}, revision = revision + 1, updated_at = {now}
-                     WHERE id = ?1 AND revision = ?{n}
-                     RETURNING revision",
-                    n = WRITE_COLUMNS.len() + 1
-                ),
+                &item_revision_update(&self.prefix),
                 rusqlite::params_from_iter(values.iter()),
                 |row| row.get(0),
             )
-            .optional()?;
-        drop(conn);
+            .optional()?)
+    }
+
+    fn write_outcome(&self, id: &str, written: Option<i64>) -> Result<WriteOutcome, Error> {
         if let Some(revision) = written {
             return Ok(WriteOutcome::Written(revision));
         }
-        Ok(match self.item(&it.id)? {
+        Ok(match self.item(id)? {
             Some((current, state)) => WriteOutcome::Stale(Box::new(current), state),
             None => WriteOutcome::Missing,
         })
@@ -1087,26 +1333,31 @@ impl Store {
         state: State,
         note: Option<&str>,
     ) -> Result<bool, Error> {
-        if self.current_state(item_id)? == Some(state) {
-            return Ok(false);
-        }
-        let p = &self.prefix;
         let conn = self.conn()?;
-        conn.execute(
-            &format!(
-                "INSERT INTO {p}_item_state (item_id, state, since, note)
-                 VALUES (?1, ?2, {now}, ?3)",
-                p = p,
-                now = sjel_store::now_offset("'+0 seconds'")
-            ),
+        self.record_state_on(&conn, item_id, state, note)
+    }
+
+    fn record_state_on(
+        &self,
+        conn: &Connection,
+        item_id: &str,
+        state: State,
+        note: Option<&str>,
+    ) -> Result<bool, Error> {
+        let inserted = conn.execute(
+            &state_insert_query(&self.prefix),
             params![item_id, state.as_str(), note],
         )?;
-        Ok(true)
+        Ok(inserted != 0)
     }
 
     /// The revision recorded for a sync operation that was already applied.
     pub fn sync_operation_revision(&self, operation_id: &str) -> Result<Option<i64>, Error> {
         let conn = self.conn()?;
+        self.sync_revision(&conn, operation_id)
+    }
+
+    fn sync_revision(&self, conn: &Connection, operation_id: &str) -> Result<Option<i64>, Error> {
         Ok(conn
             .query_row(
                 &format!(
@@ -1119,10 +1370,56 @@ impl Store {
             .optional()?)
     }
 
-    /// Records an applied operation. The primary key makes a retry visible instead of applying
-    /// the same mutation twice.
-    pub fn record_sync_operation(&self, operation_id: &str, revision: i64) -> Result<(), Error> {
-        let conn = self.conn()?;
+    /// A retry can see the receipt only after the corresponding edit has committed.
+    pub(crate) fn apply_sync_item(
+        &self,
+        operation_id: &str,
+        item: &Item,
+        expected: i64,
+    ) -> Result<SyncWriteOutcome, Error> {
+        let mut conn = self.conn()?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
+        if let Some(revision) = self.sync_revision(&tx, operation_id)? {
+            return Ok(SyncWriteOutcome::Duplicate(revision));
+        }
+        let written = self.write_item_revision(&tx, item, expected)?;
+        if let Some(revision) = written {
+            self.record_sync_receipt(&tx, operation_id, revision)?;
+        }
+        tx.commit()?;
+        drop(conn);
+        self.write_outcome(&item.id, written)
+            .map(SyncWriteOutcome::Edit)
+    }
+
+    pub(crate) fn apply_sync_create(
+        &self,
+        operation_id: &str,
+        item: &Item,
+        state: State,
+        note: Option<&str>,
+    ) -> Result<Option<SyncWriteOutcome>, Error> {
+        let mut conn = self.conn()?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
+        if let Some(revision) = self.sync_revision(&tx, operation_id)? {
+            return Ok(Some(SyncWriteOutcome::Duplicate(revision)));
+        }
+        let Some(revision) = self.create_item_on(&tx, item, state, note)? else {
+            return Ok(None);
+        };
+        self.record_sync_receipt(&tx, operation_id, revision)?;
+        tx.commit()?;
+        Ok(Some(SyncWriteOutcome::Edit(WriteOutcome::Written(
+            revision,
+        ))))
+    }
+
+    fn record_sync_receipt(
+        &self,
+        conn: &Connection,
+        operation_id: &str,
+        revision: i64,
+    ) -> Result<(), Error> {
         conn.execute(
             &format!(
                 "INSERT INTO {}_sync_operation (operation_id, revision, processed_at)
@@ -1140,6 +1437,46 @@ impl Store {
         Ok(conn.query_row(&format!("SELECT COUNT(*) FROM {p}_item"), [], |r| r.get(0))?)
     }
 
+    pub(crate) fn import_items(
+        &self,
+        items: Vec<(Item, State)>,
+        force: bool,
+    ) -> Result<Option<crate::import::Report>, Error> {
+        let mut conn = self.conn()?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
+        if !force
+            && tx.query_row(
+                &format!("SELECT EXISTS(SELECT 1 FROM {}_item)", self.prefix),
+                [],
+                |row| row.get::<_, bool>(0),
+            )?
+        {
+            tx.rollback()?;
+            return Ok(None);
+        }
+        let mut report = crate::import::Report::default();
+        for (item, state) in items {
+            self.upsert_item_on(&tx, &item)?;
+            let changed =
+                self.record_state_on(&tx, &item.id, state, Some("imported from inventory/*.toml"))?;
+            report.record(item.kind, changed);
+        }
+        tx.commit()?;
+        Ok(Some(report))
+    }
+
+    pub(crate) fn search_items(&self, query: &str) -> Result<Vec<(String, String)>, Error> {
+        let Some((sql, patterns)) = search_query(&self.prefix, query) else {
+            return Ok(Vec::new());
+        };
+        let conn = self.conn()?;
+        let mut statement = conn.prepare(&sql)?;
+        let rows = statement.query_map(rusqlite::params_from_iter(patterns), |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
     pub fn item(&self, id: &str) -> Result<Option<(Item, Option<State>)>, Error> {
         Ok(self.catalogue()?.remove(id))
     }
@@ -1149,12 +1486,8 @@ impl Store {
         &self,
         item_id: &str,
     ) -> Result<Vec<(State, String, Option<String>)>, Error> {
-        let p = &self.prefix;
         let conn = self.conn()?;
-        let mut stmt = conn.prepare(&format!(
-            "SELECT state, since, note FROM {p}_item_state
-             WHERE item_id = ?1 ORDER BY since ASC, id ASC"
-        ))?;
+        let mut stmt = conn.prepare(&state_history_query(&self.prefix))?;
         let rows = stmt.query_map(params![item_id], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -1192,92 +1525,11 @@ impl Store {
     pub fn catalogue(&self) -> Result<BTreeMap<String, (Item, Option<State>)>, Error> {
         let p = &self.prefix;
         let conn = self.conn()?;
-        let mut stmt = conn.prepare(&format!(
-            "SELECT i.id, i.kind, i.label, i.width, i.depth, i.height, i.height_min,
-                    i.width_unfolded, i.depth_unfolded, i.length, i.count, i.fold_states,
-                    i.estimated, i.clearance_zone, i.clearance_block, i.price_cents,
-                    i.cost_min_cents, i.cost_max_cents, i.link, i.sku, i.source, i.measured_at,
-                    i.on_move, i.priority, i.based_on, i.replaces, i.variants, i.target,
-                    i.notes, i.reason, i.open_question,
-                    i.opens, i.open_clear, i.wall_ok, i.expands_dir, i.expands_to,
-                    i.access_sides, i.access_clear, i.room_divider, i.image, i.disassembles,
-                    i.weight_g, i.category, i.packable, i.waterproof, i.quick_dry,
-                    i.pack_location, i.trip_types, i.size, i.color, i.seasons, i.traits, i.revision,
-                    (SELECT s.state FROM {p}_item_state s
-                      WHERE s.item_id = i.id ORDER BY s.since DESC, s.id DESC LIMIT 1)
-             FROM {p}_item i ORDER BY i.id"
-        ))?;
-        let rows = stmt.query_map([], |row| {
-            let kind: String = row.get(1)?;
-            let side = |i: usize| -> rusqlite::Result<Option<Side>> {
-                Ok(row
-                    .get::<_, Option<String>>(i)?
-                    .as_deref()
-                    .and_then(Side::parse))
-            };
-            let state: Option<String> = row.get(53)?;
-            Ok((
-                Item {
-                    id: row.get(0)?,
-                    kind: Kind::parse(&kind),
-                    label: row.get(2)?,
-                    width: row.get(3)?,
-                    depth: row.get(4)?,
-                    height: row.get(5)?,
-                    height_min: row.get(6)?,
-                    width_unfolded: row.get(7)?,
-                    depth_unfolded: row.get(8)?,
-                    length: row.get(9)?,
-                    count: row.get(10)?,
-                    fold_states: sjel_store::json_column(row, 11)?,
-                    estimated: sjel_store::json_column(row, 12)?,
-                    clearance_zone: row.get(13)?,
-                    clearance_block: row.get(14)?,
-                    price_cents: row.get(15)?,
-                    cost_min_cents: row.get(16)?,
-                    cost_max_cents: row.get(17)?,
-                    link: row.get(18)?,
-                    sku: row.get(19)?,
-                    source: row.get(20)?,
-                    measured_at: row.get(21)?,
-                    on_move: row.get(22)?,
-                    priority: row.get(23)?,
-                    based_on: row.get(24)?,
-                    replaces: sjel_store::json_column(row, 25)?,
-                    variants: sjel_store::json_column(row, 26)?,
-                    target: row.get(27)?,
-                    notes: row.get(28)?,
-                    reason: row.get(29)?,
-                    open_question: row.get(30)?,
-                    opens: side(31)?,
-                    open_clear: row.get(32)?,
-                    wall_ok: row.get(33)?,
-                    expands_dir: side(34)?,
-                    expands_to: row.get(35)?,
-                    access_sides: row.get(36)?,
-                    access_clear: row.get(37)?,
-                    room_divider: row.get(38)?,
-                    image: row.get(39)?,
-                    disassembles: row.get(40)?,
-                    weight_g: row.get(41)?,
-                    category: row.get(42)?,
-                    packable: row.get(43)?,
-                    waterproof: row.get(44)?,
-                    quick_dry: row.get(45)?,
-                    pack_location: row.get(46)?,
-                    trip_types: sjel_store::json_column(row, 47)?,
-                    size: row.get(48)?,
-                    color: row.get(49)?,
-                    seasons: sjel_store::json_column(row, 50)?,
-                    traits: sjel_store::json_column(row, 51)?,
-                    revision: row.get(52)?,
-                },
-                state.as_deref().and_then(State::parse),
-            ))
-        })?;
+        let mut statement = conn.prepare(&catalogue_query(p))?;
+        let mut rows = statement.query([])?;
         let mut out = BTreeMap::new();
-        for r in rows {
-            let (item, state) = r?;
+        while let Some(row) = rows.next()? {
+            let (item, state) = decode_catalogue_row(row)?;
             out.insert(item.id.clone(), (item, state));
         }
         Ok(out)
@@ -1401,35 +1653,39 @@ impl Store {
                     items.push(it);
                 }
             }
-            let alternatives = if g.alternatives {
-                vec![ids.clone()]
-            } else {
-                Vec::new()
-            };
-            let counted = compare::counted(items.iter().collect(), &alternatives);
-            let total_low: i64 = counted
-                .iter()
-                .map(|i| i.price_cents.or(i.cost_min_cents).unwrap_or(0))
-                .sum();
-            let total_high: i64 = counted
-                .iter()
-                .map(|i| i.price_cents.or(i.cost_max_cents).unwrap_or(0))
-                .sum();
-            let count = items.len();
-            out.push(WishGroupView {
-                id: g.id,
-                title: g.title,
-                constraint_text: g.constraint_text,
-                alternatives: g.alternatives,
-                created_at: g.created_at,
-                updated_at: g.updated_at,
-                items,
-                items_count: count,
-                total_low_cents: total_low,
-                total_high_cents: total_high,
-            });
+            out.push(wish_group_view(g, ids, items));
         }
         Ok(out)
+    }
+}
+
+pub(crate) fn wish_group_view(g: WishGroup, ids: Vec<String>, items: Vec<Item>) -> WishGroupView {
+    let alternatives = if g.alternatives {
+        vec![ids.clone()]
+    } else {
+        Vec::new()
+    };
+    let counted = compare::counted(items.iter().collect(), &alternatives);
+    let total_low: i64 = counted
+        .iter()
+        .map(|i| i.price_cents.or(i.cost_min_cents).unwrap_or(0))
+        .sum();
+    let total_high: i64 = counted
+        .iter()
+        .map(|i| i.price_cents.or(i.cost_max_cents).unwrap_or(0))
+        .sum();
+    let count = items.len();
+    WishGroupView {
+        id: g.id,
+        title: g.title,
+        constraint_text: g.constraint_text,
+        alternatives: g.alternatives,
+        created_at: g.created_at,
+        updated_at: g.updated_at,
+        items,
+        items_count: count,
+        total_low_cents: total_low,
+        total_high_cents: total_high,
     }
 }
 
@@ -1460,6 +1716,90 @@ pub fn collisions(categories: &[(String, i64)]) -> Vec<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sync_receipt_failure_rolls_back_revision_and_allows_a_retry() {
+        let path = std::env::temp_dir().join(format!("inventory-sync-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let store = Store::open(&path).unwrap();
+        let mut item = Item {
+            id: "lamp".into(),
+            label: "Before".into(),
+            ..Item::default()
+        };
+        assert_eq!(store.upsert_item(&item).unwrap(), 1);
+        store
+            .conn()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER refuse_receipt BEFORE INSERT ON inventory_sync_operation
+             BEGIN SELECT RAISE(ABORT, 'receipt unavailable'); END;",
+            )
+            .unwrap();
+        item.label = "After".into();
+        assert!(store.apply_sync_item("op", &item, 1).is_err());
+        let (persisted, _) = store.item(&item.id).unwrap().unwrap();
+        assert_eq!(
+            (persisted.label.as_str(), persisted.revision),
+            ("Before", 1)
+        );
+        assert_eq!(store.sync_operation_revision("op").unwrap(), None);
+        store
+            .conn()
+            .unwrap()
+            .execute_batch("DROP TRIGGER refuse_receipt;")
+            .unwrap();
+        assert!(matches!(
+            store.apply_sync_item("op", &item, 1).unwrap(),
+            SyncWriteOutcome::Edit(WriteOutcome::Written(2))
+        ));
+        assert!(matches!(
+            store.apply_sync_item("op", &item, 1).unwrap(),
+            SyncWriteOutcome::Duplicate(2)
+        ));
+        assert_eq!(store.item(&item.id).unwrap().unwrap().0.revision, 2);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn sync_create_commits_state_and_receipt_once() {
+        let path =
+            std::env::temp_dir().join(format!("inventory-sync-create-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let store = Store::open(&path).unwrap();
+        let item = Item {
+            id: "lamp".into(),
+            label: "Offline lamp".into(),
+            ..Item::default()
+        };
+        let conn = store.conn().unwrap();
+        conn.execute_batch(
+            "CREATE TRIGGER refuse_receipt BEFORE INSERT ON inventory_sync_operation
+             BEGIN SELECT RAISE(ABORT, 'receipt unavailable'); END;",
+        )
+        .unwrap();
+        let create = |key| store.apply_sync_create(key, &item, State::Wanted, None);
+        assert!(create("op").is_err());
+        assert!(store.item(&item.id).unwrap().is_none());
+        assert_eq!(store.sync_operation_revision("op").unwrap(), None);
+        conn.execute("DROP TRIGGER refuse_receipt", []).unwrap();
+        assert!(matches!(
+            create("op").unwrap(),
+            Some(SyncWriteOutcome::Edit(WriteOutcome::Written(1)))
+        ));
+        assert!(matches!(
+            create("op").unwrap(),
+            Some(SyncWriteOutcome::Duplicate(1))
+        ));
+        assert!(create("other").unwrap().is_none());
+        assert_eq!(
+            store.item(&item.id).unwrap().unwrap().1,
+            Some(State::Wanted)
+        );
+        assert_eq!(store.item_count().unwrap(), 1);
+        drop(conn);
+        let _ = std::fs::remove_file(&path);
+    }
 
     fn category(name: &str, count: i64) -> (String, i64) {
         (name.to_string(), count)

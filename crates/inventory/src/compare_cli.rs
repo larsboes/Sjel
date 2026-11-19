@@ -6,9 +6,9 @@
 
 use std::time::Duration;
 
-use sjel_inventory::intake;
+use inventory_api::{PriceRecorded, RecordPriceRequest};
 use sjel_inventory::store::compare::{parse_spec, GroupComparison};
-use sjel_inventory::store::Store;
+use sjel_inventory::{client, intake};
 
 /// Between two page reads. geizhals asks crawlers it names for one second; this stays above it.
 const PAUSE: Duration = Duration::from_secs(3);
@@ -23,33 +23,37 @@ fn euros(cents: i64) -> String {
     format!("{}.{:02} €", cents / 100, cents % 100)
 }
 
-/// Opens the store once and runs one comparison verb.
 pub async fn run(cmd: &str, argv: &[String]) -> i32 {
-    let store = match super::open() {
-        Ok(store) => store,
-        Err(e) => {
-            eprintln!("{e}");
-            return 2;
-        }
-    };
     match cmd {
-        "prices" => prices(&store, argv).await,
-        "price" => price(&store, argv),
-        "specs" => numbers(&store, argv, false),
-        "needs" => numbers(&store, argv, true),
-        "alternatives" => alternatives(&store, argv),
-        _ => compare(&store, argv),
+        "prices" => prices(argv).await,
+        "price" => price(argv).await,
+        "specs" => numbers(argv, false).await,
+        "needs" => numbers(argv, true).await,
+        "alternatives" => alternatives(argv).await,
+        _ => compare(argv).await,
     }
+}
+
+async fn comparisons() -> Result<Vec<GroupComparison>, String> {
+    sjel_server::blocking(|| client::comparisons().map_err(|error| error.to_string())).await
+}
+
+async fn record_price(id: &str, request: RecordPriceRequest) -> Result<PriceRecorded, String> {
+    let id = id.to_owned();
+    sjel_server::blocking(move || {
+        client::record_price(&id, &request).map_err(|error| error.to_string())
+    })
+    .await
 }
 
 /// `prices refresh`: one pass over every candidate in every group, then exit.
 /// Exit 1 when a page was due and could not be read, so the scheduler shows the failure.
-pub async fn prices(store: &Store, argv: &[String]) -> i32 {
+async fn prices(argv: &[String]) -> i32 {
     if argv.get(1).map(String::as_str) != Some("refresh") {
         eprintln!("usage: inventory prices refresh");
         return 2;
     }
-    let groups = match store.comparisons() {
+    let groups = match comparisons().await {
         Ok(groups) => groups,
         Err(e) => {
             eprintln!("cannot read the wish groups: {e}");
@@ -87,7 +91,13 @@ pub async fn prices(store: &Store, argv: &[String]) -> i32 {
             continue;
         };
         read += 1;
-        match store.record_price(&candidate.id, &link, cents, "", None) {
+        let request = RecordPriceRequest {
+            price_cents: cents,
+            source: link,
+            configuration: String::new(),
+            observed_at: None,
+        };
+        match record_price(&candidate.id, request).await {
             Ok(r) if r.alert => println!(
                 "ALERT {}: {} is at or below the limit",
                 candidate.id,
@@ -110,7 +120,7 @@ pub async fn prices(store: &Store, argv: &[String]) -> i32 {
 }
 
 /// `price <id> <amount> [--source X] [--config Y] [--on YYYY-MM-DD]`: a manual observation.
-pub fn price(store: &Store, argv: &[String]) -> i32 {
+async fn price(argv: &[String]) -> i32 {
     let (Some(id), Some(amount)) = (argv.get(1), argv.get(2)) else {
         eprintln!(
             "usage: inventory price <id> <amount> [--source X] [--config Y] [--on YYYY-MM-DD]"
@@ -122,8 +132,13 @@ pub fn price(store: &Store, argv: &[String]) -> i32 {
         return 2;
     };
     let source = flag(argv, "source").unwrap_or_else(|| "manual".into());
-    let config = flag(argv, "config").unwrap_or_default();
-    match store.record_price(id, &source, cents, &config, flag(argv, "on").as_deref()) {
+    let request = RecordPriceRequest {
+        price_cents: cents,
+        source: source.clone(),
+        configuration: flag(argv, "config").unwrap_or_default(),
+        observed_at: flag(argv, "on"),
+    };
+    match record_price(id, request).await {
         Ok(r) if r.alert => {
             println!("ALERT {id}: {} is at or below the limit", euros(cents));
             0
@@ -145,7 +160,7 @@ pub fn price(store: &Store, argv: &[String]) -> i32 {
 
 /// `specs <id> key=value[:unit]...` and `needs <group> key=value[:unit]...`. The list replaces
 /// the stored one; no pairs clears it.
-pub fn numbers(store: &Store, argv: &[String], needs: bool) -> i32 {
+async fn numbers(argv: &[String], needs: bool) -> i32 {
     let Some(owner) = argv.get(1) else {
         eprintln!("usage: inventory {} <id> key=value[:unit]...", argv[0]);
         return 2;
@@ -160,14 +175,20 @@ pub fn numbers(store: &Store, argv: &[String], needs: bool) -> i32 {
             }
         }
     }
-    let result = if needs {
-        store.set_needs(owner, &parsed)
-    } else {
-        store.set_specs(owner, &parsed)
-    };
+    let count = parsed.len();
+    let id = owner.clone();
+    let result = sjel_server::blocking(move || {
+        if needs {
+            client::set_needs(&id, parsed)
+        } else {
+            client::set_specs(&id, parsed)
+        }
+        .map_err(|error| error.to_string())
+    })
+    .await;
     match result {
         Ok(()) => {
-            println!("{owner}: {} value(s)", parsed.len());
+            println!("{owner}: {count} value(s)");
             0
         }
         Err(e) => {
@@ -179,7 +200,7 @@ pub fn numbers(store: &Store, argv: &[String], needs: bool) -> i32 {
 
 /// `alternatives <group> yes|no`: one member of the group gets bought, so a budget counts only
 /// the cheapest.
-fn alternatives(store: &Store, argv: &[String]) -> i32 {
+async fn alternatives(argv: &[String]) -> i32 {
     let (Some(group), Some(mark)) = (argv.get(1), argv.get(2)) else {
         eprintln!("usage: inventory alternatives <group> yes|no");
         return 2;
@@ -192,7 +213,12 @@ fn alternatives(store: &Store, argv: &[String]) -> i32 {
             return 2;
         }
     };
-    match store.set_alternatives(group, on) {
+    let id = group.clone();
+    match sjel_server::blocking(move || {
+        client::set_alternatives(&id, on).map_err(|error| error.to_string())
+    })
+    .await
+    {
         Ok(()) => {
             println!(
                 "{group}: {}",
@@ -212,8 +238,8 @@ fn alternatives(store: &Store, argv: &[String]) -> i32 {
 }
 
 /// `compare [group]`: needs, then one line per candidate with its latest price and specs.
-pub fn compare(store: &Store, argv: &[String]) -> i32 {
-    let groups = match store.comparisons() {
+async fn compare(argv: &[String]) -> i32 {
+    let groups = match comparisons().await {
         Ok(groups) => groups,
         Err(e) => {
             eprintln!("{e}");

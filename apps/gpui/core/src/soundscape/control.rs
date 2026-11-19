@@ -9,9 +9,11 @@
 //! that disagrees with the sound by a frame is invisible; a control path that blocks the audio
 //! callback is a dropout, so the two never share a structure.
 
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU8, Ordering};
+use soundscape_api::bedside::SleepRoom;
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, AtomicU8, Ordering};
 
 use super::music::{LayerName, Layers, ParamName, Params, Preset};
+use super::BedsideFrame;
 
 /// Number of spectrum bands the visuals draw.
 pub const BANDS: usize = 32;
@@ -43,6 +45,8 @@ pub struct Control {
     seed: AtomicU32,
     adapt: AtomicBool,
     activity: AtomicU32,
+    session_progress: AtomicU32,
+    bedside: AtomicU64,
     params: [AtomicU32; 6],
     layers: [AtomicU32; 5],
 }
@@ -65,6 +69,8 @@ impl Control {
             seed: AtomicU32::new(0),
             adapt: AtomicBool::new(false),
             activity: AtomicU32::new(0.3f32.to_bits()),
+            session_progress: AtomicU32::new(f32::NAN.to_bits()),
+            bedside: AtomicU64::new(0),
             params: std::array::from_fn(|index| {
                 AtomicU32::new(params.get(ParamName::ALL[index]).to_bits())
             }),
@@ -129,6 +135,44 @@ impl Control {
 
     pub fn activity(&self) -> f32 {
         load_f32(&self.activity)
+    }
+
+    /// Publish the conductor's elapsed fraction, or clear it for untimed playback.
+    pub fn set_session_progress(&self, progress: Option<f32>) {
+        let progress = progress.map_or(f32::NAN, |value| value.clamp(0., 1.));
+        self.session_progress
+            .store(progress.to_bits(), Ordering::Relaxed);
+    }
+
+    /// Read the latest elapsed fraction without blocking the audio callback.
+    pub fn session_progress(&self) -> Option<f32> {
+        let progress = load_f32(&self.session_progress);
+        progress.is_finite().then_some(progress)
+    }
+
+    /// Publish all Bedside mix targets together for the next audio block.
+    pub fn set_bedside(&self, frame: Option<BedsideFrame>) {
+        let bits = frame.map_or(0, |frame| {
+            let pack = |value: f32| u64::from((value.clamp(0., 1.) * f32::from(u16::MAX)) as u16);
+            ((frame.room as u64 + 1) << 48)
+                | (pack(frame.music) << 32)
+                | (pack(frame.floor) << 16)
+                | pack(frame.dawn)
+        });
+        self.bedside.store(bits, Ordering::Relaxed);
+    }
+
+    /// Read the latest Bedside mix without locking the audio callback.
+    pub fn bedside(&self) -> Option<BedsideFrame> {
+        let bits = self.bedside.load(Ordering::Relaxed);
+        let index = ((bits >> 48) as usize).checked_sub(1)?;
+        let unpack = |shift| f32::from((bits >> shift) as u16) / f32::from(u16::MAX);
+        Some(BedsideFrame {
+            room: *SleepRoom::ALL.get(index)?,
+            music: unpack(32),
+            floor: unpack(16),
+            dawn: unpack(0),
+        })
     }
 
     pub fn set_param(&self, name: ParamName, value: f32) {

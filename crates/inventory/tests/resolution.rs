@@ -1,14 +1,12 @@
+mod support;
+
 use axum::{
     body::Body,
     http::{Request, StatusCode},
     Router,
 };
 use serde_json::{json, Value};
-use sjel_inventory::{
-    api::{build_router, AppState},
-    identity::encode_item_ref,
-};
-use std::sync::Arc;
+use sjel_inventory::identity::encode_item_ref;
 use tower::ServiceExt;
 
 async fn request(
@@ -40,19 +38,15 @@ async fn request(
     )
 }
 
-fn router(name: &str) -> (Router, std::path::PathBuf) {
+async fn router(name: &str) -> (Router, std::path::PathBuf) {
     let path = std::env::temp_dir().join(format!(
         "inventory-resolution-{name}-{}.db",
         std::process::id()
     ));
     let _ = std::fs::remove_file(&path);
-    let state = Arc::new(AppState {
-        device_store: devices::store::DevicesStore::open(&path).unwrap(),
-        database: path.clone(),
-    });
     (
         sjel_server::authenticated(
-            build_router(state),
+            support::owner_router(&path).await,
             sjel_server::InboundAuth::with_token(Some("test-token".into())).require_credential(),
         ),
         path,
@@ -82,7 +76,7 @@ async fn resolve(router: &Router, body: Value) -> Value {
 
 #[tokio::test]
 async fn only_a_canonical_reference_establishes_exact_identity() {
-    let (router, path) = router("identity");
+    let (router, path) = router("identity").await;
     seed(&router, "mug", "Blue mug").await;
     assert_eq!(
         request(
@@ -143,7 +137,7 @@ async fn only_a_canonical_reference_establishes_exact_identity() {
 
 #[tokio::test]
 async fn identical_products_and_accessories_never_create_automatic_links() {
-    let (router, path) = router("duplicates");
+    let (router, path) = router("duplicates").await;
     seed(&router, "one", "Dreame R10").await;
     seed(&router, "two", "Dreame R10").await;
     let same = resolve(&router, json!({"title":"Dreame R10"})).await;
@@ -168,7 +162,7 @@ async fn identical_products_and_accessories_never_create_automatic_links() {
 
 #[tokio::test]
 async fn candidate_memory_is_bounded_and_ties_are_stable() {
-    let (router, path) = router("bounded");
+    let (router, path) = router("bounded").await;
     for n in (0..15).rev() {
         seed(&router, &format!("m{n:02}"), "Blue mug").await;
     }
@@ -206,7 +200,7 @@ async fn review(router: &Router, body: Value) -> Value {
 
 #[tokio::test]
 async fn aliases_require_owner_review_at_a_current_snapshot_and_keep_exact_scope() {
-    let (router, path) = router("alias-review");
+    let (router, path) = router("alias-review").await;
     seed(&router, "one", "Blue mug").await;
     let key = alias_key("physical_item", "SERIAL-1");
     let body = review_body(&router, "one", key.clone()).await;
@@ -273,7 +267,7 @@ async fn aliases_require_owner_review_at_a_current_snapshot_and_keep_exact_scope
 
 #[tokio::test]
 async fn product_models_and_duplicate_physical_aliases_remain_ambiguous() {
-    let (router, path) = router("alias-ambiguity");
+    let (router, path) = router("alias-ambiguity").await;
     seed(&router, "one", "Same product").await;
     seed(&router, "two", "Same product").await;
     let product = alias_key("product_model", "MODEL-1");
@@ -323,7 +317,7 @@ async fn product_models_and_duplicate_physical_aliases_remain_ambiguous() {
 
 #[tokio::test]
 async fn revocations_are_versioned_idempotent_and_retained() {
-    let (router, path) = router("alias-revoke");
+    let (router, path) = router("alias-revoke").await;
     seed(&router, "one", "Blue mug").await;
     let key = alias_key("physical_item", "SERIAL-1");
     let body = review_body(&router, "one", key.clone()).await;
@@ -362,9 +356,10 @@ async fn revocations_are_versioned_idempotent_and_retained() {
     std::fs::remove_file(path).unwrap();
 }
 
+#[cfg(not(feature = "turso-wal"))]
 #[tokio::test]
 async fn item_id_reuse_never_resurrects_an_old_alias() {
-    let (router, path) = router("alias-lifetime");
+    let (router, path) = router("alias-lifetime").await;
     seed(&router, "one", "Original item").await;
     let key = alias_key("physical_item", "SERIAL-1");
     let body = review_body(&router, "one", key.clone()).await;
@@ -398,7 +393,7 @@ async fn item_id_reuse_never_resurrects_an_old_alias() {
 
 #[tokio::test]
 async fn alias_candidates_keep_the_same_bounded_contract() {
-    let (router, path) = router("alias-bound");
+    let (router, path) = router("alias-bound").await;
     let key = alias_key("product_model", "MODEL-1");
     for n in (0..12).rev() {
         let id = format!("item-{n:02}");

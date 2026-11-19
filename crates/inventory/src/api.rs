@@ -12,17 +12,22 @@ use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 #[path = "sync.rs"]
 mod sync;
+#[cfg(feature = "turso-wal")]
+#[path = "wal_preview.rs"]
+pub mod wal_preview;
 use rusqlite::OptionalExtension;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::store::{Item, Store, WriteOutcome, LEGACY_FIELDS};
+use crate::store::{Item, Store, SyncWriteOutcome, WriteOutcome, LEGACY_FIELDS};
 
 pub use inventory_api::{
-    RecordPriceRequest, SaveWishGroupRequest, SetNeedsRequest, SetSpecsRequest,
-    SetWishGroupItemsRequest,
+    RecordPriceRequest, SaveWishGroupRequest, SetAlternativesRequest, SetNeedsRequest,
+    SetSpecsRequest, SetWishGroupItemsRequest,
 };
+
+pub(crate) const SNAPSHOT_ROUTE: &str = "/api/storage/snapshot";
 
 pub struct AppState {
     pub device_store: devices::store::DevicesStore,
@@ -48,26 +53,45 @@ async fn health() -> &'static str {
 /// source and fails when a route is missing here.
 const ROUTES: &[route_manifest::Route] = &[
     route_manifest::Route {
-        method: "POST", path: "/api/item-aliases",
+        method: "POST",
+        path: "/api/item-aliases",
         summary: "Record an owner-reviewed source-scoped item or product alias at a current snapshot.",
         request_schema: Some(route_manifest::schema_of::<inventory_api::aliases::AliasReview>),
     },
     route_manifest::Route {
-        method: "POST", path: "/api/item-aliases/{id}/revoke",
+        method: "POST",
+        path: "/api/item-aliases/{id}/revoke",
         summary: "Revoke an alias review at its version, retaining its provenance.",
         request_schema: Some(route_manifest::schema_of::<inventory_api::aliases::AliasRevocation>),
     },
-    r("GET", "/api/item-refs/{reference}/aliases", "Owner-reviewed aliases and retained revocations for an item reference."),
+    r(
+        "GET",
+        "/api/item-refs/{reference}/aliases",
+        "Owner-reviewed aliases and retained revocations for an item reference.",
+    ),
     route_manifest::Route {
         method: "POST",
         path: "/api/items/resolve",
         summary: "Resolve an item reference or retrieve review-only title candidates. Never changes inventory.",
-        request_schema: Some(route_manifest::schema_of::<inventory_api::resolution::ResolveRequest>),
+        request_schema: Some(
+            route_manifest::schema_of::<inventory_api::resolution::ResolveRequest>,
+        ),
     },
     r("GET", "/", "Every entry as a page, rendered from the rows."),
     r("GET", "/health", "Liveness."),
     r("GET", "/routes", "This catalogue."),
     r("GET", "/api/inventory", "Every entry with its state."),
+    route_manifest::Route {
+        method: "POST",
+        path: inventory_api::ROUTE_IMPORT_OVERLAY,
+        summary: "Import the Inventory files from the owner overlay. A nonempty store requires force.",
+        request_schema: Some(route_manifest::schema_of::<inventory_api::ImportOverlayRequest>),
+    },
+    r(
+        "GET",
+        "/api/search",
+        "Find at most five items by query words in ?q=.",
+    ),
     r(
         "GET",
         "/api/item-refs/{reference}",
@@ -129,6 +153,12 @@ const ROUTES: &[route_manifest::Route] = &[
         summary: "Set the items assigned to a wish group.",
         request_schema: Some(route_manifest::schema_of::<SetWishGroupItemsRequest>),
     },
+    route_manifest::Route {
+        method: "PUT",
+        path: inventory_api::ROUTE_WISH_GROUP_ALTERNATIVES,
+        summary: "Choose whether the group's members compete for one purchase.",
+        request_schema: Some(route_manifest::schema_of::<SetAlternativesRequest>),
+    },
     r(
         "GET",
         "/api/wish-comparison",
@@ -149,8 +179,7 @@ const ROUTES: &[route_manifest::Route] = &[
     route_manifest::Route {
         method: "POST",
         path: "/api/items/{id}/prices",
-        summary:
-            "Record a dated price. One per source and day; the first at or below the limit alerts.",
+        summary: "Record a dated price. One per source and day; the first at or below the limit alerts.",
         request_schema: Some(route_manifest::schema_of::<RecordPriceRequest>),
     },
     r(
@@ -196,6 +225,10 @@ async fn routes() -> Json<serde_json::Value> {
 /// A page without the shell, for a look straight at the port.
 async fn index(State(s): State<Arc<AppState>>) -> Result<Html<String>, HttpError> {
     let rows = store(&s)?.catalogue().map_err(boom)?;
+    Ok(inventory_page(&rows))
+}
+
+fn inventory_page(rows: &crate::client::Catalogue) -> Html<String> {
     let mut html = String::from(
         "<!doctype html><meta charset=\"utf-8\"><title>inventory</title>\
          <style>body{font:14px/1.5 -apple-system,sans-serif;margin:2rem;max-width:60rem}\
@@ -211,7 +244,7 @@ async fn index(State(s): State<Arc<AppState>>) -> Result<Html<String>, HttpError
         ));
     }
     html.push_str("</table>");
-    Ok(Html(html))
+    Html(html)
 }
 
 fn escape(s: &str) -> String {
@@ -222,13 +255,77 @@ fn escape(s: &str) -> String {
 
 async fn api_inventory(State(s): State<Arc<AppState>>) -> Result<impl IntoResponse, HttpError> {
     let rows = store(&s)?.catalogue().map_err(boom)?;
-    let out: Vec<_> = rows
-        .into_values()
+    Ok(Json(catalogue_entries(rows)))
+}
+
+fn catalogue_entries(rows: crate::client::Catalogue) -> Vec<serde_json::Value> {
+    rows.into_values()
         .map(
             |(item, state)| serde_json::json!({ "item": item, "state": state.map(|s| s.as_str()) }),
         )
+        .collect()
+}
+
+async fn api_import_overlay(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<inventory_api::ImportOverlayRequest>,
+) -> Result<Json<crate::import::Report>, HttpError> {
+    tokio::task::spawn_blocking(move || {
+        let items = overlay_import_items()?;
+        import_response(
+            store(&state)?
+                .import_items(items, body.force)
+                .map_err(boom)?,
+        )
+    })
+    .await
+    .map_err(boom)?
+}
+
+fn overlay_import_items() -> Result<Vec<(Item, crate::store::State)>, HttpError> {
+    let dir = crate::import::overlay_dir().ok_or((
+        StatusCode::NOT_FOUND,
+        "No inventory/*.toml found in the Inventory or Interior overlay".into(),
+    ))?;
+    crate::import::load(&dir).map_err(refused)
+}
+
+fn import_response(
+    report: Option<crate::import::Report>,
+) -> Result<Json<crate::import::Report>, HttpError> {
+    report.map(Json).ok_or((
+        StatusCode::CONFLICT,
+        "Entries already exist. Use inventory import --force to replace their values.".into(),
+    ))
+}
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    #[serde(default)]
+    q: String,
+}
+
+async fn api_search(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(query): axum::extract::Query<SearchQuery>,
+) -> Result<Json<serde_json::Value>, HttpError> {
+    let items =
+        tokio::task::spawn_blocking(move || store(&state)?.search_items(&query.q).map_err(boom))
+            .await
+            .map_err(boom)??;
+    Ok(search_hits(items))
+}
+
+fn search_hits(items: Vec<(String, String)>) -> Json<serde_json::Value> {
+    let hits: Vec<_> = items
+        .into_iter()
+        .map(|(title, detail)| {
+            serde_json::json!({
+                "kind": "item", "title": title, "detail": detail, "link": "sjel://inventory"
+            })
+        })
         .collect();
-    Ok(Json(out))
+    Json(serde_json::json!({ "hits": hits }))
 }
 
 async fn api_item_ref(
@@ -239,10 +336,22 @@ async fn api_item_ref(
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let st = store(&s)?;
     let conn = st.borrow_connection().map_err(boom)?;
-    let result: Option<(i64, Option<String>)> = conn.query_row(
-        "SELECT i.revision, (SELECT state FROM inventory_item_state WHERE item_id=i.id ORDER BY since DESC, id DESC LIMIT 1) FROM inventory_item i WHERE i.id=?1",
-        [&id], |row| Ok((row.get(0)?, row.get(1)?)),
-    ).optional().map_err(boom)?;
+    let result: Option<(i64, Option<String>)> = conn
+        .query_row(
+            &crate::store::item_reference_query("inventory"),
+            [&id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(boom)?;
+    item_reference(reference, id, result)
+}
+
+fn item_reference(
+    reference: String,
+    id: String,
+    result: Option<(i64, Option<String>)>,
+) -> Result<Json<serde_json::Value>, HttpError> {
     let (revision, state) = result.ok_or((StatusCode::NOT_FOUND, "item not found".into()))?;
     Ok(Json(
         serde_json::json!({"typed_ref": reference, "raw_id": id, "revision": revision, "state": state}),
@@ -256,6 +365,14 @@ async fn api_item_ref(
 async fn api_wishlist(State(s): State<Arc<AppState>>) -> Result<impl IntoResponse, HttpError> {
     let st = store(&s)?;
     let rows = st.catalogue().map_err(boom)?;
+    let alternatives = st.alternative_groups().map_err(boom)?;
+    wishlist_response(rows, alternatives).await
+}
+
+async fn wishlist_response(
+    rows: crate::client::Catalogue,
+    alternatives: Vec<Vec<String>>,
+) -> Result<Json<serde_json::Value>, HttpError> {
     let open: Vec<_> = rows
         .values()
         .filter(|(_, s)| *s == Some(crate::store::State::Wanted))
@@ -264,7 +381,6 @@ async fn api_wishlist(State(s): State<Arc<AppState>>) -> Result<impl IntoRespons
 
     // A group of alternatives is one purchase: only its cheapest member is in the totals. The
     // list itself still carries every wish.
-    let alternatives = st.alternative_groups().map_err(boom)?;
     let counted = crate::store::compare::counted(open.clone(), &alternatives);
     let total_low: i64 = counted
         .iter()
@@ -279,8 +395,9 @@ async fn api_wishlist(State(s): State<Arc<AppState>>) -> Result<impl IntoRespons
         .filter(|i| i.price_cents.is_none() && i.cost_min_cents.is_none())
         .count();
 
-    let conn = st.borrow_connection().map_err(boom)?;
-    let balance = crate::budget::monthly_balance(&conn).map_err(boom)?;
+    let balance = tokio::task::spawn_blocking(crate::budget::monthly_balance)
+        .await
+        .map_err(boom)?;
     let months = balance
         .as_ref()
         .and_then(|b| crate::budget::months_to_pay(total_low, b));
@@ -371,6 +488,17 @@ async fn api_put_needs(
     Ok(StatusCode::OK)
 }
 
+async fn api_put_alternatives(
+    State(s): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<SetAlternativesRequest>,
+) -> Result<StatusCode, HttpError> {
+    store(&s)?
+        .set_alternatives(&id, body.alternatives)
+        .map_err(refused)?;
+    Ok(StatusCode::OK)
+}
+
 async fn api_put_specs(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -397,15 +525,15 @@ async fn api_post_price(
     Ok(Json(recorded))
 }
 
-#[derive(Deserialize)]
-struct NewItem {
+#[derive(Deserialize, serde::Serialize)]
+pub(crate) struct NewItem {
     #[serde(flatten)]
-    item: Item,
+    pub(crate) item: Item,
     /// Required: every list joins on the latest state, so a row without one is invisible.
-    state: crate::store::State,
+    pub(crate) state: crate::store::State,
     /// The note on the first state row, not the item's `notes`.
     #[serde(default)]
-    note: Option<String>,
+    pub(crate) note: Option<String>,
 }
 
 async fn api_post_item(
@@ -416,19 +544,26 @@ async fn api_post_item(
     if body.item.id.trim().is_empty() {
         return Err((StatusCode::BAD_REQUEST, "`id` is missing".into()));
     }
-    if st.item(&body.item.id).map_err(boom)?.is_some() {
+    let revision = st
+        .create_item(
+            &body.item,
+            body.state,
+            body.note.as_deref().or(Some("created in the dashboard")),
+        )
+        .map_err(boom)?;
+    created_item(body, revision)
+}
+
+fn created_item(
+    body: NewItem,
+    revision: Option<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), HttpError> {
+    let Some(revision) = revision else {
         return Err((
             StatusCode::CONFLICT,
             format!("`{}` exists already; PATCH changes it", body.item.id),
         ));
-    }
-    let revision = st.upsert_item(&body.item).map_err(boom)?;
-    st.record_state(
-        &body.item.id,
-        body.state,
-        body.note.as_deref().or(Some("created in the dashboard")),
-    )
-    .map_err(boom)?;
+    };
     Ok((
         StatusCode::CREATED,
         Json(serde_json::json!({
@@ -562,18 +697,26 @@ fn written(id: &str, revision: i64) -> Response {
 /// Write against the revision the client read. Stale is 409 with the current row, so a client
 /// that can be offline shows it and lets a person decide instead of retrying.
 fn write_if_revision(st: &Store, item: &Item, expected: i64) -> Result<Response, HttpError> {
-    match st.update_item_if_revision(item, expected).map_err(boom)? {
-        WriteOutcome::Written(revision) => Ok(written(&item.id, revision)),
-        WriteOutcome::Missing => Err((StatusCode::NOT_FOUND, format!("no entry `{}`", item.id))),
+    write_response(
+        &item.id,
+        expected,
+        st.update_item_if_revision(item, expected).map_err(boom)?,
+    )
+}
+
+fn write_response(id: &str, expected: i64, outcome: WriteOutcome) -> Result<Response, HttpError> {
+    match outcome {
+        WriteOutcome::Written(revision) => Ok(written(id, revision)),
+        WriteOutcome::Missing => Err((StatusCode::NOT_FOUND, format!("no entry `{id}`"))),
         // The dashboard shows `error` to the person who decides
         // (dashboard/vite/inventory-conflict.test.ts).
         WriteOutcome::Stale(current, state) => Ok((
             StatusCode::CONFLICT,
             Json(serde_json::json!({
                 "error": format!(
-                    "`{}` was changed meanwhile: expected revision {expected}, current {}; \
+                    "`{id}` was changed meanwhile: expected revision {expected}, current {}; \
                      reload and apply the change to the current values",
-                    item.id, current.revision
+                    current.revision
                 ),
                 "current": {
                     "item": current,
@@ -605,9 +748,15 @@ async fn api_post_state(
     let changed = st
         .record_state(&id, body.state, body.note.as_deref())
         .map_err(boom)?;
-    Ok(Json(serde_json::json!({
-        "id": id, "state": body.state.as_str(), "changed": changed
-    })))
+    Ok(state_response(id, body.state, changed))
+}
+
+fn state_response(
+    id: String,
+    state: crate::store::State,
+    changed: bool,
+) -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "id": id, "state": state.as_str(), "changed": changed }))
 }
 
 async fn api_state_history(
@@ -615,11 +764,15 @@ async fn api_state_history(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, HttpError> {
     let rows = store(&s)?.state_history(&id).map_err(boom)?;
-    let out: Vec<_> = rows
-        .into_iter()
-        .map(|(s, since, note)| serde_json::json!({ "state": s.as_str(), "since": since, "note": note }))
-        .collect();
-    Ok(Json(out))
+    Ok(state_history_response(rows))
+}
+
+fn state_history_response(
+    rows: Vec<(crate::store::State, String, Option<String>)>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(rows.into_iter()
+        .map(|(state, since, note)| serde_json::json!({ "state": state.as_str(), "since": since, "note": note }))
+        .collect())
 }
 
 // ─── Device sync ─────────────────────────────────────────────────────────────
@@ -631,7 +784,7 @@ fn node_id() -> String {
 /// Verify the device signature before the handler runs. The signature covers method, path and
 /// body, so the body is read here and passed on.
 async fn signed_sync_auth(
-    State(state): State<Arc<AppState>>,
+    State(device_store): State<Arc<devices::store::DevicesStore>>,
     request: Request,
     next: middleware::Next,
 ) -> Response {
@@ -642,7 +795,7 @@ async fn signed_sync_auth(
                 StatusCode::UNAUTHORIZED,
                 Json(serde_json::json!({ "error": error })),
             )
-                .into_response()
+                .into_response();
         }
     };
     let method = request.method().as_str().to_string();
@@ -656,13 +809,8 @@ async fn signed_sync_auth(
         Err(_) => return (StatusCode::PAYLOAD_TOO_LARGE, "request body too large").into_response(),
     };
     let result = tokio::task::spawn_blocking({
-        let state = Arc::clone(&state);
-        let body = body.to_vec();
-        move || {
-            state
-                .device_store
-                .authenticate(&signed, &method, &path_and_query, &body)
-        }
+        let signed_body = body.to_vec();
+        move || device_store.authenticate(&signed, &method, &path_and_query, &signed_body)
     })
     .await;
     let device = match result {
@@ -672,19 +820,77 @@ async fn signed_sync_auth(
                 StatusCode::UNAUTHORIZED,
                 Json(serde_json::json!({ "error": error.to_string() })),
             )
-                .into_response()
+                .into_response();
         }
         Err(error) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({ "error": error.to_string() })),
             )
-                .into_response()
+                .into_response();
         }
     };
     let mut request = Request::from_parts(parts, Body::from(body));
     request.extensions_mut().insert(device);
     next.run(request).await
+}
+
+enum SyncBackend {
+    Sqlite(Store),
+    #[cfg(feature = "turso-wal")]
+    Wal(Arc<wal_preview::WalPreview>),
+}
+
+impl SyncBackend {
+    async fn receipt(&self, operation_id: &str) -> Result<Option<i64>, HttpError> {
+        match self {
+            Self::Sqlite(store) => store.sync_operation_revision(operation_id).map_err(boom),
+            #[cfg(feature = "turso-wal")]
+            Self::Wal(store) => store.sync_receipt(operation_id).await,
+        }
+    }
+
+    async fn create(
+        &self,
+        operation_id: &str,
+        body: &NewItem,
+    ) -> Result<Option<SyncWriteOutcome>, HttpError> {
+        match self {
+            Self::Sqlite(store) => store
+                .apply_sync_create(operation_id, &body.item, body.state, body.note.as_deref())
+                .map_err(boom),
+            #[cfg(feature = "turso-wal")]
+            Self::Wal(store) => store.apply_sync_create(operation_id, body).await,
+        }
+    }
+
+    async fn apply(
+        &self,
+        operation_id: &str,
+        item_id: &str,
+        expected: i64,
+        fields: serde_json::Map<String, serde_json::Value>,
+    ) -> Result<SyncWriteOutcome, HttpError> {
+        let patch = serde_json::Value::Object(fields);
+        match self {
+            Self::Sqlite(store) => {
+                let (current, _) = store
+                    .item(item_id)
+                    .map_err(boom)?
+                    .ok_or_else(|| (StatusCode::NOT_FOUND, format!("no item `{item_id}`")))?;
+                let merged = merge_patch(&current, patch)?;
+                store
+                    .apply_sync_item(operation_id, &merged, expected)
+                    .map_err(boom)
+            }
+            #[cfg(feature = "turso-wal")]
+            Self::Wal(store) => {
+                store
+                    .apply_sync(operation_id, item_id, expected, patch)
+                    .await
+            }
+        }
+    }
 }
 
 /// Apply a batch of mutations from a paired device.
@@ -697,9 +903,16 @@ async fn api_sync(
     Extension(device): Extension<devices::store::Device>,
     Json(envelope): Json<sync::Envelope>,
 ) -> Result<impl IntoResponse, HttpError> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs() as i64);
+    validate_sync_envelope(&device, &envelope)?;
+    Ok(Json(
+        apply_sync_envelope(SyncBackend::Sqlite(store(&state)?), device, envelope).await?,
+    ))
+}
+
+fn validate_sync_envelope(
+    device: &devices::store::Device,
+    envelope: &sync::Envelope,
+) -> Result<(), HttpError> {
     // `axon-sync/v1` is the pre-rename string a paired phone still sends for one release.
     if envelope.protocol_version != "sjel-sync/v1" && envelope.protocol_version != "axon-sync/v1" {
         return Err((
@@ -719,7 +932,17 @@ async fn api_sync(
             "envelope actor does not match the signed device".into(),
         ));
     }
-    let st = store(&state)?;
+    Ok(())
+}
+
+async fn apply_sync_envelope(
+    backend: SyncBackend,
+    device: devices::store::Device,
+    envelope: sync::Envelope,
+) -> Result<sync::ResponseEnvelope, HttpError> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs() as i64);
     let mut response = sync::empty_response(&envelope, now);
     for mutation in envelope.mutations {
         let operation_id = mutation.operation_id.clone();
@@ -731,7 +954,13 @@ async fn api_sync(
             processed_at,
             error: Some(error.into()),
         };
-        if let Some(revision) = st.sync_operation_revision(&operation_id).map_err(boom)? {
+        if mutation.actor_device_id != device.id {
+            response
+                .acknowledgements
+                .push(rejected("mutation actor does not match the signed device"));
+            continue;
+        }
+        if let Some(revision) = backend.receipt(&operation_id).await? {
             response.acknowledgements.push(sync::Acknowledgement {
                 operation_id,
                 status: "duplicate",
@@ -741,50 +970,70 @@ async fn api_sync(
             });
             continue;
         }
-        if mutation.actor_device_id != device.id {
+        let outcome = if mutation.entity_type != "interior.item" {
             response
                 .acknowledgements
-                .push(rejected("mutation actor does not match the signed device"));
+                .push(rejected("unsupported sync entity type"));
             continue;
-        }
-        if mutation.entity_type != "interior.item"
-            || !matches!(mutation.action.as_str(), "patch" | "upsert")
-        {
-            response.acknowledgements.push(rejected(
-                "initial sync supports only interior.item patch or upsert mutations",
-            ));
-            continue;
-        }
-        let Some(base_revision) = mutation.base_revision.as_deref() else {
-            response.acknowledgements.push(rejected(
-                "base_revision is required for an offline mutation",
-            ));
-            continue;
-        };
-        let Ok(expected) = base_revision.parse::<i64>() else {
+        } else if mutation.action == "create" {
+            if mutation.base_revision.is_some() || mutation.entity_id.trim().is_empty() {
+                response
+                    .acknowledgements
+                    .push(rejected("create requires an item id and no base revision"));
+                continue;
+            }
+            let mut fields = mutation.fields.clone();
+            fields.insert("id".into(), mutation.entity_id.clone().into());
+            let Ok(body) = serde_json::from_value::<NewItem>(serde_json::Value::Object(fields))
+            else {
+                response
+                    .acknowledgements
+                    .push(rejected("invalid item or initial state"));
+                continue;
+            };
+            let Some(outcome) = backend.create(&operation_id, &body).await? else {
+                response
+                    .acknowledgements
+                    .push(rejected("item already exists"));
+                continue;
+            };
+            outcome
+        } else if matches!(mutation.action.as_str(), "patch" | "upsert") {
+            let Some(expected) = mutation
+                .base_revision
+                .as_deref()
+                .and_then(|revision| revision.parse::<i64>().ok())
+            else {
+                response
+                    .acknowledgements
+                    .push(rejected("base_revision must be a decimal revision"));
+                continue;
+            };
+            backend
+                .apply(
+                    &operation_id,
+                    &mutation.entity_id,
+                    expected,
+                    mutation.fields.clone(),
+                )
+                .await?
+        } else {
             response
                 .acknowledgements
-                .push(rejected("base_revision must be a decimal revision"));
+                .push(rejected("unsupported sync action"));
             continue;
         };
-        let current = st.item(&mutation.entity_id).map_err(boom)?.ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                format!("no item `{}`", mutation.entity_id),
-            )
-        })?;
-        let mut merged = merge_patch(
-            &current.0,
-            serde_json::Value::Object(mutation.fields.clone()),
-        )?;
-        merged.id = mutation.entity_id.clone();
-        match st
-            .update_item_if_revision(&merged, expected)
-            .map_err(boom)?
-        {
-            WriteOutcome::Written(revision) => {
-                st.record_sync_operation(&mutation.operation_id, revision)
-                    .map_err(boom)?;
+        match outcome {
+            SyncWriteOutcome::Duplicate(revision) => {
+                response.acknowledgements.push(sync::Acknowledgement {
+                    operation_id,
+                    status: "duplicate",
+                    revision: Some(revision.to_string()),
+                    processed_at,
+                    error: None,
+                });
+            }
+            SyncWriteOutcome::Edit(WriteOutcome::Written(revision)) => {
                 response.acknowledgements.push(sync::Acknowledgement {
                     operation_id,
                     status: "accepted",
@@ -793,10 +1042,10 @@ async fn api_sync(
                     error: None,
                 });
             }
-            WriteOutcome::Missing => response
+            SyncWriteOutcome::Edit(WriteOutcome::Missing) => response
                 .acknowledgements
                 .push(rejected("item does not exist")),
-            WriteOutcome::Stale(actual, _) => {
+            SyncWriteOutcome::Edit(WriteOutcome::Stale(actual, _)) => {
                 let canonical = serde_json::to_value(&*actual).unwrap_or(serde_json::Value::Null);
                 response.conflicts.push(serde_json::json!({
                     "conflict_id": mutation.operation_id,
@@ -820,7 +1069,7 @@ async fn api_sync(
             }
         }
     }
-    Ok(Json(response))
+    Ok(response)
 }
 
 /// Names the origin allowlist variable, `SJEL_INVENTORY_ALLOWED_ORIGIN_HOSTS`.
@@ -831,7 +1080,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         Router::new()
             .route("/api/sync", post(api_sync))
             .layer(middleware::from_fn_with_state(
-                Arc::clone(&state),
+                Arc::new(state.device_store.clone()),
                 signed_sync_auth,
             ));
     Router::new()
@@ -839,6 +1088,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/health", get(health))
         .route("/routes", get(routes))
         .route("/api/inventory", get(api_inventory))
+        .route("/api/search", get(api_search))
         .route("/api/item-refs/{reference}", get(api_item_ref))
         .route(
             "/api/item-refs/{reference}/aliases",
@@ -878,6 +1128,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/wish-groups/{id}", delete(api_delete_wish_group))
         .route("/api/wish-groups/{id}/items", put(api_put_wish_group_items))
         .route("/api/wish-groups/{id}/needs", put(api_put_needs))
+        .route(
+            inventory_api::ROUTE_WISH_GROUP_ALTERNATIVES,
+            put(api_put_alternatives),
+        )
         .route("/api/wish-comparison", get(api_wish_comparison))
         .route("/api/items/{id}/specs", put(api_put_specs))
         .route("/api/items/{id}/prices", post(api_post_price))
@@ -886,6 +1140,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(crate::mail_proposals::snapshot),
         )
         .route("/api/items", post(api_post_item))
+        .route(
+            inventory_api::ROUTE_IMPORT_OVERLAY,
+            post(api_import_overlay),
+        )
         .route("/api/items/{id}", put(api_put_item).patch(api_patch_item))
         .route(
             "/api/items/{id}/state",
@@ -904,10 +1162,13 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
     sjel_server::agent_policy::AgentRoutes {
         closed: &[
+            ("POST", SNAPSHOT_ROUTE),
+            ("GET", "/api/search"),
             ("POST", "/api/item-aliases"),
             ("POST", "/api/item-aliases/{id}/revoke"),
             ("GET", "/api/item-refs/{reference}/aliases"),
             ("POST", "/api/items/resolve"),
+            ("POST", inventory_api::ROUTE_IMPORT_OVERLAY),
             ("GET", "/api/mail-proposals"),
             ("GET", "/api/item-refs/{reference}"),
             ("GET", "/api/items/{id}/mail-match-snapshot"),
@@ -918,23 +1179,42 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
         ..sjel_server::agent_policy::AgentRoutes::NONE
     };
 
-pub async fn serve() {
+pub async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let port: u16 = sjel_config::env_var("SJEL_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(8101);
-    let database = sjel_config::database_path();
-    let device_store = devices::store::DevicesStore::open(&database)
-        .unwrap_or_else(|error| panic!("inventory: cannot open device registry: {error}"));
-    let state = Arc::new(AppState {
-        device_store,
-        database,
-    });
-    sjel_server::serve_local_with("inventory", port, build_router(state), AGENT_ROUTES).await;
+    let engine = sjel_config::env_var("SJEL_INVENTORY_ENGINE").unwrap_or_default();
+    let registry = sjel_config::database_path();
+    let database = crate::database_path();
+    let router = match engine.as_str() {
+        "" | "sqlite" => build_router(Arc::new(AppState {
+            device_store: devices::store::DevicesStore::open(&registry)?,
+            database,
+        })),
+        #[cfg(feature = "turso-wal")]
+        "turso-wal" => {
+            let snapshot = sjel_config::env_var("SJEL_INVENTORY_SNAPSHOT_DIR")
+                .map_err(|_| "Turso requires SJEL_INVENTORY_SNAPSHOT_DIR")?;
+            wal_preview::owner_router(&database, &registry, &sjel_config::expand_tilde(&snapshot))
+                .await?
+        }
+        #[cfg(not(feature = "turso-wal"))]
+        "turso-wal" => return Err("Inventory was built without the turso-wal feature".into()),
+        _ => return Err("Unknown SJEL_INVENTORY_ENGINE; use sqlite or turso-wal".into()),
+    };
+    sjel_server::serve_local_with("inventory", port, router, AGENT_ROUTES).await;
+    Ok(())
 }
 
 #[cfg(test)]
 mod route_manifest_tests {
+    #[test]
+    fn owner_maintenance_routes_are_closed_to_agent_tokens() {
+        assert!(super::AGENT_ROUTES.closes("POST", inventory_api::ROUTE_IMPORT_OVERLAY));
+        assert!(super::AGENT_ROUTES.closes("POST", "/api/storage/snapshot"));
+    }
+
     #[test]
     fn mail_routes_are_closed_to_agent_tokens() {
         for (method, path) in [
@@ -1074,6 +1354,27 @@ mod revision_tests {
 
     fn wardrobe(label: &str) -> Value {
         json!({ "id": "wardrobe", "kind": "piece", "label": label, "width": 100 })
+    }
+
+    #[tokio::test]
+    async fn finder_search_matches_all_words_and_treats_percent_as_literal() {
+        let (r, path) = router("finder-search");
+        let mut item = wardrobe("100% Wool");
+        item["notes"] = json!("winter storage");
+        let (status, _, _) = send(&r, "PUT", "/api/items/wardrobe", None, item).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _, result) =
+            send(&r, "GET", "/api/search?q=%25+winter", None, Value::Null).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            result,
+            json!({ "hits": [{
+            "kind": "item", "title": "100% Wool", "detail": "piece", "link": "sjel://inventory"
+        }] })
+        );
+        let (_, _, result) = send(&r, "GET", "/api/search?q=%25+summer", None, Value::Null).await;
+        assert_eq!(result, json!({ "hits": [] }));
+        let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test]

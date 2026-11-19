@@ -11,11 +11,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use chrono::{Days, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 use crate::shell::{EntityFact, EntityRecord};
 
 pub mod edit;
+pub mod graph;
 
 /// The value behind one key in `EntityRecord::values`.
 ///
@@ -162,6 +164,21 @@ impl Person {
             .collect()
     }
 
+    pub fn follow_up_due(&self) -> Option<NaiveDate> {
+        let last = self.values.get("last_contact")?.parse::<NaiveDate>().ok()?;
+        let weeks = self
+            .values
+            .get(entities_api::FOLLOW_UP_WEEKS)?
+            .parse::<u32>()
+            .ok()?;
+        (weeks > 0).then_some(())?;
+        last.checked_add_days(Days::new(u64::from(weeks) * 7))
+    }
+
+    pub fn is_overdue(&self, today: NaiveDate) -> bool {
+        self.follow_up_due().is_some_and(|due| due < today)
+    }
+
     /// Every source that wrote a value for this person.
     pub fn origins(&self) -> BTreeSet<&str> {
         self.sources.values().map(String::as_str).collect()
@@ -184,6 +201,8 @@ const NETWORK_ROWS: &[(&str, &str)] = &[
     ("linkedin", "LinkedIn"),
     ("connected_on", "Connected"),
     ("last_contact", "Last contact"),
+    ("met_at", "How we met"),
+    (entities_api::FOLLOW_UP_WEEKS, "Follow-up interval (weeks)"),
 ];
 
 /// Which people the list shows, by the source that wrote their values.
@@ -298,28 +317,26 @@ pub fn extract_initials(name: &str) -> String {
     }
 }
 
-/// Filters people by search query against name, company, role, location, or email.
+/// Filters people by search query against name, aliases, company, role, location, or email.
 pub fn filter_people<'a>(people: &'a [Person], query: &str) -> Vec<&'a Person> {
-    let q = query.trim().to_ascii_lowercase();
+    let q = query.trim().to_lowercase();
     if q.is_empty() {
         return people.iter().collect();
     }
     people
         .iter()
         .filter(|p| {
-            p.name.to_ascii_lowercase().contains(&q)
-                || p.company
-                    .as_ref()
-                    .is_some_and(|c| c.to_ascii_lowercase().contains(&q))
-                || p.role
-                    .as_ref()
-                    .is_some_and(|r| r.to_ascii_lowercase().contains(&q))
-                || p.location
-                    .as_ref()
-                    .is_some_and(|l| l.to_ascii_lowercase().contains(&q))
-                || p.email
-                    .as_ref()
-                    .is_some_and(|e| e.to_ascii_lowercase().contains(&q))
+            [
+                Some(&p.name),
+                p.values.get("aliases"),
+                p.company.as_ref(),
+                p.role.as_ref(),
+                p.location.as_ref(),
+                p.email.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .any(|field| field.to_lowercase().contains(&q))
         })
         .collect()
 }
@@ -327,6 +344,42 @@ pub fn filter_people<'a>(people: &'a [Person], query: &str) -> Vec<&'a Person> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn aliases_are_searched_and_follow_up_becomes_overdue_after_its_due_day() {
+        let mut record = EntityRecord {
+            name: "Ada Lovelace".into(),
+            ..Default::default()
+        };
+        record.values.insert(
+            "aliases".into(),
+            serde_json::json!({
+                "value": ["Àda", "A. L."], "source": "operator"
+            }),
+        );
+        record
+            .values
+            .insert("last_contact".into(), serde_json::json!("2026-12-24"));
+        record
+            .values
+            .insert(entities_api::FOLLOW_UP_WEEKS.into(), serde_json::json!(2));
+        let person = Person::from_record(&record);
+        assert_eq!(
+            filter_people(std::slice::from_ref(&person), " ÀDA "),
+            vec![&person]
+        );
+        let due = NaiveDate::from_ymd_opt(2027, 1, 7).unwrap();
+        assert_eq!(person.follow_up_due(), Some(due));
+        assert!(!person.is_overdue(due));
+        assert!(person.is_overdue(due.succ_opt().unwrap()));
+
+        record.values.remove("last_contact");
+        assert_eq!(Person::from_record(&record).follow_up_due(), None);
+        record
+            .values
+            .insert("last_contact".into(), serde_json::json!("2026-02-30"));
+        assert_eq!(Person::from_record(&record).follow_up_due(), None);
+    }
 
     fn sourced(name: &str, values: &[(&str, &str, &str)]) -> Person {
         let values = values

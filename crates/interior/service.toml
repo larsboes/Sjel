@@ -7,3 +7,4 @@ port           = "8092"
 health_path    = "/health"
 autostart      = "false"
 proxy_api_only = "true"
+requires       = ["inventory"]

@@ -3,6 +3,8 @@
 //! The answers are constructed, not recorded: `j-sideboard-knapp` places the one piece with
 //! estimated sizes exactly five centimetres before a hard zone.
 
+mod support;
+
 use interior::model::Model;
 use interior::tolerance::{robustness, Holds, HORIZON_CM};
 use std::sync::Once;
@@ -11,7 +13,7 @@ const FLAT: &str = "muster";
 
 fn model() -> Model {
     fixture_overlay();
-    Model::load(FLAT).unwrap_or_else(|e| panic!("{FLAT}: {e}"))
+    support::load_model(FLAT).unwrap_or_else(|e| panic!("{FLAT}: {e}"))
 }
 
 /// The same setup as `engine.rs`: one database file per test binary, filled through the real

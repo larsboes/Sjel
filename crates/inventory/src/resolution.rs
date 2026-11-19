@@ -15,7 +15,7 @@ use crate::{
     store::{self, Store},
 };
 
-const CANDIDATE_LIMIT: usize = 10;
+pub(crate) const CANDIDATE_LIMIT: usize = 10;
 type HttpError = (StatusCode, String);
 
 fn internal(e: impl std::fmt::Display) -> HttpError {
@@ -36,7 +36,7 @@ fn title_key(text: &str) -> String {
         .to_lowercase()
 }
 
-fn candidate(
+pub(crate) fn candidate(
     item: inventory_api::MailMatchSnapshot,
     reason: CandidateReason,
     overlap_bp: Option<u32>,
@@ -53,10 +53,13 @@ fn candidate(
     })
 }
 
-pub(crate) async fn resolve(
-    State(state): State<Arc<AppState>>,
-    Json(request): Json<ResolveRequest>,
-) -> Result<Json<Resolution>, HttpError> {
+type ResolveInput = (
+    Option<String>,
+    Option<String>,
+    Option<inventory_api::aliases::AliasKey>,
+);
+
+pub(crate) fn parse_request(request: ResolveRequest) -> Result<ResolveInput, HttpError> {
     let invalid = || {
         (
             StatusCode::BAD_REQUEST,
@@ -87,6 +90,14 @@ pub(crate) async fn resolve(
         }
         _ => return Err(invalid()),
     };
+    Ok((reference, title, alias))
+}
+
+pub(crate) async fn resolve(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ResolveRequest>,
+) -> Result<Json<Resolution>, HttpError> {
+    let (reference, title, alias) = parse_request(request)?;
     let store = Store::open(&state.database).map_err(internal)?;
     let conn = store.borrow_connection().map_err(internal)?;
     if let Some(key) = alias {
@@ -147,8 +158,7 @@ pub(crate) async fn resolve(
         }));
     }
     let title = title.unwrap_or_default();
-    let query = tokens(&title);
-    let normalized_title = title_key(&title);
+    let mut ranking = TitleRanking::new(&title);
     let mut stmt = conn
         .prepare(&format!(
             "SELECT {} {}",
@@ -157,38 +167,63 @@ pub(crate) async fn resolve(
         ))
         .map_err(internal)?;
     let rows = stmt.query_map([], store::read_snapshot).map_err(internal)?;
-    let mut candidates = Vec::with_capacity(CANDIDATE_LIMIT + 1);
-    let mut total_candidates = 0;
     for row in rows {
-        let item = row.map_err(internal)?;
-        let item_tokens = tokens(&item.title);
-        let shared: Vec<_> = query.intersection(&item_tokens).cloned().collect();
-        if shared.is_empty() {
-            continue;
+        ranking.add(row.map_err(internal)?)?;
+    }
+    Ok(Json(ranking.finish()))
+}
+
+pub(crate) struct TitleRanking {
+    query: BTreeSet<String>,
+    normalized: String,
+    candidates: Vec<ResolutionCandidate>,
+    total: usize,
+}
+
+impl TitleRanking {
+    pub(crate) fn new(title: &str) -> Self {
+        Self {
+            query: tokens(title),
+            normalized: title_key(title),
+            candidates: Vec::with_capacity(CANDIDATE_LIMIT + 1),
+            total: 0,
         }
-        let union = query.len() + item_tokens.len() - shared.len();
+    }
+
+    pub(crate) fn add(&mut self, item: inventory_api::MailMatchSnapshot) -> Result<(), HttpError> {
+        let item_tokens = tokens(&item.title);
+        let shared: Vec<_> = self.query.intersection(&item_tokens).cloned().collect();
+        if shared.is_empty() {
+            return Ok(());
+        }
+        let union = self.query.len() + item_tokens.len() - shared.len();
         let overlap_bp = (shared.len() * 10_000 / union) as u32;
-        let reason = if normalized_title == title_key(&item.title) {
+        let reason = if self.normalized == title_key(&item.title) {
             CandidateReason::TitleEqual
         } else {
             CandidateReason::TokenOverlap
         };
-        total_candidates += 1;
-        candidates.push(candidate(item, reason, Some(overlap_bp), shared)?);
-        candidates.sort_by(|a, b| {
+        self.total += 1;
+        self.candidates
+            .push(candidate(item, reason, Some(overlap_bp), shared)?);
+        self.candidates.sort_by(|a, b| {
             b.overlap_bp
                 .cmp(&a.overlap_bp)
                 .then_with(|| a.item.item_id.cmp(&b.item.item_id))
         });
-        candidates.truncate(CANDIDATE_LIMIT);
+        self.candidates.truncate(CANDIDATE_LIMIT);
+        Ok(())
     }
-    Ok(Json(Resolution {
-        status: if total_candidates == 0 {
-            ResolutionStatus::Unknown
-        } else {
-            ResolutionStatus::Ambiguous
-        },
-        candidates,
-        total_candidates,
-    }))
+
+    pub(crate) fn finish(self) -> Resolution {
+        Resolution {
+            status: if self.total == 0 {
+                ResolutionStatus::Unknown
+            } else {
+                ResolutionStatus::Ambiguous
+            },
+            candidates: self.candidates,
+            total_candidates: self.total,
+        }
+    }
 }

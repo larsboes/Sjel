@@ -147,6 +147,13 @@ pub fn builder(purpose: Purpose, timeout: Duration) -> reqwest::blocking::Client
         .redirect(guard::redirect_policy())
 }
 
+/// Build a client for a caller-validated loopback URL with deployment credentials.
+pub fn loopback_builder(purpose: Purpose, timeout: Duration) -> reqwest::blocking::ClientBuilder {
+    builder(purpose, timeout)
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+}
+
 type Pool = Mutex<HashMap<(Purpose, Duration), reqwest::blocking::Client>>;
 
 fn pool() -> &'static Pool {

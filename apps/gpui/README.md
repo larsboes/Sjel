@@ -440,18 +440,26 @@ App Store Connect key can and cannot do, and the one-time steps in the web UI, a
 
 ## Soundscape: a slideover with its own synth
 
-`⌘0`, `⌘⇧M`, the sidebar's ♪ row, or **Window ▸ Soundscape** slides a 400-point panel in from the right
-edge of the window: a drawn field, the transport, the six presets, volume and energy as full-width
-bars, the twelve-value mixer behind one `mix` disclosure, and the timed scenarios. The same
-keystroke, `esc`, the `×`, or the same row in the sidebar slides it away again, and the music keeps
-playing -- the audio device lives in an app global, not in the panel.
+`⌘0`, `⌘⇧M` or **Window ▸ Soundscape** opens the player over the page column. Drag its left edge
+to resize it, or double-click the edge to reset the width. The player pairs the live field with
+playback, session progress and volume. Timed
+scenarios and the adaptive mix sit above the mixer. Closing the player restores the previous
+focus and playback continues.
 
-It is a panel and not a destination, because a soundscape is something you leave on beside a note.
-It is a panel and not a window because a second window takes focus from that note, has to be found
-in the window list, and its size was never the size of the thing it held: the player was 980 by 700
-of mostly empty field, and between that and nothing there was no third option. The panel moves over
-the page column and never over the navigation, so the way out of a page stays reachable while the
-music is showing.
+The sidebar mini player shows the current mode and session progress. Play, pause and the mode
+buttons work directly in the sidebar. Selecting the current mode's name opens the full player.
+When the timer is clear, the mini player can repeat the last timed session from the beginning.
+**Settings ▸ Appearance ▸ Soundscape mini player** controls its visibility.
+
+Select **Sleep ▸ Bedside** to choose Rain behind glass, Far shore or Warm fan. Soft chords
+fade into the room over 25 minutes. **Fade out** ends after 45 minutes. **All night** runs for
+12 hours. **Until morning** ends at the next selected local time and can brighten the room
+gradually over its final 12 minutes. **Back to sleep** starts at the settled room level and
+fades out after 20 minutes.
+
+The player dims when Bedside starts. Click the dark surface or choose **Show controls** to
+reveal it. **Dim player** restores the dark view. Bedside recalls its last room and listening
+volume. The sidebar can restart the last session with **Repeat**.
 
 ### Why there is a synthesizer in this app
 
@@ -461,9 +469,10 @@ oscillators and the clock. A native app has an audio device, so the same contrac
 -- the conductor still owns intent (preset, parameters, layers, seed, session), and
 `core/src/soundscape/` executes it against the device's own sample clock.
 
-- `core/src/soundscape/music.rs` is the browser's musical material, moved to Rust: the chord tables,
-  the EDM motif, the scape scales and roots, the six drift LFOs, the arrangement arc. Two surfaces
-  that sound different while both claiming to play "focus" would be worse than one surface.
+- `core/src/soundscape/music.rs` and `steps.rs` define the native arrangements. Focus uses a soft
+  pulse and a masking bed, Relax holds warmer chords, and Sleep uses sparse low layers. Timed
+  sessions feed elapsed progress into the arrangement. The adaptive mix uses time of day and
+  active committed calendar blocks to adjust density, pulse and brightness within the chosen mode.
 - `synth.rs`, `fx.rs` and `engine.rs` are not a port: voices are fixed slots in an array with a
   closed-form envelope instead of scheduled Web Audio nodes, the room is Freeverb rather than a
   convolution of generated noise (a six-second impulse is a twelve-second FFT), and there is no
@@ -488,13 +497,14 @@ intent and says so in the header -- it writes nothing, and it never becomes a se
 | `⇧⌘N` | Next preset |
 | `m` | Open or fold the mixer |
 | `⌘0` or `⌘⇧M` | Slide the panel in, or away |
-| `esc` | Slide it away; the music keeps playing |
+| `Esc` | Close the player even when the page has focus |
+| `⌥←` or `⌥→` | Widen or narrow the focused player |
 
 A bar is its own control: press anywhere on the track to set the value, drag to sweep it. A dragged
 value reaches the synth immediately and the conductor at most every 180 ms, so the sound never lags
 the hand and a sweep is one write rather than dozens.
 
-The sidebar's ♪ row, the finder and the global keys (`⌥⌘Space`, `⌥⌘P`) write play and preset
+The sidebar mini player, the finder and the global keys (`⌥⌘Space`, `⌥⌘P`) write play and preset
 through the panel, so the panel is the one writer of both and its guard against a stale poll covers
 every surface.
 

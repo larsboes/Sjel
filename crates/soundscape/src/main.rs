@@ -24,6 +24,7 @@ use axum::{
     Router,
 };
 use serde_json::json;
+use soundscape_api::bedside::{SleepEnding, BEDSIDE, MORNING_LIMIT_MS};
 use tokio::sync::broadcast;
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
@@ -309,8 +310,18 @@ fn spawn_session_reaper(app: &App) {
 
 async fn post_state(
     State(app): State<App>,
-    Json(patch): Json<Patch>,
+    Json(mut patch): Json<Patch>,
 ) -> Result<Json<StateView>, (StatusCode, Json<serde_json::Value>)> {
+    let now = now_ms();
+    let origin = patch.origin.take();
+    let repeat = std::mem::take(&mut patch.repeat_last_session);
+    let morning_duration = patch.repeat_morning_duration_ms.take();
+    if (repeat && patch != Patch::default()) || (!repeat && morning_duration.is_some()) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "repeat cannot be combined with other state updates"})),
+        ));
+    }
     if let Some(preset) = &patch.preset {
         if !PRESETS.contains(&preset.as_str()) {
             return Err((
@@ -323,21 +334,75 @@ async fn post_state(
         }
     }
     if let Some(Some(session)) = &patch.session {
-        if !session.is_valid(now_ms()) {
+        if !session.is_valid(now) {
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(json!({
                     "error": "invalid soundscape session",
                     "known_scenarios": SCENARIOS,
                     "max_duration_ms": MAX_SESSION_MS,
+                    "max_bedside_duration_ms": MORNING_LIMIT_MS,
                 })),
             ));
         }
     }
 
-    let origin = patch.origin;
     {
         let mut scape = app.scape_write();
+        if patch
+            .session
+            .as_ref()
+            .and_then(|session| session.as_ref())
+            .is_some_and(|session| session.bedside.is_some())
+            && patch.preset.as_deref().unwrap_or(&scape.preset) != Preset::Sleep.key()
+        {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Bedside sessions require the sleep preset"})),
+            ));
+        }
+        if repeat {
+            if scape
+                .session
+                .as_ref()
+                .is_some_and(|session| session.remaining_at(now) > 0)
+            {
+                return Err((
+                    StatusCode::CONFLICT,
+                    Json(json!({"error": "a timed session is already active"})),
+                ));
+            }
+            let Some(saved) = scape.last_session.clone() else {
+                return Err((
+                    StatusCode::CONFLICT,
+                    Json(json!({"error": "there is no timed session to repeat"})),
+                ));
+            };
+            let mut timer = saved.timer();
+            if let Some(duration) = morning_duration {
+                timer.duration_ms = duration;
+                if timer.scenario != BEDSIDE
+                    || !timer
+                        .bedside
+                        .is_some_and(|options| options.ending == SleepEnding::UntilMorning)
+                    || !timer.is_valid(now)
+                {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"error": "invalid morning timer for the saved session"})),
+                    ));
+                }
+            }
+            timer.anchor_morning(now);
+            if timer.bedside.is_some() {
+                scape.volume = scape.bedside_volume.unwrap_or(scape.volume);
+            }
+            scape.preset = saved.preset.key().into();
+            scape.params = saved.params.clamped();
+            scape.energy = clamp01(saved.energy);
+            scape.session = Some(timer);
+            scape.playing = true;
+        }
         if let Some(preset) = patch.preset {
             scape.preset = preset;
         }
@@ -359,8 +424,36 @@ async fn post_state(
         if let Some(energy) = patch.energy {
             scape.energy = clamp01(energy);
         }
-        if let Some(session) = patch.session {
+        if let Some(mut session) = patch.session {
+            if let Some(session) = session.as_mut() {
+                session.anchor_morning(now);
+                if let Some(options) = session.bedside {
+                    if patch.volume.is_none() {
+                        scape.volume = scape.bedside_volume.unwrap_or(scape.volume);
+                    }
+                    scape.bedside_volume = Some(scape.volume);
+                    if session.scenario == BEDSIDE || scape.bedside_options.is_none() {
+                        scape.bedside_options = Some(options);
+                    }
+                }
+                scape.remember_session(session);
+            }
             scape.session = session;
+        } else if patch.volume.is_some()
+            && scape
+                .session
+                .as_ref()
+                .is_some_and(|session| session.bedside.is_some())
+        {
+            scape.bedside_volume = Some(scape.volume);
+        }
+        let playing = scape.playing;
+        if let Some(session) = scape.session.as_mut() {
+            if playing {
+                session.running_since_ms.get_or_insert(now);
+            } else {
+                session.pause_at(now);
+            }
         }
     }
 
@@ -446,6 +539,22 @@ fn restore(body: &str) -> Result<Scape, serde_json::Error> {
     // `playing: true` here would be a claim with no sound behind it.
     scape.playing = false;
     let now = now_ms();
+    if scape
+        .last_session
+        .as_ref()
+        .is_some_and(|saved| !saved.timer().is_valid(now))
+    {
+        scape.last_session = None;
+    }
+    if scape.last_session.is_none() {
+        if let Some(session) = scape
+            .session
+            .clone()
+            .filter(|session| session.is_valid(now))
+        {
+            scape.remember_session(&session);
+        }
+    }
     if let Some(session) = &mut scape.session {
         session.pause_at(now);
         if !session.is_valid(now) || session.remaining_at(now) == 0 {
@@ -720,11 +829,17 @@ mod tests {
                 duration_ms: 60_000,
                 elapsed_ms: 5_000,
                 running_since_ms: Some(before.saturating_sub(10_000)),
+                bedside: None,
+                deadline_ms: None,
             }),
             ..Scape::default()
         };
         let restored =
             restore(&serde_json::to_string(&saved).expect("serializes")).expect("restores");
+        assert_eq!(
+            restored.last_session.as_ref().unwrap().scenario,
+            "deep-work"
+        );
         let session = restored.session.expect("session survives");
         assert!(session.running_since_ms.is_none());
         assert!((14_000..=16_000).contains(&session.elapsed_ms));
@@ -746,6 +861,162 @@ mod tests {
         let result = post_state(State(app), Json(patch)).await;
         let (status, _) = result.expect_err("unknown session rejected");
         assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn transport_pauses_and_resumes_the_session_clock() {
+        let app = test_app();
+        let start: Patch = serde_json::from_value(json!({
+            "preset": "focus",
+            "playing": true,
+            "session": {
+                "scenario": "deep-work",
+                "duration_ms": 3_000_000,
+                "elapsed_ms": 12_000
+            }
+        }))
+        .expect("start shape");
+        let started = post_state(State(app.clone()), Json(start)).await.unwrap().0;
+        assert_eq!(started.scape.preset, "focus");
+        assert!(started.scape.session.unwrap().running_since_ms.is_some());
+
+        let set_playing = |playing| Patch {
+            playing: Some(playing),
+            ..Patch::default()
+        };
+        let paused = post_state(State(app.clone()), Json(set_playing(false)))
+            .await
+            .unwrap()
+            .0;
+        let checkpoint = paused.scape.session.unwrap();
+        assert!(checkpoint.running_since_ms.is_none());
+        assert!(checkpoint.elapsed_ms >= 12_000);
+        assert_eq!(
+            checkpoint.remaining_at(now_ms().saturating_add(60_000)),
+            checkpoint.remaining_at(now_ms())
+        );
+
+        let resumed = post_state(State(app), Json(set_playing(true)))
+            .await
+            .unwrap()
+            .0;
+        let session = resumed.scape.session.unwrap();
+        assert_eq!(session.elapsed_ms, checkpoint.elapsed_ms);
+        assert!(session.running_since_ms.is_some());
+    }
+
+    #[tokio::test]
+    async fn repeat_restores_a_saved_session_once_without_overwriting_an_active_timer() {
+        let app = test_app();
+        let repeat = || Patch {
+            repeat_last_session: true,
+            ..Patch::default()
+        };
+        let no_history = post_state(State(app.clone()), Json(repeat()))
+            .await
+            .unwrap_err();
+        assert_eq!(no_history.0, StatusCode::CONFLICT);
+
+        let start: Patch = serde_json::from_value(json!({
+            "preset": "focus",
+            "energy": 0.42,
+            "playing": true,
+            "session": { "scenario": "reading", "duration_ms": 1_500_000, "elapsed_ms": 0 }
+        }))
+        .unwrap();
+        let started = post_state(State(app.clone()), Json(start)).await.unwrap().0;
+        let clear: Patch = serde_json::from_value(json!({
+            "session": null, "preset": "edm", "energy": 0.9, "volume": 0.2, "playing": false
+        }))
+        .unwrap();
+        let cleared = post_state(State(app.clone()), Json(clear)).await.unwrap().0;
+        *app.scape_write() = restore(&serde_json::to_string(&cleared.scape).unwrap()).unwrap();
+
+        let repeated = post_state(State(app.clone()), Json(repeat()))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(repeated.scape.preset(), Preset::Focus);
+        assert_eq!(repeated.scape.energy, started.scape.energy);
+        assert_eq!(repeated.scape.volume, cleared.scape.volume);
+        let session = repeated.scape.session.unwrap();
+        assert_eq!(session.scenario, "reading");
+        assert_eq!(session.duration_ms, 1_500_000);
+        assert_eq!(session.elapsed_ms, 0);
+        assert!(session.running_since_ms.is_some());
+
+        let duplicate = post_state(State(app.clone()), Json(repeat()))
+            .await
+            .unwrap_err();
+        assert_eq!(duplicate.0, StatusCode::CONFLICT);
+        assert_eq!(app.scape_read().session.as_ref(), Some(&session));
+    }
+
+    #[tokio::test]
+    async fn bedside_remembers_night_volume_and_reanchors_the_morning_on_repeat() {
+        let app = test_app();
+        let start: Patch = serde_json::from_value(json!({
+            "preset": "sleep",
+            "playing": true,
+            "session": {
+                "scenario": "bedside", "duration_ms": 43_200_000, "elapsed_ms": 0,
+                "bedside": { "room": "shore", "ending": "until-morning", "dawn": true }
+            }
+        }))
+        .unwrap();
+        let started = post_state(State(app.clone()), Json(start))
+            .await
+            .unwrap()
+            .0
+            .scape;
+        let timer = started.session.unwrap();
+        assert_eq!(
+            timer.deadline_ms.unwrap() - timer.running_since_ms.unwrap(),
+            43_200_000
+        );
+        let pause = Patch {
+            playing: Some(false),
+            volume: Some(0.28),
+            ..Patch::default()
+        };
+        let paused = post_state(State(app.clone()), Json(pause))
+            .await
+            .unwrap()
+            .0
+            .scape;
+        assert_eq!(
+            paused
+                .session
+                .unwrap()
+                .remaining_at(timer.deadline_ms.unwrap()),
+            0
+        );
+
+        let clear = Patch {
+            session: Some(None),
+            volume: Some(0.8),
+            ..Patch::default()
+        };
+        let cleared = post_state(State(app.clone()), Json(clear))
+            .await
+            .unwrap()
+            .0
+            .scape;
+        *app.scape_write() = restore(&serde_json::to_string(&cleared).unwrap()).unwrap();
+        let repeat = Patch {
+            repeat_last_session: true,
+            repeat_morning_duration_ms: Some(28_800_000),
+            ..Patch::default()
+        };
+        let repeated = post_state(State(app), Json(repeat)).await.unwrap().0.scape;
+        assert_eq!(repeated.volume, 0.28);
+        assert_eq!(repeated.bedside_options, started.bedside_options);
+        let timer = repeated.session.unwrap();
+        assert_eq!(timer.duration_ms, 28_800_000);
+        assert_eq!(
+            timer.deadline_ms.unwrap() - timer.running_since_ms.unwrap(),
+            28_800_000
+        );
     }
 
     #[test]

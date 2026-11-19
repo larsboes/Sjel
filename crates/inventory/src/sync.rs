@@ -1,36 +1,6 @@
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct Envelope {
-    pub protocol_version: String,
-    pub envelope_id: String,
-    pub origin_node_id: String,
-    pub target_node_id: String,
-    pub actor_device_id: String,
-    pub cursor: Option<String>,
-    #[serde(default)]
-    pub mutations: Vec<Mutation>,
-    #[serde(default, rename = "acknowledgements")]
-    pub _acknowledgements: Vec<Value>,
-    #[serde(default, rename = "conflicts")]
-    pub _conflicts: Vec<Value>,
-    #[serde(rename = "sent_at")]
-    pub _sent_at: i64,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct Mutation {
-    pub operation_id: String,
-    pub entity_type: String,
-    pub entity_id: String,
-    pub action: String,
-    pub base_revision: Option<String>,
-    pub fields: Map<String, Value>,
-    pub actor_device_id: String,
-    #[serde(rename = "created_at")]
-    pub _created_at: i64,
-}
+pub(crate) use inventory_api::sync::Envelope;
+use serde::Serialize;
+use serde_json::Value;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ResponseEnvelope {

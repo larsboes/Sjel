@@ -802,6 +802,42 @@ impl FinanceStore {
             .collect())
     }
 
+    /// Median net cash flow across at most 12 completed months with bookings.
+    pub fn monthly_balance(&self) -> Fallible<Option<finance_api::MonthlyBalance>> {
+        let conn = self.conn()?;
+        let months = conn.query_all(
+            &format!(
+                "SELECT substr(booked_at, 1, 7) AS month,
+                        sum(CASE WHEN kind = 'income' THEN amount_cents ELSE 0 END)
+                      - sum(CASE WHEN kind = 'expense' THEN amount_cents ELSE 0 END)
+                 FROM {}_transaction_projection
+                 WHERE kind IN ('income', 'expense')
+                   AND substr(booked_at, 1, 7) < strftime('%Y-%m', 'now')
+                 GROUP BY month ORDER BY month DESC LIMIT 12",
+                self.prefix
+            ),
+            [],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+        )?;
+        let (Some((to, _)), Some((from, _))) = (months.first(), months.last()) else {
+            return Ok(None);
+        };
+        let mut balances: Vec<_> = months.iter().map(|(_, balance)| *balance).collect();
+        balances.sort_unstable();
+        let middle = balances.len() / 2;
+        let median_cents = if balances.len() % 2 == 0 {
+            balances[middle - 1].midpoint(balances[middle])
+        } else {
+            balances[middle]
+        };
+        Ok(Some(finance_api::MonthlyBalance {
+            median_cents,
+            months: months.len(),
+            from: from.clone(),
+            to: to.clone(),
+        }))
+    }
+
     /// Replace the disposable holdings index and its review marker together. The
     /// marker makes a reviewed empty portfolio distinguishable from no snapshot.
     pub fn replace_holding_projection(&self, snapshot: &ReviewedHoldingsSnapshot) -> Fallible<()> {

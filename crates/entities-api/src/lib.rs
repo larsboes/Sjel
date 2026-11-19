@@ -18,6 +18,10 @@ pub const ROUTE_DUPLICATES: &str = "/api/duplicates";
 pub const ROUTE_DUPLICATES_DISTINCT: &str = "/api/duplicates/distinct";
 pub const ROUTE_MERGE: &str = "/api/entities/{id}/merge";
 pub const ROUTE_LOCATED: &str = "/api/located";
+pub const ROUTE_GRAPH: &str = "/api/graph";
+pub const FOLLOW_UP_WEEKS: &str = "follow_up_weeks";
+pub const ROUTE_EDGES: &str = "/api/edges";
+pub const ROUTE_EDGES_REMOVE: &str = "/api/edges/remove";
 pub const ROUTE_HOME: &str = "/api/home";
 pub const ROUTE_RESOLVE: &str = "/api/resolve";
 pub const ROUTE_SOURCES: &str = "/api/entities/{id}/sources";
@@ -66,6 +70,15 @@ pub const SOURCES: &[&str] = &[
 ];
 
 pub const FACT_PREDICATES: &[&str] = &["home_base", "away"];
+
+/// Exact links between two entities. `introduced` runs from the person who introduced to the
+/// person introduced; `conversation` (shared a group conversation) has no direction.
+pub const EDGE_KINDS: &[&str] = &["introduced", "conversation"];
+
+/// Whether an edge of `kind` has a direction.
+pub fn edge_is_directed(kind: &str) -> bool {
+    kind == "introduced"
+}
 
 // ============================================================================
 // Models
@@ -178,6 +191,38 @@ pub struct DuplicatePair {
     pub merged_name: String,
 }
 
+/// One exact link between two entities (`/entities/api/graph`).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, schemars::JsonSchema)]
+pub struct EntityEdge {
+    pub a: String,
+    pub b: String,
+    pub kind: String,
+    pub source: String,
+    /// The latest day the link was seen, `YYYY-MM-DD`.
+    #[serde(default)]
+    pub at: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// One node of the people graph: a person or the operator, with the values the graph groups by.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, schemars::JsonSchema)]
+pub struct GraphNode {
+    pub id: String,
+    pub kind: String,
+    pub name: String,
+    #[serde(default)]
+    pub company: Option<String>,
+}
+
+/// People as nodes and their exact links as edges. A shared company is a node value, not an
+/// edge: it is a coincidence, and the reader labels it as one.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, schemars::JsonSchema)]
+pub struct PeopleGraph {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<EntityEdge>,
+}
+
 // ============================================================================
 // Core Validation Logic
 // ============================================================================
@@ -223,6 +268,8 @@ pub fn builtin_fields() -> Vec<EntityField> {
         person("skills", "Skills", "tags", &[]),
         person("socials", "Socials", "tags", &[]),
         person("last_contact", "Last contact", "date", &[]),
+        person(FOLLOW_UP_WEEKS, "Follow up every (weeks)", "number", &[]),
+        person("met_at", "How we met (event or project)", "text", &[]),
         person("linkedin", "LinkedIn", "url", &[]),
         person("connected_on", "Connected on", "date", &[]),
         organisation("notes", "Notes", "longtext", "C2"),
@@ -297,6 +344,12 @@ pub fn check_value(def: &EntityField, value: &Value) -> Result<Value, String> {
             def.key, def.field_type
         ))
     };
+    if def.kind == "person" && def.key == FOLLOW_UP_WEEKS {
+        return match value.as_u64() {
+            Some(weeks) if (1..=u64::from(u32::MAX)).contains(&weeks) => Ok(value.clone()),
+            _ => wrong("a positive whole number of weeks"),
+        };
+    }
     match def.field_type.as_str() {
         "text" | "longtext" | "url" => match value.as_str().map(str::trim) {
             Some(text) if !text.is_empty() => Ok(Value::String(text.into())),
@@ -338,6 +391,24 @@ pub fn check_value(def: &EntityField, value: &Value) -> Result<Value, String> {
             Ok(Value::Array(out))
         }
         other => Err(format!("unknown field type {other:?}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn follow_up_requires_positive_whole_weeks() {
+        let field = builtin_fields()
+            .into_iter()
+            .find(|def| def.key == FOLLOW_UP_WEEKS)
+            .unwrap();
+        assert_eq!(check_value(&field, &json!(4)), Ok(json!(4)));
+        for bad in [json!(0), json!(-1), json!(1.5), json!("2"), json!(u64::MAX)] {
+            assert!(check_value(&field, &bad).is_err(), "accepted {bad}");
+        }
     }
 }
 

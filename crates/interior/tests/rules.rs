@@ -3,6 +3,8 @@
 //! Every test here works on a copy of the sample flat in a temp dir, because it has to change the
 //! rules to show they take effect; editing a file other test binaries read would race them.
 
+mod support;
+
 use interior::clearance::{check_layout, RULE_IDS};
 use interior::model::Model;
 use std::path::{Path, PathBuf};
@@ -36,7 +38,7 @@ fn variant(name: &str, replacements: &[(&str, &str)]) -> Model {
             );
         }
     }
-    Model::load(name).unwrap_or_else(|e| panic!("{name}: {e}"))
+    support::load_model(name).unwrap_or_else(|e| panic!("{name}: {e}"))
 }
 
 fn fixture() -> PathBuf {

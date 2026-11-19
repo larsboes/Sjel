@@ -5,6 +5,8 @@
 //! name pointing out of the dir, and a clearing-away that takes the reasoning with it. Works on a
 //! copy of the sample flat, because it writes.
 
+mod support;
+
 use interior::layout_io;
 use interior::model::{Layout, Model, PlacedItem};
 use std::path::{Path, PathBuf};
@@ -45,7 +47,7 @@ fn flat(name: &str) -> Model {
     if !target.exists() {
         copy_layout(&fixture().join("data/interior/flats").join(MUSTER), &target);
     }
-    Model::load(name).unwrap_or_else(|e| panic!("{name}: {e}"))
+    support::load_model(name).unwrap_or_else(|e| panic!("{name}: {e}"))
 }
 
 fn copy_layout(von: &Path, nach: &Path) {

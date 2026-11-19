@@ -23,11 +23,12 @@ struct AppState {
     database: PathBuf,
 }
 
-/// The model is read fresh per request, not cached at start: the TOML files are edited by hand,
-/// and a cached copy would show a plan contradicting its own numbers. Reading takes under a
-/// millisecond.
-fn load(state: &AppState) -> Result<Model, (StatusCode, String)> {
-    Model::load(&state.flat).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+/// Read the geometry and Inventory catalogue fresh for each model request.
+async fn load(state: &AppState) -> Result<Model, (StatusCode, String)> {
+    let flat = state.flat.clone();
+    sjel_server::blocking(move || Model::load(&flat).map_err(|error| error.to_string()))
+        .await
+        .map_err(boom)
 }
 
 async fn health() -> &'static str {
@@ -265,7 +266,7 @@ async fn routes() -> Json<serde_json::Value> {
 async fn api_model(
     State(s): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let m = load(&s)?;
+    let m = load(&s).await?;
     let (b, t) = m.room.dimensions();
     Ok(Json(serde_json::json!({
         "flat": m.room.flat,
@@ -290,7 +291,7 @@ async fn api_model(
 async fn api_layouts(
     State(s): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let m = load(&s)?;
+    let m = load(&s).await?;
     let names = m
         .layout_names()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -314,7 +315,7 @@ async fn api_layout(
     State(s): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let m = load(&s)?;
+    let m = load(&s).await?;
     let l = m
         .load_layout(&name)
         .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
@@ -368,7 +369,7 @@ async fn api_item_impact(
     Path(id): Path<String>,
     Json(patch): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let mut model = load(&s).await?;
     let before = verdicts(&model)?;
 
     let alt = model
@@ -377,7 +378,6 @@ async fn api_item_impact(
         .ok_or((StatusCode::NOT_FOUND, format!("no entry `{id}`")))?;
     let created = sjel_inventory::api::merge_patch(alt, patch)?;
 
-    let mut model = load(&s)?;
     model.catalogue.insert(id.clone(), created);
     let after = verdicts(&model)?;
 
@@ -451,7 +451,7 @@ async fn api_put_layout(
     Path(id): Path<String>,
     Json(body): Json<LayoutBody>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     crate::layout_io::update(&model, &id, &body.items)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let l = model
@@ -658,7 +658,7 @@ async fn api_roomplan_propose_placement(
         ));
     }
 
-    let model = load(&s)?;
+    let model = load(&s).await?;
     if model.states.get(&request.item_id) != Some(&crate::store::State::Owned) {
         return Err((
             StatusCode::CONFLICT,
@@ -891,12 +891,22 @@ async fn api_roomplan_object_link(
             "Observation ID is not an object in this scan revision.".into(),
         ));
     }
+    let items = sjel_server::blocking(|| {
+        sjel_inventory::client::catalogue().map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(boom)?;
+    let (item, state) = items.get(&request.item_id).ok_or((
+        StatusCode::CONFLICT,
+        "Inventory item was not found".into(),
+    ))?;
     store
         .link_roomplan_object(
             &space_id,
             &request.revision_id,
             &request.observation_id,
-            &request.item_id,
+            item,
+            *state,
         )
         .map_err(|error| (StatusCode::CONFLICT, error.to_string()))?;
     Ok(Json(serde_json::json!({
@@ -953,7 +963,7 @@ async fn api_roomplan_apply_placement(
                 .into(),
         ));
     }
-    let model = load(&s)?;
+    let model = load(&s).await?;
     if model.states.get(&item_id) != Some(&crate::store::State::Owned) {
         return Err((
             StatusCode::CONFLICT,
@@ -1193,7 +1203,7 @@ async fn api_roomplan_capture(
             "draft_id may contain only ASCII letters, numbers, hyphens and underscores".into(),
         ));
     }
-    let model = load(&s)?;
+    let model = load(&s).await?;
     let usdz = base64::engine::general_purpose::STANDARD
         .decode(upload.usdz_base64.as_bytes())
         .map_err(|error| {
@@ -1544,7 +1554,7 @@ async fn api_allowed(
     Path(name): Path<String>,
     axum::extract::Query(q): axum::extract::Query<AllowedQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     let base = model
         .load_layout(&name)
         .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
@@ -1575,7 +1585,7 @@ async fn api_preview_placements(
     State(s): State<Arc<AppState>>,
     Json(body): Json<LayoutBody>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     let l = as_is(body.items);
     let r = check_layout(&model, &l).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let svg = plan::svg(&model, &l).map_err(boom)?;
@@ -1595,7 +1605,7 @@ async fn api_placements_allowed(
     State(s): State<Arc<AppState>>,
     Json(body): Json<PlacementsAllowedBody>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     let base = as_is(body.items);
     let a = crate::search::allowed_positions(&model, &base, &body.reference, body.rot)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
@@ -1618,7 +1628,7 @@ async fn api_preview_layout(
     Path(id): Path<String>,
     Json(body): Json<LayoutBody>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     let template = model
         .load_layout(&id)
         .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
@@ -1640,7 +1650,7 @@ async fn api_post_layout(
     State(s): State<Arc<AppState>>,
     Json(body): Json<NewLayout>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     // An unusable name is a bad request, not a conflict.
     crate::layout_io::check_id(&body.id).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let template = match &body.from {
@@ -1705,7 +1715,7 @@ async fn api_delete_layout(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     crate::layout_io::check_id(&id).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     // Through the name list, not `load_layout`: a layout with a TOML typo is one someone wants to
     // clear away.
@@ -1744,7 +1754,7 @@ async fn api_put_placements(
 }
 
 async fn index(State(s): State<Arc<AppState>>) -> Result<Html<String>, (StatusCode, String)> {
-    let m = load(&s)?;
+    let m = load(&s).await?;
     let names = m
         .layout_names()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -2139,7 +2149,7 @@ async fn api_tolerance(
     State(s): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     let l = model.load_layout(&name).map_err(not_found)?;
     Ok(Json(
         crate::tolerance::robustness(&model, &l).map_err(boom)?,
@@ -2150,7 +2160,7 @@ async fn api_sun(
     State(s): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     let l = model.load_layout(&name).map_err(not_found)?;
     Ok(Json(crate::sun::report(&model, &l).map_err(boom)?))
 }
@@ -2159,7 +2169,7 @@ async fn api_delivery(
     State(s): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     let l = model.load_layout(&name).map_err(not_found)?;
     let mut out = Vec::new();
     for it in &l.items {
@@ -2184,7 +2194,7 @@ async fn api_fits(
     State(s): State<Arc<AppState>>,
     axum::extract::Query(q): axum::extract::Query<PieceSize>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     Ok(Json(crate::delivery::through_the_door(
         &model,
         q.width,
@@ -2196,17 +2206,17 @@ async fn api_fits(
 async fn api_declarations(
     State(s): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
+    let model = load(&s).await?;
     Ok(Json(crate::declarations::overview(&model).map_err(boom)?))
 }
 
 async fn api_purchase_order(
     State(s): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let model = load(&s)?;
-    let st = store(&s)?;
-    let conn = st.borrow_connection().map_err(boom)?;
-    let balance = crate::budget::monthly_balance(&conn).map_err(boom)?;
+    let model = load(&s).await?;
+    let balance = tokio::task::spawn_blocking(crate::budget::monthly_balance)
+        .await
+        .map_err(boom)?;
     Ok(Json(
         crate::budget::purchase_order(&model, balance).map_err(boom)?,
     ))

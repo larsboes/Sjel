@@ -6,8 +6,8 @@
 //! accepted as aliases.
 
 use crate::store::{Item, Kind, Side, State, Store};
-use serde::Deserialize;
-use std::path::Path;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 type Error = Box<dyn std::error::Error>;
 
@@ -183,12 +183,32 @@ impl Raw {
 }
 
 /// What a run did, as numbers, so an import cannot report "ok" having written nothing.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Report {
     pub gear: usize,
     pub pieces: usize,
     pub slots: usize,
     pub state_changes: usize,
+}
+
+impl Report {
+    pub(crate) fn record(&mut self, kind: Kind, state_changed: bool) {
+        self.state_changes += usize::from(state_changed);
+        match kind {
+            Kind::Piece => self.pieces += 1,
+            Kind::Slot => self.slots += 1,
+            Kind::Gear => self.gear += 1,
+        }
+    }
+}
+
+pub(crate) fn overlay_dir() -> Option<PathBuf> {
+    let own = sjel_config::overlay_data_dir("inventory")?.join("inventory");
+    if own.is_dir() {
+        return Some(own);
+    }
+    let old = sjel_config::overlay_data_dir("interior")?.join("inventory");
+    old.is_dir().then_some(old)
 }
 
 /// A need another entry replaced is no longer wanted. `priority` means urgency and `state` means
@@ -203,11 +223,15 @@ fn state_for(priority: Option<&str>, default: State) -> State {
 /// Reads `<dir>/owned.toml` and `<dir>/wishlist.toml` into the tables. Repeatable: the same files
 /// twice give the same rows and no second state change.
 pub fn inventory(store: &Store, dir: &Path) -> Result<Report, Error> {
+    store
+        .import_items(load(dir)?, true)?
+        .ok_or_else(|| "import did not run".into())
+}
+
+pub(crate) fn load(dir: &Path) -> Result<Vec<(Item, State)>, Error> {
     let owned: OwnedFile = read(&dir.join("owned.toml"))?;
     let wish: WishlistFile = read(&dir.join("wishlist.toml"))?;
-    let mut report = Report::default();
-
-    for (raw, kind, default) in owned
+    Ok(owned
         .item
         .into_iter()
         .map(|r| (r, Kind::Piece, State::Owned))
@@ -221,20 +245,12 @@ pub fn inventory(store: &Store, dir: &Path) -> Result<Report, Error> {
                 .into_iter()
                 .map(|r| (r, Kind::Piece, State::Wanted)),
         )
-    {
-        let item = raw.into_item(kind);
-        let state = state_for(item.priority.as_deref(), default);
-        store.upsert_item(&item)?;
-        if store.record_state(&item.id, state, Some("imported from inventory/*.toml"))? {
-            report.state_changes += 1;
-        }
-        match kind {
-            Kind::Piece => report.pieces += 1,
-            Kind::Slot => report.slots += 1,
-            Kind::Gear => report.gear += 1,
-        }
-    }
-    Ok(report)
+        .map(|(raw, kind, default)| {
+            let item = raw.into_item(kind);
+            let state = state_for(item.priority.as_deref(), default);
+            (item, state)
+        })
+        .collect())
 }
 
 fn read<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, Error> {

@@ -1,6 +1,8 @@
 //! The search, and what its ranking holds right. A ranking, not a verdict: `room_divider` cannot
 //! make a layout pass or fail; it decides which of several allowed proposals ranks first.
 
+mod support;
+
 use interior::model::Model;
 use interior::search::{search, Spec};
 use std::collections::BTreeMap;
@@ -22,7 +24,7 @@ fn model() -> Model {
         sjel_inventory::import::inventory(&store, &fixture.join("data/interior/inventory"))
             .expect("the sample inventory imports");
     });
-    Model::load(FLAT).expect("Musterwohnung")
+    support::load_model(FLAT).expect("Musterwohnung")
 }
 
 /// Searches the layout holding just this one board. Both layouts place their board at the same

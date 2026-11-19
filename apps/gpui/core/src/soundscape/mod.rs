@@ -1,35 +1,27 @@
-//! Soundscape, natively: the synthesizer, the arrangement, and the report the visuals read.
+//! Shared native synthesizer, listening modes and session controls.
 //!
-//! The dashboard makes this sound in the browser, because Web Audio only exists there. That split
-//! is still right for a *page*: the conductor owns intent, the browser owns execution. A native
-//! app has an audio device, so the same split lands differently -- the conductor still owns what
-//! should be playing (preset, parameters, layers, seed, session), and this module executes it
-//! against the device's own clock.
-//!
-//! Why this is a port and not a rewrite: the musical material -- chord tables, motif, scales,
-//! the drift LFOs, the arrangement arc, the swing -- is what a preset *is*, and two surfaces that
-//! sound different while both claiming to play "focus" are worse than one surface. Where the
-//! implementation differs it says so: [`fx`] substitutes a comb-and-allpass room for the browser's
-//! convolution, [`synth`] replaces scheduled Web Audio nodes with fixed voice slots, and
-//! [`engine`] has no lookahead scheduler because a sample clock does not need one.
-//!
-//! Platform-free on purpose: it contains no output device. `apps/gpui/src/audio.rs` owns the
-//! device on the Mac, so the phone can drive the same engine from its own.
+//! The conductor owns playback intent and the timed session. Each native audio
+//! device drives this engine against its own sample clock.
 
 pub mod analyser;
+mod bedside;
 pub mod control;
 pub mod engine;
 pub mod fx;
 pub mod music;
 pub mod rng;
+mod session;
 pub mod steps;
 pub mod synth;
 
 pub use analyser::Analyser;
+pub use bedside::BedsideFrame;
 pub use control::{Control, Visual, BANDS};
 pub use engine::Engine;
 pub use music::{ArcPhase, Arrangement, LayerName, Layers, ParamName, Params, Preset};
 pub use rng::{format_seed, parse_seed, Mulberry32};
+pub use session::{ListeningContext, Scenario};
+pub use soundscape_api::bedside::{BedsideOptions, SleepEnding, SleepRoom};
 pub use steps::{play_step, Events, Sequence};
 pub use synth::{VoiceSpec, Voices};
 

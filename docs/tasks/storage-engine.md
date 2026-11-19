@@ -1,11 +1,14 @@
 ---
 id: storage-engine
 title: "Measure one database engine"
-state: verify
+state: done
 area: storage
 kind: investigation
 priority: 2
 spec: docs/plans/storage.md
+evidence:
+  - "The compatibility probes exercised recursive queries, JSON, vectors, concurrent writers, crash recovery and arm64 iOS builds."
+  - "Inventory WAL replay and SQLite restore matched all ten owner tables and the acknowledged write receipt."
 ---
 
 # Measure one database engine
@@ -35,6 +38,25 @@ index rejected the existing dense embeddings. In one process, WAL needed a retry
 both overlapping writes on distinct keys. Both modes preserved only committed data after process
 death. The local-only Rust probe built and linked for arm64 iOS with Turso's default features disabled.
 
-Keep libSQL for the unchanged-file migration path. A production-store copy and power-loss
-recovery remain unverified. Revisit with the owner if Turso accepts the existing index schema or
-a separate migration can meet the search contract with a replacement.
+The side-by-side workload matched all recursive and vector query results. Turso MVCC committed
+about 2.3 times as many distinct-key transactions per second as libSQL WAL. The shared-key
+workload had no consistent gain with Turso. Turso WAL files reopened in libSQL. The closed MVCC
+copy required a Turso conversion to WAL before libSQL could read it. SQLite backup and restore
+checks passed for both WAL states.
+
+The registered shared-store backup passed receipt, integrity and row-count checks in isolation.
+Its schema contained no libSQL vector indexes. The missing-table errors begin at the Documents
+FTS5 table in catalog order and reproduce on a generated schema. After removing that derived
+index and its triggers from a restored copy, all ordinary table counts match. SQLite reopened
+the Turso-written copy, rebuilt and verified the FTS5 index, and passed integrity checking.
+
+Turso FTS misses the Documents prefix results in the comparison fixture. Its feature-enabled
+Rust binding fails to compile on arm64 iOS with stable Rust. A generated MVCC snapshot from an
+open connection preserved the intended commit boundary. Concurrent-write backup, power-loss
+recovery and physical iPhone behavior remain unverified.
+
+## Decision
+
+Use Turso WAL for the Inventory pilot. The owner-only copy passed the SQL replay and restored to
+SQLite with acknowledged writes intact. MVCC conversion of the existing `AUTOINCREMENT` tables
+failed. Keep the shared-store engine until the [owner cutover gates](storage-files.md) pass.

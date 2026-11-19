@@ -40,6 +40,7 @@ boundaries. The [application README](../../apps/gpui/README.md) owns current int
 - [Accept consolidated Mac Travel](../tasks/gpui-travel-mac.md).
 - [Choose safe historical place resolution](../tasks/gpui-travel-backfill.md).
 - [Accept Mac People mutations](../tasks/gpui-people-writes.md).
+- [Redesign People around the network](../tasks/task-ce2fbbcd-b2ff-4c15-8aa9-25bf8debceef.md).
 - [Accept Finance import and review](../tasks/gpui-finance-import.md).
 - [Accept native Discover workflows](../tasks/gpui-discover.md).
 - [Accept Inventory and wishlist mutations](../tasks/gpui-inventory-writes.md).

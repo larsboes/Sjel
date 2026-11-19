@@ -242,6 +242,7 @@ type DeviceRow = (
     Option<i64>,
 );
 
+#[derive(Clone)]
 pub struct DevicesStore {
     pool: sjel_store::Pool,
 }

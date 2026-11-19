@@ -151,6 +151,10 @@ The comparison CLI points at the isolated Inventory service. The rehearsal verif
 reader, compare output, specs, needs, alternatives and a price retry. The CLI's sentinel database
 path remains absent and the first price remains recorded on the service.
 
+The same rehearsal checks catalogue and category reads, atomic item creation, and overlay import.
+It injects a refused state insert and verifies that both the single create and the batch import
+leave their attempted rows absent. A forced import succeeds after correcting the fixture.
+
 The Rust binding probe injects a receipt insert failure after a revision update. Turso 0.8.3
 defers drop-triggered rollback, and a prepared statement on the writer can still see the edit.
 With explicit rollback, both connections see revision 3 and no receipt. Retrying records revision 4

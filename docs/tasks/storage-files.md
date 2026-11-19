@@ -51,13 +51,17 @@ The scheduled price refresh and the comparison CLI use the Inventory API for rea
 The rehearsal used an unavailable CLI database path and verified price retry, specs, needs and
 alternative-group updates in the owner file.
 
+All Inventory CLI entry points use the owner API. Creation commits the item and its initial state
+together. Overlay import requires force for a nonempty database and commits the complete import
+in one transaction. The rehearsal proved duplicate create refusal and rollback of a refused
+initial state and a partial import.
+
 A same-process Turso WAL snapshot ran while a second connection had an uncommitted Inventory
 write. SQLite verified the ten-table snapshot at revision 4 and the later shutdown restore at
 revision 5. The receipt for revision 5 appears only in the shutdown restore.
 
 ## Remaining migration gates
 
-- Move the remaining Inventory CLI entry points behind the owner before enabling Turso writes.
 - Run the owner API suite against a Turso WAL adapter. Roll back failed transactions explicitly
   before reusing their connections. Turso 0.8.3 prepared statements can run before drop-triggered
   rollback. Rehearse cutover and rollback with the adapter running, and register and restore the

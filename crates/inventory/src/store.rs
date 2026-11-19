@@ -1018,6 +1018,37 @@ impl Store {
     /// Insert or update; the later writer wins. `created_at` survives an update. Returns the
     /// revision the row now carries, raised in the same statement so an older client is refused.
     pub fn upsert_item(&self, it: &Item) -> Result<i64, Error> {
+        let conn = self.conn()?;
+        self.upsert_item_on(&conn, it)
+    }
+
+    pub(crate) fn create_item(
+        &self,
+        item: &Item,
+        state: State,
+        note: Option<&str>,
+    ) -> Result<Option<i64>, Error> {
+        let mut conn = self.conn()?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
+        let exists = tx.query_row(
+            &format!("SELECT EXISTS(SELECT 1 FROM {}_item WHERE id = ?1)", self.prefix),
+            [&item.id],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if exists {
+            tx.rollback()?;
+            return Ok(None);
+        }
+        let revision = self.upsert_item_on(&tx, item)?;
+        if !self.record_state_on(&tx, &item.id, state, note)? {
+            tx.rollback()?;
+            return Err("initial item state was not recorded".into());
+        }
+        tx.commit()?;
+        Ok(Some(revision))
+    }
+
+    fn upsert_item_on(&self, conn: &Connection, it: &Item) -> Result<i64, Error> {
         let p = &self.prefix;
         let now = sjel_store::now_offset("'+0 seconds'");
         let columns = WRITE_COLUMNS.join(", ");
@@ -1030,7 +1061,6 @@ impl Store {
             .map(|c| format!("{c}=excluded.{c}"))
             .collect::<Vec<_>>()
             .join(", ");
-        let conn = self.conn()?;
         let revision = conn.query_row(
             &format!(
                 "INSERT INTO {p}_item ({columns}, revision, created_at, updated_at)
@@ -1105,21 +1135,30 @@ impl Store {
         state: State,
         note: Option<&str>,
     ) -> Result<bool, Error> {
-        if self.current_state(item_id)? == Some(state) {
-            return Ok(false);
-        }
-        let p = &self.prefix;
         let conn = self.conn()?;
-        conn.execute(
+        self.record_state_on(&conn, item_id, state, note)
+    }
+
+    fn record_state_on(
+        &self,
+        conn: &Connection,
+        item_id: &str,
+        state: State,
+        note: Option<&str>,
+    ) -> Result<bool, Error> {
+        let p = &self.prefix;
+        let inserted = conn.execute(
             &format!(
                 "INSERT INTO {p}_item_state (item_id, state, since, note)
-                 VALUES (?1, ?2, {now}, ?3)",
+                 SELECT ?1, ?2, {now}, ?3
+                 WHERE (SELECT state FROM {p}_item_state WHERE item_id = ?1
+                        ORDER BY since DESC, id DESC LIMIT 1) IS NOT ?2",
                 p = p,
                 now = sjel_store::now_offset("'+0 seconds'")
             ),
             params![item_id, state.as_str(), note],
         )?;
-        Ok(true)
+        Ok(inserted != 0)
     }
 
     /// The revision recorded for a sync operation that was already applied.
@@ -1174,6 +1213,37 @@ impl Store {
         let p = &self.prefix;
         let conn = self.conn()?;
         Ok(conn.query_row(&format!("SELECT COUNT(*) FROM {p}_item"), [], |r| r.get(0))?)
+    }
+
+    pub(crate) fn import_items(
+        &self,
+        items: Vec<(Item, State)>,
+        force: bool,
+    ) -> Result<Option<crate::import::Report>, Error> {
+        let mut conn = self.conn()?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
+        if !force && tx.query_row(
+            &format!("SELECT EXISTS(SELECT 1 FROM {}_item)", self.prefix),
+            [],
+            |row| row.get::<_, bool>(0),
+        )? {
+            tx.rollback()?;
+            return Ok(None);
+        }
+        let mut report = crate::import::Report::default();
+        for (item, state) in items {
+            self.upsert_item_on(&tx, &item)?;
+            if self.record_state_on(&tx, &item.id, state, Some("imported from inventory/*.toml"))? {
+                report.state_changes += 1;
+            }
+            match item.kind {
+                Kind::Piece => report.pieces += 1,
+                Kind::Slot => report.slots += 1,
+                Kind::Gear => report.gear += 1,
+            }
+        }
+        tx.commit()?;
+        Ok(Some(report))
     }
 
     pub(crate) fn search_items(&self, query: &str) -> Result<Vec<(String, String)>, Error> {

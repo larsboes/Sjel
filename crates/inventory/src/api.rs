@@ -68,6 +68,12 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/health", "Liveness."),
     r("GET", "/routes", "This catalogue."),
     r("GET", "/api/inventory", "Every entry with its state."),
+    route_manifest::Route {
+        method: "POST",
+        path: inventory_api::ROUTE_IMPORT_OVERLAY,
+        summary: "Import the Inventory files from the owner overlay. A nonempty store requires force.",
+        request_schema: Some(route_manifest::schema_of::<inventory_api::ImportOverlayRequest>),
+    },
     r("GET", "/api/search", "Find at most five items by query words in ?q=."),
     r(
         "GET",
@@ -236,6 +242,29 @@ async fn api_inventory(State(s): State<Arc<AppState>>) -> Result<impl IntoRespon
         )
         .collect();
     Ok(Json(out))
+}
+
+async fn api_import_overlay(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<inventory_api::ImportOverlayRequest>,
+) -> Result<Json<crate::import::Report>, HttpError> {
+    tokio::task::spawn_blocking(move || {
+        let dir = crate::import::overlay_dir().ok_or((
+            StatusCode::NOT_FOUND,
+            "No inventory/*.toml found in the Inventory or Interior overlay".into(),
+        ))?;
+        let items = crate::import::load(&dir).map_err(refused)?;
+        store(&state)?
+            .import_items(items, body.force)
+            .map_err(boom)?
+            .map(Json)
+            .ok_or((
+                StatusCode::CONFLICT,
+                "Entries already exist. Use inventory import --force to replace their values.".into(),
+            ))
+    })
+    .await
+    .map_err(boom)?
 }
 
 #[derive(Deserialize)]
@@ -440,15 +469,15 @@ async fn api_post_price(
     Ok(Json(recorded))
 }
 
-#[derive(Deserialize)]
-struct NewItem {
+#[derive(Deserialize, serde::Serialize)]
+pub(crate) struct NewItem {
     #[serde(flatten)]
-    item: Item,
+    pub(crate) item: Item,
     /// Required: every list joins on the latest state, so a row without one is invisible.
-    state: crate::store::State,
+    pub(crate) state: crate::store::State,
     /// The note on the first state row, not the item's `notes`.
     #[serde(default)]
-    note: Option<String>,
+    pub(crate) note: Option<String>,
 }
 
 async fn api_post_item(
@@ -459,19 +488,19 @@ async fn api_post_item(
     if body.item.id.trim().is_empty() {
         return Err((StatusCode::BAD_REQUEST, "`id` is missing".into()));
     }
-    if st.item(&body.item.id).map_err(boom)?.is_some() {
+    let Some(revision) = st
+        .create_item(
+            &body.item,
+            body.state,
+            body.note.as_deref().or(Some("created in the dashboard")),
+        )
+        .map_err(boom)?
+    else {
         return Err((
             StatusCode::CONFLICT,
             format!("`{}` exists already; PATCH changes it", body.item.id),
         ));
-    }
-    let revision = st.upsert_item(&body.item).map_err(boom)?;
-    st.record_state(
-        &body.item.id,
-        body.state,
-        body.note.as_deref().or(Some("created in the dashboard")),
-    )
-    .map_err(boom)?;
+    };
     Ok((
         StatusCode::CREATED,
         Json(serde_json::json!({
@@ -938,6 +967,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(crate::mail_proposals::snapshot),
         )
         .route("/api/items", post(api_post_item))
+        .route(inventory_api::ROUTE_IMPORT_OVERLAY, post(api_import_overlay))
         .route("/api/items/{id}", put(api_put_item).patch(api_patch_item))
         .route(
             "/api/items/{id}/state",
@@ -961,6 +991,7 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
             ("POST", "/api/item-aliases/{id}/revoke"),
             ("GET", "/api/item-refs/{reference}/aliases"),
             ("POST", "/api/items/resolve"),
+            ("POST", inventory_api::ROUTE_IMPORT_OVERLAY),
             ("GET", "/api/mail-proposals"),
             ("GET", "/api/item-refs/{reference}"),
             ("GET", "/api/items/{id}/mail-match-snapshot"),
@@ -987,6 +1018,11 @@ pub async fn serve() {
 
 #[cfg(test)]
 mod route_manifest_tests {
+    #[test]
+    fn overlay_import_is_closed_to_agent_tokens() {
+        assert!(super::AGENT_ROUTES.closes("POST", inventory_api::ROUTE_IMPORT_OVERLAY));
+    }
+
     #[test]
     fn mail_routes_are_closed_to_agent_tokens() {
         for (method, path) in [

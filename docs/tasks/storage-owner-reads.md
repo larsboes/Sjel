@@ -31,3 +31,4 @@ used separate Inventory, Finance and Devices files and exercised an unavailable 
 Interior uses Inventory's owner catalogue for model and RoomPlan requests. The separate-file
 rehearsal verified model loading and confirmed that only the owned item could be linked.
 The scheduled wishlist price refresh and comparison CLI use Inventory's owner routes.
+Inventory's remaining CLI reads, creation and overlay import also go through the service.

@@ -195,8 +195,14 @@ INSERT INTO inventory_item(id, kind, label, created_at, updated_at)
 VALUES ('cli/probe +?', 'gear', 'Price CLI fixture', '2000-01-01', '2000-01-01');
 -- Keep the scheduled runner on local fixtures during the rehearsal.
 UPDATE inventory_item SET link = NULL WHERE id IN (SELECT item_id FROM inventory_wish_group_item);
+CREATE TRIGGER refuse_fixture_initial_state BEFORE INSERT ON inventory_item_state
+WHEN NEW.item_id = 'refused-create'
+BEGIN SELECT RAISE(ABORT, 'fixture state refused'); END;
 SQL
 start_service price-cli
+if env -i PATH="$PATH" SJEL_INVENTORY_DB_PATH="$work/cli-must-not-open.db" \
+    "$inventory" inventory > missing-owner.log 2>&1; then exit 1; fi
+grep -q 'Set SJEL_INVENTORY_URL' missing-owner.log
 inventory_cli() {
     env -i PATH="$PATH" SJEL_PERSONAL_ROOT="$work" SJEL_DB_PATH="$work/cli-must-not-open.db" \
         SJEL_INVENTORY_DB_PATH="$work/cli-must-not-open.db" SJEL_INVENTORY_URL="$base" \
@@ -204,6 +210,8 @@ inventory_cli() {
 }
 inventory_cli compare sjel-turso-rehearsal-group > compare.log
 grep -q 'sjel-turso-rehearsal-group' compare.log
+inventory_cli inventory > inventory.log
+inventory_cli categories > categories.log
 test "$(inventory_cli prices refresh)" = '0 read, 0 failed'
 inventory_cli specs 'cli/probe +?' memory_gb=32 >/dev/null
 inventory_cli needs sjel-turso-rehearsal-group memory_gb=24 >/dev/null
@@ -211,13 +219,46 @@ inventory_cli alternatives sjel-turso-rehearsal-group yes >/dev/null
 inventory_cli price 'cli/probe +?' 79.90 --source rehearsal --on 2000-01-03 > price.log
 inventory_cli price 'cli/probe +?' 81.00 --source rehearsal --on 2000-01-03 > price-retry.log
 grep -q 'nothing written' price-retry.log
+test "$(request --output /dev/null --write-out '%{http_code}' -H 'Content-Type: application/json' \
+    --data '{"id":"refused-create","kind":"gear","label":"Must roll back","state":"wanted"}' "$base/api/items")" = 500
+request --fail -H 'Content-Type: application/json' \
+    --data '{"id":"owner-create","kind":"gear","label":"First label","state":"wanted"}' "$base/api/items" |
+    jq -e '.revision == 1 and .state == "wanted"' >/dev/null
+test "$(request --output /dev/null --write-out '%{http_code}' -H 'Content-Type: application/json' \
+    --data '{"id":"owner-create","kind":"gear","label":"Must not overwrite","state":"owned"}' "$base/api/items")" = 409
+mkdir -p data/inventory/inventory
+cat > data/inventory/inventory/owned.toml <<'TOML'
+[[item]]
+id = "import-control"
+label = "Import fixture"
+
+[[item]]
+id = "refused-create"
+label = "Must roll back the entire import"
+TOML
+touch data/inventory/inventory/wishlist.toml
+if inventory_cli import > import-refused.log 2>&1; then exit 1; fi
+grep -q '409 Conflict' import-refused.log
+if inventory_cli import --force > import-rolled-back.log 2>&1; then exit 1; fi
+grep -q '500 Internal Server Error' import-rolled-back.log
+reference="inv:$(printf '%s' 'import-control' | od -An -v -tx1 | tr -d ' \n')"
+test "$(request --output /dev/null --write-out '%{http_code}' "$base/api/item-refs/$reference")" = 404
+sed 's/refused-create/import-second/' data/inventory/inventory/owned.toml > owned-retry.toml
+mv owned-retry.toml data/inventory/inventory/owned.toml
+inventory_cli import --force > import.log 2>&1
+grep -q '2 pieces, 0 needs, 2 state changes' import.log
 stop_service
 test ! -e cli-must-not-open.db
+test "$(sqlite3 -readonly owner.db "SELECT count(*) FROM inventory_item WHERE id='refused-create';")" = 0
+test "$(sqlite3 -readonly owner.db "SELECT label || '|' || revision FROM inventory_item WHERE id='owner-create';")" = 'First label|1'
+test "$(sqlite3 -readonly owner.db "SELECT state FROM inventory_item_state WHERE item_id='owner-create';")" = wanted
 test "$(sqlite3 -readonly owner.db "SELECT price_cents FROM inventory_price_observation WHERE item_id='cli/probe +?' AND source='rehearsal'")" = 7990
 test "$(sqlite3 -readonly owner.db "SELECT count(*) FROM inventory_wish_spec WHERE item_id='cli/probe +?' AND key='memory_gb' AND value=32;")" = 1
 test "$(sqlite3 -readonly owner.db "SELECT count(*) FROM inventory_wish_group_need WHERE group_id='sjel-turso-rehearsal-group' AND key='memory_gb' AND value=24;")" = 1
 test "$(sqlite3 -readonly owner.db "SELECT alternatives FROM inventory_wish_group WHERE id='sjel-turso-rehearsal-group';")" = 1
 echo 'The comparison CLI used the owner, preserved the first price on retry, and opened no local database.'
+echo 'Item creation rolled back a refused state and left an existing item unchanged on a duplicate request.'
+echo 'The owner rejected an unforced import, rolled back a failed forced import, and committed both rows on retry.'
 
 test "$(shasum -a 256 "$source_db")" = "$source_sha"
 echo 'Inventory served the restored revision, kept the Turso receipt, rejected a stale edit, and retained the new revision after restart.'

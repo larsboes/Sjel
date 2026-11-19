@@ -25,7 +25,8 @@ inventory import [--force]
 
 The service is managed through `tools/service-runner.sh` and its `service.toml` manifest. Its live HTTP contract is available at `GET /routes`.
 
-`SJEL_INVENTORY_DB_PATH` selects an isolated Inventory SQLite file for the service and CLI.
+The CLI calls the running Inventory service. For an isolated deployment, set
+`SJEL_INVENTORY_DB_PATH` on the service and point `SJEL_INVENTORY_URL` at that listener.
 Device authentication continues to use the device registry in `SJEL_DB_PATH`.
 
 ## Considered and declined

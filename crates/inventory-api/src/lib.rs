@@ -14,6 +14,7 @@ pub mod resolution;
 // ============================================================================
 
 pub const ROUTE_INVENTORY: &str = "/api/inventory";
+pub const ROUTE_IMPORT_OVERLAY: &str = "/api/import/overlay";
 pub const ROUTE_ITEM_REFS: &str = "/api/item-refs/{reference}";
 pub const ROUTE_MAIL_PROPOSALS: &str = "/api/mail-proposals";
 pub const ROUTE_MAIL_PROPOSAL_DECISION: &str = "/api/mail-proposals/{id}/decision";
@@ -33,8 +34,9 @@ pub const ROUTE_ITEM_PRICES: &str = "/api/items/{id}/prices";
 pub const ROUTE_WISH_COMPARISON: &str = "/api/wish-comparison";
 
 /// Every route constant above. The server test checks each one against its manifest.
-pub const ALL_ROUTES: [&str; 18] = [
+pub const ALL_ROUTES: [&str; 19] = [
     ROUTE_INVENTORY,
+    ROUTE_IMPORT_OVERLAY,
     ROUTE_ITEM_REFS,
     ROUTE_MAIL_PROPOSALS,
     ROUTE_MAIL_PROPOSAL_DECISION,
@@ -56,6 +58,12 @@ pub const ALL_ROUTES: [&str; 18] = [
 
 /// The path prefix under which the status proxy serves these routes.
 pub const PROXY_PREFIX: &str = "/inventory";
+
+#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct ImportOverlayRequest {
+    #[serde(default)]
+    pub force: bool,
+}
 
 // ============================================================================
 // Enums

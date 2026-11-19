@@ -1,10 +1,10 @@
-//! inventory: what the household owns. The only writer of the `inventory_` tables; `interior`
-//! reads them to compute plans, and `trips` reads them over HTTP.
+//! Inventory CLI and HTTP service.
 
 mod compare_cli;
 
+use sjel_inventory::client::{self, Catalogue};
 use sjel_inventory::intake::{self, FetchError, Page};
-use sjel_inventory::store::{Item, Kind, State, Store};
+use sjel_inventory::store::{Item, Kind, State};
 
 fn bold(s: &str) -> String {
     format!("\x1b[1m{s}\x1b[0m")
@@ -58,21 +58,6 @@ fn flag(argv: &[String], name: &str) -> Option<String> {
         .and_then(|i| argv.get(i + 1).cloned())
 }
 
-/// Where `inventory/*.toml` lives: this capability's own data dir, else interior's, where
-/// existing machines keep it.
-fn import_dir() -> Option<std::path::PathBuf> {
-    let own = sjel_config::overlay_data_dir("inventory")?.join("inventory");
-    if own.is_dir() {
-        return Some(own);
-    }
-    let old = sjel_config::overlay_data_dir("interior")?.join("inventory");
-    old.is_dir().then_some(old)
-}
-
-fn open() -> Result<Store, String> {
-    Store::open(&sjel_inventory::database_path()).map_err(|e| format!("database not reachable: {e}"))
-}
-
 macro_rules! or_exit {
     ($e:expr) => {
         match $e {
@@ -92,14 +77,19 @@ async fn main() {
         usage()
     };
 
+    if cmd != "serve" && owner_url_needed() {
+        eprintln!("Set SJEL_INVENTORY_URL to the service that owns the configured database.");
+        std::process::exit(2);
+    }
+
     let code = match cmd {
         "serve" => {
             sjel_inventory::api::serve().await;
             return;
         }
-        "import" => import(&argv),
-        "inventory" => show(),
-        "categories" => categories_show(),
+        "import" => import(&argv).await,
+        "inventory" => show().await,
+        "categories" => categories_show().await,
         "add" => add(&argv).await,
         "prices" | "price" | "specs" | "needs" | "alternatives" | "compare" => {
             compare_cli::run(cmd, &argv).await
@@ -109,50 +99,47 @@ async fn main() {
     std::process::exit(code);
 }
 
-fn import(argv: &[String]) -> i32 {
-    let Some(dir) = import_dir() else {
-        eprintln!(
-            "{}",
-            red("no inventory/*.toml found in data/inventory/inventory or data/interior/inventory")
-        );
-        return 2;
-    };
-    let store = or_exit!(open());
-    let force = argv.iter().any(|a| a == "--force");
-    match store.item_count() {
-        Ok(n) if n > 0 && !force => {
-            eprintln!(
-                "\n  {}\n\n  The tables are the truth, not `inventory/*.toml`. An import would reset\n  \
-                 every change made in the dashboard to the state of the files.\n\n  {}\n",
-                red(&format!("{n} entries are already in the database.")),
-                dim("If that is what you mean: inventory import --force")
-            );
-            return 2;
-        }
-        Err(e) => {
-            eprintln!("{}", red(&format!("database not readable: {e}")));
-            return 2;
-        }
-        _ => {}
+fn owner_url_needed() -> bool {
+    if sjel_config::env_var("SJEL_INVENTORY_URL").is_ok_and(|value| !value.trim().is_empty()) {
+        return false;
     }
+    let owner_override =
+        sjel_config::env_var("SJEL_INVENTORY_DB_PATH").is_ok_and(|value| !value.trim().is_empty());
+    let shared_override = sjel_config::env_var("SJEL_DB_PATH").is_ok_and(|value| {
+        !value.trim().is_empty()
+            && Some(sjel_config::expand_tilde(&value))
+                != sjel_config::overlay_data_dir("sjel").map(|dir| dir.join("sjel.db"))
+    });
+    owner_override || shared_override
+}
+
+async fn import(argv: &[String]) -> i32 {
+    let force = argv.iter().any(|a| a == "--force");
     if force {
         eprintln!("  {}", dim("--force: the files overwrite the tables"));
     }
-    let report = or_exit!(sjel_inventory::import::inventory(&store, &dir));
+    let report = or_exit!(
+        sjel_server::blocking(
+            move || client::import_overlay(force).map_err(|error| error.to_string())
+        )
+        .await
+    );
     println!(
-        "\n  {} {} pieces, {} needs, {} state changes\n  {}\n",
+        "\n  {} {} pieces, {} needs, {} state changes\n",
         green("imported:"),
         report.pieces,
         report.slots,
-        report.state_changes,
-        dim(&format!("from {}", dir.display()))
+        report.state_changes
     );
     0
 }
 
-fn show() -> i32 {
-    let store = or_exit!(open());
-    let rows = or_exit!(store.catalogue());
+async fn owner_catalogue() -> Result<Catalogue, String> {
+    sjel_server::blocking(|| client::catalogue().map_err(|error| error.to_string())).await
+}
+
+async fn show() -> i32 {
+    let rows = or_exit!(owner_catalogue().await);
     if rows.is_empty() {
         println!(
             "\n  {}\n",
@@ -204,20 +191,32 @@ fn show() -> i32 {
         euro(open_total),
         dim("low end: the product price, else the minimum of the estimate.")
     );
-    print_categories(&store);
+    print_categories(&rows);
     0
 }
 
-fn categories_show() -> i32 {
-    let store = or_exit!(open());
-    if print_categories(&store).is_empty() {
+async fn categories_show() -> i32 {
+    let rows = or_exit!(owner_catalogue().await);
+    if print_categories(&rows).is_empty() {
         println!("\n  {}\n", dim("no entry has a category"));
     }
     0
 }
 
-fn print_categories(store: &Store) -> Vec<(String, i64)> {
-    let categories = store.categories().unwrap_or_default();
+fn print_categories(rows: &Catalogue) -> Vec<(String, i64)> {
+    let mut counts = std::collections::BTreeMap::new();
+    for (item, _) in rows.values() {
+        if let Some(category) = item
+            .category
+            .as_deref()
+            .map(|value| value.trim_matches(' '))
+            .filter(|value| !value.is_empty())
+        {
+            *counts.entry(category.to_owned()).or_insert(0) += 1;
+        }
+    }
+    let mut categories: Vec<_> = counts.into_iter().collect();
+    categories.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     if categories.is_empty() {
         return categories;
     }
@@ -312,8 +311,7 @@ async fn add(argv: &[String]) -> i32 {
         })
         .unwrap_or_default();
 
-    let store = or_exit!(open());
-    let catalogue = or_exit!(store.catalogue());
+    let catalogue = or_exit!(owner_catalogue().await);
     // An explicit id that is taken is refused: a second shirt is a second entry, and an
     // overwritten one loses its history.
     let id = match flag(argv, "id") {
@@ -344,12 +342,13 @@ async fn add(argv: &[String]) -> i32 {
         source: Some(format!("link {url}")),
         ..Default::default()
     };
-    if let Err(e) = store.upsert_item(&item) {
+    let request = item.clone();
+    if let Err(e) = sjel_server::blocking(move || {
+        client::create_wish(request).map_err(|error| error.to_string())
+    })
+    .await
+    {
         eprintln!("{}", red(&format!("not created: {e}")));
-        return 2;
-    }
-    if let Err(e) = store.record_state(&id, State::Wanted, Some("created with `inventory add`")) {
-        eprintln!("{}", red(&format!("state not written: {e}")));
         return 2;
     }
 

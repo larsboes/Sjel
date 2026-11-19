@@ -58,7 +58,39 @@ pub fn record_price(id: &str, price: &RecordPriceRequest) -> Result<PriceRecorde
         inventory_api::ROUTE_ITEM_PRICES,
         "inventory-price",
         Method::POST,
-        Some((id, serde_json::to_vec(price)?)),
+        Some(id),
+        Some(serde_json::to_vec(price)?),
+    )?;
+    Ok(serde_json::from_reader(response)?)
+}
+
+pub fn create_wish(item: Item) -> Result<(), Error> {
+    let body = crate::api::NewItem {
+        item,
+        state: State::Wanted,
+        note: Some("created with `inventory add`".into()),
+    };
+    request(
+        &inventory_url(),
+        inventory_api::ROUTE_ITEMS,
+        "inventory-intake",
+        Method::POST,
+        None,
+        Some(serde_json::to_vec(&body)?),
+    )?;
+    Ok(())
+}
+
+pub fn import_overlay(force: bool) -> Result<crate::import::Report, Error> {
+    let response = request(
+        &inventory_url(),
+        inventory_api::ROUTE_IMPORT_OVERLAY,
+        "inventory-import",
+        Method::POST,
+        None,
+        Some(serde_json::to_vec(&inventory_api::ImportOverlayRequest {
+            force,
+        })?),
     )?;
     Ok(serde_json::from_reader(response)?)
 }
@@ -93,7 +125,8 @@ fn update(id: &str, path: &str, body: &impl serde::Serialize) -> Result<(), Erro
         path,
         "inventory-comparison",
         Method::PUT,
-        Some((id, serde_json::to_vec(body)?)),
+        Some(id),
+        Some(serde_json::to_vec(body)?),
     )?;
     Ok(())
 }
@@ -103,7 +136,7 @@ pub(crate) fn read_json<T: serde::de::DeserializeOwned>(
     path: &str,
     purpose: &'static str,
 ) -> Result<T, Error> {
-    let response = request(base_url, path, purpose, Method::GET, None)?;
+    let response = request(base_url, path, purpose, Method::GET, None, None)?;
     Ok(serde_json::from_reader(response)?)
 }
 
@@ -112,7 +145,8 @@ fn request(
     path: &str,
     purpose: &'static str,
     method: Method,
-    item_body: Option<(&str, Vec<u8>)>,
+    id: Option<&str>,
+    body: Option<Vec<u8>>,
 ) -> Result<impl Read, Error> {
     let client =
         sjel_http::loopback_builder(sjel_http::Purpose::new(purpose), Duration::from_secs(1))
@@ -130,13 +164,13 @@ fn request(
     }
     url.set_query(None);
     url.set_fragment(None);
-    if let Some((id, _)) = &item_body {
+    if let Some(id) = id {
         url.path_segments_mut()
             .map_err(|_| "Invalid capability URL")?
             .clear()
             .extend(path.trim_start_matches('/').split('/').map(|segment| {
                 if segment == "{id}" {
-                    *id
+                    id
                 } else {
                     segment
                 }
@@ -145,7 +179,7 @@ fn request(
         url.set_path(path);
     }
     let mut request = client.request(method, url.clone());
-    if let Some((_, body)) = item_body {
+    if let Some(body) = body {
         request = request
             .header("Content-Type", "application/json")
             .body(body);
@@ -154,6 +188,17 @@ fn request(
     let response = request.send()?;
     if !response.status().is_success() {
         let status = response.status();
+        if status.is_client_error() {
+            let mut body = Vec::new();
+            response.take(1024).read_to_end(&mut body)?;
+            let detail: String = String::from_utf8_lossy(&body)
+                .chars()
+                .filter(|c| !c.is_control())
+                .collect();
+            if !detail.is_empty() {
+                return Err(format!("owner request failed: {status}: {detail}").into());
+            }
+        }
         return Err(format!("owner request failed: {status}").into());
     }
     Ok(response)

@@ -10,17 +10,6 @@
 
 <p align="center"><b>A private layer under the tools you already use. It connects the areas of your life and keeps them on your own machines.</b></p>
 
-## Install the CLI
-
-macOS ARM64 and Linux x86-64/ARM64. **Awaiting public release: this URL is not live yet.**
-
-~~~sh
-curl -LsSf https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh
-~~~
-
-No source checkout or Rust toolchain is needed. This installs the CLI and coding resources, not
-the desktop app or node services. [wget, pinned versions and setup details](#install).
-
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
   <a href="https://github.com/larsboes/Sjel/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/larsboes/Sjel/actions/workflows/ci.yml/badge.svg"></a>
@@ -32,7 +21,7 @@ the desktop app or node services. [wget, pinned versions and setup details](#ins
 <p align="center">
   <a href="#where-it-stands">Where it stands</a> ·
   <a href="#how-it-works">How it works</a> ·
-  <a href="#install-the-cli">Install</a> ·
+  <a href="#install">Install</a> ·
   <a href="#measured">Measured</a> ·
   <a href="research/README.md">Research</a> ·
   <a href="PLAN.md">Plan</a>
@@ -155,100 +144,16 @@ smart. Using and maintaining it may not require that smartness.
 | Small install with optional downloadable capabilities | CLI-only preview archives are built and smoke-tested. Mac DMG, node and native iOS delivery remain preparation paths. First-run setup and clean-user acceptance remain open ([#235](https://github.com/larsboes/Sjel/issues/235)). |
 | iCloud connection, encrypted by Sjel | Relay built and tested (`apps/mac`). Nothing syncs through it yet. |
 
+<a id="install-the-cli"></a>
+
 ## Install
 
-### CLI and coding tooling (preview)
-
-The CLI installs without a source checkout or Rust toolchain. It includes coding Packs and
-harness integration helpers, not the desktop app, node services, model weights or credentials.
-Pi, Claude Code and other harness executables must be installed and authenticated separately.
-
-#### Standalone installer
-
-The next CLI preview adds a standalone installer for macOS and Linux. **These URLs require a
-published release containing `install.sh`; the current `v0.0.2` draft does not contain it.**
-
-~~~sh
-curl -LsSf https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh
-~~~
-
-Without curl, use wget. The installer supports either downloader for its archive downloads too:
-
-~~~sh
-wget -qO- https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh
-~~~
-
-A version-specific URL defaults to that exact release rather than resolving latest again:
-
-~~~sh
-curl -LsSf https://github.com/larsboes/Sjel/releases/download/v0.0.3/install.sh | sh
-~~~
-
-The installer checks prerequisites, selects the host archive and verifies its SHA-256. Bash and
-standard Unix tools are required; Git and a Rust toolchain are not. It prints PATH instructions
-without editing shell configuration. [Installation options and recovery](docs/operations/index.md#cli-only-coding-installation)
-include custom directories and explicit updates.
-
-<details>
-<summary>Maintainer installation from the existing v0.0.2 draft</summary>
-
-`v0.0.2` is a [draft release](https://github.com/larsboes/Sjel/releases), not a public download.
-The following example requires GitHub CLI authentication with maintainer access to the draft.
-It selects macOS ARM64; the [CLI installation guide](docs/operations/index.md#cli-only-coding-installation)
-lists Linux archives, system requirements and installation options.
-
-~~~sh
-archive=sjel-cli-v0.0.2-aarch64-apple-darwin.tar.gz
-gh release download v0.0.2 --repo larsboes/Sjel \
-  --pattern "$archive" --pattern cli-install.sh --pattern SHA256SUMS \
-  --dir sjel-cli-preview
-cd sjel-cli-preview
-digest=$(awk -v name="$archive" '$2 == name {print $1}' SHA256SUMS)
-bash cli-install.sh --archive "$archive" --sha256 "$digest"
-export PATH="$HOME/.local/bin:$PATH"
-sjel --version
-sjel harnesses list
-~~~
-
-</details>
-
-The PATH change applies to the current shell. For later shells, add `~/.local/bin` to the shell
-configuration if it is not already present. Installation does not change harness settings.
-After Pi is installed, `sjel pack use pi coding-harness` explicitly activates its coding profile.
-Other harnesses use `sjel harnesses use coding-harness --harness <id>`.
-
-`sjel self status` inspects the installation and `sjel self rollback` restores a retained runtime.
-`sjel self check` and `sjel self update` use the public release channel, which is not available
-while the release remains a draft. Local-archive updates and recovery limits are documented in
-the installation guide. There is no anonymous one-command installation until a public release
-exists.
-
-### Source-based node
-
-To prepare a node with capability services on macOS or Linux:
-
-~~~sh
-git clone https://github.com/larsboes/Sjel.git
-cd Sjel
-tools/install.sh
-~~~
-
-Setup creates or connects private configuration outside this repository and offers capability
-selection. Follow the [shell-only installation workflow](docs/operations/index.md#install-a-shell-only-node)
-for prerequisites, authentication, startup and reboot checks. Enabling an optional capability does
-not start it or remove unused code from the checkout.
-
-### Desktop and iPhone
-
-The CLI preview does not install either app. From a source checkout, build the Mac app:
-
-~~~sh
-cd apps/gpui
-./install    # ~/Applications/Sjel Desktop.app
-~~~
-
-The iPhone app is on TestFlight for invited testers. `apps/gpui/ios/run-sim` runs it in the iOS
-Simulator. See [the GPUI README](apps/gpui/README.md#workspace-and-the-ios-app).
+- [CLI preview](docs/operations/index.md#cli-only-coding-installation) covers supported hosts,
+  release availability, draft installation, updates and rollback.
+- [Shell-only node](docs/operations/index.md#install-a-shell-only-node) covers source setup,
+  capability selection and startup checks.
+- The app guide covers the [Mac build](apps/gpui/README.md#running-it) and
+  [iPhone simulator](apps/gpui/README.md#workspace-and-the-ios-app).
 
 ## Measured
 

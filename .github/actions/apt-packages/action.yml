@@ -1,0 +1,61 @@
+name: Install apt packages from a cache
+description: >-
+  Installs Debian packages on a Linux runner. Keeps the downloaded .deb files in the
+  Actions cache, keyed on the runner image version and the package list, and installs
+  them with dpkg on a hit. Falls back to apt-get when the cache is missing or incomplete.
+  Saves a new entry only from main.
+inputs:
+  packages:
+    description: Space-separated package names.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Compute the package cache key
+      id: key
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        sum="$(printf '%s' "$PACKAGES" | sha256sum | cut -c1-12)"
+        echo "key=apt-${ImageOS:-linux}-${ImageVersion:-unknown}-$sum" >> "$GITHUB_OUTPUT"
+        echo "dir=$RUNNER_TEMP/apt-debs" >> "$GITHUB_OUTPUT"
+    - name: Restore the package cache
+      id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.key.outputs.dir }}
+        key: ${{ steps.key.outputs.key }}
+    - name: Install the packages
+      id: install
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        DEBS: ${{ steps.key.outputs.dir }}
+        HIT: ${{ steps.restore.outputs.cache-hit }}
+      run: |
+        read -r -a pkgs <<< "$PACKAGES"
+        installed() {
+          local p
+          for p in "${pkgs[@]}"; do
+            dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "install ok installed" || return 1
+          done
+        }
+        if [ "$HIT" = true ] && sudo dpkg -i "$DEBS"/*.deb >/dev/null && installed; then
+          echo "installed ${#pkgs[@]} package(s) from the cache"
+          exit 0
+        fi
+        mkdir -p "$DEBS"
+        rm -f "$DEBS"/*.deb
+        sudo apt-get clean
+        sudo apt-get update
+        sudo apt-get install -y --download-only "${pkgs[@]}"
+        cp /var/cache/apt/archives/*.deb "$DEBS"/ 2>/dev/null || true
+        sudo apt-get install -y "${pkgs[@]}"
+        if ls "$DEBS"/*.deb >/dev/null 2>&1; then echo "save=true" >> "$GITHUB_OUTPUT"; fi
+    - name: Save the package cache
+      if: github.ref == 'refs/heads/main' && steps.install.outputs.save == 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.key.outputs.dir }}
+        key: ${{ steps.key.outputs.key }}

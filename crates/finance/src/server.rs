@@ -3308,7 +3308,9 @@ mod tests {
                 .unwrap();
             let response = router.clone().oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
-            let bytes = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+            let bytes = axum::body::to_bytes(response.into_body(), 4096)
+                .await
+                .unwrap();
             serde_json::from_slice::<Option<finance_api::MonthlyBalance>>(&bytes).unwrap()
         };
         assert_eq!(read().await, None);

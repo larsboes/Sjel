@@ -896,10 +896,9 @@ async fn api_roomplan_object_link(
     })
     .await
     .map_err(boom)?;
-    let (item, state) = items.get(&request.item_id).ok_or((
-        StatusCode::CONFLICT,
-        "Inventory item was not found".into(),
-    ))?;
+    let (item, state) = items
+        .get(&request.item_id)
+        .ok_or((StatusCode::CONFLICT, "Inventory item was not found".into()))?;
     store
         .link_roomplan_object(
             &space_id,

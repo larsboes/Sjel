@@ -605,7 +605,10 @@ impl Model {
 
     pub fn load_with_catalogue(
         flat: &str,
-        read_catalogue: impl FnOnce() -> Result<sjel_inventory::client::Catalogue, Box<dyn std::error::Error>>,
+        read_catalogue: impl FnOnce() -> Result<
+            sjel_inventory::client::Catalogue,
+            Box<dyn std::error::Error>,
+        >,
     ) -> Result<Self, ModelError> {
         let root = data_dir()?;
         let flat_dir = root.join("flats").join(flat);

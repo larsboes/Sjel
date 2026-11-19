@@ -227,7 +227,9 @@ async fn inventory_hits(query: &str) -> Vec<SearchHit> {
             .ok()
     }
 
-    fetch(query).await.map_or_else(Vec::new, |response| response.hits)
+    fetch(query)
+        .await
+        .map_or_else(Vec::new, |response| response.hits)
 }
 
 pub(crate) async fn search_handler(

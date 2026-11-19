@@ -49,3 +49,39 @@ default Turso features disabled. It was not run on a phone.
 
 The probe uses synthetic data and does not measure power-loss recovery, search latency at production
 scale or compatibility with a copy of the deployed store.
+
+## Side-by-side workload
+
+```sh
+sh research/benchmarks/storage-engine/binding-probe.sh "$turso_source" "$scratch/workload" workload
+```
+
+The optimized Rust probe uses libSQL 0.10.0 and Turso 0.8.3 on the same generated database. It
+uses the [graph-store probe](../graph-store/README.md)'s edge schema and scale: 37,200 nodes,
+84,232 edges and 22,261 call edges. It checks 120 three-hop queries and 24 exact top-10 queries
+over 25,000 dense, 384-dimensional vectors. Four connections each commit 200 counter updates,
+first on distinct keys and then on one shared key. Every graph result and ranked vector list
+matches libSQL. All three engines preserve all 800 increments in both writer workloads.
+
+Ranges below are from three optimized runs on one Mac. The engine order was fixed. A separate
+end-to-end restore run also passed and showed higher graph read tails for Turso.
+
+| Engine | Graph read p95 | Exact cosine p95 | Distinct-key tx/s | Shared-key tx/s |
+| --- | ---: | ---: | ---: | ---: |
+| libSQL WAL | 0.24–0.49 ms | 17.36–27.23 ms | 20.3–20.5k | 25.2–26.3k |
+| Turso WAL | 0.72–0.77 ms | 19.44–19.94 ms | 16.0–17.5k | 15.4–16.4k |
+| Turso MVCC | 0.62–0.69 ms | 22.36–22.98 ms | 47.2–47.6k | 20.8–23.5k |
+
+MVCC committed the distinct-key workload without retries. The shared-key workload required
+24–38 retries after write conflicts. The adapter checks autocommit before rolling back, since
+Turso can already have aborted the transaction.
+
+## Backup and rollback rehearsal
+
+The native probe reopens the Turso-written WAL file directly with libSQL. SQLite 3.54.0 rejected
+the MVCC file as a database. With the engine closed, the probe copies the main file and its
+sidecars, opens that copy with Turso, switches it to WAL, and checks the counters and vector
+results in libSQL. SQLite's `.backup` then produces readable snapshots of both WAL files.
+`quick_check` returns `ok` and the restored counters, edge count and embedding count match.
+The rehearsal covers closed-file recovery and rollback. A live MVCC backup, a power cut, a
+physical iPhone, and a deployed-store fixture remain outside the measured scope.

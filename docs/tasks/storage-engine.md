@@ -35,6 +35,12 @@ index rejected the existing dense embeddings. In one process, WAL needed a retry
 both overlapping writes on distinct keys. Both modes preserved only committed data after process
 death. The local-only Rust probe built and linked for arm64 iOS with Turso's default features disabled.
 
-Keep libSQL for the unchanged-file migration path. A production-store copy and power-loss
-recovery remain unverified. Revisit with the owner if Turso accepts the existing index schema or
-a separate migration can meet the search contract with a replacement.
+The side-by-side workload matched all recursive and vector query results. Turso MVCC committed
+about 2.3 times as many distinct-key transactions per second as libSQL WAL. The shared-key
+workload had no consistent gain with Turso. Turso WAL files reopened in libSQL. The closed MVCC
+copy required a Turso conversion to WAL before libSQL could read it. SQLite backup and restore
+checks passed for both WAL states.
+
+Keep libSQL for the shared store. Turso MVCC merits a pilot on a rebuildable, single-owner
+projection after measuring distinct-key write contention in that workload. Live MVCC backup,
+power-loss recovery, physical iPhone behavior and the deployed-store schema remain unverified.

@@ -145,13 +145,19 @@ mirror whose 257 Place rows matched the restore. The live Media ledger had zero 
 A fixture verified that the authenticated map projection supplies location links while the
 regular geotag response keeps its existing fields.
 
+Transit runs on its own Turso WAL file. Its CLI and Scouting fare recorder submit jobs to the
+credentialed owner socket. The rehearsal used an absent shared-store path and verified that
+retried writes preserved one session and one journey. The first native archive restored four
+tables and 16 rows with exact parity. Live requests matched all five journeys through gateway
+pagination and all ten legs in Places. The Transit CLI retrieved the restored session.
+
 ## Remaining migration gates
 
 - Verify a successful signed request from a paired client against the live Inventory owner.
 - Verify a refresh on a paired iPhone.
 - Migrate the remaining owners after their cross-owner readers and independent writers are
   routed through the owning services. The shared store still serves active capabilities
-  including Comms, Devices, Interior, Media, Projects, Transit, and Trips. See
+  including Comms, Devices, Interior, Media, Projects, Scouting, and Trips. See
   [owner reads](storage-owner-reads.md).
 - Any MVCC cutover requires recovery with the logical log and proof that backups preserve
   committed writes during concurrent use. Keep the original database through rollback acceptance.

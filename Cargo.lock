@@ -6221,6 +6221,7 @@ dependencies = [
  "sjel-config",
  "sjel-extraction",
  "sjel-http",
+ "sjel-native-wal",
  "sjel-server",
  "sjel-store",
  "station-time",

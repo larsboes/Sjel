@@ -2,7 +2,7 @@
 kind        = "process"
 name        = "transit"
 command     = ["target/release/transit-server"]
-build       = ["cargo", "build", "--locked", "--release", "--bin", "transit-server"]
+build       = ["cargo", "build", "--locked", "--release", "-p", "sjel-transit", "--no-default-features", "--features", "turso-wal", "--bin", "transit-server"]
 port        = "3000"
 health_path = "/health"
 proxy_extra = ["/api"]

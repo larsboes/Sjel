@@ -66,3 +66,5 @@ Live parity checked the spend count and cent total. Trip plans and paged Transit
 supply the live travel layer. The Media owner supplies indexed photo locations through a
 protected Unix projection. The phone mirror reads the entire Places registry through its
 protected owner projection, and the rebuilt copy matches all 257 rows.
+
+Transit CLI sessions and the Scouting fare recorder use the Transit owner socket.

@@ -26,7 +26,7 @@
 //! already applies to `transit`'s own CLI.
 
 use transit::hafas::HafasClient;
-use transit::store::TransitStore;
+use transit::jobs::Client;
 use transit::travel::Journey;
 
 use crate::opportunity::{Opportunity, OpportunityType, SourceKind};
@@ -35,11 +35,11 @@ use crate::source::{SearchQuery, SourceAdapter, SourceError};
 pub struct TransitFareAdapter {
     from_eva: String,
     to_eva: String,
-    store: Option<TransitStore>,
+    store: Option<Client>,
 }
 
 impl TransitFareAdapter {
-    pub fn new(from_eva: String, to_eva: String, store: Option<TransitStore>) -> Self {
+    pub fn new(from_eva: String, to_eva: String, store: Option<Client>) -> Self {
         Self {
             from_eva,
             to_eva,

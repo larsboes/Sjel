@@ -1,0 +1,6 @@
+kind                  = "data"
+name                  = "transit-wal-backup"
+requires              = ["transit"]
+backup_owner_snapshot = "transit"
+backup_sqlite_online  = "data/transit/snapshots/transit.db"
+backup_target         = "backup-target"

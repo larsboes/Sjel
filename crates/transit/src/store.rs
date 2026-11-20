@@ -1,45 +1,28 @@
-//! Persistence for `transit_trips`/`transit_trip_legs` -- the "own
-//! trips/trip_legs tables" half of Phase 2 (defined in
-//! `services/store/README.md`) --
-//! plus `transit_trip_sessions` (Phase 3: fuzzy/triggered trip-search
-//! sessions). Same shared file as every other store-owning capability, under
-//! this one's table prefix: PRD Q45 (2026-08-27) retired Postgres, and the
-//! schema-per-capability convention became a prefix-per-capability one so the
-//! cross-capability joins it existed for survive. A recorded journey
-//! lands in two places on an "auto" (adapter-driven) run: here, as the
-//! detailed structured record; and in `scouting.opportunities` (via
-//! `scouting::adapters::transit_fare`), as the scored/dismissable view. A
-//! "manual" (`transit search`/`split` CLI) run only writes here -- there's
-//! no adapter/pipeline involved in a one-shot CLI query. A "session" run
-//! (`transit plan`) writes here AND into a `trip_sessions` row it owns --
-//! different code path from the background scan (correlation driving query
-//! #2 vs #1), same underlying store.
-//!
-//! Phase 3 settled two deliberately-deferred column questions:
-//! `candidate_destinations` and
-//! `date_window` are now real columns, but on the *session* row
-//! (`trip_sessions.candidates` / `date_start`/`date_end`), not on `trips` --
-//! a trip is one concrete journey, the candidate set and the date window
-//! describe the user-intent session that found it, not the journey itself.
-//! `trips` gains a nullable `session_id` FK so a session-scoped journey is
-//! traceable back to the session that surfaced it, but a manual/auto trip
-//! keeps `session_id = NULL` (the prior shape unchanged). `trips.status`
-//! still exists (from Phase 2's schema sketch); nothing reads/sets it
-//! back yet -- same honest "scaffolding only" gap
-//! `scouting::store`'s `source_state.cursor` already carries.
+//! Journey, session and train-label persistence for the Transit owner.
 
 use std::path::Path;
 
 use crate::travel::Journey;
-use rusqlite::{params, Connection, OptionalExtension, Row};
-use sjel_store::QueryAll;
+#[cfg(not(feature = "turso-wal"))]
+use rusqlite::{params, Connection, OptionalExtension, Result as DbResult, Row, Transaction};
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal::{
+    self as db, params, Connection, OptionalExtension, Result as DbResult, Row, Transaction,
+};
+#[cfg(not(feature = "turso-wal"))]
+use sjel_store::{self as db, QueryAll};
+
+#[cfg(feature = "turso-wal")]
+type StoreClient = db::Connection;
+#[cfg(not(feature = "turso-wal"))]
+type StoreClient = db::PooledClient;
 
 pub type TripWithLegs = (TripRow, Vec<TripLegRow>);
 
 pub struct TransitStore {
     /// Shared with every other store in this process on the same file, so
     /// opening one is a checkout rather than an open.
-    pool: sjel_store::Pool,
+    pool: db::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `transit` here means `transit_trips`, `transit_trip_legs` and
     /// `transit_trip_sessions`.
@@ -61,7 +44,7 @@ impl TransitStore {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         // A pool checkout, and the migration runs once per process per (file,
         // prefix) rather than once per open -- libs/sjel-store/README.md has why.
-        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
+        let pool = db::open_pool(database_path, prefix, |conn| {
             Self::init_schema(conn, prefix)
         })?;
         let store = Self {
@@ -77,8 +60,17 @@ impl TransitStore {
     /// A `Result` where this used to be `self.conn.lock().unwrap()`: that unwrap
     /// could only fail on a poisoned mutex, whereas a checkout can genuinely fail
     /// when the file is unreachable or every connection is busy.
-    fn conn(&self) -> Result<sjel_store::PooledClient, Box<dyn std::error::Error>> {
+    fn conn(&self) -> Result<StoreClient, Box<dyn std::error::Error>> {
         Ok(self.pool.get()?)
+    }
+
+    #[cfg(feature = "turso-wal")]
+    pub fn snapshot(
+        &self,
+        database: &Path,
+        target: &Path,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        db::snapshot(&self.conn()?, database, target)
     }
 
     /// The tables as they are, not the history that produced them.
@@ -185,7 +177,7 @@ impl TransitStore {
             "SELECT train_number, train_name, train_type FROM {}_train_labels",
             self.prefix
         ))?;
-        let rows = stmt.query_map([], |row| {
+        let rows = stmt.query_map(params![], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -227,7 +219,7 @@ impl TransitStore {
             .into());
         }
         let mut conn = self.conn()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
+        let tx = db::write_transaction(&mut conn)?;
 
         let existing: Option<String> = tx
             .query_row(
@@ -235,7 +227,7 @@ impl TransitStore {
                     "SELECT id FROM {prefix}_trips WHERE id = ?1",
                     prefix = self.prefix
                 ),
-                params![&journey.id],
+                params![journey.id.as_str()],
                 |row| row.get(0),
             )
             .optional()?;
@@ -281,13 +273,13 @@ impl TransitStore {
                 prefix = self.prefix
             ),
             params![
-                &journey.id,
+                journey.id.as_str(),
                 &origin_eva,
                 &destination_eva,
                 &trigger_reason,
                 &(journey.total_duration_minutes as i32),
                 &journey.total_price,
-                &chrono_now(),
+                chrono_now(),
                 &session_id,
                 // Both hafas.rs parse paths set start/end_station from the
                 // first/last leg, so these are the journey's own endpoint
@@ -328,7 +320,7 @@ impl TransitStore {
     /// `list_trips` read them identically and the column order is positional.
     fn legs_of(
         &self,
-        conn: &sjel_store::PooledClient,
+        conn: &StoreClient,
         trip_id: &str,
     ) -> Result<Vec<TripLegRow>, Box<dyn std::error::Error>> {
         Ok(conn.query_all(
@@ -388,8 +380,9 @@ impl TransitStore {
         date_end: &str,
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let cands_json = serde_json::to_string(candidates)?;
-        let conn = self.conn()?;
-        let existing: Option<String> = conn
+        let mut conn = self.conn()?;
+        let tx = db::write_transaction(&mut conn)?;
+        let existing: Option<String> = tx
             .query_row(
                 &format!(
                     "SELECT id FROM {prefix}_trip_sessions WHERE id = ?1",
@@ -400,7 +393,7 @@ impl TransitStore {
             )
             .optional()?;
         let is_new = existing.is_none();
-        conn.execute(
+        tx.execute(
             &format!(
                 "INSERT INTO {prefix}_trip_sessions
                     (id, origin_eva, intent, candidates, date_start, date_end, created_at)
@@ -416,12 +409,13 @@ impl TransitStore {
                 &id,
                 &origin_eva,
                 &intent,
-                &cands_json,
+                cands_json.as_str(),
                 &date_start,
                 &date_end,
-                &chrono_now(),
+                chrono_now(),
             ],
         )?;
+        tx.commit()?;
         Ok(is_new)
     }
 
@@ -532,7 +526,7 @@ const LEG_COLUMNS: &str = "origin_eva, origin_name, destination_eva, destination
      platform, is_regional,
      origin_latitude, origin_longitude, destination_latitude, destination_longitude";
 
-fn row_to_trip(row: &Row) -> rusqlite::Result<TripRow> {
+fn row_to_trip(row: &Row) -> DbResult<TripRow> {
     Ok(TripRow {
         id: row.get(0)?,
         status: row.get(1)?,
@@ -551,7 +545,7 @@ fn row_to_trip(row: &Row) -> rusqlite::Result<TripRow> {
     })
 }
 
-fn row_to_leg(row: &Row) -> rusqlite::Result<TripLegRow> {
+fn row_to_leg(row: &Row) -> DbResult<TripLegRow> {
     Ok(TripLegRow {
         origin_eva: row.get(0)?,
         origin_name: row.get(1)?,
@@ -563,7 +557,7 @@ fn row_to_leg(row: &Row) -> rusqlite::Result<TripLegRow> {
         train_number: row.get(7)?,
         train_category: row.get(8)?,
         platform: row.get(9)?,
-        is_regional: row.get(10)?,
+        is_regional: row.get::<_, i64>(10)? != 0,
         origin_latitude: row.get(11)?,
         origin_longitude: row.get(12)?,
         destination_latitude: row.get(13)?,
@@ -576,7 +570,7 @@ fn row_to_leg(row: &Row) -> rusqlite::Result<TripLegRow> {
 /// whether the recording came from a manual CLI call, the `transit_fare`
 /// adapter, or a session run. Caller holds the live transaction.
 fn insert_legs(
-    tx: &rusqlite::Transaction,
+    tx: &Transaction,
     prefix: &str,
     journey_id: &str,
     legs: &[crate::travel::Leg],
@@ -598,16 +592,16 @@ fn insert_legs(
             params![
                 &journey_id,
                 &(i as i64),
-                &leg.origin.id,
-                &leg.origin.name,
-                &leg.destination.id,
-                &leg.destination.name,
-                &leg.departure_time,
-                &leg.arrival_time,
-                &leg.train_name,
-                &leg.train_number,
-                &leg.train_category,
-                &leg.platform,
+                leg.origin.id.as_str(),
+                leg.origin.name.as_str(),
+                leg.destination.id.as_str(),
+                leg.destination.name.as_str(),
+                leg.departure_time.as_str(),
+                leg.arrival_time.as_str(),
+                leg.train_name.as_str(),
+                leg.train_number.as_str(),
+                leg.train_category.as_str(),
+                leg.platform.as_deref(),
                 &leg.is_regional,
                 &leg.origin.latitude,
                 &leg.origin.longitude,
@@ -631,7 +625,7 @@ fn insert_legs(
                              train_type = excluded.train_type,
                              updated_at = excluded.updated_at"
                     ),
-                    params![&leg.train_number, &leg.train_name, t, &chrono_now()],
+                    params![leg.train_number.as_str(), leg.train_name.as_str(), t, chrono_now()],
                 );
                 crate::hafas::register_train_label(&leg.train_number, &leg.train_name, t);
             }
@@ -670,7 +664,7 @@ pub struct CandidateDest {
 /// has been JSON-parsed; an unparseable column yields an empty Vec rather
 /// than an error (a session created by a buggy/partial run shouldn't
 /// brick `get_session`).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SessionRow {
     pub id: String,
     pub origin_eva: String,
@@ -714,7 +708,7 @@ pub fn stable_session_id(
     format!("trip:session:{:016x}", h)
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TripRow {
     pub id: String,
     pub status: String,
@@ -741,7 +735,7 @@ pub struct TripRow {
     pub destination_longitude: Option<f64>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TripLegRow {
     pub origin_eva: String,
     pub origin_name: String,
@@ -1366,7 +1360,7 @@ mod db_tests {
             .unwrap()
             .execute(
                 "UPDATE transit_trips SET status='saved' WHERE id='j:refresh'",
-                [],
+                params![],
             )
             .unwrap();
         let (trip, _) = store.get_trip("j:refresh").unwrap().unwrap();

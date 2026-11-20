@@ -58,6 +58,12 @@ OWNERS = {
         "punctuality_stations",
         "punctuality_stop_stats",
     },
+    "transit": {
+        "transit_train_labels",
+        "transit_trip_legs",
+        "transit_trip_sessions",
+        "transit_trips",
+    },
     "software": {"software_apps", "software_decisions"},
 }
 

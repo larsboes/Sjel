@@ -512,6 +512,25 @@ async fn handle_list_trips(
 #[tokio::main]
 async fn main() {
     let config = Arc::new(Config::load());
+    #[cfg(feature = "turso-wal")]
+    {
+        if config.database_path == sjel_config::database_path() {
+            eprintln!("Turso requires a separate Transit owner database");
+            std::process::exit(1);
+        }
+        if std::env::args().nth(1).as_deref() == Some("snapshot") {
+            let result = tokio::task::spawn_blocking(move || {
+                transit::jobs::snapshot(&config.database_path).map_err(|error| error.to_string())
+            })
+            .await
+            .expect("Transit snapshot worker");
+            if let Err(error) = result {
+                eprintln!("transit snapshot: {error}");
+                std::process::exit(1);
+            }
+            return;
+        }
+    }
     // HafasClient wraps reqwest::blocking::Client, which spins up its own
     // background tokio runtime internally. Constructing it directly inside
     // #[tokio::main]'s async context panics on drop ("cannot drop a runtime
@@ -523,6 +542,8 @@ async fn main() {
             .expect("hafas client construction panicked"),
     );
 
+    #[cfg(feature = "turso-wal")]
+    let database = Arc::new(config.database_path.clone());
     let state = AppState {
         hafas_client,
         config,
@@ -531,7 +552,11 @@ async fn main() {
     // Port contract and loopback bind live in sjel_server; the old 0.0.0.0 bind
     // here was never a documented decision and is retired with it.
     let port = sjel_server::resolve_port(Some("TRANSIT_PORT"), None, 3000);
-    sjel_server::serve_local("transit", port, build_router(state)).await;
+    let http = sjel_server::serve_local("transit", port, build_router(state));
+    #[cfg(feature = "turso-wal")]
+    tokio::join!(http, transit::jobs::serve(database));
+    #[cfg(not(feature = "turso-wal"))]
+    http.await;
 }
 
 /// This capability's name, for the origin guard's env var

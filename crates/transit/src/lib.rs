@@ -2,6 +2,7 @@ pub mod config;
 pub mod document;
 pub mod extractor;
 pub mod hafas;
+pub mod jobs;
 pub mod punctuality;
 pub mod ranking;
 pub mod store;

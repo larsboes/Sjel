@@ -180,7 +180,13 @@ fn build_api_adapter(name: &str, no_store: bool) -> Option<Box<dyn SourceAdapter
             let transit_store = if no_store {
                 None
             } else {
-                transit::store::TransitStore::open(&tcfg.database_path).ok()
+                match transit::jobs::Client::open(&tcfg.database_path) {
+                    Ok(client) => Some(client),
+                    Err(error) => {
+                        eprintln!("warning: could not prepare Transit recording: {error}");
+                        None
+                    }
+                }
             };
             Box::new(TransitFareAdapter::new(from_eva, to_eva, transit_store))
         }

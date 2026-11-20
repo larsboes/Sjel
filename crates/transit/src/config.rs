@@ -42,12 +42,6 @@ pub struct Config {
     pub default_from_eva: Option<String>,
     pub default_to_eva: Option<String>,
     pub default_time: Option<String>,
-    /// The one shared SQLite file `store::TransitStore` opens, under the table
-    /// prefix `transit` (PRD Q45). Resolved by `sjel_config::database_path`:
-    /// `SJEL_DB_PATH`, else `<overlay>/data/sjel/sjel.db`. Not a per-capability
-    /// setting any more -- a file per capability would drop the cross-capability
-    /// joins the shared instance existed for, so a `database_url` in
-    /// `transit.json` is now ignored.
     pub database_path: PathBuf,
     /// Which reader turns a ticket file into text. `builtin` is the original
     /// pdf_extract/mailparse path; `xberg` shells out to the xberg CLI, which
@@ -134,6 +128,18 @@ fn load_file_config() -> FileConfig {
     }
 }
 
+pub(crate) fn owner_path() -> Option<PathBuf> {
+    sjel_config::env_var("SJEL_TRANSIT_DB_PATH")
+        .ok()
+        .filter(|path| !path.is_empty())
+        .map(|path| expand_tilde(&path))
+        .or_else(|| {
+            sjel_config::overlay_data_dir("transit-store")
+                .map(|directory| directory.join("transit.db"))
+                .filter(|path| path.is_file())
+        })
+}
+
 impl Config {
     pub fn load() -> Self {
         let file = load_file_config();
@@ -141,7 +147,11 @@ impl Config {
             default_from_eva: file.default_from_eva,
             default_to_eva: file.default_to_eva,
             default_time: file.default_time,
-            database_path: database_path(),
+            database_path: if cfg!(feature = "turso-wal") {
+                owner_path().unwrap_or_else(database_path)
+            } else {
+                database_path()
+            },
             document_backend: DocumentBackend::parse(file.document_backend.as_deref()),
             xberg_bin: file.xberg_bin.unwrap_or_else(|| "xberg".into()),
             ocr_language: file.ocr_language.unwrap_or_else(|| "deu".into()),

@@ -24,7 +24,7 @@ run() { # run <args...> -> $out, $status
 
 expect_refused() { # expect_refused <description> <substring>
   [ "$status" -eq 2 ] || { note_fail "$1 — wanted exit 2, got $status"; return; }
-  printf '%s' "$out" | grep -qF "$2" || note_fail "$1 — refusal does not say '$2'"
+  printf '%s' "$out" | grep -qF -- "$2" || note_fail "$1 — refusal does not say '$2'"
 }
 
 expect_ok() { # expect_ok <description>
@@ -240,9 +240,11 @@ fixture_tmp="$(sed -n '1p' "$case_dir/report")"
 
 cat > "$case_dir/bin/rmdir" <<'RMDIR'
 #!/bin/bash
-case "$1" in
-  "$HERMETIC_TEST_BLOCKED"/*) exit 1 ;;
-esac
+if [ -n "${HERMETIC_TEST_BLOCKED:-}" ]; then
+  case "$1" in
+    "$HERMETIC_TEST_BLOCKED"/*) exit 1 ;;
+  esac
+fi
 exec /bin/rmdir "$@"
 RMDIR
 chmod +x "$case_dir/bin/rmdir"
@@ -267,6 +269,28 @@ expect_ok "the shared fallback survives a second invocation"
 [ "$(sed -n '2p' "$case_dir/report")" = "$fallback_cache" ] || note_fail "the fallback cache changed between invocations"
 fallback_run test --target-dir "$case_dir/blocked"
 expect_refused "an explicit unwritable cache is not silently redirected" "explicit target cannot create and remove"
+
+run --scratch
+expect_refused "scratch mode still needs a Cargo subcommand" "needs a cargo subcommand"
+run --scratch --print-env test --target-dir "$EXPLICIT_TARGET"
+expect_refused "scratch mode refuses a conflicting explicit path" "--scratch and --target-dir"
+run --scratch --print-env test --target-dir="$EXPLICIT_TARGET"
+expect_refused "scratch mode refuses the equals spelling too" "--scratch and --target-dir"
+run --scratch test --release
+expect_refused "scratch mode does not bypass the release guard" "target/release"
+
+touch -t 200001010000 "$fallback_cache"
+touch -t 200001020000 "$case_dir/aged"
+fake_run --scratch test
+expect_ok "scratch mode overrides a writable inherited cache"
+[ "$(sed -n '2p' "$case_dir/report")" = "$fallback_cache" ] || note_fail "scratch mode did not reuse the checkout's fallback"
+[ "$fallback_cache" -nt "$case_dir/aged" ] || note_fail "scratch mode did not refresh the cache age"
+
+fake_run --scratch fail
+[ "$status" -eq 19 ] || note_fail "scratch mode lost Cargo's failure status"
+fake_run --scratch --print-env
+expect_ok "scratch mode reports the selected path without building"
+[ "$(env_value CARGO_TARGET_DIR)" = "$fallback_cache" ] || note_fail "scratch mode reported a different cache"
 
 # ---------------------------------------------------------------------------
 

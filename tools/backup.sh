@@ -62,6 +62,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$CAP" ] || usage
+if [ "$CAP" = archive ]; then umask 077; fi
 if [ -n "$SOURCE_FLAG" ] && [ "$STREAM" -ne 1 ]; then
   echo "backup.sh: --source-root requires --stream so an override cannot replace the configured backup receipt" >&2
   exit 1
@@ -355,6 +356,15 @@ if [ "$STREAM" -eq 0 ]; then
       # destination that is (or passes through) a symlink to iCloud Drive would otherwise
       # miss the store-only upload gate below and prune on the generic local path.
       REMOTE_ROOT="$(cd "$REMOTE_ROOT" && pwd -P)"
+      if [ "$CAP" = archive ]; then
+        python3 - "$SRC_ROOT/archive" "$REMOTE_ROOT" <<'PY'
+import os
+import sys
+
+if os.stat(sys.argv[1]).st_dev == os.stat(sys.argv[2]).st_dev:
+    sys.exit("backup.sh: archive source and backup target are on the same filesystem")
+PY
+      fi
       ;;
     *)
       echo "backup.sh: target '$TARGET_ID' has unknown kind '$TARGET_KIND' (expected ssh or local)" >&2; exit 1 ;;
@@ -437,23 +447,36 @@ resume_capability() {
   return 1
 }
 
+prepare_archive_stage_removal() {
+  [ -d "$STAGE" ] || return 0
+  find "$STAGE" -type d ! -perm -0700 -exec chmod u+rwx {} \;
+}
+
 cleanup() {
-  rm -rf "$RUN_DIR"
-  if [ -n "$DEST_PART" ]; then rm -f "$DEST_PART"; fi
+  local failed=0
+  if [ "$CAP" = archive ]; then prepare_archive_stage_removal || failed=1; fi
+  rm -rf "$RUN_DIR" || failed=1
+  if [ -n "$DEST_PART" ]; then rm -f "$DEST_PART" || failed=1; fi
   if [ -n "$REMOTE_PART" ]; then
     if ! ssh 9>&- "${SSHM[@]}" "$SSH_USER@$HOST" "rm -f '$REMOTE_PART'"; then
       echo "backup.sh: could not remove remote partial: $REMOTE_PART" >&2
+      failed=1
     fi
   fi
+  return "$failed"
 }
 on_exit() {
   status=$?
   trap - EXIT HUP INT TERM
   resume_failed=0
   resume_capability || resume_failed=1
-  cleanup
+  cleanup_failed=0
+  cleanup || cleanup_failed=1
   if declare -F close_master >/dev/null 2>&1; then close_master; fi
-  if [ "$status" -eq 0 ] && [ "$resume_failed" -ne 0 ]; then status=1; fi
+  if [ "$cleanup_failed" -ne 0 ]; then
+    echo "backup.sh: could not clean up backup staging or partial output" >&2
+  fi
+  if [ "$status" -eq 0 ] && [ "$((resume_failed + cleanup_failed))" -ne 0 ]; then status=1; fi
   exit "$status"
 }
 trap on_exit EXIT
@@ -511,6 +534,46 @@ if [ -n "$SQLITE_REL" ]; then
 fi
 if [ "${#PATHS[@]}" -gt 0 ]; then
   stage_host_paths
+fi
+
+if [ "$CAP" = archive ]; then
+  # Keep link targets as data while the extractor continues to reject link members.
+  python3 - "$STAGE/archive" "$STAGE/archive-symlinks.json" <<'PY'
+import json
+import os
+import stat
+import sys
+from pathlib import Path
+
+root, metadata = map(Path, sys.argv[1:])
+links = {}
+
+
+def fail(error):
+    raise error
+
+
+for directory, subdirs, files in os.walk(root, onerror=fail):
+    parent = Path(directory)
+    for name in subdirs + files:
+        path = parent / name
+        if path.is_symlink():
+            links[path.relative_to(root).as_posix()] = os.readlink(path)
+            if name in subdirs:
+                subdirs.remove(name)
+            mode = stat.S_IMODE(parent.stat().st_mode)
+            if mode & stat.S_IWUSR:
+                path.unlink()
+            else:
+                parent.chmod(mode | stat.S_IWUSR)
+                try:
+                    path.unlink()
+                finally:
+                    parent.chmod(mode)
+
+metadata.write_text(json.dumps(links, sort_keys=True) + "\n", encoding="utf-8")
+print(f"  symbolic links recorded: {len(links)}")
+PY
 fi
 
 # Paths read from INSIDE the container, for data the host user cannot read.
@@ -794,6 +857,10 @@ verify_archive() {  # <path>
   fi
 }
 verify_archive "$TARBALL"
+if [ "$CAP" = archive ]; then
+  prepare_archive_stage_removal
+  rm -rf "$STAGE"
+fi
 
 # Pull mode stops here. The source capability has already resumed, the archive is
 # complete, and the EXIT trap removes all staging state after the caller consumes it.

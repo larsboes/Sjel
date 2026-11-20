@@ -144,6 +144,12 @@ why = "capabilities/comms/src/media.rs execs it for share-link metadata and subt
 install_macos = "brew install yt-dlp"
 install_linux = "apt-get install -y yt-dlp   # or: uv tool install yt-dlp"
 
+[magick]
+required = "optional"
+os = "macos"
+why = "crates/posts/src/media.rs execs it to resize Photos exports and compose collages"
+install_macos = "brew install imagemagick"
+
 [ollama]
 required = "optional"
 needed_by = ["capability:comms", "capability:scouting"]

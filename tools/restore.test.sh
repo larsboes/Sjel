@@ -4,7 +4,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 RESTORE="$ROOT/tools/restore.sh"
-SCRATCH="$(mktemp -d /tmp/sjel-restore-test.XXXXXX)"
+SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/sjel-restore-test.XXXXXX")" || exit 1
 trap 'rm -rf "$SCRATCH"' EXIT
 MOCK_BIN="$SCRATCH/bin"
 mkdir -p "$MOCK_BIN"
@@ -146,6 +146,9 @@ live_candidate="$ROOT/restore-test-must-not-exist"
 expect_fail_with "live checkout destination" "may not be inside the Sjel checkout" \
   "$RESTORE" vaultwarden "$SCRATCH/vaultwarden.tar.gz" --destination "$live_candidate"
 [ ! -e "$live_candidate" ] || { echo "FAIL: refused live destination was created"; fails=$((fails + 1)); }
+TMPDIR="$ROOT" expect_fail_with "live checkout temporary directory" "temporary directory may not be inside the Sjel checkout" \
+  "$RESTORE" vaultwarden "$SCRATCH/vaultwarden.tar.gz" --destination "$SCRATCH/live-tmp-out"
+[ ! -e "$SCRATCH/live-tmp-out" ] || { echo "FAIL: refused temporary directory created a destination"; fails=$((fails + 1)); }
 
 container_payload="$SCRATCH/container-payload"
 container_stage="$SCRATCH/container-stage"
@@ -253,6 +256,44 @@ cp "$store_stage/sjel-backup.toml" "$broken_store/sjel-backup.toml"
 tar czf "$SCRATCH/store-broken.tar.gz" -C "$broken_store" .
 expect_fail_with "a corrupt live copy is caught" "failed integrity_check" \
   "$RESTORE" store "$SCRATCH/store-broken.tar.gz" --destination "$SCRATCH/store-broken-out"
+
+archive_stage="$SCRATCH/archive-stage"
+archive_source="$SCRATCH/archive-source"
+nfc="$(printf 'caf\303\251')"
+nfd="$(printf 'cafe\314\201')"
+mkdir -p "$archive_stage/archive/$nfd" "$archive_source/$nfc"
+printf 'payload\n' > "$archive_stage/archive/$nfd/file.txt"
+cp "$archive_stage/archive/$nfd/file.txt" "$archive_source/$nfc/file.txt"
+ln -s "$nfc/file.txt" "$archive_source/$nfc-link"
+cat > "$archive_stage/sjel-backup.toml" <<'META'
+format = "1"
+capability = "archive"
+created_at = "2026-01-02T030405Z"
+backup_paths = ["archive"]
+backup_container_paths = []
+META
+printf '{"%s-link":"%s/file.txt"}\n' "$nfd" "$nfc" > "$archive_stage/archive-symlinks.json"
+COPYFILE_DISABLE=1 tar czf "$SCRATCH/archive.tar.gz" -C "$archive_stage" .
+expect_pass "canonically equivalent archive paths" \
+  "$RESTORE" archive "$SCRATCH/archive.tar.gz" --destination "$SCRATCH/archive-out" \
+  --compare-archive-source "$archive_source"
+
+printf 'changed\n' > "$archive_source/$nfc/file.txt"
+expect_fail_with "byte mismatch at an equivalent path" "restored file bytes differ" \
+  "$RESTORE" archive "$SCRATCH/archive.tar.gz" --destination "$SCRATCH/archive-byte-out" \
+  --compare-archive-source "$archive_source"
+
+printf '{"%s-link":"%s/file.txt"}\n' "$nfd" "$nfd" > "$archive_stage/archive-symlinks.json"
+COPYFILE_DISABLE=1 tar czf "$SCRATCH/archive-link.tar.gz" -C "$archive_stage" .
+expect_fail_with "symlink targets are compared verbatim" "recorded symbolic links differ" \
+  "$RESTORE" archive "$SCRATCH/archive-link.tar.gz" --destination "$SCRATCH/archive-link-out" \
+  --compare-archive-source "$archive_source"
+
+printf '{"%s-link":"%s/file.txt","%s-link":"%s/file.txt"}\n' "$nfd" "$nfc" "$nfc" "$nfc" > "$archive_stage/archive-symlinks.json"
+COPYFILE_DISABLE=1 tar czf "$SCRATCH/archive-collision.tar.gz" -C "$archive_stage" .
+expect_fail_with "canonical link path collision" "recorded symbolic link paths collide" \
+  "$RESTORE" archive "$SCRATCH/archive-collision.tar.gz" --destination "$SCRATCH/archive-collision-out" \
+  --compare-archive-source "$archive_source"
 
 # --- retired contract (PRD Q45) --------------------------------------------------------------
 # A pg_dumpall archive was verified by replaying it into a disposable PostgreSQL container.

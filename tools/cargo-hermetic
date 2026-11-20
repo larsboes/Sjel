@@ -24,7 +24,12 @@ fi
 # --- what this refuses -----------------------------------------------------
 
 die() { echo "cargo-hermetic: $1" >&2; exit 2; }
-[ "$#" -gt 0 ] || die "needs a cargo subcommand, e.g. 'test --workspace --locked'. Run 'sjel help cargo'."
+_use_scratch=0
+if [ "${1:-}" = "--scratch" ]; then
+  _use_scratch=1
+  shift
+fi
+[ "$#" -gt 0 ] || die "needs a cargo subcommand, e.g. 'test --workspace --locked'. Usage: sjel cargo [--scratch] <args...>."
 
 # `--release` is refused rather than redirected. Redirecting it would still produce a
 # release build under a scratch path, which is fine, but the reason the ban exists is that
@@ -89,18 +94,24 @@ for arg in "$@"; do
 done
 [ "$_target_next" -eq 0 ] || die "--target-dir needs a directory"
 
-TARGET="${_requested_target:-${CARGO_TARGET_DIR:-}}"
-[ -n "$TARGET" ] || TARGET="${TMPDIR:-/tmp}/sjel-cargo-hermetic/target"
 _checkout_cache="hermetic-$(printf %s "$REPO" | shasum | cut -c1-12)"
-# One target per checkout: cargo reuses a member's test binary across checkouts that share a
-# target, and env!("CARGO_MANIFEST_DIR") inside it then names the other checkout.
-if [ -z "$_requested_target" ]; then
-  case "${TARGET%/}" in
-    */"$_checkout_cache") TARGET="${TARGET%/}" ;;
-    *) TARGET="${TARGET%/}/$_checkout_cache" ;;
+_scratch_target="$(_canonical "${TMPDIR:-/tmp}/sjel-cargo-hermetic/target/$_checkout_cache")"
+if [ "$_use_scratch" -eq 1 ]; then
+  [ -z "$_requested_target" ] || die "--scratch and --target-dir select different caches"
+  TARGET="$_scratch_target"
+elif [ -n "$_requested_target" ]; then
+  TARGET="$(_canonical "$_requested_target")"
+elif [ -n "${CARGO_TARGET_DIR:-}" ]; then
+  # Shared targets can reuse a test binary with another checkout's compiled-in paths.
+  TARGET="${CARGO_TARGET_DIR%/}"
+  case "$TARGET" in
+    */"$_checkout_cache") ;;
+    *) TARGET="$TARGET/$_checkout_cache" ;;
   esac
+  TARGET="$(_canonical "$TARGET")"
+else
+  TARGET="$_scratch_target"
 fi
-TARGET="$(_canonical "$TARGET")"
 _guard_target() {
   local forbidden
   for forbidden in "$REPO" "$MAIN_CHECKOUT"; do
@@ -127,9 +138,8 @@ _cache_writable() {
 
 if [ "${1:-}" != "--print-env" ] && ! _cache_writable "$TARGET"; then
   [ -z "$_requested_target" ] || die "explicit target cannot create and remove cache directories: $TARGET"
-  _fallback_target="$(_canonical "${TMPDIR:-/tmp}/sjel-cargo-hermetic/target/$_checkout_cache")"
-  [ "$TARGET" != "$_fallback_target" ] || die "verification cache is not writable: $TARGET"
-  TARGET="$_fallback_target"
+  [ "$TARGET" != "$_scratch_target" ] || die "verification cache is not writable: $TARGET"
+  TARGET="$_scratch_target"
   _guard_target
   _cache_writable "$TARGET" || die "verification cache is not writable: $TARGET"
   echo "cargo-hermetic: inherited target cannot clean cache directories; reusing $TARGET" >&2
@@ -179,6 +189,12 @@ if [ "${1:-}" = "--print-env" ]; then
 fi
 
 echo "cargo-hermetic: target $CARGO_TARGET_DIR, overlay $SJEL_PERSONAL_ROOT" >&2
-# Not exec: the trap has to run so the sandbox goes away, and the exit status has to be
-# cargo's own.
-cargo "$@"
+if [ "$TARGET" = "$_scratch_target" ]; then
+  touch -cm "$TARGET" || die "cannot refresh scratch age: $TARGET"
+fi
+status=0
+cargo "$@" || status=$?
+if [ "$TARGET" = "$_scratch_target" ]; then
+  touch -cm "$TARGET" || echo "cargo-hermetic: could not refresh scratch age: $TARGET" >&2
+fi
+exit "$status"

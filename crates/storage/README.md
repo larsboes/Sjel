@@ -350,4 +350,24 @@ where it reaches a shell substitutes only the paths this tool measured.
 would read a report as success. `report --json` reads the report; `reclaim --dry-run` shows the
 plan.
 
+## Reclaim one incremental profile
+
+```sh
+sjel storage reclaim --repo --incremental --profile debug --checkout-target --dry-run
+```
+
+`--profile` scopes incremental reclaim to one profile. It cannot be combined with whole-target
+or Node dependency reclaim. `--checkout-target` selects the checkout's literal `target/` instead
+of the inherited Cargo target. The guard checks the selected profile and excludes symlinked
+directories. The command preserves other profiles and the selected profile's non-incremental output.
+
+## Temporary Cargo verification
+
+`sjel cargo` reuses the checkout cache. `sjel cargo --scratch <args...>` selects the same
+temporary checkout cache used when the inherited target is not writable. It does not allocate
+a new cache for each run. Deployments can apply the `cargo verification scratch` class in
+`schemas/storage-policy.toml.example` to the parent reported by `sjel cargo --scratch --print-env`.
+The launcher refreshes the cache directory's modification time around Cargo runs. Keep app
+binaries that run outside a verification job out of this cache.
+
 Nothing here writes to the overlay, and nothing here reads a secret.

@@ -71,6 +71,15 @@ apply = true
 older_than_days = 3
 
 [[class]]
+name = "cargo verification scratch"
+paths = ["<canonical-temp-root>/sjel-cargo-hermetic/target"]
+apply = true
+regrows = true
+older_than_days = 2
+entry_pattern = "hermetic-*"
+note = "Use the parent of CARGO_TARGET_DIR from sjel cargo --scratch --print-env."
+
+[[class]]
 name = "<model-server> KV cache"
 paths = ["~/<cache-dir>"]
 reclaim = "<curl-the-servers-own-cache-clear-endpoint>"

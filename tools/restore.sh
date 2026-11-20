@@ -10,7 +10,7 @@ source "$TOOLS_DIR/lib/paths.sh"
 source "$TOOLS_DIR/lib/pipe.sh"
 
 usage() {
-  echo "usage: restore.sh <capability> <archive.tar.gz> [--receipt <receipt.json>] [--destination <empty-dir>] [--allow-legacy]" >&2
+  echo "usage: restore.sh <capability> <archive.tar.gz> [--receipt <receipt.json>] [--destination <empty-dir>] [--compare-archive-source <dir>] [--allow-legacy]" >&2
   exit 1
 }
 
@@ -21,6 +21,7 @@ shift 2
 
 DEST_ARG=""
 RECEIPT=""
+ARCHIVE_SOURCE=""
 ALLOW_LEGACY=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -32,6 +33,10 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || usage
       DEST_ARG="$2"; shift 2
       ;;
+    --compare-archive-source)
+      [ "$CAP" = archive ] && [ $# -ge 2 ] && [ -d "$2" ] || usage
+      ARCHIVE_SOURCE="$2"; shift 2
+      ;;
     --allow-legacy)
       ALLOW_LEGACY=1; shift
       ;;
@@ -42,6 +47,7 @@ done
 case "$CAP" in
   ''|*[!A-Za-z0-9._-]*) echo "restore.sh: invalid capability name" >&2; exit 1 ;;
 esac
+if [ "$CAP" = archive ]; then umask 077; fi
 
 # The manifest is read from the checkout by default. `SJEL_RESTORE_MANIFEST` exists for
 # tools/restore.test.sh: its container-path case needs a capability that declares
@@ -54,19 +60,12 @@ MANIFEST="${SJEL_RESTORE_MANIFEST:-$(sjel_manifest_for "$CAP" || true)}"
 [ -f "$ARCHIVE" ] || { echo "restore.sh: archive not found: $ARCHIVE" >&2; exit 1; }
 ARCHIVE="$(cd "$(dirname "$ARCHIVE")" && pwd -P)/$(basename "$ARCHIVE")"
 
-WORK="$(mktemp -d "/tmp/sjel-restore-check.XXXXXX")"
 DEST=""
 DEST_AUTO=0
 RESTORE_COMPLETE=0
-cleanup() {
-  rm -rf "$WORK"
-  if [ "$DEST_AUTO" -eq 1 ] && [ "$RESTORE_COMPLETE" -ne 1 ] && [ -n "$DEST" ]; then
-    rm -rf "$DEST"
-  fi
-}
-trap cleanup EXIT
 
 fail() { echo "restore.sh: $*" >&2; exit 1; }
+TEMP_ROOT="$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P)" || fail "temporary directory does not exist"
 
 sha256_file() {
   if command -v shasum >/dev/null 2>&1; then
@@ -146,7 +145,7 @@ if [ -n "$DEST_ARG" ]; then
     DEST_NEEDS_CREATE=1
   fi
 else
-  DEST="/tmp/sjel-restore-$CAP.XXXXXX"
+  DEST="$TEMP_ROOT/sjel-restore-$CAP.XXXXXX"
   DEST_NEEDS_CREATE=2
 fi
 
@@ -155,6 +154,9 @@ OVERLAY_REAL="$(cd "$SJEL_PERSONAL_ROOT" 2>/dev/null && pwd -P || true)"
 path_within "$DEST" "$SJEL_REAL" && fail "destination may not be inside the Sjel checkout"
 [ -n "$OVERLAY_REAL" ] && path_within "$DEST" "$OVERLAY_REAL" \
   && fail "destination may not be inside the active private overlay"
+path_within "$TEMP_ROOT" "$SJEL_REAL" && fail "temporary directory may not be inside the Sjel checkout"
+[ -n "$OVERLAY_REAL" ] && path_within "$TEMP_ROOT" "$OVERLAY_REAL" \
+  && fail "temporary directory may not be inside the active private overlay"
 # Refused BEFORE the destination exists, for the reason the container preflight this replaces
 # existed (#163): the one operation whose purpose is proving a backup is recoverable must not
 # announce that it cannot, having already created a directory and extracted into it.
@@ -171,6 +173,15 @@ path_within "$DEST" "$SJEL_REAL" && fail "destination may not be inside the Sjel
 if tar -tzf "$ARCHIVE" 2>/dev/null | stream_matches -E '(^|/)pg_dumpall\.sql$'; then
   fail "this archive carries a PostgreSQL dump, and the capability that produced it was retired on 2026-08-27 (PRD Q45). Verify it with the Sjel revision that still declares the image"
 fi
+
+WORK="$(mktemp -d "$TEMP_ROOT/sjel-restore-check.XXXXXX")"
+cleanup() {
+  rm -rf "$WORK"
+  if [ "$DEST_AUTO" -eq 1 ] && [ "$RESTORE_COMPLETE" -ne 1 ] && [ -n "$DEST" ]; then
+    rm -rf "$DEST"
+  fi
+}
+trap cleanup EXIT
 
 case "$DEST_NEEDS_CREATE" in
   1) mkdir "$DEST" ;;
@@ -343,6 +354,62 @@ verify_sqlite_online() {
 
 if [ -n "$SQLITE_ONLINE_REL" ]; then
   verify_sqlite_online
+fi
+
+if [ -n "$ARCHIVE_SOURCE" ]; then
+  python3 - "$ARCHIVE_SOURCE" "$DEST/archive" "$DEST/archive-symlinks.json" <<'PY'
+import filecmp
+import json
+import os
+import sys
+import unicodedata
+from pathlib import Path
+
+
+def fail(error):
+    raise error
+
+
+def path_key(relative):
+    return unicodedata.normalize("NFC", relative)
+
+
+def inventory(root):
+    directories, files, links, seen = set(), {}, {}, set()
+    for directory, subdirs, names in os.walk(root, onerror=fail):
+        parent = Path(directory)
+        for name in subdirs + names:
+            path = parent / name
+            key = path_key(path.relative_to(root).as_posix())
+            if key in seen:
+                sys.exit("restore.sh: archive paths collide after Unicode normalization")
+            seen.add(key)
+            if path.is_symlink():
+                links[key] = os.readlink(path)
+            elif path.is_file():
+                files[key] = path
+            elif path.is_dir():
+                directories.add(key)
+            else:
+                sys.exit("restore.sh: source or restored archive contains a special file")
+    return directories, files, links
+
+
+source, restored, metadata = map(Path, sys.argv[1:])
+source_dirs, source_files, source_links = inventory(source)
+restored_dirs, restored_files, restored_links = inventory(restored)
+if source_dirs != restored_dirs or source_files.keys() != restored_files.keys():
+    sys.exit("restore.sh: restored paths differ from the source archive")
+recorded_links = json.loads(metadata.read_text(encoding="utf-8"))
+recorded_by_path = {path_key(path): target for path, target in recorded_links.items()}
+if len(recorded_by_path) != len(recorded_links):
+    sys.exit("restore.sh: recorded symbolic link paths collide after Unicode normalization")
+if restored_links or source_links != recorded_by_path:
+    sys.exit("restore.sh: recorded symbolic links differ from the source archive")
+if any(not filecmp.cmp(path, restored_files[key], shallow=False) for key, path in source_files.items()):
+    sys.exit("restore.sh: restored file bytes differ from the source archive")
+print(f"  matching archive contents: {len(source_files)} files, {len(source_dirs)} directories, {len(source_links)} symbolic links")
+PY
 fi
 
 echo "✓ restore verified in isolation"

@@ -77,19 +77,17 @@ fn measure(paths: Vec<PathBuf>) -> Vec<Candidate> {
         .collect()
 }
 
-/// `target/<profile>/incremental` for every profile that has one.
-///
-/// Always safe and always regrows: incremental state is a cache of the last compilation of
-/// unchanged code, so removing it costs one full rebuild and nothing else. On 2026-09-03 it
-/// was 7 GB of the 21 GB this workspace's target dir had reached.
-pub fn incremental_dirs(target_dir: &Path) -> Vec<PathBuf> {
+/// Incremental directories under real Cargo profile directories, never symlink targets.
+pub fn incremental_dirs(target_dir: &Path, profile: Option<&str>) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(target_dir) else {
         return vec![];
     };
     let mut out: Vec<PathBuf> = entries
         .flatten()
-        .map(|e| e.path().join("incremental"))
-        .filter(|p| p.is_dir())
+        .filter(|entry| profile.is_none_or(|name| entry.file_name() == name))
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .map(|entry| entry.path().join("incremental"))
+        .filter(|path| std::fs::symlink_metadata(path).is_ok_and(|meta| meta.is_dir()))
         .collect();
     out.sort();
     out
@@ -105,6 +103,7 @@ pub fn node_module_dirs(repo_root: &Path) -> Vec<PathBuf> {
 
 pub struct Plan {
     pub incremental: Vec<Candidate>,
+    scoped_incremental: bool,
     pub node_modules: Vec<Candidate>,
     /// The whole target dir, when `--target` was asked for. Removed by `cargo clean`, not
     /// by this process.
@@ -121,12 +120,14 @@ impl Plan {
         repo_root: &Path,
         target_dir: &Path,
         want_incremental: bool,
+        profile: Option<&str>,
         want_target: bool,
         want_node_modules: bool,
     ) -> Plan {
         Plan {
+            scoped_incremental: profile.is_some(),
             incremental: if want_incremental {
-                measure(incremental_dirs(target_dir))
+                measure(incremental_dirs(target_dir, profile))
             } else {
                 vec![]
             },
@@ -209,6 +210,16 @@ pub fn run(plan: &Plan, repo_root: &Path, guard: &Guard, dry_run: bool) -> Outco
                 }
                 Ok(real) => real,
             };
+            let profile_hold = if plan.scoped_incremental && group.0 == "incremental" {
+                real.parent().and_then(|profile| guard.holds(profile))
+            } else {
+                None
+            };
+            if let Some(reason) = profile_hold {
+                lines.push(format!("  refused  {reason}"));
+                refused += 1;
+                continue;
+            }
             if dry_run {
                 lines.push(format!(
                     "  {:>9}  {} (dry run)",
@@ -389,7 +400,7 @@ mod tests {
         std::fs::create_dir_all(root.join("debug/incremental")).unwrap();
         std::fs::create_dir_all(root.join("release/deps")).unwrap();
         assert_eq!(
-            incremental_dirs(&root),
+            incremental_dirs(&root, None),
             vec![root.join("debug").join("incremental")]
         );
     }
@@ -464,6 +475,7 @@ mod tests {
     fn held_plan(modules: &Path) -> Plan {
         Plan {
             incremental: vec![],
+            scoped_incremental: false,
             node_modules: vec![Candidate {
                 path: modules.to_path_buf(),
                 bytes: 4096,
@@ -549,7 +561,12 @@ mod tests {
         std::fs::create_dir_all(&incremental).unwrap();
         std::fs::write(incremental.join("f"), vec![0u8; 16 * 1024]).unwrap();
 
-        let plan = Plan::build(&repo, &target, true, false, false);
+        let sibling = target.join("release/incremental");
+        std::fs::create_dir_all(&sibling).unwrap();
+        std::os::unix::fs::symlink(target.join("release"), target.join("alias")).unwrap();
+        assert!(incremental_dirs(&target, Some("alias")).is_empty());
+
+        let plan = Plan::build(&repo, &target, true, Some("debug"), false, false);
         assert_eq!(plan.incremental.len(), 1);
         assert!(plan.incremental[0].bytes >= 16 * 1024);
         let authority = Authority::default();
@@ -560,8 +577,18 @@ mod tests {
         assert!(outcome.lines[0].contains("dry run"), "{:?}", outcome.lines);
         assert!(incremental.exists(), "a dry run must leave the tree alone");
 
+        with_holder(&target.join("debug"), || {
+            let outcome = run(&plan, &repo, &guard, true);
+            assert_eq!(outcome.refused, 1, "{:?}", outcome.lines);
+            assert_eq!(outcome.bytes, 0);
+        });
+
         let outcome = run(&plan, &repo, &guard, false);
         assert_eq!(outcome.refused, 0);
         assert!(!incremental.exists(), "the real run must remove it");
+        assert!(
+            sibling.exists(),
+            "scoped reclaim must leave sibling profiles"
+        );
     }
 }

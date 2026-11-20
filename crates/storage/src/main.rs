@@ -30,7 +30,8 @@ const HELP: &str = "sjel-storage — what is filling this disk, and what is safe
                                    `--where` adds the largest directories no policy path
                                    names, which is where `unattributed` lives
   sjel-storage reclaim [--dry-run] [--force] [--scheduled] [--only <class>]
-                                   [--repo [--incremental] [--target] [--node-modules]]
+                                   [--repo [--incremental [--profile NAME [--checkout-target]]]
+                                           [--target] [--node-modules]]
                                    the one verb that removes anything. Classes by
                                    default; `--repo` acts on the checkout's build
                                    output instead, and needs one of the three
@@ -122,22 +123,25 @@ fn main() -> ExitCode {
              `report --json` reads the report."
                 .to_string(),
         ),
-        "reclaim" | "apply" | "prune" => cmd_reclaim(
-            reclaim::Args {
-                dry_run: has("--dry-run"),
-                force: has("--force"),
-                scheduled: has("--scheduled"),
-                only: value("--only"),
-                // `prune` and `apply` are spellings of this verb, not separate commands: both
-                // were reclaim, and keeping two guard implementations is what let one of them
-                // offer to clean a directory the policy had already said no to.
-                repo: verb == "prune" || has("--repo"),
-                incremental: has("--incremental"),
-                target: has("--target"),
-                node_modules: has("--node-modules"),
-            },
-            verb != "reclaim",
-        ),
+        "reclaim" | "apply" | "prune" => {
+            reclaim::profile_options(&args).and_then(|(profile, checkout_target)| {
+                cmd_reclaim(
+                    reclaim::Args {
+                        dry_run: has("--dry-run"),
+                        force: has("--force"),
+                        scheduled: has("--scheduled"),
+                        only: value("--only"),
+                        repo: verb == "prune" || has("--repo"),
+                        incremental: has("--incremental"),
+                        profile,
+                        checkout_target,
+                        target: has("--target"),
+                        node_modules: has("--node-modules"),
+                    },
+                    verb != "reclaim",
+                )
+            })
+        }
         "browse" => number("--top", 80).and_then(|top| browse::run(json, value("--root"), top)),
         "target" => cmd_target(json),
         "discover" => number("--top", 20).and_then(|top| {

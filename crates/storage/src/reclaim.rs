@@ -48,6 +48,8 @@ pub struct Args {
     /// caches is not something to discover after the fact.
     pub repo: bool,
     pub incremental: bool,
+    pub profile: Option<String>,
+    pub checkout_target: bool,
     pub target: bool,
     pub node_modules: bool,
 }
@@ -60,6 +62,45 @@ impl Args {
     fn wants_repo(&self) -> bool {
         self.repo
     }
+}
+
+/// Parse profile selectors without silently falling back to unscoped reclaim.
+pub fn profile_options(args: &[String]) -> Result<(Option<String>, bool), String> {
+    let mut profile = None;
+    let mut checkout_target = false;
+    for (i, arg) in args.iter().enumerate() {
+        if arg.starts_with("--checkout-target=") {
+            return Err("--checkout-target does not take a value".into());
+        }
+        if arg == "--checkout-target" {
+            checkout_target = true;
+        }
+        let value = if arg == "--profile" {
+            args.get(i + 1)
+                .ok_or("--profile needs a Cargo profile name")?
+                .as_str()
+        } else if let Some(value) = arg.strip_prefix("--profile=") {
+            value
+        } else {
+            continue;
+        };
+        if profile.is_some() {
+            return Err("--profile may be specified only once".into());
+        }
+        if !valid_profile(value) {
+            return Err("--profile needs a Cargo profile name, not a flag or path".into());
+        }
+        profile = Some(value.to_owned());
+    }
+    Ok((profile, checkout_target))
+}
+
+fn valid_profile(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('-')
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// Load the policy, or `None` when the machine has no overlay.
@@ -96,7 +137,34 @@ pub fn run(
         );
     }
 
-    let (target_dir, _) = target::target_dir(root);
+    if args.checkout_target && args.profile.is_none() {
+        return Err("--checkout-target requires --profile NAME".into());
+    }
+    if let Some(profile) = args.profile.as_deref() {
+        if !valid_profile(profile) {
+            return Err("--profile needs a Cargo profile name, not a flag or path".into());
+        }
+        if !args.repo || !args.incremental || args.target || args.node_modules || args.scheduled {
+            return Err(
+                "--profile requires --repo --incremental without other reclaim scopes".into(),
+            );
+        }
+    }
+    let target_dir = if args.checkout_target {
+        let path = root.join("target");
+        match std::fs::symlink_metadata(&path) {
+            Ok(meta) if !meta.is_dir() => {
+                return Err(format!("{} is not a real directory", path.display()));
+            }
+            Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("{}: {err}", path.display()));
+            }
+            _ => {}
+        }
+        path
+    } else {
+        target::target_dir(root).0
+    };
     // An empty authority is a machine with no policy, and every guard that depends on the
     // policy then has nothing to say — which is the behaviour `prune` has always had.
     let authority = match policy {
@@ -145,6 +213,7 @@ pub fn run(
             root,
             &target_dir,
             args.incremental,
+            args.profile.as_deref(),
             args.target,
             args.node_modules,
         );
@@ -152,4 +221,54 @@ pub fn run(
     }
 
     Ok(outcome)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn profile_options_reject_missing_invalid_or_repeated_names() {
+        let parse = |args: &[&str]| {
+            profile_options(&args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>())
+        };
+        assert_eq!(
+            parse(&["--profile=desktop-dev", "--checkout-target"]).unwrap(),
+            (Some("desktop-dev".into()), true)
+        );
+        for args in [
+            &["--profile"][..],
+            &["--profile", "--dry-run"],
+            &["--profile=../release"],
+            &["--profile", "debug", "--profile=release"],
+            &["--checkout-target=false"],
+        ] {
+            assert!(parse(args).is_err(), "{args:?}");
+        }
+    }
+
+    #[test]
+    fn explicit_checkout_target_does_not_select_the_inherited_cache() {
+        let repo = crate::testutil::tempdir("checkout-profile");
+        let incremental = repo.join("target/debug/incremental");
+        std::fs::create_dir_all(&incremental).unwrap();
+        let args = Args {
+            dry_run: true,
+            repo: true,
+            incremental: true,
+            profile: Some("debug".into()),
+            checkout_target: true,
+            ..Default::default()
+        };
+        let outcome = run(None, "", &repo, &args).unwrap();
+        assert_eq!(outcome.refused, 0, "{:?}", outcome.lines);
+        assert!(outcome.lines[0].contains("target/debug/incremental"));
+        assert!(incremental.exists());
+
+        let incompatible = Args {
+            target: true,
+            ..args
+        };
+        assert!(run(None, "", &repo, &incompatible).is_err());
+    }
 }

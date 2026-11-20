@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Test the cutover failure boundary without starting or stopping a deployed service."""
 
+from dataclasses import replace
 import os
 from pathlib import Path
 import runpy
@@ -16,18 +17,21 @@ from urllib.request import ProxyHandler, build_opener
 SCRIPT = Path(__file__).with_name("owner-store-cutover.py")
 
 
-class HealthCutoverTest(unittest.TestCase):
+class CutoverTest(unittest.TestCase):
+    OWNER = "health"
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
         self.apply = runpy.run_path(str(SCRIPT))["apply"]
         self.command = self.apply.__globals__
-        self.legacy = self.command["LEGACY_BUILD"]
-        self.native = self.command["OWNER_BUILD"]
         self.manifest = self.root / "service.toml"
-        self.binary = self.root / "health"
-        self.marker = self.root / "owner/health.db"
+        self.owner = replace(self.command["OWNERS"][self.OWNER], manifest=self.manifest)
+        self.legacy = self.owner.legacy_build
+        self.native = self.owner.owner_build
+        self.binary = self.root / self.owner.binary
+        self.marker = self.root / "owner" / Path(self.owner.destination).name
         self.manifest.write_bytes(self.legacy)
         self.binary.write_bytes(b"shared")
         self.lifecycle = []
@@ -38,24 +42,25 @@ class HealthCutoverTest(unittest.TestCase):
         self.fail_post_activation = False
 
     def simulate(self, program, *args, **kwargs):
+        name = self.owner.name
         match Path(program).name, args:
             case "cargo", ("build", *flags, "--target-dir", target):
                 self.assertFalse(self.lifecycle)
                 self.assertEqual(flags, ["--locked", "--release", "--no-default-features", "--features",
-                                         "turso-wal", "--bin", "health", "--package", "sjel-health"])
+                                         "turso-wal", "--bin", self.owner.binary, "--package", self.owner.package])
                 self.assertFalse(target.is_relative_to(SCRIPT.resolve().parent.parent))
                 self.assertEqual(kwargs["environ"]["CARGO_BUILD_BUILD_DIR"], str(target))
                 if self.fail_build:
                     raise RuntimeError("compiler failed")
                 (target / "release").mkdir()
-                (target / "release/health").write_bytes(b"native")
-            case "service-runner.sh", ("status", "health"):
-                return "health process stopped, held no answer"
-            case "service-runner.sh", (event, "health"):
+                (target / "release" / self.owner.binary).write_bytes(b"native")
+            case "service-runner.sh", ("status", service) if service == name:
+                return f"{name} process stopped, held no answer"
+            case "service-runner.sh", (event, service) if service == name:
                 self.lifecycle.append(event)
-            case _, (helper, "health", source, destination) if Path(helper).name == "owner-store-split.py":
-                destination.write_bytes(b"health rows")
-            case "health", ("check-owner",):
+            case _, (helper, owner, source, destination) if Path(helper).name == "owner-store-split.py" and owner == name:
+                destination.write_bytes(b"owner rows")
+            case binary, ("check-owner",) if binary == self.owner.binary:
                 if self.fail_probe:
                     raise RuntimeError("candidate failed")
             case _:
@@ -77,19 +82,19 @@ class HealthCutoverTest(unittest.TestCase):
         self.assertEqual(self.lifecycle, ["stop", "resume"])
         self.assertEqual(self.manifest.read_bytes(), self.native)
         self.assertEqual(self.binary.read_bytes(), b"native")
-        self.assertEqual(self.marker.read_bytes(), b"health rows")
+        self.assertEqual(self.marker.read_bytes(), b"owner rows")
         if self.fail_post_activation:
             raise RuntimeError("owner backup failed")
 
     def execute(self):
         self.original_put = self.command["put_file"]
         overrides = {
-            "HEALTH_MANIFEST": self.manifest, "run": self.simulate, "put_file": self.put,
+            "run": self.simulate, "put_file": self.put,
             "prove_legacy_source": lambda *_: None, "backup_restore": self.restore,
-            "compare_health": lambda *_, **__: None, "verify_owner": self.verify,
+            "compare_owner": lambda *_, **__: None, "verify_owner": self.verify,
         }
         with patch.dict(self.command, overrides):
-            self.apply(self.root, self.root / "machine.toml", self.root / "shared.db",
+            self.apply(self.owner, self.root, self.root / "machine.toml", self.root / "shared.db",
                        self.marker, self.binary, "http://127.0.0.1:1", self.legacy)
 
     def assert_legacy_resumed(self):
@@ -140,6 +145,34 @@ class HealthCutoverTest(unittest.TestCase):
         self.assertTrue(self.marker.exists())
 
 
+class ProjectsCutoverTest(CutoverTest):
+    OWNER = "projects"
+
+
+class CompareOwnerTest(unittest.TestCase):
+    def test_row_order_does_not_matter_but_content_and_sequences_do(self):
+        import sqlite3
+        cutover = runpy.run_path(str(SCRIPT))
+        owner = cutover["OWNERS"]["health"]
+        with tempfile.TemporaryDirectory() as work:
+            def database(name, rows, seq):
+                path = Path(work) / name
+                with sqlite3.connect(path) as db:
+                    db.execute("CREATE TABLE health_days (day TEXT, metric TEXT, value REAL)")
+                    db.execute("CREATE TABLE health_imports (id INTEGER PRIMARY KEY AUTOINCREMENT, note TEXT)")
+                    db.executemany("INSERT INTO health_days VALUES (?, ?, ?)", rows)
+                    db.execute("INSERT INTO health_imports (id, note) VALUES (1, 'x')")
+                    db.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = 'health_imports'", (seq,))
+                return path
+            rows = [("2026-11-20", "steps", 1.0), ("2026-11-20", "sleep", 7.5)]
+            source = database("source.db", rows, 3)
+            cutover["compare_owner"](owner, source, database("same.db", list(reversed(rows)), 3), closed=True)
+            with self.assertRaisesRegex(cutover["Refused"], "rows changed"):
+                cutover["compare_owner"](owner, source, database("rows.db", rows[:1], 3), closed=True)
+            with self.assertRaisesRegex(cutover["Refused"], "sequences changed"):
+                cutover["compare_owner"](owner, source, database("seq.db", rows, 4), closed=True)
+
+
 class LegacySourceTest(unittest.TestCase):
     def test_launch_settings_take_priority_and_preserve_spaces(self):
         cutover = runpy.run_path(str(SCRIPT))
@@ -184,11 +217,12 @@ class LegacySourceTest(unittest.TestCase):
                     replacement = executable.with_suffix(".new")
                     shutil.copy2(artifact, replacement)
                     replacement.replace(executable)
-                    cutover["prove_legacy_source"](base, expected, executable)
+                    health = cutover["OWNERS"]["health"]
+                    cutover["prove_legacy_source"](health, base, expected, executable)
                     wrong = expected.with_name("other.db")
                     wrong.touch()
                     with self.assertRaisesRegex(cutover["Refused"], "different shared database"):
-                        cutover["prove_legacy_source"](base, wrong, executable)
+                        cutover["prove_legacy_source"](health, base, wrong, executable)
                 finally:
                     process.terminate()
 

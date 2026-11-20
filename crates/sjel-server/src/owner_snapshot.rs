@@ -87,7 +87,8 @@ pub async fn serve_at(
     serve_at_with_jobs(owner, target, snapshot, Router::new()).await;
 }
 
-async fn serve_at_with_jobs(
+/// Serve snapshots at a fixed path and other local jobs under the same credential gate.
+pub async fn serve_at_with_jobs(
     owner: &str,
     target: PathBuf,
     snapshot: impl Fn(&Path) -> Result<(), String> + Clone + Send + Sync + 'static,

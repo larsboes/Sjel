@@ -3,6 +3,7 @@
 
 import argparse
 from contextlib import closing
+from dataclasses import dataclass
 import fcntl
 import json
 import os
@@ -17,16 +18,68 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
-HEALTH_MANIFEST = ROOT / "crates/health/service.toml"
-LEGACY_BUILD = b'["cargo", "build", "--locked", "--release", "--bin", "health"]'
-OWNER_BUILD = b'["cargo", "build", "--locked", "--release", "--no-default-features", "--features", "turso-wal", "--bin", "health"]'
-BACKUP = "health-wal-backup"
-HEALTH_TABLES = ("health_days", "health_imports")
 SOURCE_KEYS = {b"SJEL_DB_PATH", b"SJEL_PERSONAL_ROOT", b"HOME"}
 
 
 class Refused(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class Owner:
+    """One capability that moves from the shared store to its own Turso WAL file."""
+
+    name: str
+    label: str
+    manifest: Path
+    package: str
+    binary: str
+    serve_args: tuple
+    destination: str
+    snapshot: str
+    tables: tuple
+    checks: tuple
+    note: str
+
+    @property
+    def backup(self):
+        return f"{self.name}-wal-backup"
+
+    @property
+    def env(self):
+        return f"SJEL_{self.name.upper()}_DB_PATH"
+
+    @property
+    def legacy_build(self):
+        return f'["cargo", "build", "--locked", "--release", "--bin", "{self.binary}"]'.encode()
+
+    @property
+    def owner_build(self):
+        return (f'["cargo", "build", "--locked", "--release", "--no-default-features", "--features", '
+                f'"turso-wal", "--bin", "{self.binary}"]').encode()
+
+
+# Each check runs after activation; "@binary" names the owner's release binary.
+OWNERS = {
+    "health": Owner(
+        name="health", label="Health", manifest=ROOT / "crates/health/service.toml",
+        package="sjel-health", binary="health",
+        serve_args=(b"serve",), destination="data/health/health.db",
+        snapshot="data/health/snapshots/health.db", tables=("health_days", "health_imports"),
+        checks=(("@binary", "metrics"), ("@binary", "summary")),
+        note="Pause manual Health imports.",
+    ),
+    "projects": Owner(
+        name="projects", label="Projects", manifest=ROOT / "crates/projects/service.toml",
+        package="sjel-projects", binary="projects-server",
+        serve_args=(), destination="data/projects-index/projects.db",
+        snapshot="data/projects-wal-backup/projects.db",
+        tables=("projects_inventory_links", "projects_mail_applications",
+                "projects_mail_proposals", "projects_records"),
+        checks=(("crates/projects/projects", "verify"), ("crates/projects/projects", "projects")),
+        note="Close editors on Projects records.",
+    ),
+}
 
 
 def run(*args, capture=False, quiet=False, environ=None):
@@ -68,7 +121,7 @@ def private_restore_workspace(overlay):
     if scratch.resolve() != scratch or scratch.is_relative_to(ROOT.resolve()):
         raise Refused("the private restore workspace must be inside overlay data, outside the checkout")
     scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
-    return tempfile.TemporaryDirectory(prefix="health-", dir=scratch)
+    return tempfile.TemporaryDirectory(prefix="cutover-", dir=scratch)
 
 
 def backup_restore(capability, overlay, machine, scratch, environ=None):
@@ -91,14 +144,14 @@ def backup_restore(capability, overlay, machine, scratch, environ=None):
         "--receipt", receipt, "--private-scratch", "--destination", scratch)
 
 
-def stage_shared(overlay, machine, source, staged):
+def stage_shared(owner, overlay, machine, source, staged):
     with private_restore_workspace(overlay) as work:
         restore = Path(work) / "shared-restore"
         backup_restore("store", overlay, machine, restore, {**os.environ, "SJEL_DB_PATH": str(source)})
-        run(sys.executable, TOOLS / "owner-store-split.py", "health", restore / "data/sjel/sjel.db", staged)
+        run(sys.executable, TOOLS / "owner-store-split.py", owner.name, restore / "data/sjel/sjel.db", staged)
 
 
-def compare_health(source, candidate, *, closed):
+def compare_owner(owner, source, candidate, *, closed):
     for path in (candidate, source) if closed else (candidate,):
         wal = path.with_name(path.name + "-wal")
         if wal.is_file() and wal.stat().st_size > 32:
@@ -108,11 +161,23 @@ def compare_health(source, candidate, *, closed):
         closing(sqlite3.connect(candidate.resolve().as_uri() + "?immutable=1", uri=True)) as candidate_db,
     ):
         source_db.execute("BEGIN")
-        queries = [f"SELECT * FROM {name} ORDER BY 1,2" for name in HEALTH_TABLES]
-        queries.append("SELECT seq FROM sqlite_sequence WHERE name = 'health_imports'")
-        for query in queries:
-            if source_db.execute(query).fetchall() != candidate_db.execute(query).fetchall():
-                raise Refused("Health rows or import sequence changed; refusing to use the candidate")
+        for name in owner.tables:
+            if rows(source_db, f"SELECT * FROM {name}") != rows(candidate_db, f"SELECT * FROM {name}"):
+                raise Refused(f"{owner.label} rows changed; refusing to use the candidate")
+        if sequences(source_db, owner.tables) != sequences(candidate_db, owner.tables):
+            raise Refused(f"{owner.label} sequences changed; refusing to use the candidate")
+
+
+def rows(db, query):
+    return sorted(db.execute(query).fetchall(), key=repr)
+
+
+def sequences(db, tables):
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'").fetchone():
+        return []
+    names = ", ".join("?" for _ in tables)
+    return db.execute(f"SELECT name, seq FROM sqlite_sequence WHERE name IN ({names}) ORDER BY name",
+                      tables).fetchall()
 
 
 def put_file(path, content, mode):
@@ -131,10 +196,10 @@ def put_file(path, content, mode):
 def listener_pid(base):
     port = base.removeprefix("http://127.0.0.1:")
     if not port.isascii() or not port.isdecimal():
-        raise Refused("Health is not a local loopback service")
+        raise Refused("the owner is not a local loopback service")
     listeners = set(run("lsof", "-nP", "-t", f"-iTCP:{port}", "-sTCP:LISTEN", capture=True).split())
     if len(listeners) != 1:
-        raise Refused("cannot identify the single running Health process")
+        raise Refused("cannot identify the single running owner process")
     return int(listeners.pop())
 
 
@@ -143,9 +208,9 @@ def prove_running_source(base, source):
     try:
         opened = run("lsof", "-a", "-t", "-p", pid, "--", source, capture=True).split()
     except subprocess.CalledProcessError as error:
-        raise Refused("the running Health owner did not prove it has the expected database open") from error
+        raise Refused("the running owner did not prove it has the expected database open") from error
     if pid not in opened:
-        raise Refused("the running Health owner did not prove it has the expected database open")
+        raise Refused("the running owner did not prove it has the expected database open")
 
 
 def source_settings(records):
@@ -156,7 +221,7 @@ def source_settings(records):
             continue
         key = os.fsdecode(name)
         if key in selected:
-            raise Refused("the running Health process has ambiguous database settings")
+            raise Refused("the running owner process has ambiguous database settings")
         selected[key] = os.fsdecode(value)
     return selected
 
@@ -174,15 +239,15 @@ def darwin_launch_context(pid):
     data = ctypes.create_string_buffer(os.sysconf("SC_ARG_MAX"))
     length = ctypes.c_size_t(len(data))
     if sysctl(mib, len(mib), data, ctypes.byref(length), None, 0) != 0:
-        raise OSError(ctypes.get_errno(), "cannot inspect the running Health process settings")
+        raise OSError(ctypes.get_errno(), "cannot inspect the running owner process settings")
     raw = data.raw[:length.value]
     if len(raw) < struct.calcsize("@i"):
-        raise Refused("the running Health process did not provide complete launch settings")
+        raise Refused("the running owner process did not provide complete launch settings")
     argc = struct.unpack_from("@i", raw)[0]
     executable, separator, tail = raw[struct.calcsize("@i"):].partition(b"\0")
     records = tail.lstrip(b"\0").split(b"\0")
     if not separator or not executable or not 0 < argc < len(records):
-        raise Refused("the running Health process did not provide complete launch settings")
+        raise Refused("the running owner process did not provide complete launch settings")
     return Path(os.fsdecode(executable)), records[1:argc], source_settings(records[argc:])
 
 
@@ -200,7 +265,7 @@ def launched_database(settings):
             value = str(Path(settings["HOME"]) / value[2:])
         path = Path(value)
         if not path.is_absolute():
-            raise Refused("the running Health process does not declare an absolute database path")
+            raise Refused("the running owner process does not declare an absolute database path")
         return path
 
     override = settings.get("SJEL_DB_PATH", "")
@@ -209,174 +274,175 @@ def launched_database(settings):
     return path_of(settings.get("SJEL_PERSONAL_ROOT", "")) / "data/sjel/sjel.db"
 
 
-def prove_legacy_source(base, source, binary):
+def prove_legacy_source(owner, base, source, binary):
     # libSQL closes its connection after a request. Its actual launch settings are the proof.
     pid = listener_pid(base)
     fields = run("lsof", "-nP", "-a", "-d", "txt", "-p", str(pid), "-Fn", capture=True)
-    # Cargo can replace the file at this path while the old Health process is still running.
+    # Cargo can replace the file at this path while the old owner process is still running.
     # Check the executable path, not the inode of the newer artifact on disk.
     expected = binary.resolve()
     text_paths = {Path(line[1:].removesuffix(" (deleted)")).resolve()
                   for line in fields.splitlines() if line.startswith("n/")}
     if expected not in text_paths:
-        raise Refused("the listener is not the deployed Health executable")
+        raise Refused(f"the listener is not the deployed {owner.label} executable")
     executable, args, settings = process_launch_context(pid)
-    if args != [b"serve"] or Path(str(executable.resolve()).removesuffix(" (deleted)")) != expected:
-        raise Refused("the listener is not the deployed Health service")
+    if args != list(owner.serve_args) or Path(str(executable.resolve()).removesuffix(" (deleted)")) != expected:
+        raise Refused(f"the listener is not the deployed {owner.label} service")
     if not launched_database(settings).samefile(source) or listener_pid(base) != pid:
-        raise Refused("the running Health service points at a different shared database or changed during preflight")
+        raise Refused(f"the running {owner.label} service points at a different shared database or changed during preflight")
 
 
-def preflight(overlay, machine, source, destination, binary, base):
+def preflight(owner, overlay, machine, source, destination, binary, base):
     try:
         with source.open("rb") as f:
             if f.read(16) != b"SQLite format 3\x00":
                 raise Refused("the shared source is not a SQLite database")
     except OSError as error:
         raise Refused("cannot read the live shared store; run outside Pi or Claude Code in a Mac owner terminal") from error
-    prove_legacy_source(base, source, binary)
+    prove_legacy_source(owner, base, source, binary)
     if os.path.lexists(destination):
-        raise Refused("Health owner path already exists; inspect it before attempting a cutover")
-    machine_env = table(machine).get("capability", {}).get("health", {}).get("env", [])
+        raise Refused(f"{owner.label} owner path already exists; inspect it before attempting a cutover")
+    machine_env = table(machine).get("capability", {}).get(owner.name, {}).get("env", [])
     declaration = overlay / "config/deployment.env"
     deployment_keys = set()
     if declaration.is_file():
         with declaration.open() as f:
             deployment_keys = {line.partition("=")[0] for line in f}
-    if ("SJEL_HEALTH_DB_PATH" in os.environ or "SJEL_HEALTH_DB_PATH" in deployment_keys
-            or any(value.startswith("SJEL_HEALTH_DB_PATH=") for value in machine_env)):
-        raise Refused("this command requires the default Health owner path, without an override")
-    before = HEALTH_MANIFEST.read_bytes()
-    if before.count(LEGACY_BUILD) != 1:
-        raise Refused("Health service build is not the reviewed legacy declaration")
+    if (owner.env in os.environ or owner.env in deployment_keys
+            or any(value.startswith(owner.env + "=") for value in machine_env)):
+        raise Refused(f"this command requires the default {owner.label} owner path, without an override")
+    before = owner.manifest.read_bytes()
+    if before.count(owner.legacy_build) != 1:
+        raise Refused(f"{owner.label} service build is not the reviewed legacy declaration")
     try:
-        run("git", "diff", "HEAD", "--quiet", "--", HEALTH_MANIFEST)
+        run("git", "diff", "HEAD", "--quiet", "--", owner.manifest)
     except subprocess.CalledProcessError as error:
-        raise Refused("Health service manifest has local changes; review them before applying") from error
-    credential = run(TOOLS / "capability-auth/capability-auth", "--check", "health", capture=True)
+        raise Refused(f"{owner.label} service manifest has local changes; review them before applying") from error
+    credential = run(TOOLS / "capability-auth/capability-auth", "--check", owner.name, capture=True)
     if credential.strip() != "configured":
         raise Refused("the owner credential needed for verification is not available in this terminal")
-    for contract in ("store", BACKUP):
+    for contract in ("store", owner.backup):
         local_target(overlay, machine, contract)
     return before
 
 
-def verify_owner(overlay, machine, destination, binary, base):
+def verify_owner(owner, overlay, machine, destination, binary, base):
     prove_running_source(base, destination)
     run("curl", "-qfsS", "--noproxy", "*", "--max-time", "10", "-o", "/dev/null", base + "/ready")
-    for check in ("metrics", "summary"):
-        run(binary, check, quiet=True)
+    for program, *args in owner.checks:
+        run(binary if program == "@binary" else ROOT / program, *args, quiet=True)
     with private_restore_workspace(overlay) as work:
         restore = Path(work) / "owner-restore"
-        backup_restore(BACKUP, overlay, machine, restore)
-        snapshot = Path("data/health/snapshots/health.db")
-        compare_health(overlay / snapshot, restore / snapshot, closed=True)
-    run(TOOLS / "capability.sh", "enable", BACKUP)
-    print("Health ready. Metrics and summary passed. Owner backup restored with exact row parity.", flush=True)
+        backup_restore(owner.backup, overlay, machine, restore)
+        snapshot = Path(owner.snapshot)
+        compare_owner(owner, overlay / snapshot, restore / snapshot, closed=True)
+    run(TOOLS / "capability.sh", "enable", owner.backup)
+    print(f"{owner.label} ready. Live checks passed. Owner backup restored with exact row parity.", flush=True)
 
 
-def build_candidate(target):
+def build_candidate(owner, target):
     target = target.resolve()
     if target.is_relative_to(ROOT.resolve()) or any(target.iterdir()):
-        raise Refused("Health requires an empty build directory outside the checkout")
+        raise Refused(f"{owner.label} requires an empty build directory outside the checkout")
     build_context = {**os.environ, "CARGO_BUILD_BUILD_DIR": str(target)}
     # This is an owner release build, like distribution preparation. The live target is not an output.
-    run(*json.loads(OWNER_BUILD), "--package", "sjel-health", "--target-dir", target, environ=build_context)
-    return target / "release/health"
+    run(*json.loads(owner.owner_build), "--package", owner.package, "--target-dir", target, environ=build_context)
+    return target / "release" / owner.binary
 
 
-def apply(overlay, machine, source, destination, binary, base, before):
-    with tempfile.TemporaryDirectory(prefix="sjel-health-build-", dir="/tmp") as target:
-        candidate = build_candidate(Path(target))
-        activate(overlay, machine, source, destination, binary, base, before, candidate)
+def apply(owner, overlay, machine, source, destination, binary, base, before):
+    with tempfile.TemporaryDirectory(prefix=f"sjel-{owner.name}-build-", dir="/tmp") as target:
+        candidate = build_candidate(owner, Path(target))
+        activate(owner, overlay, machine, source, destination, binary, base, before, candidate)
 
 
-def activate(overlay, machine, source, destination, binary, base, before, candidate_binary):
+def activate(owner, overlay, machine, source, destination, binary, base, before, candidate_binary):
     new_binary = candidate_binary.read_bytes()
-    prove_legacy_source(base, source, binary)
-    if HEALTH_MANIFEST.read_bytes() != before or os.path.lexists(destination):
+    prove_legacy_source(owner, base, source, binary)
+    if owner.manifest.read_bytes() != before or os.path.lexists(destination):
         raise Refused("the deployment changed during the build")
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    after = before.replace(LEGACY_BUILD, OWNER_BUILD)
+    after = before.replace(owner.legacy_build, owner.owner_build)
     old_binary = binary.read_bytes()
     promoted = switched = False
     with tempfile.TemporaryDirectory(prefix=".cutover-", dir=destination.parent) as work:
         work = Path(work)
-        staged = work / "health.db"
+        staged = work / Path(owner.destination).name
         try:
-            run(TOOLS / "service-runner.sh", "stop", "health")
-            stage_shared(overlay, machine, source, staged)
-            run(candidate_binary, "check-owner", environ={**os.environ, "SJEL_HEALTH_DB_PATH": str(staged)})
-            compare_health(source, staged, closed=False)
-            status = run(TOOLS / "service-runner.sh", "status", "health", capture=True)
+            run(TOOLS / "service-runner.sh", "stop", owner.name)
+            stage_shared(owner, overlay, machine, source, staged)
+            run(candidate_binary, "check-owner", environ={**os.environ, owner.env: str(staged)})
+            compare_owner(owner, source, staged, closed=False)
+            status = run(TOOLS / "service-runner.sh", "status", owner.name, capture=True)
             if "stopped, held" not in status or "no answer" not in status:
-                raise Refused("the Health maintenance hold is not active")
-            if HEALTH_MANIFEST.read_bytes() != before or binary.read_bytes() != old_binary:
-                raise Refused("Health build or binary changed during maintenance")
+                raise Refused(f"the {owner.label} maintenance hold is not active")
+            if owner.manifest.read_bytes() != before or binary.read_bytes() != old_binary:
+                raise Refused(f"{owner.label} build or binary changed during maintenance")
             os.link(staged, destination)
             promoted = True
-            put_file(HEALTH_MANIFEST, after, 0o644)
+            put_file(owner.manifest, after, 0o644)
             put_file(binary, new_binary, 0o755)
             switched = True
-            run(TOOLS / "service-runner.sh", "resume", "health")
-            verify_owner(overlay, machine, destination, binary, base)
+            run(TOOLS / "service-runner.sh", "resume", owner.name)
+            verify_owner(owner, overlay, machine, destination, binary, base)
         except BaseException:
             if switched:
-                print("Health was switched to the owner file. Do not resume the shared build; new writes may exist. Repair the owner and run --verify.", file=sys.stderr)
+                print(f"{owner.label} was switched to the owner file. Do not resume the shared build; new writes may exist. Repair the owner and run --verify.", file=sys.stderr)
             else:
-                if HEALTH_MANIFEST.read_bytes() == after and promoted:
-                    put_file(HEALTH_MANIFEST, before, 0o644)
+                if owner.manifest.read_bytes() == after and promoted:
+                    put_file(owner.manifest, before, 0o644)
                 if promoted and binary.read_bytes() == new_binary:
                     put_file(binary, old_binary, 0o755)
                 if promoted and destination.samefile(staged):
                     destination.unlink()
-                if HEALTH_MANIFEST.read_bytes() == before and binary.read_bytes() == old_binary:
-                    run(TOOLS / "service-runner.sh", "resume", "health")
-                    print("Cutover stopped before activation. Legacy Health resumed.", file=sys.stderr)
+                if owner.manifest.read_bytes() == before and binary.read_bytes() == old_binary:
+                    run(TOOLS / "service-runner.sh", "resume", owner.name)
+                    print(f"Cutover stopped before activation. Legacy {owner.label} resumed.", file=sys.stderr)
                 else:
-                    print("Concurrent build changes detected. Health remains held for operator review.", file=sys.stderr)
+                    print(f"Concurrent build changes detected. {owner.label} remains held for operator review.", file=sys.stderr)
             raise
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("owner", choices=("health",))
+    parser.add_argument("owner", choices=tuple(OWNERS))
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="run preflight without changing anything (default)")
-    mode.add_argument("--apply", action="store_true", help="perform the Health cutover after interactive confirmation")
+    mode.add_argument("--apply", action="store_true", help="perform the cutover after interactive confirmation")
     mode.add_argument("--verify", action="store_true", help="retry live checks and the first owner backup after cutover")
     args = parser.parse_args()
+    owner = OWNERS[args.owner]
     overlay, machine = deployment()
     source = Path(os.environ.get("SJEL_DB_PATH") or overlay / "data/sjel/sjel.db").expanduser().resolve()
-    destination = overlay / "data/health/health.db"
-    binary = ROOT / "target/release/health"
-    base = run(ROOT / "sjel", "capability", "url", "health", capture=True).strip()
+    destination = overlay / owner.destination
+    binary = ROOT / "target/release" / owner.binary
+    base = run(ROOT / "sjel", "capability", "url", owner.name, capture=True).strip()
     if not args.verify:
-        before = preflight(overlay, machine, source, destination, binary, base)
-        print("Health preflight passed: readable running source, legacy build and local backup targets.", flush=True)
+        before = preflight(owner, overlay, machine, source, destination, binary, base)
+        print(f"{owner.label} preflight passed: readable running source, legacy build and local backup targets.", flush=True)
     if not (args.apply or args.verify):
         return
     if not sys.stdin.isatty() or os.environ.get("SJEL_AGENT") == "1":
         raise Refused("use a regular owner terminal, not an agent or a piped session")
-    prompt = ("Pause manual Health imports. This holds the service and changes the tracked Health build to Turso WAL. Type health to continue: "
-              if args.apply else "Run and restore a new Health owner backup. Type health to continue: ")
-    if input(prompt) != "health":
+    prompt = (f"{owner.note} This holds the service and changes the tracked {owner.label} build to Turso WAL. Type {owner.name} to continue: "
+              if args.apply else f"Run and restore a new {owner.label} owner backup. Type {owner.name} to continue: ")
+    if input(prompt) != owner.name:
         raise Refused("not confirmed; no cutover or backup started")
     locks = overlay / "backup/locks"
     locks.mkdir(parents=True, exist_ok=True)
-    with (locks / "health-cutover.flock").open("a") as lock:
+    with (locks / f"{owner.name}-cutover.flock").open("a") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
-            raise Refused("another Health cutover or verification is running") from error
+            raise Refused(f"another {owner.label} cutover or verification is running") from error
         if args.apply:
-            before = preflight(overlay, machine, source, destination, binary, base)
-            apply(overlay, machine, source, destination, binary, base, before)
+            before = preflight(owner, overlay, machine, source, destination, binary, base)
+            apply(owner, overlay, machine, source, destination, binary, base, before)
         else:
-            if OWNER_BUILD not in HEALTH_MANIFEST.read_bytes() or not destination.is_file():
-                raise Refused("Health has not been cut over")
-            verify_owner(overlay, machine, destination, binary, base)
+            if owner.owner_build not in owner.manifest.read_bytes() or not destination.is_file():
+                raise Refused(f"{owner.label} has not been cut over")
+            verify_owner(owner, overlay, machine, destination, binary, base)
 
 
 if __name__ == "__main__":

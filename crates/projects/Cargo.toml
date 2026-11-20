@@ -31,7 +31,7 @@ content-item = { path = "../content-item" }
 markdown-root = { path = "../markdown-root" }
 projects-api = { path = "../projects-api" }
 route-manifest = { path = "../route-manifest" }
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["blocking", "json"] }
 schemars.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

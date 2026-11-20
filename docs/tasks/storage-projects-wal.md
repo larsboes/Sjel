@@ -29,6 +29,22 @@ The opt-in Turso build passed 56 Projects tests, including schema migration, con
 
 [`projects-owner-rehearsal.sh`](../../research/benchmarks/storage-engine/projects-owner-rehearsal.sh) passed against a scratch libSQL store and Turso owner. The shared archive restored first; `owner-store-split.py projects` staged the four owner tables without copying an unrelated table. The protected snapshot and registered backup contract produced a second receipt-backed archive. Its isolated restore matched all four tables row for row. The owner read and wrote with the shared path absent.
 
+The CLI sends every command to the owner's credentialed `/commands` job and never opens the
+owner file. A route test runs a command, reads its output and refuses `edit` and unknown
+commands; a CLI test checks that file arguments become absolute and record paths stay
+relative. The default build passed 57 tests and the Turso build 58.
+
+The [owner cutover command](../../tools/owner-store-cutover.py) supports Projects with the same
+preflight, hold, receipt-backed restore and rollback as Health. Its owner file is
+`data/projects-index/projects.db`, outside the Markdown tree in `data/projects`. Once that file
+exists, the default CLI refuses to fall back to the shared tables. The cutover suite passed 15
+tests for both owners, with one skipped that needs a legacy Health binary.
+
+The extended rehearsal also drives the CLI through the owner and checks its refusal without one.
+It has not run since that extension: the agent shell may not write the fixture credential.
+
 ## Remaining work
 
-Route CLI operations to the service. Repeat the cutover and archive checks against live data in the deployment operator context, including reindex and the Projects file backup. The live service remains on the shared database.
+Run the extended rehearsal, then `python3 tools/owner-store-cutover.py projects --check` and
+`--apply`, from a deployment operator terminal. Repeat the archive checks against live data, including reindex and the
+Projects file backup. The live service remains on the shared database.

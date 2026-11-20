@@ -1,351 +1,198 @@
-use std::path::PathBuf;
+use std::path::Path;
 
-use projects::ops;
+use projects::{commands, jobs::CommandResult};
 
-const USAGE: &str = "usage: projects <command>
-  list [--all|--done]                          open tasks of live projects
-  projects                                     every project with its task counts
-  add <project> <title> [--due YYYY-MM-DD] [--priority 1|2|3] [--summary TEXT]
-  new-project <name> [--summary TEXT]
-  archive <project>                            move a live project's folder under Archive/
-  unarchive <project>                          move an archived project's folder back
-  new-note <project> <title> [--summary TEXT]
-  edit <path>                                  open a record in $EDITOR and save it
-  put <path> <file> [--base <file>]            create a record from a file; with --base, replace it
-                                               only while the stored content still equals that file
-  done <task-id>  |  reopen <task-id>
-  set <path> <key> [value]                     set one property; no value clears it
-  attach <path> <file>                         store a binary attachment in a live project
-  remove <path>                                delete a record and its file
-  rename <path> <title>                        move a record's file to the new title and
-                                               rewrite the [[links]] that name the old one
-  normalize [--apply]                          put every task on the status schema; dry run first
-  import <vault>/Projects [--only PROJECT]     copy vault project notes into the store
-  import <vault> --folder Atlas/<Domain>       copy one domain folder, keeping its path
-  freeze-vault <vault>/Projects [--only PROJECT]  mark imported vault notes as moved
-  verify                                       compare the index with the files
-  reindex                                      adopt file edits; refuse a lowered class
-  workspace adopt <manifest.json>              adopt private indexes and delivery assets
-  workspace setup <name> <template-directory>   prepare a private project from Markdown templates
-  workspace status [--github]                   source tasks, next actions, checkout and optional CI
-  workspace lesson draft|publish ...            prepare and explicitly review reusable lessons";
+type Fallible<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 fn main() {
-    let runtime = match tokio::runtime::Runtime::new() {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            eprintln!("projects: tokio runtime could not start: {error}");
-            std::process::exit(1);
-        }
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let result = match args.first().map(String::as_str) {
+        Some("edit") => edit(&args),
+        Some(_) => absolute_paths(&args)
+            .and_then(|args| execute(&args))
+            .and_then(|r| print(&r)),
+        None => Err(commands::USAGE.into()),
     };
-    if let Err(error) = runtime.block_on(run()) {
+    if let Err(error) = result {
         eprintln!("projects: {error}");
         std::process::exit(1);
     }
 }
 
-async fn open_cli_store() -> Result<projects::Projects, Box<dyn std::error::Error + Send + Sync>> {
-    #[cfg(feature = "turso-wal")]
-    return Err("The Turso Projects build does not open an index from the CLI".into());
-    #[cfg(not(feature = "turso-wal"))]
-    projects::open_default().await
+/// Run a command in the owner when one answers, otherwise against a local store.
+fn execute(args: &[String]) -> Fallible<CommandResult> {
+    if let Some(result) = projects::jobs::request(args)? {
+        return Ok(result);
+    }
+    local(args)
 }
 
-async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let Some(command) = args.first() else {
-        return Err(USAGE.into());
-    };
-    let flag = |name: &str| {
-        args.iter()
-            .position(|a| a == name)
-            .and_then(|i| args.get(i + 1))
-            .map(String::as_str)
-    };
-    let positional = |n: usize| {
-        args.get(n)
-            .filter(|a| !a.starts_with("--"))
-            .map(String::as_str)
-            .ok_or(USAGE)
-    };
-    let projects = open_cli_store().await?;
-    // The files are the authority, so every command but the two that inspect the index starts
-    // from them.
-    if !matches!(command.as_str(), "verify" | "reindex") {
-        report_reindex(&projects.reindex().await?, false);
-    }
-    match command.as_str() {
-        "workspace" => projects::workspace::run(&projects, &args[1..]).await?,
-        "list" => {
-            let status = if args.iter().any(|a| a == "--all") {
-                None
-            } else if args.iter().any(|a| a == "--done") {
-                Some("done")
-            } else {
-                Some("open")
-            };
-            for t in ops::tasks(&projects, status).await? {
-                println!(
-                    "{} P{} {:10} {}  [{}]",
-                    if t.done { "x" } else { " " },
-                    t.priority,
-                    t.due.as_deref().unwrap_or("-"),
-                    t.title,
-                    t.id
-                );
-            }
-        }
-        "projects" => {
-            let mut rows: std::collections::BTreeMap<(bool, String), (usize, usize, usize)> =
-                Default::default();
-            for r in ops::view_records(&projects)
-                .await?
-                .into_iter()
-                .filter(|r| !r.domain)
-            {
-                let row = rows.entry((r.archived, r.project.clone())).or_default();
-                match (r.kind, r.done) {
-                    (projects::Kind::Task, false) => row.0 += 1,
-                    (projects::Kind::Task, true) => row.1 += 1,
-                    _ => row.2 += 1,
-                }
-            }
-            for ((archived, name), (open, done, notes)) in rows {
-                let state = if archived { "archived" } else { "live" };
-                println!("{state:8} {name:30} {open:3} open {done:3} done {notes:3} notes");
-            }
-        }
-        "add" => {
-            let priority = flag("--priority").map(str::parse).transpose()?.unwrap_or(2);
-            let r = ops::add_task(
-                &projects,
-                positional(1)?,
-                positional(2)?,
-                flag("--summary").unwrap_or_default(),
-                flag("--due"),
-                priority,
-            )
-            .await?;
-            println!("added {}", r.path);
-        }
-        "new-project" => {
-            let r = ops::add_project(
-                &projects,
-                positional(1)?,
-                flag("--summary").unwrap_or_default(),
-            )
-            .await?;
-            println!("added {}", r.path);
-        }
-        "new-note" => {
-            let (path, content) = ops::new_note(
-                positional(1)?,
-                positional(2)?,
-                flag("--summary").unwrap_or_default(),
-            )?;
-            println!(
-                "added {}",
-                ops::save(&projects, &path, &content, None).await?.path
-            );
-        }
-        "edit" => {
-            let path = positional(1)?;
-            let base = projects
-                .get(path)
-                .await?
-                .ok_or_else(|| format!("no record {path:?}"))?
-                .content;
-            let scratch =
-                std::env::temp_dir().join(format!("sjel-projects-edit-{}.md", std::process::id()));
-            std::fs::write(&scratch, &base)?;
-            let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
-            let status = std::process::Command::new(&editor).arg(&scratch).status()?;
-            let edited = std::fs::read_to_string(&scratch);
-            let _ = std::fs::remove_file(&scratch);
-            if !status.success() {
-                return Err(format!("{editor} exited with {status}; nothing saved").into());
-            }
-            let edited = edited?;
-            if edited == base {
-                println!("unchanged {path}");
-            } else {
-                ops::save(&projects, path, &edited, Some(&base)).await?;
-                println!("saved {path}");
-            }
-        }
-        "put" => {
-            let path = positional(1)?;
-            let content = std::fs::read_to_string(positional(2)?)?;
-            let base = match flag("--base") {
-                Some(file) => Some(std::fs::read_to_string(file)?),
-                None => None,
-            };
-            if base.as_deref() == Some(content.as_str()) {
-                println!("unchanged {path}");
-            } else {
-                let saved = ops::save(&projects, path, &content, base.as_deref()).await?;
-                println!(
-                    "{} {}",
-                    if base.is_some() { "saved" } else { "added" },
-                    saved.path
-                );
-            }
-        }
-        "done" | "reopen" => {
-            let r = ops::set_done(&projects, positional(1)?, command == "done").await?;
-            println!("{} {}", if r.done { "done" } else { "open" }, r.path);
-        }
-        "set" => {
-            let value = args.get(3).map(String::as_str).unwrap_or_default();
-            let r = ops::set_property(&projects, positional(1)?, positional(2)?, value).await?;
-            println!(
-                "{}: {}",
-                r.path,
-                r.fields().get(positional(2)?).map_or("", String::as_str)
-            );
-        }
-        "attach" => {
-            let path = positional(1)?;
-            let file = positional(2)?;
-            let bytes = std::fs::read(file)?;
-            match ops::attach(&projects, path, &bytes).await? {
-                projects::store::Attached::New => println!("attached {path}"),
-                projects::store::Attached::Unchanged => println!("unchanged {path}"),
-                projects::store::Attached::Differs => {
-                    return Err(format!(
-                        "a different attachment already exists at {path:?}; not overwritten"
-                    )
-                    .into());
-                }
-            }
-        }
-        "remove" => {
-            let path = positional(1)?;
-            let removed = projects.remove(path).await?;
-            println!("{} {path}", if removed { "removed" } else { "no record" });
-        }
-        "archive" | "unarchive" => {
-            let name = positional(1)?;
-            let moved = if command == "archive" {
-                ops::archive(&projects, name).await?
-            } else {
-                ops::unarchive(&projects, name).await?
-            };
-            println!(
-                "{command}d {name}: {} record(s), {} attachment(s)",
-                moved.records.len(),
-                moved.attachments.len()
-            );
-        }
-        "rename" => {
-            let renamed = ops::rename(&projects, positional(1)?, positional(2)?).await?;
-            println!(
-                "{} -> {} ({} link(s) rewritten)",
-                positional(1)?,
-                renamed.path,
-                renamed.links.len()
-            );
-            for left in &renamed.failed {
-                println!("  still names the old title: {left}");
-            }
-        }
-        "normalize" => {
-            let apply = args.iter().any(|a| a == "--apply");
-            let report = ops::normalize(&projects, apply).await?;
-            for n in &report {
-                println!("{}\n  {}", n.path, n.changes.join("\n  "));
-            }
-            let verb = if apply {
-                "normalized"
-            } else {
-                "would normalize (dry run; add --apply)"
-            };
-            println!("{verb} {} task(s)", report.len());
-        }
-        "import" => {
-            let report = ops::import(
-                &projects,
-                &PathBuf::from(positional(1)?),
-                flag("--only"),
-                flag("--folder"),
-            )
-            .await?;
-            for (path, reason) in &report.skipped {
-                println!("skipped {path}: {reason}");
-            }
-            println!(
-                "imported {}, unchanged {}, attachments {} new and {} unchanged, skipped {}",
-                report.imported.len(),
-                report.unchanged.len(),
-                report.attached.len(),
-                report.attached_unchanged,
-                report.skipped.len()
-            );
-        }
-        "freeze-vault" => {
-            let report =
-                ops::freeze_vault(&projects, &PathBuf::from(positional(1)?), flag("--only"))
-                    .await?;
-            for (path, reason) in &report.skipped {
-                println!("skipped {path}: {reason}");
-            }
-            println!(
-                "frozen {}, already frozen {}, skipped {}",
-                report.frozen.len(),
-                report.already.len(),
-                report.skipped.len()
-            );
-        }
-        "verify" => {
-            let drift = projects.verify().await?;
-            for path in &drift.stale {
-                println!("stale    {path}");
-            }
-            for path in &drift.orphaned {
-                println!("orphaned {path}");
-            }
-            if drift.stale.is_empty() && drift.orphaned.is_empty() {
-                println!("index and files match");
-            } else {
-                return Err("index and files differ; `projects reindex` adopts the files".into());
-            }
-        }
-        "reindex" => report_reindex(&projects.reindex().await?, true),
-        _ => return Err(USAGE.into()),
-    }
-    Ok(())
+#[cfg(feature = "turso-wal")]
+fn local(_args: &[String]) -> Fallible<CommandResult> {
+    Err(
+        "the Projects owner is not running; start it with `tools/service-runner.sh start projects`"
+            .into(),
+    )
 }
 
-/// Changes go to stderr on an implicit reindex, so a command's own output stays parseable.
-fn report_reindex(report: &projects::store::Reindexed, explicit: bool) {
-    let line = |text: String| {
-        if explicit {
-            println!("{text}");
-        } else {
-            eprintln!("projects: {text}");
-        }
+#[cfg(not(feature = "turso-wal"))]
+fn local(args: &[String]) -> Fallible<CommandResult> {
+    // After the cutover the shared tables are stale, so only the owner may answer.
+    if projects::owner_file().is_some() {
+        return Err("the Projects owner is not running; start it with `tools/service-runner.sh start projects`".into());
+    }
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(async {
+        let projects = projects::open_default().await?;
+        let mut result = CommandResult::default();
+        result.error = commands::run(&projects, args, &mut result.stdout, &mut result.stderr)
+            .await
+            .err()
+            .map(|error| error.to_string());
+        Ok(result)
+    })
+}
+
+/// Print the command's output and turn its refusal into this process's error.
+fn print(result: &CommandResult) -> Fallible<()> {
+    eprint!("{}", result.stderr);
+    print!("{}", result.stdout);
+    match &result.error {
+        Some(error) => Err(error.clone().into()),
+        None => Ok(()),
+    }
+}
+
+/// The owner runs in another working directory, so file arguments travel as absolute paths.
+fn absolute_paths(args: &[String]) -> Fallible<Vec<String>> {
+    let sub = args.get(1).map(String::as_str);
+    let lesson = args.get(2).map(String::as_str);
+    let positions: &[usize] = match (args[0].as_str(), sub, lesson) {
+        ("put" | "attach", ..) => &[2],
+        ("import" | "freeze-vault", ..) => &[1],
+        ("workspace", Some("adopt"), _) => &[2],
+        ("workspace", Some("setup"), _) => &[3],
+        ("workspace", Some("lesson"), Some("publish")) => &[4, 5],
+        _ => &[],
     };
-    for path in &report.adopted {
-        line(format!("adopted  {path}"));
+    let flags: &[&str] = match (args[0].as_str(), sub) {
+        ("put", _) => &["--base"],
+        ("workspace", Some("lesson")) => &["--proposal"],
+        _ => &[],
+    };
+    let mut out = args.to_vec();
+    for &i in positions {
+        if let Some(arg) = out.get_mut(i) {
+            *arg = absolute(arg)?;
+        }
     }
-    for path in &report.added {
-        line(format!("added    {path}"));
+    for flag in flags {
+        if let Some(i) = out.iter().position(|a| a == flag) {
+            if let Some(arg) = out.get_mut(i + 1) {
+                *arg = absolute(arg)?;
+            }
+        }
     }
-    for path in &report.dropped {
-        line(format!("dropped  {path}"));
+    Ok(out)
+}
+
+fn absolute(path: &str) -> Fallible<String> {
+    Ok(std::path::absolute(Path::new(path))?
+        .to_string_lossy()
+        .into_owned())
+}
+
+/// Edit a record in `$EDITOR`, then save it only while the stored content still matches.
+fn edit(args: &[String]) -> Fallible<()> {
+    let path = args.get(1).ok_or(commands::USAGE)?;
+    let shown = execute(&["show".into(), path.clone()])?;
+    if let Some(error) = shown.error {
+        return Err(error.into());
     }
-    for (path, why) in &report.refused {
-        line(format!("refused  {path}: {why}"));
+    let base = shown.stdout;
+    let scratch = std::env::temp_dir().join(format!("sjel-projects-edit-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch)?;
+    let (base_file, edited_file) = (scratch.join("base.md"), scratch.join("edited.md"));
+    std::fs::write(&base_file, &base)?;
+    std::fs::write(&edited_file, &base)?;
+    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
+    let status = std::process::Command::new(&editor)
+        .arg(&edited_file)
+        .status();
+    let saved = (|| {
+        let status = status?;
+        if !status.success() {
+            return Err(format!("{editor} exited with {status}; nothing saved").into());
+        }
+        if std::fs::read_to_string(&edited_file)? == base {
+            println!("unchanged {path}");
+            return Ok(());
+        }
+        let put = [
+            "put".to_owned(),
+            path.clone(),
+            edited_file.to_string_lossy().into_owned(),
+            "--base".to_owned(),
+            base_file.to_string_lossy().into_owned(),
+        ];
+        print(&execute(&put)?)
+    })();
+    let _ = std::fs::remove_dir_all(&scratch);
+    saved
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn strings(args: &[&str]) -> Vec<String> {
+        args.iter().map(|a| (*a).to_owned()).collect()
     }
-    for (path, why) in &report.skipped {
-        line(format!("skipped  {path}: {why}"));
-    }
-    if explicit
-        && report.adopted.is_empty()
-        && report.added.is_empty()
-        && report.dropped.is_empty()
-        && report.refused.is_empty()
-    {
-        println!("index and files match");
+
+    #[test]
+    fn file_arguments_become_absolute_and_record_paths_stay_relative() {
+        let here = std::env::current_dir().unwrap();
+        let abs = |p: &str| here.join(p).to_string_lossy().into_owned();
+        let put = absolute_paths(&strings(&[
+            "put",
+            "Pilot/Note.md",
+            "new.md",
+            "--base",
+            "old.md",
+        ]))
+        .unwrap();
+        assert_eq!(
+            put,
+            [
+                "put".into(),
+                "Pilot/Note.md".into(),
+                abs("new.md"),
+                "--base".into(),
+                abs("old.md")
+            ]
+        );
+        let set = absolute_paths(&strings(&["set", "Pilot/Note.md", "status", "done"])).unwrap();
+        assert_eq!(set, strings(&["set", "Pilot/Note.md", "status", "done"]));
+        let import =
+            absolute_paths(&strings(&["import", "vault/Projects", "--only", "Pilot"])).unwrap();
+        assert_eq!(import[1], abs("vault/Projects"));
+        assert_eq!(import[3], "Pilot");
+        let publish = absolute_paths(&strings(&[
+            "workspace",
+            "lesson",
+            "publish",
+            "Pilot/L.md",
+            "review.md",
+            "vault",
+            "K/L.md",
+            "--declassify",
+            "why",
+        ]))
+        .unwrap();
+        assert_eq!(
+            (publish[4].as_str(), publish[5].as_str()),
+            (abs("review.md").as_str(), abs("vault").as_str())
+        );
+        assert_eq!(publish[6], "K/L.md");
     }
 }

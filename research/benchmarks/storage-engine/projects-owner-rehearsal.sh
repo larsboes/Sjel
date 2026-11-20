@@ -114,5 +114,17 @@ call "$base/api/tasks" | jq -e 'any(.tasks[]; .title == "Prepare fixture")' >/de
 call "$base/api/tasks" -H 'Content-Type: application/json' \
     --data '{"project":"Rehearsal","title":"Owner write"}' > write.json
 call "$base/api/tasks" | jq -e 'any(.tasks[]; .title == "Owner write")' >/dev/null
+
+# The CLI sends its commands to the owner socket and never opens a database itself.
+"$legacy" add Rehearsal 'CLI write' >/dev/null
+"$legacy" list | grep -q 'CLI write'
+call "$base/api/tasks" | jq -e 'any(.tasks[]; .title == "CLI write")' >/dev/null
 test ! -e "$SJEL_DB_PATH"
-echo 'Both receipt-backed restores matched all four Projects tables. The isolated owner read and wrote with the shared database absent.'
+kill "$pid"
+wait "$pid" 2>/dev/null || :
+if "$legacy" list >/dev/null 2>&1; then
+    echo 'the CLI used a local store while an owner file exists' >&2
+    exit 1
+fi
+test ! -e "$SJEL_DB_PATH"
+echo 'Both receipt-backed restores matched all four Projects tables. The isolated owner and the CLI read and wrote with the shared database absent, and the CLI refused without its owner.'

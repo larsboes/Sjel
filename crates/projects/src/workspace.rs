@@ -13,6 +13,8 @@ use serde::Deserialize;
 
 use crate::{ops, record, Kind, Projects, Record};
 
+use std::fmt::Write as _;
+
 type Fallible<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Deserialize)]
@@ -41,24 +43,24 @@ struct ProjectIndex {
 ///
 /// # Errors
 /// Inputs are invalid, a source or destination conflicts, or a capability write fails.
-pub async fn run(projects: &Projects, args: &[String]) -> Fallible<()> {
+pub async fn run(projects: &Projects, args: &[String], out: &mut String) -> Fallible<()> {
     match args.first().map(String::as_str) {
-        Some("adopt") if args.len() == 2 => adopt(projects, Path::new(&args[1])).await,
-        Some("setup") if args.len() == 3 => setup(projects, &args[1], Path::new(&args[2])).await,
+        Some("adopt") if args.len() == 2 => adopt(projects, Path::new(&args[1]), out).await,
+        Some("setup") if args.len() == 3 => setup(projects, &args[1], Path::new(&args[2]), out).await,
         Some("status") if args.len() == 1 || (args.len() == 2 && args[1] == "--github") => {
-            status(projects, args.len() == 2).await
+            status(projects, args.len() == 2, out).await
         }
         Some("lesson") if args.get(1).map(String::as_str) == Some("draft") && (args.len() == 5 || (args.len() == 7 && args[5] == "--proposal")) => {
-            draft(projects, &args[2], &args[3], &args[4], args.get(6).map(Path::new)).await
+            draft(projects, &args[2], &args[3], &args[4], args.get(6).map(Path::new), out).await
         }
         Some("lesson") if args.get(1).map(String::as_str) == Some("publish") && args.len() == 8 && args[6] == "--declassify" => {
-            publish(projects, &args[2], Path::new(&args[3]), Path::new(&args[4]), &args[5], &args[7]).await
+            publish(projects, &args[2], Path::new(&args[3]), Path::new(&args[4]), &args[5], &args[7], out).await
         }
         _ => Err("usage: projects workspace adopt <manifest.json> | setup <name> <template-directory> | status [--github] | lesson draft <project> <title> <evidence> | lesson publish <draft-id> <reviewed-note.md> <vault-root> <relative-note.md> --declassify <owner-rationale>".into()),
     }
 }
 
-async fn adopt(projects: &Projects, manifest: &Path) -> Fallible<()> {
+async fn adopt(projects: &Projects, manifest: &Path, out: &mut String) -> Fallible<()> {
     let config: Adoption = serde_json::from_slice(&fs::read(manifest)?)?;
     let overlay = sjel_config::overlay_root().ok_or("no private overlay configured")?;
     let resources = overlay.join("resources");
@@ -129,11 +131,12 @@ async fn adopt(projects: &Projects, manifest: &Path) -> Fallible<()> {
             projects.put(hub).await?;
         }
     }
-    println!(
+    writeln!(
+        out,
         "adopted {} project hubs and verified {} library files; source workspace preserved",
         hubs.len(),
         copies.len()
-    );
+    )?;
     Ok(())
 }
 
@@ -173,7 +176,7 @@ fn collect_files(
     Ok(())
 }
 
-async fn setup(projects: &Projects, name: &str, template: &Path) -> Fallible<()> {
+async fn setup(projects: &Projects, name: &str, template: &Path, out: &mut String) -> Fallible<()> {
     let name = record::check_name(name)?;
     if !projects.by_project(name).await?.is_empty() {
         return Err("project already exists".into());
@@ -202,14 +205,15 @@ async fn setup(projects: &Projects, name: &str, template: &Path) -> Fallible<()>
     for record in &records {
         projects.put(record).await?;
     }
-    println!(
+    writeln!(
+        out,
         "prepared {name}: {} records; platform choices remain unconfirmed",
         records.len()
-    );
+    )?;
     Ok(())
 }
 
-async fn status(projects: &Projects, github: bool) -> Fallible<()> {
+async fn status(projects: &Projects, github: bool, out: &mut String) -> Fallible<()> {
     let records = ops::view_records(projects).await?;
     for hub in records
         .iter()
@@ -221,13 +225,14 @@ async fn status(projects: &Projects, github: bool) -> Fallible<()> {
             .iter()
             .filter(|r| r.project == hub.project && r.kind == Kind::Task && !r.done)
             .collect();
-        println!(
+        writeln!(
+            out,
             "{} | phase {} | {} open | next: {}",
             hub.project,
             field("phase"),
             tasks.len(),
             field("next")
-        );
+        )?;
         if !field("local").is_empty() {
             let root = sjel_config::expand_tilde(field("local"));
             let changes = Command::new("git")
@@ -246,12 +251,13 @@ async fn status(projects: &Projects, github: bool) -> Fallible<()> {
             if !revision.status.success() {
                 return Err("checkout revision unavailable".into());
             }
-            println!(
+            writeln!(
+                out,
                 "  checkout {} | {} changed paths | task source: {}",
                 String::from_utf8(revision.stdout)?.trim(),
                 String::from_utf8(changes.stdout)?.lines().count(),
                 field("task_source")
-            );
+            )?;
         }
         if github && !field("repo").is_empty() {
             let output = Command::new("gh")
@@ -269,7 +275,7 @@ async fn status(projects: &Projects, github: bool) -> Fallible<()> {
             if !output.status.success() {
                 return Err(format!("{}: GitHub CI read failed", hub.project).into());
             }
-            println!("  CI {}", String::from_utf8(output.stdout)?.trim());
+            writeln!(out, "  CI {}", String::from_utf8(output.stdout)?.trim())?;
         }
     }
     Ok(())
@@ -281,6 +287,7 @@ async fn draft(
     title: &str,
     evidence: &str,
     proposal: Option<&Path>,
+    out: &mut String,
 ) -> Fallible<()> {
     let (path, content) = ops::new_note(
         project,
@@ -299,7 +306,7 @@ async fn draft(
     };
     let content = format!("{content}\n{mechanism}\n## Evidence\n\n{evidence}\n\n## Confidentiality review\n\nClient details and private source references remain in this record. The separate concept proposal requires owner review before publication.\n");
     ops::save(projects, &path, &content, None).await?;
-    println!("drafted {path}; no vault write");
+    writeln!(out, "drafted {path}; no vault write")?;
     Ok(())
 }
 
@@ -310,6 +317,7 @@ async fn publish(
     vault: &Path,
     relative: &str,
     rationale: &str,
+    out: &mut String,
 ) -> Fallible<()> {
     if rationale.trim().len() < 20 {
         return Err("publication requires the owner's confidentiality-review rationale".into());
@@ -350,7 +358,10 @@ async fn publish(
         reviewed.display()
     ));
     ops::save(projects, draft_id, &ledger, Some(&current.content)).await?;
-    println!("published {relative}; provenance and review remain in {draft_id}");
+    writeln!(
+        out,
+        "published {relative}; provenance and review remain in {draft_id}"
+    )?;
     Ok(())
 }
 
@@ -423,11 +434,15 @@ mod tests {
             "---\ntype: note\n---\n# Acceptance\n",
         )
         .unwrap();
-        setup(&projects, "Pilot", &template).await.unwrap();
+        setup(&projects, "Pilot", &template, &mut String::new())
+            .await
+            .unwrap();
         let records = projects.by_project("Pilot").await.unwrap();
         assert_eq!(records.len(), 2);
         assert!(records.iter().all(|r| r.fields()["class"] == "c2"));
-        assert!(setup(&projects, "Pilot", &template).await.is_err());
+        assert!(setup(&projects, "Pilot", &template, &mut String::new())
+            .await
+            .is_err());
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -447,9 +462,16 @@ mod tests {
     async fn publication_requires_review_and_never_replaces_an_existing_note() {
         let (projects, dir) = crate::store::tests::scratch("workspace-publish").await;
         ops::add_project(&projects, "Pilot", "").await.unwrap();
-        draft(&projects, "Pilot", "Lesson", "local evidence", None)
-            .await
-            .unwrap();
+        draft(
+            &projects,
+            "Pilot",
+            "Lesson",
+            "local evidence",
+            None,
+            &mut String::new(),
+        )
+        .await
+        .unwrap();
         let vault = dir.join("vault");
         fs::create_dir_all(vault.join("Knowledge")).unwrap();
         fs::create_dir_all(vault.join("Resources")).unwrap();
@@ -457,11 +479,17 @@ mod tests {
         let reviewed = dir.join("review.md");
         fs::write(&reviewed, "---\ntype: concept\nmaturity: seedling\nclass: c1\nsummary: A mechanism\ncategories: [Knowledge]\nsources: [Public source]\n---\n\nA mechanism.\n").unwrap();
         let id = "Pilot/Lesson.md";
-        assert!(
-            publish(&projects, id, &reviewed, &vault, "Knowledge/Lesson.md", "")
-                .await
-                .is_err()
-        );
+        assert!(publish(
+            &projects,
+            id,
+            &reviewed,
+            &vault,
+            "Knowledge/Lesson.md",
+            "",
+            &mut String::new()
+        )
+        .await
+        .is_err());
         fs::write(vault.join("Knowledge/Lesson.md"), "human note").unwrap();
         assert!(publish(
             &projects,
@@ -469,7 +497,8 @@ mod tests {
             &reviewed,
             &vault,
             "Knowledge/Lesson.md",
-            "Owner reviewed the abstraction and removed private details"
+            "Owner reviewed the abstraction and removed private details",
+            &mut String::new(),
         )
         .await
         .is_err());
@@ -485,6 +514,7 @@ mod tests {
             &vault,
             "Knowledge/Lesson.md",
             "Owner reviewed the abstraction and removed private details",
+            &mut String::new(),
         )
         .await
         .unwrap();

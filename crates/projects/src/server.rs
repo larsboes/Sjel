@@ -923,10 +923,12 @@ async fn serve() {
         let target = sjel_config::overlay_data_dir("projects-wal-backup")
             .expect("Projects snapshot requires an overlay")
             .join("projects.db");
-        tokio::spawn(sjel_server::owner_snapshot::serve_at(
+        let jobs = projects::jobs::router(projects.clone());
+        tokio::spawn(sjel_server::owner_snapshot::serve_at_with_jobs(
             "projects",
             target,
             move |target| owner.snapshot(target),
+            jobs,
         ));
     }
     tokio::spawn(reindex_loop(projects.clone()));
@@ -963,6 +965,17 @@ async fn reindex_loop(projects: Arc<Projects>) {
 
 fn main() {
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime could not start");
+    if std::env::args().nth(1).as_deref() == Some("check-owner") {
+        let checked = runtime.block_on(async {
+            let owner = projects::open_default().await?;
+            projects::ops::view_records(&owner).await.map(drop)
+        });
+        if let Err(error) = checked {
+            eprintln!("projects: staged owner check failed: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if std::env::args().nth(1).as_deref() == Some("snapshot") {
         #[cfg(feature = "turso-wal")]
         match runtime.block_on(sjel_server::owner_snapshot::submit("projects")) {

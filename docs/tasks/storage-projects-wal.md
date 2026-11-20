@@ -58,5 +58,7 @@ owner reindexes; whether any reached the shared index only is not checked.
 
 ## Remaining work
 
-Check one live write through the owner and the existing Projects file backup after cutover.
-The extended scratch rehearsal result is not recorded.
+Check one live CLI write through the owner and the existing Projects file backup after cutover.
+The agent shell received HTTP 401 from the CLI command socket and could not access the Projects
+backup source. Both checks still require an authorized operator shell. The extended scratch rehearsal
+result is not recorded.

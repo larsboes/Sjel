@@ -24,7 +24,7 @@ contains "$out" "search <words...>              Search commands, tools, capabili
 contains "$out" "storage <browse|report|discover|installed|reclaim|target>"
 contains "$out" "gates"
 contains "$out" "test"
-contains "$out" "cargo <args...>"
+contains "$out" "cargo [--scratch] <args...>"
 contains "$out" "cv [args...]"
 contains "$out" "work <command>"
 

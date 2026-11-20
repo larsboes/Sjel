@@ -390,6 +390,15 @@ pub fn write_transaction(conn: &mut Connection) -> Result<Transaction<'_>, rusql
     conn.transaction_with_behavior(TransactionBehavior::Immediate)
 }
 
+/// A transaction that only reads: one consistent snapshot across several
+/// queries, without the writer lock `write_transaction` takes up front.
+///
+/// Never write inside it. A write would have to upgrade the deferred lock,
+/// which is the `SQLITE_BUSY` failure `write_transaction` exists to prevent.
+pub fn read_transaction(conn: &mut Connection) -> Result<Transaction<'_>, rusqlite::Error> {
+    conn.transaction_with_behavior(TransactionBehavior::Deferred)
+}
+
 /// A TEXT column holding JSON, read into its type.
 ///
 /// The one shape SQLite has no type for. Postgres carried it three ways and all

@@ -5,7 +5,9 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use futures::future::{AbortHandle, Abortable};
 use futures::{stream, StreamExt};
+#[cfg(not(target_os = "ios"))]
 use nsh_base::button;
+#[cfg(not(target_os = "ios"))]
 use nsh_core::{
     element::TouchEvent,
     geometry::{point, size},
@@ -123,6 +125,7 @@ struct Fingers {
 }
 
 impl Fingers {
+    #[cfg(not(target_os = "ios"))]
     fn from_touch(event: &TouchEvent) -> Self {
         let mut points: Vec<_> = event
             .points
@@ -187,6 +190,8 @@ impl Snapshot {
 
 struct State {
     snap: Snapshot,
+    #[cfg(target_os = "ios")]
+    origin: (f32, f32),
     generation: u64,
     request: Option<AbortHandle>,
     fingers: Fingers,
@@ -228,6 +233,8 @@ fn feed() -> &'static Feed {
         Feed {
             state: Mutex::new(State {
                 snap,
+                #[cfg(target_os = "ios")]
+                origin: (0., 0.),
                 generation: 0,
                 request: None,
                 fingers: Fingers::default(),
@@ -424,6 +431,7 @@ fn resize(size: (f32, f32)) {
     load_tiles();
 }
 
+#[cfg(not(target_os = "ios"))]
 fn touch(event: &TouchEvent) {
     let finished = matches!(event.phase, TouchPhase::End | TouchPhase::Cancel);
     {
@@ -510,6 +518,7 @@ fn fit() {
     load_tiles();
 }
 
+#[cfg(not(target_os = "ios"))]
 fn rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<Points> {
     Bounds {
         origin: point(px(x), px(y)),
@@ -517,6 +526,7 @@ fn rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<Points> {
     }
 }
 
+#[cfg(not(target_os = "ios"))]
 fn draw(snap: &Snapshot) -> Painter {
     let camera = snap.camera;
     let mut p = Painter::new();
@@ -577,6 +587,7 @@ fn draw(snap: &Snapshot) -> Painter {
     p
 }
 
+#[cfg(not(target_os = "ios"))]
 fn action(label: impl Into<String>, press: impl Fn() + 'static) -> impl IntoElement {
     button()
         .px_3()
@@ -586,6 +597,7 @@ fn action(label: impl Into<String>, press: impl Fn() + 'static) -> impl IntoElem
 }
 
 /// The phone's global or per-trip travel map.
+#[cfg(not(target_os = "ios"))]
 #[component]
 pub fn MapScreen() -> impl IntoElement {
     let mut rx = feed().tx.subscribe();
@@ -772,7 +784,7 @@ pub fn MapScreen() -> impl IntoElement {
         })))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "ios")))]
 mod tests {
     use super::*;
     use sjel_gpui_core::travel::Place;
@@ -954,3 +966,8 @@ mod tests {
         }
     }
 }
+
+#[cfg(target_os = "ios")]
+mod phone;
+#[cfg(target_os = "ios")]
+pub use phone::{pinch, PhoneMap};

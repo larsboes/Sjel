@@ -1,126 +1,9 @@
-//! The phone's Settings, drawn by NSH (`docs/plans/gpui.md` §11).
-//!
-//! The shell owns everything this screen shows: pairing, the Macs it found, the capabilities that
-//! answered, the room scan, reminders and the appearance. It describes them as a
-//! [`SettingsState`], and the screen hands every press back as a [`SettingsAction`]. The screen
-//! itself knows no camera, no notification centre and no settings file.
-
-use std::sync::{Mutex, OnceLock};
+//! The NSH Settings view used by non-phone hosts.
 
 use nsh_base::button;
 use nsh_core::prelude::*;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
-/// One row of mutually exclusive options, such as the theme mode.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Choice {
-    /// The key the shell applies a pick by.
-    pub id: &'static str,
-    pub title: &'static str,
-    /// Each option's label and whether it is the current one.
-    pub options: Vec<(String, bool)>,
-}
-
-/// A Mac this phone found on the network.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct FoundMac {
-    pub name: String,
-    pub address: String,
-}
-
-/// What the screen draws. The shell rebuilds it after every change; equal states are not resent.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SettingsState {
-    pub status: String,
-    pub synced: Option<String>,
-    /// True once a capability answered, so the pairing card offers to pair again.
-    pub paired: bool,
-    /// True from a Scan or Join press until the owner decides.
-    pub joining: bool,
-    pub found: Vec<FoundMac>,
-    /// The paired Mac's capabilities, and whether each one answered.
-    pub capabilities: Vec<(String, bool)>,
-    pub room_status: String,
-    /// True when a Mac is in reach, so pending scans can be sent.
-    pub room_can_sync: bool,
-    pub reminders_on: bool,
-    pub reminders_sentence: String,
-    /// iOS refused notifications, so the way back is the system's own page.
-    pub reminders_denied: bool,
-    /// Dates past the number iOS holds, said rather than hidden.
-    pub reminders_dropped: Option<String>,
-    /// "How early", shown while reminders are on.
-    pub lead: Option<Choice>,
-    pub appearance: Vec<Choice>,
-    pub terminal: Vec<Choice>,
-}
-
-/// A press the shell answers.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SettingsAction {
-    /// Back to Today.
-    Back,
-    /// Present the camera for the Mac's pairing code.
-    Scan,
-    /// Ask the found Mac at this index to admit the phone.
-    Join(usize),
-    CaptureRoom,
-    SyncRoomScans,
-    ToggleReminders,
-    OpenSystemSettings,
-    /// Pick option `option` of the choice with this id.
-    Choose {
-        id: &'static str,
-        option: usize,
-    },
-}
-
-type Host = Box<dyn Fn(SettingsAction) + Send>;
-
-struct Feed {
-    state: Mutex<SettingsState>,
-    tx: Mutex<Option<UnboundedSender<SettingsState>>>,
-    host: Mutex<Option<Host>>,
-}
-
-fn feed() -> &'static Feed {
-    static FEED: OnceLock<Feed> = OnceLock::new();
-    FEED.get_or_init(|| Feed {
-        state: Mutex::new(SettingsState::default()),
-        tx: Mutex::new(None),
-        host: Mutex::new(None),
-    })
-}
-
-/// What the shell does with a press.
-pub fn set_host(host: impl Fn(SettingsAction) + Send + 'static) {
-    *feed().host.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(host));
-}
-
-/// Hands the screen the shell's current state. A state equal to the last one is dropped.
-pub fn set_state(next: SettingsState) {
-    {
-        let mut state = feed().state.lock().unwrap_or_else(|e| e.into_inner());
-        if *state == next {
-            return;
-        }
-        *state = next.clone();
-    }
-    if let Some(tx) = feed().tx.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-        let _ = tx.send(next);
-    }
-}
-
-fn send(action: SettingsAction) {
-    if let Some(host) = feed()
-        .host
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .as_ref()
-    {
-        host(action);
-    }
-}
+use crate::phone_settings::{send, snapshots, Choice, SettingsAction, SettingsState};
 
 fn muted() -> AdaptiveColor {
     nsh_base::theme().muted_foreground
@@ -293,6 +176,31 @@ fn body(state: SettingsState) -> impl IntoElement {
         page = page.child(found);
     }
 
+    page = page.child(
+        card()
+            .child(title("Health sync"))
+            .child(
+                text(state.health_status)
+                    .text_sm()
+                    .text_color(move || muted()),
+            )
+            .child(
+                state
+                    .health_last_synced
+                    .map(|at| text(format!("Last synced: {at}")).text_sm()),
+            )
+            .child(pill(
+                "Sync now",
+                state.health_can_sync,
+                SettingsAction::SyncHealth,
+            ))
+            .child(
+                text("Check read access in Apple Health › profile › Apps (under Privacy) › Sjel.")
+                    .text_xs()
+                    .text_color(move || muted()),
+            ),
+    );
+
     if !state.capabilities.is_empty() {
         let mut list = card().gap_2();
         for (name, up) in state.capabilities.iter().cloned() {
@@ -388,19 +296,7 @@ fn body(state: SettingsState) -> impl IntoElement {
 
 #[component]
 pub fn SettingsScreen() -> impl IntoElement {
-    let initial = feed()
-        .state
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone();
-    let state = signal(initial);
-    let (tx, mut rx) = unbounded_channel::<SettingsState>();
-    *feed().tx.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
-    spawn(async move {
-        while let Some(next) = rx.recv().await {
-            state.set(next);
-        }
-    });
+    let state = crate::nsh_ui::snapshot(snapshots());
     view()
         .flex_1()
         .child(dynamic(move || body(state.get()).into_element()))
@@ -409,7 +305,8 @@ pub fn SettingsScreen() -> impl IntoElement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use crate::phone_settings::{set_host, set_state, FoundMac};
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn the_screen_draws_the_shells_state_and_reports_presses() {
@@ -427,6 +324,8 @@ mod tests {
                 address: "192.0.2.4:8443".to_owned(),
             }],
             room_status: "No scans yet".to_owned(),
+            health_status: "No upload confirmed yet.".to_owned(),
+            health_can_sync: true,
             reminders_sentence: "Off · nothing is announced".to_owned(),
             appearance: vec![Choice {
                 id: "theme",
@@ -442,19 +341,26 @@ mod tests {
         .expect("the Settings screen starts");
         app.wait_for("text:Paired with Studio").unwrap();
         app.press("text:Join").unwrap();
+        app.wait_for("text:Health sync").unwrap();
+        app.wait_for("text:No upload confirmed yet.").unwrap();
+        app.press("text:Sync now").unwrap();
         app.press("text:Dark").unwrap();
         app.press("text:Scan").unwrap();
-        let current = feed().state.lock().unwrap().clone();
+        let current = snapshots().borrow().clone();
         set_state(SettingsState {
             status: "Point the camera at the code on your Mac.".to_owned(),
+            health_status: "Upload confirmed by your Mac.".to_owned(),
+            health_last_synced: Some("Nov 20, 4:50 PM".to_owned()),
             ..current
         });
         app.wait_for("text:Point the camera at the code on your Mac.")
             .unwrap();
+        app.wait_for("text:Last synced: Nov 20, 4:50 PM").unwrap();
         assert_eq!(
             *seen.lock().unwrap(),
             vec![
                 SettingsAction::Join(0),
+                SettingsAction::SyncHealth,
                 SettingsAction::Choose {
                     id: "theme",
                     option: 1

@@ -1,230 +1,23 @@
 //! Phone Finance screen drawn by NSH: overview, spend goals, transactions, subscriptions, and
 //! candidate review (`sjel_gpui_core::finance`).
 
-use std::sync::{Mutex, OnceLock};
-
 use nsh_base::{button, input};
 use nsh_core::prelude::*;
-use sjel_gpui_core::context::format_money;
-use sjel_gpui_core::device::Source;
 use sjel_gpui_core::finance::{
     calculate_monthly_burn, filter_transactions, format_exact_money, SubscriptionSummary,
     TransactionFilter,
 };
-use sjel_gpui_core::shell::{
-    self, BalanceKind, FinanceCandidate, FinanceDashboardProjection, SubscriptionRecord,
-};
-use tokio::sync::watch;
+use sjel_gpui_core::shell::{BalanceKind, FinanceCandidate};
 
 use crate::nsh_ui::{
     action, caption, empty_state, heading, metric_tile, pill_tab, progress_bar, section_heading,
     snapshot, status_chip, surface_card,
 };
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum FinanceTab {
-    #[default]
-    Overview,
-    Transactions,
-    Subscriptions,
-    Review,
-}
-
-impl FinanceTab {
-    pub const ALL: [Self; 4] = [
-        Self::Overview,
-        Self::Transactions,
-        Self::Subscriptions,
-        Self::Review,
-    ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Overview => "Overview",
-            Self::Transactions => "Transactions",
-            Self::Subscriptions => "Subscriptions",
-            Self::Review => "Review",
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct Snapshot {
-    pub dashboard: FinanceDashboardProjection,
-    pub subscriptions: Vec<SubscriptionRecord>,
-    pub candidates: Vec<FinanceCandidate>,
-    pub status: String,
-    pub loading: bool,
-    pub error: Option<String>,
-}
-
-impl Default for Snapshot {
-    fn default() -> Self {
-        Self {
-            dashboard: FinanceDashboardProjection::default(),
-            subscriptions: Vec::new(),
-            candidates: Vec::new(),
-            status: "Connect to the paired Mac to read finance records.".into(),
-            loading: false,
-            error: None,
-        }
-    }
-}
-
-struct State {
-    source: Option<Source>,
-    snap: Snapshot,
-}
-
-struct Feed {
-    state: Mutex<State>,
-    tx: watch::Sender<Snapshot>,
-}
-
-fn feed() -> &'static Feed {
-    static FEED: OnceLock<Feed> = OnceLock::new();
-    FEED.get_or_init(|| {
-        let snap = Snapshot::default();
-        let (tx, _) = watch::channel(snap.clone());
-        Feed {
-            state: Mutex::new(State { source: None, snap }),
-            tx,
-        }
-    })
-}
-
-fn state() -> std::sync::MutexGuard<'static, State> {
-    feed().state.lock().unwrap_or_else(|e| e.into_inner())
-}
-
-fn publish(s: &State) {
-    feed().tx.send_replace(s.snap.clone());
-}
-
-/// Connects the phone Finance screen to the Mac's shell or paired device client.
-pub fn connect(source: Source) {
-    {
-        let mut s = state();
-        s.source = Some(source);
-    }
-    load();
-}
-
-/// Replaces the current finance snapshot directly (used by offline caching and tests).
-pub fn set_snapshot(
-    dashboard: FinanceDashboardProjection,
-    subscriptions: Vec<SubscriptionRecord>,
-    candidates: Vec<FinanceCandidate>,
-) {
-    let mut s = state();
-    let tx_count = dashboard.transactions.len();
-    let sub_count = subscriptions.len();
-    let pending_count = candidates.iter().filter(|c| c.state == "pending").count();
-    s.snap.dashboard = dashboard;
-    s.snap.subscriptions = subscriptions;
-    s.snap.candidates = candidates;
-    s.snap.loading = false;
-    s.snap.error = None;
-    s.snap.status =
-        format!("{tx_count} transactions · {sub_count} subscriptions · {pending_count} to review");
-    publish(&s);
-}
-
-/// Refreshes dashboard, subscriptions, and pending candidates from the connected source.
-pub fn load() {
-    let source = {
-        let mut s = state();
-        let Some(source) = s.source.clone() else {
-            return;
-        };
-        s.snap.loading = true;
-        s.snap.error = None;
-        s.snap.status = "Reading finance records from the Mac…".into();
-        publish(&s);
-        source
-    };
-    shell::spawn(async move {
-        let (dash_res, subs_res, cand_res) = futures::join!(
-            source.finance_dashboard(),
-            source.finance_subscriptions(),
-            source.finance_candidates(),
-        );
-        let mut s = state();
-        s.snap.loading = false;
-        match dash_res {
-            Ok(dashboard) => {
-                s.snap.dashboard = dashboard;
-                if let Ok(subs) = subs_res {
-                    s.snap.subscriptions = subs;
-                }
-                if let Ok(cands) = cand_res {
-                    s.snap.candidates = cands;
-                }
-                let pending = s
-                    .snap
-                    .candidates
-                    .iter()
-                    .filter(|c| c.state == "pending")
-                    .count();
-                s.snap.status = format!(
-                    "{} transactions · {} subscriptions · {pending} to review",
-                    s.snap.dashboard.transactions.len(),
-                    s.snap.subscriptions.len()
-                );
-            }
-            Err(err) => {
-                s.snap.error = Some(err);
-            }
-        }
-        publish(&s);
-    });
-}
-
-fn review_candidate(id: String, decision: &'static str) {
-    let source = {
-        let mut s = state();
-        // Optimistically update local candidate state so the phone UI responds immediately.
-        for candidate in &mut s.snap.candidates {
-            if candidate.id == id {
-                candidate.state = if decision == "confirm" {
-                    "confirmed".into()
-                } else {
-                    "rejected".into()
-                };
-            }
-        }
-        let pending = s
-            .snap
-            .candidates
-            .iter()
-            .filter(|c| c.state == "pending")
-            .count();
-        s.snap.status = format!("Recorded {decision} · {pending} candidates left to review");
-        publish(&s);
-        s.source.clone()
-    };
-    let Some(source) = source else {
-        return;
-    };
-    shell::spawn(async move {
-        if let Err(err) = source.finance_review_candidate(&id, decision).await {
-            let mut s = state();
-            s.snap.error = Some(err);
-            publish(&s);
-        } else {
-            load();
-        }
-    });
-}
-
-fn format_signed_cents(cents: i64, currency: &str) -> String {
-    let code = if currency.trim().is_empty() {
-        "EUR"
-    } else {
-        currency
-    };
-    format_money(cents, code)
-}
+use crate::phone_finance::{
+    format_signed_cents, load, review_candidate, snapshots, FinanceTab, Snapshot,
+};
+pub use crate::phone_finance::connect;
 
 fn overview_section(snap: &Snapshot) -> nsh_core::element::AnyElement {
     let summary = &snap.dashboard.summary;
@@ -628,7 +421,7 @@ fn review_section(snap: &Snapshot) -> nsh_core::element::AnyElement {
 /// Phone Finance screen with Overview, Transactions, Subscriptions, and Review sub-tabs.
 #[component]
 pub fn FinanceScreen() -> impl IntoElement {
-    let snap = snapshot(&feed().tx);
+    let snap = snapshot(snapshots());
     let tab = signal(FinanceTab::Overview);
     let query = signal(String::new());
     let category = signal(None::<String>);
@@ -725,9 +518,10 @@ pub fn FinanceScreen() -> impl IntoElement {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::phone_finance::set_snapshot;
     use sjel_gpui_core::shell::{
-        FinanceDashboardSummary, FinancePlanningView, FinanceSpendGoal, FinanceTransaction,
-        PricePointRecord, StateChangeRecord,
+        FinanceDashboardProjection, FinanceDashboardSummary, FinancePlanningView, FinanceSpendGoal,
+        FinanceTransaction, PricePointRecord, StateChangeRecord, SubscriptionRecord,
     };
 
     #[test]

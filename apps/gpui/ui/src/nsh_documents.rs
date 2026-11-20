@@ -18,15 +18,51 @@ use sjel_gpui_core::originals::Originals;
 use sjel_gpui_core::shell::{self, DocumentDetail, DocumentSummary};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
+#[cfg(not(target_os = "ios"))]
 use crate::nsh_calendar::calendar_screen;
+#[cfg(not(target_os = "ios"))]
 use crate::nsh_capture::capture_screen;
+#[cfg(not(target_os = "ios"))]
 use crate::nsh_mail::mail_screen;
+#[cfg(not(target_os = "ios"))]
 use crate::nsh_people::people_screen;
+#[cfg(not(target_os = "ios"))]
 use crate::nsh_settings::settings_screen;
+#[cfg(not(target_os = "ios"))]
 use crate::nsh_today::today_screen;
 
 /// The native component that shows a PDF at a file path (`ios/src/nsh.rs` registers it).
 pub const PDF_COMPONENT: &str = "sjel.pdf";
+
+/// The UIKit surface hosting the GPUI Documents route on iPhone.
+#[cfg(target_os = "ios")]
+pub const PHONE_DOCUMENTS_COMPONENT: &str = "sjel.gpui-documents";
+
+/// The UIKit surface hosting the GPUI Today route on iPhone.
+#[cfg(target_os = "ios")]
+pub const PHONE_SETTINGS_COMPONENT: &str = "sjel.gpui-settings";
+#[cfg(target_os = "ios")]
+pub const PHONE_TODAY_COMPONENT: &str = "sjel.gpui-today";
+
+/// The UIKit surface hosting the GPUI Capture route on iPhone.
+#[cfg(target_os = "ios")]
+pub const PHONE_CAPTURE_COMPONENT: &str = "sjel.gpui-capture";
+
+/// The UIKit surface hosting the GPUI Projects route on iPhone.
+#[cfg(target_os = "ios")]
+pub const PHONE_PROJECTS_COMPONENT: &str = "sjel.gpui-projects";
+
+/// The UIKit surface hosting GPUI People and Places on iPhone.
+#[cfg(target_os = "ios")]
+pub const PHONE_CALENDAR_COMPONENT: &str = "sjel.gpui-calendar";
+#[cfg(target_os = "ios")]
+pub const PHONE_FINANCE_COMPONENT: &str = "sjel.gpui-finance";
+#[cfg(target_os = "ios")]
+pub const PHONE_MAIL_COMPONENT: &str = "sjel.gpui-mail";
+#[cfg(target_os = "ios")]
+pub const PHONE_INVENTORY_COMPONENT: &str = "sjel.gpui-inventory";
+#[cfg(target_os = "ios")]
+pub const PHONE_PEOPLE_COMPONENT: &str = "sjel.gpui-people";
 
 /// Which shared NSH screen [`NshHostScreen`] displays.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -689,19 +725,49 @@ pub fn NshHostScreen() -> impl IntoElement {
         .child(top_drilldown_bar)
         .child(more_drawer)
         .child(view().flex_1().child(dynamic(move || match page.get() {
+            #[cfg(target_os = "ios")]
+            NshPage::Today => native(PHONE_TODAY_COMPONENT).flex_1().into_element(),
+            #[cfg(not(target_os = "ios"))]
             NshPage::Today => today_screen().into_element(),
+            #[cfg(target_os = "ios")]
+            NshPage::Calendar => native(PHONE_CALENDAR_COMPONENT).flex_1().into_element(),
+            #[cfg(not(target_os = "ios"))]
             NshPage::Calendar => calendar_screen().into_element(),
             NshPage::Map => crate::nsh_map::map_screen().into_element(),
             NshPage::Travel => crate::nsh_travel::travel_screen().into_element(),
+            #[cfg(target_os = "ios")]
+            NshPage::Projects => native(PHONE_PROJECTS_COMPONENT).flex_1().into_element(),
+            #[cfg(not(target_os = "ios"))]
             NshPage::Projects => crate::nsh_projects::projects_screen().into_element(),
             NshPage::Interior => crate::nsh_interior::interior_screen().into_element(),
             NshPage::Edge => crate::nsh_edge::edge_screen().into_element(),
+            #[cfg(target_os = "ios")]
+            NshPage::Capture => native(PHONE_CAPTURE_COMPONENT).flex_1().into_element(),
+            #[cfg(not(target_os = "ios"))]
             NshPage::Capture => capture_screen().into_element(),
+            #[cfg(target_os = "ios")]
+            NshPage::People => native(PHONE_PEOPLE_COMPONENT).flex_1().into_element(),
+            #[cfg(not(target_os = "ios"))]
             NshPage::People => people_screen().into_element(),
+            #[cfg(target_os = "ios")]
+            NshPage::Settings => native(PHONE_SETTINGS_COMPONENT).flex_1().into_element(),
+            #[cfg(not(target_os = "ios"))]
             NshPage::Settings => settings_screen().into_element(),
+            #[cfg(target_os = "ios")]
+            NshPage::Documents => native(PHONE_DOCUMENTS_COMPONENT).flex_1().into_element(),
+            #[cfg(not(target_os = "ios"))]
             NshPage::Documents => documents_screen().into_element(),
+            #[cfg(target_os = "ios")]
+            NshPage::Mail => native(PHONE_MAIL_COMPONENT).flex_1().into_element(),
+            #[cfg(not(target_os = "ios"))]
             NshPage::Mail => mail_screen().into_element(),
+            #[cfg(target_os = "ios")]
+            NshPage::Finance => native(PHONE_FINANCE_COMPONENT).flex_1().into_element(),
+            #[cfg(not(target_os = "ios"))]
             NshPage::Finance => crate::nsh_finance::finance_screen().into_element(),
+            #[cfg(target_os = "ios")]
+            NshPage::Inventory => native(PHONE_INVENTORY_COMPONENT).flex_1().into_element(),
+            #[cfg(not(target_os = "ios"))]
             NshPage::Inventory => crate::nsh_inventory::inventory_screen().into_element(),
         })))
         .child(closable.then_some(bottom_tab_bar))

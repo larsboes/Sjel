@@ -5,7 +5,7 @@ use std::rc::Rc;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{div, prelude::*, px, rems, rgb, Context, FocusHandle, SharedString, Window};
 use serde_json::Value;
-use sjel_gpui_core::record::registry::{self, View};
+use sjel_gpui_core::record::registry::{self, Binding, View};
 
 use crate::data::{self, Remote, Repo};
 use crate::ely::buttons::{Button, ButtonVariant};
@@ -41,6 +41,16 @@ impl RegistryPage {
 
     fn load(&mut self, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
+        if repo.is_replica() {
+            data::read_repo(
+                cx,
+                self,
+                |page| &mut page.data,
+                &repo,
+                |repo| async move { repo.registry_view(None).await },
+            );
+            return;
+        }
         let capability = self.capability.clone();
         data::read(
             cx,
@@ -67,7 +77,21 @@ impl RegistryPage {
             }
         };
         self.history.push((view.clone(), self.selected.take()));
+        self.read_binding(view, binding, cx);
+    }
+
+    fn read_binding(&mut self, view: View, binding: Binding, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
+        if repo.is_replica() {
+            data::read_repo(
+                cx,
+                self,
+                |page| &mut page.data,
+                &repo,
+                move |repo| async move { repo.registry_view(Some(binding)).await },
+            );
+            return;
+        }
         data::read(
             cx,
             self,
@@ -147,16 +171,7 @@ impl Render for RegistryPage {
                         .disabled(loading)
                         .on_click(cx.listener(|page, _, _, cx| {
                             if let Some(view) = page.data.value.clone() {
-                                let repo = page.repo.clone();
-                                data::read(
-                                    cx,
-                                    page,
-                                    |page| &mut page.data,
-                                    &repo,
-                                    move |shell| async move {
-                                        registry::read(&shell, view.registry, view.binding).await
-                                    },
-                                );
+                                page.read_binding(view.clone(), view.binding, cx);
                                 page.selected = None;
                             } else {
                                 page.load(cx);

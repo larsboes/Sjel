@@ -18,9 +18,8 @@ final class HealthSync {
   private let defaults = UserDefaults.standard
   private let syncedKey = "health.synced-through"
   private let attemptKey = "health.last-attempt"
-  /// What the last read found and what the Mac answered, for diagnosis.
-  private let readKey = "health.last-read"
-  private let resultKey = "health.last-result"
+  private let lastSyncedKey = "health.last-synced"
+  private let statusKey = "health.sync-status"
   /// Days re-sent before the last synced one: today's totals grow until midnight, and a watch can
   /// deliver late.
   private let overlapDays = 2
@@ -93,31 +92,66 @@ final class HealthSync {
     return formatter
   }()
 
-  func collect() {
-    guard HKHealthStore.isHealthDataAvailable(), !running else { return }
+  func report(_ status: String? = nil) {
+    let last = (defaults.object(forKey: lastSyncedKey) as? Date)?
+      .formatted(date: .abbreviated, time: .shortened)
+    let message = status ?? (running ? "Syncing…" : defaults.string(forKey: statusKey))
+      ?? (last == nil ? "No upload confirmed yet." : "Upload confirmed by your Mac.")
+    message.withCString { message in
+      if let last {
+        last.withCString { sjel_ios_health_state(message, $0, running) }
+      } else {
+        sjel_ios_health_state(message, nil, running)
+      }
+    }
+  }
+
+  func collect(manual: Bool) {
+    guard !running else { return }
+    guard HKHealthStore.isHealthDataAvailable() else {
+      failed("Apple Health is unavailable on this device.")
+      return
+    }
     let now = Date()
-    if let last = defaults.object(forKey: attemptKey) as? Date, now.timeIntervalSince(last) < minimumGap {
+    if !manual, let last = defaults.object(forKey: attemptKey) as? Date,
+      now.timeIntervalSince(last) < minimumGap {
       return
     }
     running = true
     defaults.set(now, forKey: attemptKey)
-    // A read-only request: HealthKit never says which types the person refused, so a refused
-    // type reads as no data, and the upload carries what was allowed.
-    store.requestAuthorization(toShare: [], read: readTypes) { _, _ in
-      self.read(until: now)
+    report("Checking Apple Health…")
+    store.requestAuthorization(toShare: [], read: readTypes) { completed, _ in
+      DispatchQueue.main.async {
+        // A completed request does not tell us which read permissions were granted.
+        guard completed else {
+          self.failed("Could not request Apple Health access.")
+          return
+        }
+        self.read(until: Date())
+      }
     }
   }
 
-  /// Rust's answer for the last upload: the Mac stored it through `through` (`YYYY-MM-DD`), or
-  /// `error` says why not. A failure clears the throttle, so the next foreground tries again.
+  private func failed(_ message: String) {
+    running = false
+    defaults.removeObject(forKey: attemptKey)
+    defaults.set(message, forKey: statusKey)
+    report()
+  }
+
+  /// Only a Mac acknowledgement advances the date and records a successful sync.
   func finished(through: String?, error: String?) {
+    if let error {
+      failed(error)
+      return
+    }
     if let through, let date = day.date(from: through) {
       defaults.set(date, forKey: syncedKey)
     }
-    defaults.set(error ?? "stored through \(through ?? "-")", forKey: resultKey)
-    if error != nil {
-      defaults.removeObject(forKey: attemptKey)
-    }
+    running = false
+    defaults.set(Date(), forKey: lastSyncedKey)
+    defaults.removeObject(forKey: statusKey)
+    report()
   }
 
   private func startDay(_ now: Date) -> Date {
@@ -136,6 +170,14 @@ final class HealthSync {
     let lock = NSLock()
     var values: [[String: Any]] = []
     var sleep: [[String: String]] = []
+    var readFailed = false
+
+    func recordFailure(_ error: Error?) {
+      guard let error, (error as? HKError)?.code != .errorNoData else { return }
+      lock.lock()
+      readFailed = true
+      lock.unlock()
+    }
 
     for quantity in quantities {
       group.enter()
@@ -145,8 +187,9 @@ final class HealthSync {
         options: quantity.option,
         anchorDate: from,
         intervalComponents: DateComponents(day: 1))
-      query.initialResultsHandler = { _, collection, _ in
+      query.initialResultsHandler = { _, collection, error in
         defer { group.leave() }
+        recordFailure(error)
         guard let collection else { return }
         var found: [[String: Any]] = []
         collection.enumerateStatistics(from: from, to: now) { statistics, _ in
@@ -180,8 +223,9 @@ final class HealthSync {
       predicate: HKQuery.predicateForSamples(withStart: sleepFrom, end: now),
       limit: HKObjectQueryNoLimit,
       sortDescriptors: nil
-    ) { _, samples, _ in
+    ) { _, samples, error in
       defer { group.leave() }
+      recordFailure(error)
       var found: [[String: String]] = []
       for case let sample as HKCategorySample in samples ?? [] {
         guard let stage = Self.stage(sample.value) else { continue }
@@ -199,10 +243,8 @@ final class HealthSync {
     store.execute(sleepQuery)
 
     group.notify(queue: .main) {
-      self.running = false
-      self.defaults.set("\(values.count) values, \(sleep.count) sleep samples from \(self.day.string(from: from))", forKey: self.readKey)
       guard !values.isEmpty || !sleep.isEmpty else {
-        self.defaults.removeObject(forKey: self.attemptKey)
+        self.failed(readFailed ? "Could not read Apple Health." : "No readable data from Apple Health.")
         return
       }
       let body: [String: Any] = [
@@ -213,7 +255,11 @@ final class HealthSync {
       ]
       guard let data = try? JSONSerialization.data(withJSONObject: body),
         let text = String(data: data, encoding: .utf8)
-      else { return }
+      else {
+        self.failed("Could not prepare the Health upload.")
+        return
+      }
+      self.report("Sending to your Mac…")
       text.withCString { sjel_ios_health_upload($0) }
     }
   }
@@ -232,8 +278,8 @@ final class HealthSync {
 }
 
 @_cdecl("sjel_ios_health_collect")
-func sjelIosHealthCollect() {
-  DispatchQueue.main.async { HealthSync.shared.collect() }
+func sjelIosHealthCollect(_ manual: Bool) {
+  DispatchQueue.main.async { HealthSync.shared.collect(manual: manual) }
 }
 
 @_cdecl("sjel_ios_health_finished")

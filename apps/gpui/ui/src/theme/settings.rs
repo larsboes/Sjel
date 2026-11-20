@@ -423,6 +423,15 @@ impl ThemeContext {
             window.appearance(),
             WindowAppearance::Dark | WindowAppearance::VibrantDark
         );
+        Self::sync_with_system(appearance, system_dark, cx)
+    }
+
+    /// Applies settings using the host's effective light or dark appearance.
+    pub fn sync_with_system(
+        appearance: AppearanceSettings,
+        system_dark: bool,
+        cx: &mut gpui::App,
+    ) -> Palette {
         let is_dark = appearance.theme_mode.is_dark(system_dark);
         let base = if is_dark {
             Palette::dark()

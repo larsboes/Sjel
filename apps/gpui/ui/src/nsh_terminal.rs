@@ -1,14 +1,15 @@
 //! NSH terminal grid and native keyboard over the shared VT parser and signed pty API.
-use crate::{
-    nsh_ui::{action, caption, field, heading, snapshot},
-    terminal_screen::{spans, Screen, Span},
-    theme::MONOKAI,
-};
+#[cfg(not(target_os = "ios"))]
+use crate::nsh_ui::{action, caption, field, heading, snapshot};
+use crate::terminal_screen::{spans, Screen, Span};
+use crate::theme::MONOKAI;
+#[cfg(not(target_os = "ios"))]
 use alacritty_terminal::{index::Side, selection::SelectionType};
 use futures::{
     future::{AbortHandle, Abortable},
     StreamExt,
 };
+#[cfg(not(target_os = "ios"))]
 use nsh_core::{element::TouchEvent, prelude::*, TouchPhase};
 use sjel_gpui_core::{
     shell,
@@ -492,6 +493,7 @@ fn close() {
         refresh();
     });
 }
+#[cfg(not(target_os = "ios"))]
 fn touch(event: &TouchEvent) {
     let Some(point) = event.points.first() else {
         return;
@@ -562,6 +564,7 @@ fn zoom(steps: i32) {
     }
 }
 
+#[cfg(not(target_os = "ios"))]
 fn cell_size(snap: &Snapshot) -> (f32, f32) {
     let size = snap.font_size.max(1);
     let family = snap
@@ -587,6 +590,7 @@ fn edit_bytes(before: &str, after: &str) -> Vec<u8> {
 }
 
 /// Authenticated pty tabs with the same ANSI grid, scrollback, selection and paste rules.
+#[cfg(not(target_os = "ios"))]
 #[component]
 pub fn TerminalScreen() -> impl IntoElement {
     let snap = snapshot(&feed().tx);
@@ -596,6 +600,7 @@ pub fn TerminalScreen() -> impl IntoElement {
         else { terminal_content().into_element() }
     }))
 }
+#[cfg(not(target_os = "ios"))]
 #[component]
 fn TerminalContent() -> impl IntoElement {
     let snap = snapshot(&feed().tx);
@@ -760,6 +765,7 @@ fn TerminalContent() -> impl IntoElement {
         )
 }
 
+#[cfg(not(target_os = "ios"))]
 fn terminal_tools(
     snap: Signal<Snapshot>,
     cwd: Signal<String>,
@@ -883,7 +889,7 @@ fn terminal_tools(
         }))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "ios")))]
 mod tests {
     use super::*;
     #[test]
@@ -946,4 +952,14 @@ mod tests {
         set_unlocked(false);
         app.wait_for("text:Terminal locked").unwrap();
     }
+}
+
+#[cfg(target_os = "ios")]
+mod phone;
+#[cfg(target_os = "ios")]
+pub use phone::PhoneTerminal;
+#[cfg(target_os = "ios")]
+fn cell_size(snap: &Snapshot) -> (f32, f32) {
+    let font = f32::from(snap.font_size.max(1));
+    (font * 0.602, font * 1.4)
 }

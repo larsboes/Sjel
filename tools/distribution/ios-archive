@@ -4,21 +4,24 @@
 set -euo pipefail
 
 usage() {
-  echo "tools/distribution/ios-archive --version X.Y.Z --build NUMBER --out NEW_DIR [--team TEAM_ID] [--export] [--upload]"
-  echo "Without --team this prepares an unsigned archive. --export requires a signing team."
+  echo "tools/distribution/ios-archive --version X.Y.Z --build NUMBER --out NEW_DIR [--target-dir DIR] [--team TEAM_ID] [--development-ipa] [--export] [--upload]"
+  echo "Without --team this prepares an unsigned archive. Both IPA options require a signing team."
+  echo "--development-ipa packages the signed app for local installation through Device Hub."
   echo "--upload sends the exported build to App Store Connect with the API key in"
   echo "~/.appstoreconnect (one AuthKey_*.p8 and an issuer_id). It needs no Xcode account."
 }
-version=""; build=""; out=""; team=""; export_ipa=false; upload=false
+version=""; build=""; out=""; team=""; target=""; development_ipa=false; export_ipa=false; upload=false
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --help|-h) usage; exit 0 ;;
+    --development-ipa) development_ipa=true; shift ;;
     --export) export_ipa=true; shift ;;
     --upload) upload=true; export_ipa=true; shift ;;
-    --version|--build|--out|--team)
+    --version|--build|--out|--target-dir|--team)
       [ "$#" -ge 2 ] || { usage >&2; exit 2; }
       case "$1" in
         --version) version="$2" ;; --build) build="$2" ;; --out) out="$2" ;; --team) team="$2" ;;
+        --target-dir) target="$2" ;;
       esac
       shift 2 ;;
     *) usage >&2; exit 2 ;;
@@ -31,6 +34,7 @@ if [ -n "$team" ]; then
   [[ "$team" =~ ^[A-Z0-9]{10}$ ]] || { echo "invalid Apple team identifier" >&2; exit 2; }
 fi
 [ "$export_ipa" = false ] || [ -n "$team" ] || { echo "--export requires --team" >&2; exit 2; }
+[ "$development_ipa" = false ] || [ -n "$team" ] || { echo "--development-ipa requires --team" >&2; exit 2; }
 [ "$upload" = false ] || [ -n "$team" ] || { echo "--upload requires --team" >&2; exit 2; }
 [ "$(uname -s)" = Darwin ] || { echo "iOS archive preparation requires macOS" >&2; exit 1; }
 for tool in cargo xcrun xcodebuild xcodegen; do
@@ -57,7 +61,9 @@ done
 [ -f "$host/project.yml" ] || { echo "native host project spec is missing" >&2; exit 1; }
 export IPHONEOS_DEPLOYMENT_TARGET="$(sed -n 's/^ *iOS: *"\([^"]*\)".*/\1/p' "$host/project.yml")"
 [[ "$IPHONEOS_DEPLOYMENT_TARGET" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "invalid iOS deployment target" >&2; exit 1; }
-target="$out/cargo-target"
+target="${target:-$out/cargo-target}"
+mkdir -p "$target"
+target="$(cd "$target" && pwd)"
 # SJEL_IOS_FEATURES adds cargo features to the Rust library. A release leaves it unset.
 cargo build --locked --release --manifest-path "$root/apps/gpui/Cargo.toml" \
   --package sjel-gpui-ios --target aarch64-apple-ios --target-dir "$target" --lib \
@@ -93,6 +99,14 @@ xcodebuild -project "$host/SjelIOS.xcodeproj" -scheme SjelIOS -configuration Rel
   "MARKETING_VERSION=$version" "CURRENT_PROJECT_VERSION=$build" \
   GENERATE_INFOPLIST_FILE=NO INFOPLIST_KEY_CFBundleShortVersionString="$version" \
   INFOPLIST_KEY_CFBundleVersion="$build" "${signing[@]}" "${update[@]}" archive
+
+if [ "$development_ipa" = true ]; then
+  app="$out/Sjel.xcarchive/Products/Applications/SjelIOS.app"
+  codesign --verify --strict "$app"
+  mkdir "$stage/Payload"
+  ditto --norsrc "$app" "$stage/Payload/SjelIOS.app"
+  ditto -c -k --norsrc --keepParent "$stage/Payload" "$out/SjelIOS-development.ipa"
+fi
 
 if [ -n "$team" ]; then
   upload_destination=export

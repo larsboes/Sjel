@@ -49,58 +49,58 @@ pub(crate) fn phone_screen(target: &Target) -> Screen {
 
 impl AppState {
     pub(crate) fn select_tab(&mut self, tab: Tab) {
-        use sjel_gpui_ui::nsh_documents::{set_nsh_page, NshPage};
         let page = match tab {
             Tab::Today => {
-                nsh_today::load();
-                NshPage::Today
+                phone_today::load();
+                PhonePage::Today
             }
             Tab::Projects => {
+                #[cfg(not(target_os = "ios"))]
                 sjel_gpui_ui::nsh_projects::load();
-                NshPage::Projects
+                PhonePage::Projects
             }
             Tab::Calendar => {
-                nsh_calendar::load();
-                NshPage::Calendar
+                phone_calendar::load();
+                PhonePage::Calendar
             }
             Tab::People => {
-                sjel_gpui_ui::nsh_people::load();
-                NshPage::People
+                sjel_gpui_ui::phone_people::load();
+                PhonePage::People
             }
             Tab::Interior => {
                 sjel_gpui_ui::nsh_interior::load();
                 load_roomplan_archive();
-                NshPage::Interior
+                PhonePage::Interior
             }
             Tab::Inbox => {
-                sjel_gpui_ui::nsh_capture::load();
-                NshPage::Capture
+                sjel_gpui_ui::phone_capture::load();
+                PhonePage::Capture
             }
             Tab::Travel => {
                 sjel_gpui_ui::nsh_travel::open(sjel_gpui_core::travel::TravelRoute::Trips);
-                NshPage::Travel
+                PhonePage::Travel
             }
             Tab::Settings => {
                 notify::report();
-                NshPage::Settings
+                PhonePage::Settings
             }
-            Tab::Mail => NshPage::Mail,
-            Tab::Documents => NshPage::Documents,
+            Tab::Mail => PhonePage::Mail,
+            Tab::Documents => PhonePage::Documents,
             Tab::Finance => {
-                sjel_gpui_ui::nsh_finance::load();
-                NshPage::Finance
+                sjel_gpui_ui::phone_finance::load();
+                PhonePage::Finance
             }
             Tab::Inventory => {
-                sjel_gpui_ui::nsh_inventory::load();
-                NshPage::Inventory
+                sjel_gpui_ui::phone_inventory::load();
+                PhonePage::Inventory
             }
         };
-        set_nsh_page(page);
+        open_page(page);
     }
     pub(crate) fn open_link(&mut self, link: &str) {
         if let Some(day) = reminders::link_day(link) {
             self.select_tab(Tab::Calendar);
-            nsh_calendar::open_day(day);
+            phone_calendar::open_day(day);
         } else if let Some(screen) = phone_link(link) {
             match screen {
                 Screen::Tab(tab) => self.select_tab(tab),
@@ -108,7 +108,7 @@ impl AppState {
                 Screen::Terminal => nsh_edge::open(Seat::Terminal),
                 Screen::Mac(page) => {
                     self.select_tab(Tab::Today);
-                    nsh_today::set_note(Some(format!("{page} opens on the Mac.")));
+                    phone_today::set_note(Some(format!("{page} opens on the Mac.")));
                 }
             }
         }
@@ -117,10 +117,13 @@ impl AppState {
         match event {
             TodayEvent::OpenDay(day) => {
                 self.select_tab(Tab::Calendar);
-                nsh_calendar::open_day(day);
+                phone_calendar::open_day(day);
             }
             TodayEvent::OpenProject(name) => {
+                #[cfg(target_os = "ios")]
+                crate::projects::open_project(name);
                 self.select_tab(Tab::Projects);
+                #[cfg(not(target_os = "ios"))]
                 sjel_gpui_ui::nsh_projects::open_project(Some(name));
             }
             TodayEvent::Settings => self.select_tab(Tab::Settings),

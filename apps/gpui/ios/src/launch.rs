@@ -6,10 +6,10 @@ use super::*;
 /// `SJEL_REGISTER=places` opens the Places side of the People tab, and `SJEL_PERSON=Ada` opens the
 /// card of the first person whose name contains that text. Both exist so a screenshot can reach a
 /// page a hand did not navigate to, like `SJEL_DAY` and `SJEL_TAB`; a phone never sets either.
-pub(crate) fn launch_register() -> sjel_gpui_ui::nsh_people::Register {
+pub(crate) fn launch_register() -> sjel_gpui_ui::phone_people::Register {
     match std::env::var("SJEL_REGISTER").unwrap_or_default().as_str() {
-        "places" => sjel_gpui_ui::nsh_people::Register::Places,
-        _ => sjel_gpui_ui::nsh_people::Register::People,
+        "places" => sjel_gpui_ui::phone_people::Register::Places,
+        _ => sjel_gpui_ui::phone_people::Register::People,
     }
 }
 

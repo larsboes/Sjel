@@ -1,294 +1,16 @@
-//! People and Places, drawn by NSH from the Mac's read-only copy (`docs/plans/gpui.md` §11).
-//!
-//! One register with two sides: who somebody is, and where the two of you have been. The switch
-//! chooses the side and clears the shared search field. The screen is read-only by intent: the
-//! registry's writes are the operator's (`/api/people/decide`), so nothing here offers a control
-//! that would have to be refused.
-
-use std::sync::{Arc, Mutex, OnceLock};
+//! NSH rendering for the phone's read-only people and places.
 
 use nsh_base::{button, input};
 use nsh_core::prelude::*;
-use sjel_gpui_core::mirror::{Mirror, PeopleCopy};
-use sjel_gpui_core::people::{self, Person};
-use sjel_gpui_core::places::{self, PersonLink, Place};
-use sjel_gpui_core::shell;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
+use sjel_gpui_core::{
+    people::Person,
+    places::{self, Place},
+};
 
-/// Which side of the register is on screen.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Register {
-    #[default]
-    People,
-    Places,
-}
-
-/// What the register read from the copy, and what the host said about it.
-#[derive(Clone, Debug, Default, PartialEq)]
-struct Snapshot {
-    source: String,
-    people: Vec<Person>,
-    places: Vec<Place>,
-    links: Vec<PersonLink>,
-    error: Option<String>,
-    loaded: bool,
-    loading: bool,
-    has_copy: bool,
-    /// A card a launch flag asked for (`SJEL_PERSON`), opened once the rows hold it.
-    pending_open: Option<String>,
-    register: Register,
-}
-
-#[derive(Default)]
-struct State {
-    copy: Option<Arc<Mirror>>,
-    missing: Option<String>,
-    note: Option<String>,
-    generation: u64,
-}
-
-struct Feed {
-    state: Mutex<State>,
-    snapshot: Mutex<Snapshot>,
-    tx: Mutex<Option<UnboundedSender<Snapshot>>>,
-    refresh: Mutex<Option<Box<dyn Fn() + Send>>>,
-}
-
-fn feed() -> &'static Feed {
-    static FEED: OnceLock<Feed> = OnceLock::new();
-    FEED.get_or_init(|| Feed {
-        state: Mutex::new(State::default()),
-        snapshot: Mutex::new(Snapshot::default()),
-        tx: Mutex::new(None),
-        refresh: Mutex::new(None),
-    })
-}
-
-fn update(change: impl FnOnce(&mut Snapshot)) {
-    let snap = {
-        let mut snap = feed().snapshot.lock().unwrap_or_else(|e| e.into_inner());
-        change(&mut snap);
-        snap.clone()
-    };
-    if let Some(tx) = feed().tx.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-        let _ = tx.send(snap);
-    }
-}
-
-/// The register's own line: which copy this is, and how old.
-fn source_line(state: &State) -> String {
-    let Some(copy) = state.copy.as_ref() else {
-        return state
-            .missing
-            .clone()
-            .unwrap_or_else(|| "No copy on this phone yet.".to_owned());
-    };
-    let line = format!("Copy from {} · read-only", copy.manifest().built_label());
-    match state.note.as_ref() {
-        Some(note) => format!("{line} · {note}"),
-        None => line,
-    }
-}
-
-/// What "Refresh" asks the host for: a newer copy, or a sync that carries one.
-pub fn set_refresh(refresh: impl Fn() + Send + 'static) {
-    *feed().refresh.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(refresh));
-}
-
-/// Chooses the register a launch opens on (`SJEL_REGISTER`).
-pub fn set_register(register: Register) {
-    update(|snap| snap.register = register);
-}
-
-/// Opens the card of the first person, else the first place, whose name contains `text`
-/// (`SJEL_PERSON`). A name that matches nothing yet is kept for the next read.
-pub fn open_named(text: &str) {
-    let text = text.to_owned();
-    update(|snap| snap.pending_open = Some(text));
-}
-
-/// Hands the screen the Mac's copy, or the reason it is not there, and reads both registers.
-/// A newer copy moves the rows, not the person: the open card and the side stay.
-pub fn set_copy(copy: Option<Arc<Mirror>>, missing: Option<String>) {
-    let source = {
-        let mut state = feed().state.lock().unwrap_or_else(|e| e.into_inner());
-        state.copy = copy;
-        state.missing = missing;
-        source_line(&state)
-    };
-    let has_copy = feed()
-        .state
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .copy
-        .is_some();
-    update(|snap| {
-        snap.source = source;
-        snap.has_copy = has_copy;
-        snap.error = None;
-    });
-    load();
-}
-
-/// A sentence from the host, such as why a newer copy could not be fetched. The rows stay.
-pub fn set_note(note: Option<String>) {
-    let source = {
-        let mut state = feed().state.lock().unwrap_or_else(|e| e.into_inner());
-        state.note = note;
-        source_line(&state)
-    };
-    update(|snap| snap.source = source);
-}
-
-/// Reads both registers from the copy. A newer read makes an older answer stale.
-pub fn load() {
-    let (copy, generation) = {
-        let mut state = feed().state.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(copy) = state.copy.clone() else {
-            return;
-        };
-        state.generation += 1;
-        (copy, state.generation)
-    };
-    update(|snap| snap.loading = true);
-    shell::spawn(async move {
-        let answer = copy.people().await;
-        if feed()
-            .state
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .generation
-            != generation
-        {
-            return;
-        }
-        update(|snap| {
-            snap.loading = false;
-            snap.loaded = true;
-            match answer {
-                Ok(copy) => apply(snap, copy),
-                Err(error) => snap.error = Some(error),
-            }
-        });
-    });
-}
-
-fn apply(snap: &mut Snapshot, copy: PeopleCopy) {
-    snap.people = copy.people.iter().map(Person::from_record).collect();
-    snap.places = copy.places;
-    snap.links = copy.links;
-    snap.error = None;
-}
-
-/// The card a pending name opens: a person first, else a place.
-fn resolve_pending(snap: &Snapshot) -> Option<(Register, String)> {
-    let needle = snap.pending_open.as_ref()?.to_lowercase();
-    if let Some(person) = snap
-        .people
-        .iter()
-        .find(|p| p.name.to_lowercase().contains(&needle))
-    {
-        return Some((Register::People, person.id.clone()));
-    }
-    snap.places
-        .iter()
-        .find(|p| p.name.to_lowercase().contains(&needle))
-        .map(|place| (Register::Places, place.id.clone()))
-}
-
-/// One line of the list: a kind header in Places, or a row.
-#[derive(Clone, Debug, PartialEq)]
-enum Line {
-    Header(String),
-    Person(Person),
-    Place(Place),
-}
-
-fn lines(snap: &Snapshot, register: Register, query: &str) -> Vec<Line> {
-    match register {
-        Register::People => people::filter_people(&snap.people, query)
-            .into_iter()
-            .cloned()
-            .map(Line::Person)
-            .collect(),
-        Register::Places => {
-            // Grouped by kind: the register sorts by it, and hundreds of places in one column
-            // read as one long list of nothing in particular.
-            let mut out = Vec::new();
-            let mut last_kind = String::new();
-            for place in places::filter_places(&snap.places, query) {
-                if place.kind != last_kind {
-                    out.push(Line::Header(place.kind_label().to_uppercase()));
-                    last_kind = place.kind.clone();
-                }
-                out.push(Line::Place(place.clone()));
-            }
-            out
-        }
-    }
-}
-
-fn empty_line(snap: &Snapshot, register: Register, searching: bool) -> Option<&'static str> {
-    if !snap.has_copy {
-        return None;
-    }
-    if snap.loading && !snap.loaded {
-        return Some("Reading the register…");
-    }
-    if !snap.loaded {
-        return Some("Not read yet.");
-    }
-    Some(match (register, searching) {
-        (Register::People, true) => "Nobody matches that.",
-        (Register::Places, true) => "No place matches that.",
-        (Register::People, false) => "The copy holds no contacts.",
-        (Register::Places, false) => "The copy holds no places.",
-    })
-}
-
-fn second_line(person: &Person) -> String {
-    [person.role.as_deref(), person.company.as_deref()]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-        .join(" · ")
-}
-
-fn person_fields(person: &Person) -> Vec<(String, String)> {
-    let mut fields = Vec::new();
-    for (label, value) in [
-        ("EMAIL", &person.email),
-        ("PHONE", &person.phone),
-        ("LOCATION", &person.location),
-        ("NOTE", &person.note_ref),
-    ] {
-        if let Some(value) = value {
-            fields.push((label.to_owned(), value.clone()));
-        }
-    }
-    for (label, value) in person.network_rows() {
-        fields.push((label.to_uppercase(), value));
-    }
-    for (key, value) in &person.custom_fields {
-        fields.push((key.to_uppercase(), value.clone()));
-    }
-    fields
-}
-
-fn place_fields(place: &Place) -> Vec<(String, String)> {
-    let mut fields = Vec::new();
-    let where_line = place.where_line();
-    if !where_line.is_empty() {
-        fields.push(("WHERE".to_owned(), where_line));
-    }
-    if let Some(address) = &place.address {
-        fields.push(("ADDRESS".to_owned(), address.clone()));
-    }
-    if let (Some(lat), Some(lon)) = (place.latitude, place.longitude) {
-        fields.push(("COORDINATES".to_owned(), format!("{lat:.4}, {lon:.4}")));
-    }
-    fields
-}
+use crate::phone_people::{
+    clear_pending, empty_line, lines, person_fields, place_fields, refresh, resolve_pending,
+    second_line, subscribe, Line, Register, Snapshot,
+};
 
 fn muted() -> AdaptiveColor {
     nsh_base::theme().muted_foreground
@@ -492,11 +214,8 @@ fn line_view(line: Line, open: Open) -> AnyElement {
 
 #[component]
 pub fn PeopleScreen() -> impl IntoElement {
-    let initial = feed()
-        .snapshot
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone();
+    let mut source = subscribe();
+    let initial = source.borrow_and_update().clone();
     let register = signal(initial.register);
     let snap = signal(initial);
     let query = signal(String::new());
@@ -511,18 +230,13 @@ pub fn PeopleScreen() -> impl IntoElement {
                 Register::People => open.person.set(Some(id)),
                 Register::Places => open.place.set(Some(id)),
             }
-            feed()
-                .snapshot
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .pending_open = None;
+            clear_pending(current.pending_open.as_deref());
         }
     };
     open_pending(&snap.get());
-    let (tx, mut rx) = unbounded_channel::<Snapshot>();
-    *feed().tx.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
     spawn(async move {
-        while let Some(next) = rx.recv().await {
+        while source.changed().await.is_ok() {
+            let next = source.borrow_and_update().clone();
             if next.register != snap.with(|s| s.register) {
                 register.set(next.register);
             }
@@ -599,17 +313,7 @@ pub fn PeopleScreen() -> impl IntoElement {
                                 button()
                                     .px_2()
                                     .py_1()
-                                    .on_press(|| {
-                                        if let Some(refresh) = feed()
-                                            .refresh
-                                            .lock()
-                                            .unwrap_or_else(|e| e.into_inner())
-                                            .as_ref()
-                                        {
-                                            refresh();
-                                        }
-                                        load();
-                                    })
+                                    .on_press(refresh)
                                     .child(text("Refresh").text_sm()),
                             ),
                     )
@@ -686,99 +390,4 @@ pub fn PeopleScreen() -> impl IntoElement {
         }
         list().into_element()
     }))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn place(id: &str, name: &str, kind: &str) -> Place {
-        Place {
-            id: id.to_owned(),
-            name: name.to_owned(),
-            kind: kind.to_owned(),
-            address: None,
-            city: Some("Berlin".to_owned()),
-            country_code: Some("DE".to_owned()),
-            latitude: None,
-            longitude: None,
-            source: "manual".to_owned(),
-            external_ref: None,
-            ..Place::default()
-        }
-    }
-
-    fn person(id: &str, name: &str) -> Person {
-        Person {
-            id: id.to_owned(),
-            name: name.to_owned(),
-            initials: name.chars().take(1).collect(),
-            note_ref: None,
-            revision: 1,
-            email: None,
-            phone: None,
-            company: Some("Acme".to_owned()),
-            role: Some("Engineer".to_owned()),
-            location: None,
-            photo: None,
-            tags: Vec::new(),
-            custom_fields: Vec::new(),
-            values: Default::default(),
-            sources: Default::default(),
-            facts: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn places_group_under_their_kind_and_a_name_opens_a_card() {
-        let snap = Snapshot {
-            people: vec![person("p1", "Ada Lovelace")],
-            places: vec![
-                place("a", "Bar Raval", "bar"),
-                place("b", "Café Einstein", "cafe"),
-                place("c", "Kaffee Kirsch", "cafe"),
-            ],
-            pending_open: Some("kirsch".to_owned()),
-            ..Default::default()
-        };
-        let all = lines(&snap, Register::Places, "");
-        assert_eq!(all.len(), 5, "two headers and three rows");
-        assert!(matches!(&all[0], Line::Header(_)));
-        assert!(matches!(&all[2], Line::Header(_)));
-        assert_eq!(
-            resolve_pending(&snap),
-            Some((Register::Places, "c".to_owned()))
-        );
-        assert_eq!(second_line(&snap.people[0]), "Engineer · Acme");
-    }
-
-    #[test]
-    fn the_screen_lists_people_and_opens_a_card() {
-        use nsh_core::element::Root;
-        use nsh_engine::EngineConfig;
-        use nsh_testing::Headless;
-
-        update(|snap| {
-            *snap = Snapshot {
-                source: "Copy from 2026-11-09 · read-only".to_owned(),
-                people: vec![person("p1", "Ada Lovelace")],
-                places: vec![place("a", "Bar Raval", "bar")],
-                loaded: true,
-                has_copy: true,
-                ..Default::default()
-            };
-        });
-        let mut app = Headless::start(EngineConfig {
-            ui_sets: vec![nsh_base::registry()],
-            ..EngineConfig::new(Root::of::<PeopleScreen>())
-        })
-        .expect("the People screen starts");
-        app.wait_for("text:Ada Lovelace").unwrap();
-        app.press("text:Ada Lovelace").unwrap();
-        app.wait_for("text:‹ All people").unwrap();
-        app.wait_for("text:NO PLACES LINKED").unwrap();
-        app.press("text:‹ All people").unwrap();
-        app.press("text:Places 1").unwrap();
-        app.wait_for("text:Bar Raval").unwrap();
-    }
 }

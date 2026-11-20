@@ -1,7 +1,7 @@
 import LocalAuthentication
 import UIKit
 
-// UIKit owns the window and safe areas; NSH renders the phone screens.
+// UIKit owns the window and safe areas; GPUI renders the phone UI.
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication,
@@ -23,11 +23,23 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window.rootViewController = UINavigationController(rootViewController: SjelController())
         window.makeKeyAndVisible()
         self.window = window
+        openLinks(options.urlContexts)
+    }
+
+    func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) {
+        openLinks(contexts)
+    }
+
+    private func openLinks(_ contexts: Set<UIOpenURLContext>) {
+        for context in contexts where context.url.scheme?.lowercased() == "sjel" {
+            context.url.absoluteString.withCString { sjel_ios_open_link($0) }
+        }
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
         // The phone was in a pocket and the day moved on: the reminders it holds are the ones it
         // scheduled last time it was awake (`ios/src/notify.rs` rebuilds them).
+        HealthSync.shared.report()
         sjel_ios_became_active()
     }
     // A Face ID sheet only resigns active; entering the background ends the session it unlocked.
@@ -67,13 +79,13 @@ public func sjelIOSUnlock() {
     }
 }
 
-/// The full-screen NSH background, including the bands outside the safe areas.
-private weak var nshScreens: UIView?
+/// The full-screen phone background, including the bands outside the safe areas.
+private weak var phoneCover: UIView?
 
 /// Paints the cover with the palette's page colours and forces a scheme: `style` 0 follows the
 /// system, 1 is light, 2 is dark. The colours are `0xRRGGBB`.
-@_cdecl("sjel_ios_nsh_cover")
-public func sjelIOSNshCover(_ style: Int32, _ light: UInt32, _ dark: UInt32) {
+@_cdecl("sjel_ios_phone_cover")
+public func sjelIOSPhoneCover(_ style: Int32, _ light: UInt32, _ dark: UInt32) {
     func color(_ rgb: UInt32) -> UIColor {
         UIColor(
             red: CGFloat((rgb >> 16) & 0xff) / 255,
@@ -82,10 +94,10 @@ public func sjelIOSNshCover(_ style: Int32, _ light: UInt32, _ dark: UInt32) {
             alpha: 1)
     }
     DispatchQueue.main.async {
-        guard let cover = nshScreens else { return }
+        guard let cover = phoneCover else { return }
         cover.overrideUserInterfaceStyle =
             style == 2 ? .dark : style == 1 ? .light : .unspecified
-        sjel_ios_nsh_apply_theme()
+        sjel_ios_gpui_apply_theme(cover.traitCollection.userInterfaceStyle == .dark)
         cover.backgroundColor = UIColor { traits in
             traits.userInterfaceStyle == .dark ? color(dark) : color(light)
         }
@@ -97,7 +109,7 @@ final class SjelController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Each NSH page carries its own heading.
+        // The GPUI shell carries its own headings.
         navigationController?.setNavigationBarHidden(true, animated: false)
         view.backgroundColor = .systemBackground
         view.layoutIfNeeded()
@@ -111,22 +123,20 @@ final class SjelController: UIViewController {
             cover.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             cover.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
-        let screens = UIView(frame: view.safeAreaLayoutGuide.layoutFrame)
+        let screens = GpuiSurface()
         screens.backgroundColor = .clear
         cover.addSubview(screens)
         screens.translatesAutoresizingMaskIntoConstraints = false
         let guide = cover.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
             screens.topAnchor.constraint(equalTo: guide.topAnchor),
-            screens.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
+            screens.bottomAnchor.constraint(equalTo: cover.keyboardLayoutGuide.topAnchor),
             screens.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
             screens.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
         ])
+        phoneCover = cover
+        sjel_ios_phone_prepare()
         view.layoutIfNeeded()
-        nshScreens = cover
-        if !sjel_ios_nsh_mount(Unmanaged.passUnretained(screens).toOpaque()) {
-            fatalError("NSH could not mount")
-        }
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
         pinch.cancelsTouchesInView = false
         screens.addGestureRecognizer(pinch)
@@ -137,6 +147,8 @@ final class SjelController: UIViewController {
     }
 
     @objc private func pinched(_ gesture: UIPinchGestureRecognizer) {
-        sjel_ios_pinch(Double(gesture.scale), gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed)
+        let point = gesture.location(in: gesture.view)
+        let ended = gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed
+        sjel_ios_pinch(Double(gesture.scale), Float(point.x), Float(point.y), ended)
     }
 }

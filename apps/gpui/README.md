@@ -73,16 +73,16 @@ the top of its scroll area.
 
 The Mac sidebar, ⌘7 and `sjel://travel` open Travel; `sjel://map` opens its map subpage. Trip links
 use `sjel://travel/<id>/overview`, `/itinerary`, `/map` or `/items`, and Copy link keeps the trip
-and subpage. The iPhone's Travel tab uses the same views. `ui/src/travel.rs` owns the state, with
-rendering and reads under `ui/src/travel/`; `core/src/travel/` holds detail contracts and routes.
+and subpage. The iPhone's Travel tab uses the same route and data contracts. Desktop rendering and
+reads live under `ui/src/travel/`; `core/src/travel/` holds shared detail contracts and routes.
 The clients read `/trips/api/plans` and load `/trips/api/plans/<id>` when a trip is opened, using
 the Mac shell or the phone's signed device client. Successful reads are saved locally with their
 timestamps. Open a trip while connected once to retain its items for offline reading. Refresh
 failures keep the previous answer visible.
 
-The Mac map uses OpenStreetMap raster tiles, GPUI images and labelled stops, without a webview or
-another rendering dependency. The phone draws its global and per-trip maps with NSH
-(`ui/src/nsh_map.rs`), using the same projection, tile loader and disk cache. The phone reads trips through `ui/src/nsh_travel.rs`; desktop editing stays in GPUI Travel. On the Mac, drag to pan; the scroll wheel and a trackpad pinch zoom,
+Both clients draw OpenStreetMap raster tiles and labelled stops in GPUI, using the same
+projection, tile loader and disk cache. The phone reads trips through `ui/src/nsh_travel.rs`;
+desktop editing stays in GPUI Travel. On the Mac, drag to pan; the scroll wheel and a trackpad pinch zoom,
 both about the pointer rather than the centre. Fit trip and the zoom buttons sit on the map. The map takes the
 wheel while the pointer is over it, so the page scrolls when the pointer is anywhere else. On
 desktop the stops list sits beside the map; on iPhone it sits below. Selecting a stop recenters the
@@ -186,8 +186,7 @@ reaches the browser or the log.
 
 `GET /api/sjel-status/events` pushes the health and agent answers when they change
 (`crates/sjel-status/src/status/events.rs`), so the open window reads them once and then
-listens: one held connection and one calendar read per 10 seconds, instead of three reads. A shell
-without that stream keeps the timer.
+listens. A shell without that stream keeps the timer.
 
 A project's records arrive without their content, and the note editor reads the one record it
 opens. A task's done, due and priority go to the capability, which owns the frontmatter edit and
@@ -196,14 +195,8 @@ project again. `core/src/data/` holds every read and write, and `ui/src/data.rs`
 that needs a window: a read settles into the slot the page draws and never runs twice at once, and
 a write toasts its outcome and then lets the caller re-read only what it changed.
 
-Where a local `sjel.db` is readable, `Repo` in `core/src/data/repo.rs` answers projects, tasks,
-calendar and record reads from it and falls back to the shell otherwise, over one LibSQL handle
-opened once per process and shared by every clone. Holding the connection rather than reopening it
-is the point: opening one costs 0.05 ms, but a fresh connection starts on an empty SQLite page
-cache, so opening and reading once costs 0.68 ms against 0.02 ms for the same read on a handle that
-already ran one, and a poll runs several. How the numbers were measured: `cargo test --release
---manifest-path apps/gpui/core/Cargo.toml holding_one_connection -- --ignored --nocapture`, which
-times all three against this machine's database.
+On Desktop, `Repo` in `core/src/data/repo.rs` reads Projects and Calendar through their owner
+APIs. It does not open the shared database.
 
 Going back to a note opened in the last five minutes costs no read at all. `core/src/data/notes.rs`
 keeps the 16 notes opened most recently, most recent first, so tabbing back to one is a memory hit
@@ -225,10 +218,11 @@ opens natively within the client. Deep links (`sjel://<path>`) follow the same r
 
 ## Native renderers, shared models
 
-GPUI Fast renders the desktop. NSH draws every phone screen with UIKit views inside the Swift
-host. The clients share capability contracts, local storage, sync, theme palettes and pure view
-models in `core/`; renderer dependencies stay optional in `ui/`. The phone builds with
-`default-features = false, features = ["nsh"]` and has no GPUI platform dependency.
+GPUI Fast renders the desktop. All phone pages, panels, and navigation share one GPUI and Ely
+window in the Swift host. The Swift host handles system integrations, including PDFKit,
+RoomPlan, HealthKit, notifications, and device authentication.
+The clients share capability contracts, local storage, sync and theme palettes. The phone uses
+the same `gpui-pre` snapshot for GPUI Mobile, GPUI Kit and Ely.
 
 It is a stack decision, not a speed fix: Sjel's waits come from services, not from rendering. A
 release build starts in one frame under 10 ms with about 100 MB resident, and the Swift menu bar
@@ -251,12 +245,12 @@ dependency resolution.
 |---|---|
 | `.` | The Mac app |
 | `core/` | What both apps share: the destinations, the shell client, a paired device's client, the offline replica and the two-way sync. No GPUI types. |
-| `ui/` | Shared theme tokens, GPUI desktop pages behind `gpui`, and native phone screens behind `nsh`. |
+| `ui/` | Shared theme tokens, GPUI pages, and the Mac's NSH comparison views. |
 | `ios/` | Phone event coordinator, pairing, sync and notifications in `src/`; UIKit host in `host/`. |
 
-On iOS, UIKit owns the window, safe areas and scene lifecycle. `NshHostScreen` routes Today,
-Calendar, Travel, Projects, Interior, People, capture, Settings, Documents, Mail and the four
-side-panel seats. The host mounts one NSH view; it does not run a GPUI window or frame pump.
+On iOS, UIKit owns the window, safe areas, and scene lifecycle. `ios/src/gpui_host.rs` mounts
+one embedded GPUI window and renders the tab bar, panels, and current page. The phone route
+coordinator handles both system URLs and in-app navigation.
 
 The iOS app has no inbound token: it is a paired device (`core/src/device.rs`), signed with its
 Keychain key over TLS pinned to the Mac's LAN listener. The Mac is found over Bonjour:
@@ -304,8 +298,9 @@ one says what is queued and whether this launch is connected. Nothing on it is a
 The bottom bar opens Today, Mail, Documents, Calendar, Travel and Agent. Projects and Interior
 open from Today's shortcuts, and **Settings**, which holds the pairing: the found Mac, the Join tap, and
 the capability health list it answers with once the owner allows the device, sits behind Today's
-gear, one row from it. **Projects** is where a person writes: the NSH project reader and editor over the
-phone's own records, under the queue count and the report of the last sync. UIKit text inputs own the software keyboard. A fresh install starts empty and queues
+gear, one row from it. **Projects** provides the project reader and editor over the phone's own
+records, with the queue count and the last sync status. The Swift host manages the software
+keyboard for GPUI text fields. A fresh install starts empty and queues
 nothing, so pairing later sends the Mac only what the person wrote. A store that cannot open says
 so on that page instead of falling back to memory.
 
@@ -315,7 +310,7 @@ Sync retains the owner's classification, rationale and archive state, including 
 unchanged records and empty project identities. Missing metadata and queued project edits refuse
 object browsing until synchronization completes; the task and note editor remains available.
 
-**The side panel** holds Agent, Terminal, Soundscape and Activity. The Mac uses
+**The side panel** holds Scratchpad, Agent, Terminal, Soundscape and Activity. The Mac uses
 `ui/src/sidebar/`; the phone uses `ui/src/nsh_edge.rs`, with a close action that restores the
 previous page. Its open state and selected seat are persisted in `sidebar.json`. Terminal access
 requires Face ID or the device passcode, and background entry locks the terminal and clears its
@@ -402,9 +397,9 @@ The touch checks are `host/UITests/`: `JoinTap.swift`, `ScanTap.swift`,
 `SJEL_REGISTER=places`, `SJEL_PERSON=Ada`, `SJEL_DAY=2026-10-21`, `SJEL_NOTIFY=1` and
 `SJEL_SIDEBAR=soundscape|activity|off` open a given tab, register, card, day, the reminder card with its
 switch on, or the right edge on a seat (or away), at launch — which is how `ios/run-sim` and a
-screenshot reach a page that is not the first one without a hand on the screen. `NshScreens.swift`
-asserts visible headings and navigation in the native screens; older coordinate tests require
-review against the new layout.
+screenshot reach a page that is not the first one without a hand on the screen. `GpuiScreens.swift`
+checks visible GPUI surfaces, tab navigation, and URL routing. The older coordinate tests require
+review against the current layout.
 
 A write the Mac will not take is named rather than counted. `sync` used to stop at the first refusal,
 so one duplicate note title held every later write in the queue and nothing said which record it was

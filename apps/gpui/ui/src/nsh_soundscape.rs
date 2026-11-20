@@ -1,12 +1,19 @@
 //! Native soundscape controls over the same audio-thread atomics as the desktop drawer.
-use crate::{
-    nsh_ui::{action, caption, heading, snapshot},
-    theme::SoundscapePrefs,
-};
+#[cfg(not(target_os = "ios"))]
+use crate::nsh_ui::{action, caption, heading, snapshot};
+use crate::theme::SoundscapePrefs;
+#[cfg(not(target_os = "ios"))]
 use nsh_core::prelude::*;
+#[cfg(not(target_os = "ios"))]
+use sjel_gpui_core::soundscape::LayerName;
+
+#[cfg(target_os = "ios")]
+mod phone;
+#[cfg(target_os = "ios")]
+pub use phone::PhoneSoundscape;
 use sjel_gpui_core::{
     shell,
-    soundscape::{Control, LayerName, Playback, Preset, Visual, BANDS},
+    soundscape::{Control, Playback, Preset, Visual, BANDS},
 };
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio::sync::watch;
@@ -130,6 +137,7 @@ pub fn pause() {
     s.control.set_playing(false);
     publish(&mut s);
 }
+#[cfg(not(target_os = "ios"))]
 fn knob(
     label: &'static str,
     read: impl Fn(&Control) -> f32 + 'static,
@@ -163,6 +171,7 @@ fn knob(
     )
 }
 /// Local playback, six presets, volume, mixer layers and a real analyser meter.
+#[cfg(not(target_os = "ios"))]
 #[component]
 pub fn SoundscapeScreen() -> impl IntoElement {
     let snap = snapshot(&feed().tx);
@@ -252,7 +261,7 @@ pub fn SoundscapeScreen() -> impl IntoElement {
     )
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "ios")))]
 mod tests {
     use super::*;
     #[test]

@@ -12,7 +12,6 @@ boundaries. The [application README](../../apps/gpui/README.md) owns current int
 
 - [Make note rename and saves lossless](../tasks/gpui-note-rename.md).
 - [Isolate NSH behind an app-owned facade](../tasks/gpui-nsh-facade.md).
-- [Measure NSH Mail before desktop convergence](../tasks/gpui-nsh-measurement.md).
 - [Accept migrated desktop controls](../tasks/gpui-ely-acceptance.md).
 - [Accept native table accessibility and editing](../tasks/gpui-table-acceptance.md).
 
@@ -75,6 +74,8 @@ boundaries. The [application README](../../apps/gpui/README.md) owns current int
 
 ## Phone acceptance
 
+- [Move the phone UI to GPUI](../tasks/gpui-phone-renderer.md).
+- [Move phone Documents to shared GPUI](../tasks/gpui-documents-renderer.md).
 - [Accept offline phone Documents](../tasks/gpui-documents-phone.md).
 - [Accept phone Mail replay and attachments](../tasks/gpui-mail-phone.md).
 - [Accept native phone Calendar gestures](../tasks/gpui-calendar-phone.md).

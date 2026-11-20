@@ -1,10 +1,16 @@
 //! Phone travel reads, saved trips, itinerary and connection search, independent of GPUI.
+#[cfg(target_os = "ios")]
+use crate::phone_navigation::{open as set_nsh_page, Page as NshPage};
+#[cfg(not(target_os = "ios"))]
+use crate::nsh_documents::{set_nsh_page, NshPage};
+
 use crate::{
-    nsh_documents::{self, NshPage},
     nsh_map::{self, MapEvent, MapScene},
-    nsh_ui::{action, caption, field, heading, snapshot},
 };
+#[cfg(not(target_os = "ios"))]
 use nsh_core::prelude::*;
+#[cfg(not(target_os = "ios"))]
+use crate::nsh_ui::{action, caption, field, heading, snapshot};
 use sjel_gpui_core::{
     shell,
     travel::{
@@ -108,7 +114,7 @@ pub fn open(route: TravelRoute) {
         sync_map();
         nsh_map::show(None);
     } else {
-        nsh_documents::set_nsh_page(NshPage::Travel);
+        set_nsh_page(NshPage::Travel);
     }
     load();
 }
@@ -384,7 +390,7 @@ fn sync_map() {
 /// Handles the map's actions after Travel no longer has a GPUI controller.
 pub fn map_event(event: MapEvent) {
     match event {
-        MapEvent::Show => nsh_documents::set_nsh_page(NshPage::Map),
+        MapEvent::Show => set_nsh_page(NshPage::Map),
         MapEvent::Open(route) => open(route),
         MapEvent::Refresh => load(),
         MapEvent::Resolve(id) => resolve(id),
@@ -478,6 +484,9 @@ fn search(query: Query) {
     });
 }
 
+#[cfg(not(target_os = "ios"))]
+mod legacy {
+use super::*;
 fn item(item: &travel::Item) -> impl IntoElement {
     let badge = if item.item_type == "packing" {
         if item.is_packed() {
@@ -645,8 +654,8 @@ fn trip_view(
             let title = entry.title.clone();
             out = out.child(action(format!("Calendar · {title}"), move || {
                 if let Some(date) = date {
-                    crate::nsh_calendar::open_day(date);
-                    nsh_documents::set_nsh_page(NshPage::Calendar);
+                    crate::phone_calendar::open_day(date);
+                    set_nsh_page(NshPage::Calendar);
                 }
             }));
         }
@@ -669,8 +678,8 @@ fn calendar_entry(entry: &sjel_gpui_core::shell::CalendarEntry) -> impl IntoElem
         .py_2()
         .child(action(entry.title.clone(), move || {
             if let Some(date) = date {
-                crate::nsh_calendar::open_day(date);
-                nsh_documents::set_nsh_page(NshPage::Calendar);
+                crate::phone_calendar::open_day(date);
+                set_nsh_page(NshPage::Calendar);
             }
         }))
         .child(caption(if entry.all_day {
@@ -1231,3 +1240,12 @@ mod tests {
         );
     }
 }
+
+}
+#[cfg(not(target_os = "ios"))]
+pub use legacy::travel_screen;
+
+#[cfg(target_os = "ios")]
+mod phone;
+#[cfg(target_os = "ios")]
+pub use phone::PhoneTravel;

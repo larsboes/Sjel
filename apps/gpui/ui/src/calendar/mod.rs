@@ -1,4 +1,4 @@
-//! The Mac's Calendar pages: month grid, week view and proposals. The phone's day view is NSH (`crate::nsh_calendar`).
+//! Calendar pages and event adapters for the Mac and iPhone.
 
 pub mod actions;
 mod adapter;
@@ -6,6 +6,10 @@ mod details;
 mod editor;
 pub mod grid;
 pub mod page;
+#[cfg(target_os = "ios")]
+mod phone;
+#[cfg(target_os = "ios")]
+pub use phone::PhoneCalendar;
 pub mod proposals;
 pub mod types;
 

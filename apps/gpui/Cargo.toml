@@ -27,7 +27,7 @@ sjel-gpui-core = { path = "core" }
 sjel-gpui-ui = { path = "ui", default-features = false }
 gpui-kit = { version = "=0.10.0", default-features = false, features = ["component"] }
 # Sjel's fork of Ely on GPUI Kit (docs/plans/gpui.md §11, Components from Ely).
-ely-gpui-component = { git = "https://github.com/larsboes/Ely-GPUI-Components", rev = "57b3131eefa0f6b39ac522114598709ecf32ba37", default-features = false }
+ely-gpui-component = { git = "https://github.com/larsboes/Ely-GPUI-Components", rev = "e0a36acae905f61dc85ccafb0d7217a0d7e933a7", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json"] }

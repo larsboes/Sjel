@@ -31,12 +31,16 @@ use crate::theme::{tint, Density, Palette};
 mod collections;
 mod duplicate_history;
 mod duplicates;
+#[cfg(target_os = "ios")]
+mod phone;
 mod proposals;
 mod split_picker;
 mod split_preview;
 mod split_queue;
 pub mod viewer;
 
+#[cfg(target_os = "ios")]
+pub use phone::PhoneDocuments;
 use proposals::{proposal_panel, workflow_panel};
 pub use viewer::{register_renderer, set_default_pdf_renderer, PdfError, PdfRenderer};
 use viewer::{search_extracted_pages, PageSearchHit, Reader, ReaderTarget, DEFAULT_RENDERER};
@@ -265,6 +269,14 @@ fn document_matches(row: &DocumentSummary, query: &str) -> bool {
             .project
             .as_deref()
             .is_some_and(|project| project.to_lowercase().contains(query))
+}
+
+fn document_title(row: &DocumentSummary) -> &str {
+    row.extracted_title
+        .as_deref()
+        .map(str::trim)
+        .filter(|title| !title.is_empty())
+        .unwrap_or(&row.filename)
 }
 
 fn workflow_label(stage: &str) -> &'static str {
@@ -1112,13 +1124,7 @@ impl Documents {
                 .iter()
                 .filter_map(|entry| rows_slice.get(entry.index))
                 .map(|row| {
-                    let primary_title = row
-                        .extracted_title
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|t| !t.is_empty())
-                        .unwrap_or(&row.filename)
-                        .to_owned();
+                    let primary_title = document_title(row).to_owned();
                     let mut meta_parts: Vec<String> = Vec::new();
                     if primary_title != row.filename {
                         meta_parts.push(row.filename.clone());

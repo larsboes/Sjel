@@ -1,7 +1,7 @@
-//! The state the NSH Settings screen draws (`sjel_gpui_ui::nsh_settings`), and what its presses do.
+//! The state the Settings screen draws (`sjel_gpui_ui::phone_settings`), and what its presses do.
 
 use super::*;
-use sjel_gpui_ui::nsh_settings::{Choice, FoundMac, SettingsAction, SettingsState};
+use sjel_gpui_ui::phone_settings::{Choice, FoundMac, SettingsAction, SettingsState};
 
 fn choice(id: &'static str, title: &'static str, options: Vec<(String, bool)>) -> Choice {
     Choice { id, title, options }
@@ -51,6 +51,15 @@ impl AppState {
             capabilities: self.rows.clone(),
             room_status: self.roomplan_status.to_string(),
             room_can_sync: self.client.is_some(),
+            health_status: if self.client.is_none() {
+                "Connect to your paired Mac or pair one above.".into()
+            } else if self.health.status.is_empty() {
+                "No upload confirmed yet.".into()
+            } else {
+                self.health.status.clone()
+            },
+            health_last_synced: self.health.last_synced.clone(),
+            health_can_sync: self.client.is_some() && !self.health.busy,
             reminders_on: on,
             reminders_sentence,
             reminders_denied: denied,
@@ -152,6 +161,11 @@ impl AppState {
             }
             SettingsAction::CaptureRoom => present_roomplan(),
             SettingsAction::SyncRoomScans => load_roomplan_upload(),
+            SettingsAction::SyncHealth => {
+                if self.client.is_some() && !self.health.busy {
+                    health::collect(true);
+                }
+            }
             SettingsAction::ToggleReminders => self.toggle_reminders(),
             SettingsAction::OpenSystemSettings => notify::open_settings(),
             SettingsAction::Choose { id: "lead", option } => {

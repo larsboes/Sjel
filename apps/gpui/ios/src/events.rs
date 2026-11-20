@@ -9,18 +9,24 @@ impl AppState {
         if self.repo.is_none() {
             if let Some(store) = board.store().cloned() {
                 let repo = self.repo_for(store.clone());
-                sjel_gpui_ui::nsh_capture::set_store(Some(store));
-                nsh_today::set_store(Some(repo.clone()));
-                nsh_calendar::set_store(Some(repo.clone()));
+                sjel_gpui_ui::phone_capture::set_store(Some(store));
+                phone_today::set_store(Some(repo.clone()));
+                phone_calendar::set_store(Some(repo.clone()));
+                #[cfg(not(target_os = "ios"))]
                 sjel_gpui_ui::nsh_projects::set_repo(repo.clone());
                 self.repo = Some(repo);
             }
         }
-        sjel_gpui_ui::nsh_projects::set_blocked(board.blocked().to_vec());
-        sjel_gpui_ui::nsh_projects::load();
-        sjel_gpui_ui::nsh_capture::load();
-        nsh_today::set_records(board.records().to_vec());
-        nsh_today::set_travel(board.pending(), self.client.is_some());
+        #[cfg(target_os = "ios")]
+        crate::projects::set_board(self.repo.clone(), board.blocked().to_vec());
+        #[cfg(not(target_os = "ios"))]
+        {
+            sjel_gpui_ui::nsh_projects::set_blocked(board.blocked().to_vec());
+            sjel_gpui_ui::nsh_projects::load();
+        }
+        sjel_gpui_ui::phone_capture::load();
+        phone_today::set_records(board.records().to_vec());
+        phone_today::set_travel(board.pending(), self.client.is_some());
         self.board = Some(board);
         self.rebuild_reminders();
     }
@@ -29,27 +35,27 @@ impl AppState {
             Event::Status(text) => self.status = text,
             Event::StoreFailed(text) => {
                 self.status = text.clone();
-                nsh_today::set_note(Some(text));
+                phone_today::set_note(Some(text));
             }
             Event::Copy(outcome) => {
                 self.copying = false;
                 match outcome {
                     Ok(copy) => {
                         self.copy = Some(copy.clone());
-                        nsh_calendar::set_copy(Some(copy.clone()), None);
-                        sjel_gpui_ui::nsh_people::set_copy(Some(copy.clone()), None);
-                        nsh_today::set_copy(Some(copy), None);
+                        phone_calendar::set_copy(Some(copy.clone()), None);
+                        sjel_gpui_ui::phone_people::set_copy(Some(copy.clone()), None);
+                        phone_today::set_copy(Some(copy), None);
                     }
                     Err(error) if self.copy.is_none() => {
-                        nsh_calendar::set_copy(None, Some(error.clone()));
-                        sjel_gpui_ui::nsh_people::set_copy(None, Some(error.clone()));
-                        nsh_today::set_copy(None, Some(error));
+                        phone_calendar::set_copy(None, Some(error.clone()));
+                        sjel_gpui_ui::phone_people::set_copy(None, Some(error.clone()));
+                        phone_today::set_copy(None, Some(error));
                     }
                     Err(error) => {
                         let note = Some(format!("Could not fetch a newer copy: {error}"));
-                        nsh_calendar::set_note(note.clone());
-                        sjel_gpui_ui::nsh_people::set_note(note.clone());
-                        nsh_today::set_note(note);
+                        phone_calendar::set_note(note.clone());
+                        sjel_gpui_ui::phone_people::set_note(note.clone());
+                        phone_today::set_note(note);
                     }
                 }
             }
@@ -116,16 +122,22 @@ impl AppState {
             }
             Event::RoomplanArchive(records) => sjel_gpui_ui::nsh_interior::set_local(records),
             Event::RoomplanLive(live) => sjel_gpui_ui::nsh_interior::set_live(live),
+            Event::HealthState(state) => self.health = state,
             Event::HealthUpload(body) => {
                 let Some(client) = self.client.clone() else {
+                    health::finished(Err("Connect to your paired Mac and try again.".into()));
                     return;
                 };
-                let through = crate::health::through(&body);
                 shell::spawn(async move {
-                    let stored = client
-                        .post::<crate::health::Ack>(&crate::health::route(), body.as_bytes())
-                        .await;
-                    crate::health::finished(stored.map(|_| through));
+                    let result = client
+                        .post::<health::Ack>(&health::route(), body.as_bytes())
+                        .await
+                        .map_err(|_| {
+                            "Could not sync Health to your Mac. Check the connection and try again."
+                                .to_owned()
+                        })
+                        .and_then(|ack| ack.confirm(health::through(&body)));
+                    health::finished(result);
                 });
             }
             Event::RoomplanUpload(body) => {
@@ -173,16 +185,15 @@ impl AppState {
                         sjel_gpui_ui::nsh_interior::connect(RoomPlanSource::Device(client.clone()));
                         sjel_gpui_ui::nsh_agent::connect(Host::Device(client.clone()));
                         sjel_gpui_ui::nsh_terminal::connect(Host::Device(client.clone()));
-                        sjel_gpui_ui::nsh_documents::connect(
+                        #[cfg(target_os = "ios")]
+                        crate::documents::connect(client.clone());
+                        sjel_gpui_ui::phone_mail::connect(sjel_gpui_core::device::Source::Device(
+                            client.clone(),
+                        ));
+                        sjel_gpui_ui::phone_finance::connect(
                             sjel_gpui_core::device::Source::Device(client.clone()),
                         );
-                        sjel_gpui_ui::nsh_mail::connect(sjel_gpui_core::device::Source::Device(
-                            client.clone(),
-                        ));
-                        sjel_gpui_ui::nsh_finance::connect(sjel_gpui_core::device::Source::Device(
-                            client.clone(),
-                        ));
-                        sjel_gpui_ui::nsh_inventory::connect(
+                        sjel_gpui_ui::phone_inventory::connect(
                             sjel_gpui_core::device::Source::Device(client.clone()),
                         );
                         self.client = Some(client);
@@ -194,9 +205,9 @@ impl AppState {
                 if self.client.is_some() {
                     load_roomplan_upload();
                     // At launch the foreground event fires before the pairing is restored.
-                    crate::health::collect();
+                    health::collect(false);
                 }
-                nsh_today::set_travel(
+                phone_today::set_travel(
                     self.board.as_ref().map_or(0, Board::pending),
                     self.client.is_some(),
                 );
@@ -218,7 +229,7 @@ impl AppState {
             Event::Synced(outcome, board) => {
                 self.syncing = false;
                 self.board_changed(board);
-                nsh_calendar::load();
+                phone_calendar::load();
                 self.synced = Some(match outcome {
                     Ok(report) => report.summary(),
                     Err(error) => format!("Nothing moved: {error}"),
@@ -262,23 +273,30 @@ impl AppState {
                 self.rebuild_reminders();
                 if self.client.is_some() {
                     load_roomplan_upload();
-                    crate::health::collect();
+                    health::collect(false);
                 }
                 notify::report();
             }
-            Event::Pinch(scale, ended) => {
-                if sjel_gpui_ui::nsh_documents::nsh_page()
-                    != sjel_gpui_ui::nsh_documents::NshPage::Edge
-                    || !nsh_edge::is_terminal()
-                {
-                    return;
+            Event::Pinch(scale, _location, ended) => {
+                let relative = scale / self.pinch_base;
+                #[cfg(target_os = "ios")]
+                if current_page() == PhonePage::Map {
+                    if relative.is_finite()
+                        && relative > 0.
+                        && (relative >= 1.12 || relative <= 1. / 1.12 || ended)
+                    {
+                        sjel_gpui_ui::nsh_map::pinch(relative.log2(), _location);
+                        self.pinch_base = scale;
+                    }
                 }
-                if scale / self.pinch_base >= 1.2 {
-                    self.handle(Event::Zoom(1));
-                    self.pinch_base = scale;
-                } else if scale / self.pinch_base <= 1. / 1.2 {
-                    self.handle(Event::Zoom(-1));
-                    self.pinch_base = scale;
+                if current_page() == PhonePage::Edge && nsh_edge::is_terminal() {
+                    if relative >= 1.2 {
+                        self.handle(Event::Zoom(1));
+                        self.pinch_base = scale;
+                    } else if relative <= 1. / 1.2 {
+                        self.handle(Event::Zoom(-1));
+                        self.pinch_base = scale;
+                    }
                 }
                 if ended {
                     self.pinch_base = 1.;

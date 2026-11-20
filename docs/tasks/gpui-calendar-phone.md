@@ -17,6 +17,8 @@ Accept native phone Calendar gestures through the existing owner, with implement
 
 ## Acceptance
 
-- On a paired device check the NSH day grid, quarter-hour edits, touch/long-press behavior, resize/cancellation, availability and all-day/overnight layouts.
+- On a paired device check the Ely day grid, quarter-hour edits, touch and long-press behavior,
+  resize and cancellation, availability, and all-day and overnight layouts.
 - Move an event and verify its Mac value and successful sync timestamp; verify Undo through real dispatch, not only an unavailable-shell unit test.
-- Measure scroll cost and check both themes; shared timeline rules remain in core while NSH remains independent of Ely.
+- Measure scroll cost and check both themes. The Mac and phone share the Ely day grid and core
+  timeline rules.

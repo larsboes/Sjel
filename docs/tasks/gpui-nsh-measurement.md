@@ -1,12 +1,13 @@
 ---
 id: "gpui-nsh-measurement"
 title: "Measure NSH Mail before desktop convergence"
-state: "backlog"
+state: "cancelled"
 area: "gpui"
 kind: "investigation"
 priority: 1
 depends_on: ["gpui-nsh-facade"]
 spec: "docs/architecture/native-ui-boundaries.md"
+reason: "Native UI convergence moves phone screens to shared GPUI."
 ---
 
 # Measure NSH Mail before desktop convergence

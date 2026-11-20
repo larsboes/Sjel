@@ -1,17 +1,27 @@
 //! The phone's agent seat, using the shared run model and signed capability stream.
+#[cfg(not(target_os = "ios"))]
 use crate::nsh_ui::{action, caption, field, heading, snapshot};
 use futures::{
     future::{AbortHandle, Abortable},
     StreamExt,
 };
+#[cfg(not(target_os = "ios"))]
 use nsh_core::prelude::*;
+#[cfg(not(target_os = "ios"))]
+use sjel_gpui_core::agent::tool_summary;
 use sjel_gpui_core::{
-    agent::{tool_summary, AgentRun, Host, Pending, Row, Session},
+    agent::{AgentRun, Host, Pending, Row, Session},
     shell,
 };
+#[cfg(not(target_os = "ios"))]
 use std::collections::BTreeSet;
 use std::sync::{Mutex, OnceLock};
 use tokio::sync::watch;
+
+#[cfg(target_os = "ios")]
+mod phone;
+#[cfg(target_os = "ios")]
+pub use phone::PhoneAgent;
 
 #[derive(Clone, Default)]
 struct Snapshot {
@@ -414,6 +424,7 @@ fn stop() {
 }
 
 /// Session shelf, streamed transcript, guidance and explicit per-call approvals.
+#[cfg(not(target_os = "ios"))]
 #[component]
 pub fn AgentScreen() -> impl IntoElement {
     let snap = snapshot(&feed().tx);
@@ -561,7 +572,7 @@ pub fn AgentScreen() -> impl IntoElement {
         })))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "ios")))]
 mod tests {
     use super::*;
     #[test]

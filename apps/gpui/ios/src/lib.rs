@@ -12,9 +12,9 @@ use sjel_gpui_core::{
     terminal::Host,
 };
 use sjel_gpui_ui::{
-    nsh_calendar::{self, CalendarEvent},
     nsh_edge::{self, Seat},
-    nsh_today::{self, TodayEvent},
+    phone_calendar::{self, CalendarEvent},
+    phone_today::{self, TodayEvent},
     AccentColor, AppearanceSettings, BackgroundTone, NotifyPrefs, SoundscapePrefs, TerminalFont,
     ThemeMode, WindowOpacity, TERMINAL_FONT_SIZES,
 };
@@ -22,17 +22,31 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 mod audio;
+#[cfg(target_os = "ios")]
+mod documents;
 mod events;
+#[cfg(target_os = "ios")]
+mod gpui_host;
 mod health;
 mod host;
 mod identity;
 mod launch;
 mod nav;
 mod notify;
-mod nsh;
 mod pairing;
+#[cfg(target_os = "ios")]
+mod phone_system;
+#[cfg(target_os = "ios")]
+mod projects;
 mod runtime;
 mod settings;
+#[cfg(not(target_os = "ios"))]
+use sjel_gpui_ui::nsh_documents::{
+    nsh_page as current_page, set_nsh_page as open_page, NshPage as PhonePage,
+};
+#[cfg(target_os = "ios")]
+use sjel_gpui_ui::phone_navigation::{open as open_page, page as current_page, Page as PhonePage};
+
 use host::*;
 use launch::*;
 use pairing::*;
@@ -85,6 +99,8 @@ enum Event {
     /// One HealthKit read from `host/Health.swift`, the body for the Mac's health capability.
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
     HealthUpload(String),
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    HealthState(health::State),
     Ready(Node, NodeHealth),
     /// The phone's replica after it was opened, read or written: its rows and queued count.
     Board(Board),
@@ -117,25 +133,25 @@ enum Event {
     Unlocked(bool),
     /// A pinch on the page: its scale since it began, and whether it ended (`host/App.swift`).
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-    Pinch(f64, bool),
+    Pinch(f64, (f32, f32), bool),
     /// Host or NSH tab navigation request.
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
     SelectTab(Tab),
     /// Host or NSH edge seat opening request.
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
     OpenEdge(Seat),
-    /// What the NSH Today screen asked for (`sjel_gpui_ui::nsh_today`).
+    /// What the NSH Today screen asked for (`sjel_gpui_ui::phone_today`).
     Today(TodayEvent),
     /// An NSH screen asked for a newer copy of the Mac's data.
     RefreshCopy,
-    /// A refresh or a write on the NSH Calendar screen (`sjel_gpui_ui::nsh_calendar`).
+    /// A refresh or a write on the Calendar screen (`sjel_gpui_ui::phone_calendar`).
     Calendar(CalendarEvent),
     Map(sjel_gpui_ui::nsh_map::MapEvent),
     Interior(sjel_gpui_ui::nsh_interior::InteriorEvent),
     Retry,
     Zoom(i32),
-    /// A press on the NSH Settings screen (`sjel_gpui_ui::nsh_settings`).
-    Settings(sjel_gpui_ui::nsh_settings::SettingsAction),
+    /// A press on the Settings screen (`sjel_gpui_ui::phone_settings`).
+    Settings(sjel_gpui_ui::phone_settings::SettingsAction),
 }
 
 #[derive(Clone)]
@@ -166,6 +182,7 @@ struct AppState {
     notify_state: notify::State,
     notify_plan: reminders::Plan,
     roomplan_status: String,
+    health: health::State,
     repo: Option<Repo>,
     appearance: AppearanceSettings,
     terminal_unlocked: bool,
@@ -201,30 +218,32 @@ pub fn start() {
             notify_state: notify::State::default(),
             notify_plan: reminders::Plan::default(),
             roomplan_status: "Room scans stay on this iPhone until they are synced.".into(),
+            health: health::State::default(),
             repo: None,
             appearance: AppearanceSettings::load(),
             terminal_unlocked: false,
             pinch_base: 1.,
             events: events.clone(),
         };
-        nsh_calendar::set_host(|event| announce(Event::Calendar(event)));
-        nsh_calendar::open_day(launch_day());
+        phone_calendar::set_host(|event| announce(Event::Calendar(event)));
+        phone_calendar::open_day(launch_day());
         sjel_gpui_ui::nsh_map::set_host(|event| announce(Event::Map(event)));
+        #[cfg(not(target_os = "ios"))]
         sjel_gpui_ui::nsh_projects::set_retry(|| announce(Event::Retry));
         sjel_gpui_ui::nsh_interior::set_host(|event| announce(Event::Interior(event)));
         sjel_gpui_ui::nsh_terminal::set_unlock(unlock);
         sjel_gpui_ui::nsh_terminal::set_zoom(|steps| announce(Event::Zoom(steps)));
         nsh_edge::set_host(|seat| announce(Event::OpenEdge(seat)));
-        nsh_today::set_host(|event| announce(Event::Today(event)));
-        sjel_gpui_ui::nsh_settings::set_host(|action| announce(Event::Settings(action)));
-        sjel_gpui_ui::nsh_people::set_refresh(|| announce(Event::RefreshCopy));
-        sjel_gpui_ui::nsh_capture::set_wrote(|| announce(Event::Wrote));
+        phone_today::set_host(|event| announce(Event::Today(event)));
+        sjel_gpui_ui::phone_settings::set_host(|action| announce(Event::Settings(action)));
+        sjel_gpui_ui::phone_people::set_refresh(|| announce(Event::RefreshCopy));
+        sjel_gpui_ui::phone_capture::set_wrote(|| announce(Event::Wrote));
         if let Some(day) = frozen_day() {
-            nsh_today::set_day(day);
+            phone_today::set_day(day);
         }
-        sjel_gpui_ui::nsh_people::set_register(launch_register());
+        sjel_gpui_ui::phone_people::set_register(launch_register());
         if let Some(name) = launch_person() {
-            sjel_gpui_ui::nsh_people::open_named(&name);
+            sjel_gpui_ui::phone_people::open_named(&name);
         }
         let (control, visual) = audio::parts();
         sjel_gpui_ui::nsh_soundscape::set_parts(control, visual, SoundscapePrefs::load());
@@ -295,8 +314,11 @@ pub fn start() {
 
 impl AppState {
     fn publish(&self) {
-        sjel_gpui_ui::nsh_settings::set_state(self.settings_state());
+        sjel_gpui_ui::phone_settings::set_state(self.settings_state());
         let pending = self.board.as_ref().map_or(0, Board::pending);
+        #[cfg(target_os = "ios")]
+        projects::set_sync(pending, self.synced.as_deref());
+        #[cfg(not(target_os = "ios"))]
         sjel_gpui_ui::nsh_projects::set_sync(pending, self.synced.as_deref());
         let mut reminders = Vec::new();
         match notify::disabled_reason() {
@@ -326,6 +348,6 @@ impl AppState {
         sjel_gpui_ui::nsh_interior::set_status(self.roomplan_status.clone());
         sjel_gpui_ui::nsh_terminal::set_appearance(self.appearance);
         #[cfg(target_os = "ios")]
-        nsh::apply_appearance(&self.appearance);
+        phone_system::apply_appearance(&self.appearance);
     }
 }

@@ -3808,7 +3808,7 @@
     },
     {
       "name": "gpui-mobile",
-      "verdict": "watch"
+      "verdict": "fork"
     },
     {
       "name": "gpui-pre-ios",

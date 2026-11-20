@@ -62,41 +62,41 @@ pub mod media;
 pub mod music;
 #[cfg(feature = "gpui")]
 pub mod nav;
-#[cfg(feature = "nsh")]
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
 pub mod nsh_agent;
-#[cfg(feature = "nsh")]
+#[cfg(all(feature = "nsh", not(target_os = "ios")))]
 pub mod nsh_calendar;
-#[cfg(feature = "nsh")]
+#[cfg(all(feature = "nsh", not(target_os = "ios")))]
 pub mod nsh_capture;
 #[cfg(feature = "nsh")]
 pub mod nsh_documents;
-#[cfg(feature = "nsh")]
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
 pub mod nsh_edge;
-#[cfg(feature = "nsh")]
+#[cfg(all(feature = "nsh", not(target_os = "ios")))]
 pub mod nsh_finance;
-#[cfg(feature = "nsh")]
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
 pub mod nsh_interior;
-#[cfg(feature = "nsh")]
+#[cfg(all(feature = "nsh", not(target_os = "ios")))]
 pub mod nsh_inventory;
-#[cfg(feature = "nsh")]
+#[cfg(all(feature = "nsh", not(target_os = "ios")))]
 pub mod nsh_mail;
-#[cfg(feature = "nsh")]
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
 pub mod nsh_map;
-#[cfg(feature = "nsh")]
+#[cfg(all(feature = "nsh", not(target_os = "ios")))]
 pub mod nsh_people;
-#[cfg(feature = "nsh")]
+#[cfg(all(feature = "nsh", not(target_os = "ios")))]
 pub mod nsh_projects;
-#[cfg(feature = "nsh")]
+#[cfg(all(feature = "nsh", not(target_os = "ios")))]
 mod nsh_registry;
-#[cfg(feature = "nsh")]
+#[cfg(all(feature = "nsh", not(target_os = "ios")))]
 pub mod nsh_settings;
-#[cfg(feature = "nsh")]
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
 pub mod nsh_soundscape;
-#[cfg(feature = "nsh")]
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
 pub mod nsh_terminal;
-#[cfg(feature = "nsh")]
+#[cfg(all(feature = "nsh", not(target_os = "ios")))]
 pub mod nsh_today;
-#[cfg(feature = "nsh")]
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
 pub mod nsh_travel;
 #[cfg(feature = "nsh")]
 mod nsh_ui;
@@ -106,6 +106,24 @@ pub mod packs;
 pub mod pdf_kit;
 #[cfg(feature = "gpui")]
 pub mod people;
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+pub mod phone_calendar;
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+pub mod phone_capture;
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+pub mod phone_finance;
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+pub mod phone_inventory;
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+pub mod phone_mail;
+#[cfg(all(feature = "gpui", target_os = "ios"))]
+pub mod phone_navigation;
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+pub mod phone_people;
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+pub mod phone_settings;
+#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+pub mod phone_today;
 #[cfg(feature = "gpui")]
 pub mod posts;
 #[cfg(feature = "gpui")]
@@ -138,7 +156,7 @@ pub mod systems;
 pub mod tasks;
 #[cfg(feature = "gpui")]
 pub mod terminal;
-#[cfg(any(feature = "nsh", test))]
+#[cfg(any(feature = "nsh", test, all(feature = "gpui", target_os = "ios")))]
 mod terminal_screen;
 #[cfg(all(feature = "gpui", any(test, feature = "test-support")))]
 pub mod test_support;

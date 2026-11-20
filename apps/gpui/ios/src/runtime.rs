@@ -161,7 +161,7 @@ impl AppState {
         }
         let Some(client) = self.client.clone() else {
             // A refresh needs the Mac. Saying so is better than a button that does nothing.
-            nsh_calendar::set_note(Some(
+            phone_calendar::set_note(Some(
                 "Pair with your Mac in Settings to fetch a copy.".to_owned(),
             ));
             return;

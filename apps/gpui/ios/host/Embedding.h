@@ -37,10 +37,19 @@ void sjel_ios_entered_background(void);
 void sjel_ios_unlocked(bool ok);
 // ios/src/host.rs: a pinch on the page, its scale since it began, and whether it ended. The
 // terminal steps its font size with it.
-void sjel_ios_pinch(double scale, bool ended);
+void sjel_ios_pinch(double scale, float x, float y, bool ended);
 // ios/src/health.rs: one HealthKit read from host/Health.swift, the `POST /health/api/days` body.
 // NUL-terminated UTF-8, valid only for the call.
 void sjel_ios_health_upload(const char *json);
-// ios/src/host.rs: mounts all phone screens into `container`, a UIView.
-bool sjel_ios_nsh_mount(void *container);
-void sjel_ios_nsh_apply_theme(void);
+void sjel_ios_health_state(const char *status, const char *last_synced, bool busy);
+// The GPUI window and its embedded UIKit controller.
+void sjel_ios_phone_prepare(void);
+void sjel_ios_open_link(const char *link);
+void *sjel_ios_gpui_start(void);
+int32_t sjel_ios_gpui_current_route(void);
+void *gpui_ios_view_controller(void *window);
+void gpui_ios_layout_view(void *window);
+bool gpui_ios_request_frame(void *window);
+void sjel_ios_gpui_apply_theme(bool system_dark);
+void gpui_ios_did_become_active(void *app);
+void gpui_ios_will_resign_active(void *app);

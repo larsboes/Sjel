@@ -951,11 +951,10 @@ why = "Its README reports 73-88% less main-thread CPU per frame than gpui-pre, m
 
 [gpui-mobile]
 url = "https://github.com/longbridge/gpui-mobile"
-verdict = "watch"
+verdict = "fork"
 license = "GPL-3.0-or-later OR AGPL-3.0-or-later OR Apache-2.0"
-summary = "GPUI platform crate for iOS and Android that a Swift or Kotlin host embeds; Sjel's former phone renderer"
-why = "It was the only GPUI platform for a Swift-hosted app, because Zed's gpui_ios owns the app lifecycle. Sjel pinned a fork at gpui-pre 0.3.12 that re-vendored gpui-pre-wgpu, until b59879d0 moved the last phone screen to NSH and removed the dependency (docs/plans/gpui.md section 11)."
-revisit = "Reopen only if NSH stops shipping and the phone returns to GPUI."
+summary = "Embedded GPUI platform for the iPhone's Swift host"
+why = "The maintained fork supplies the iOS platform for GPUI views within the running UIKit app. Its GPUI snapshot matches GPUI Kit and Ely."
 
 [gpui-pre-ios]
 url = "https://github.com/zed-industries/zed/tree/main/crates/gpui_ios"

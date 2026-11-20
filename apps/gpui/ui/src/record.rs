@@ -9,6 +9,8 @@ use crate::primitives::{card, note, placeholder, section};
 use crate::theme::ThemeContext;
 
 mod registry;
+#[cfg(target_os = "ios")]
+pub use registry::RegistryPage;
 
 pub struct RecordPage {
     repo: Repo,

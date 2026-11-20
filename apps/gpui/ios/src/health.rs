@@ -7,7 +7,7 @@ use serde::Deserialize;
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)] // Declaring the host's symbols is unsafe; the host owns their definitions.
 unsafe extern "C" {
-    fn sjel_ios_health_collect();
+    fn sjel_ios_health_collect(manual: bool);
     fn sjel_ios_health_finished(through: *const std::ffi::c_char, error: *const std::ffi::c_char);
 }
 
@@ -20,13 +20,52 @@ pub(crate) fn route() -> String {
 /// [`sjel_ios_health_upload`] when there is something to send.
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)]
-pub(crate) fn collect() {
-    // SAFETY: no arguments; the host answers on its own queue.
-    unsafe { sjel_ios_health_collect() };
+pub(crate) fn collect(manual: bool) {
+    // SAFETY: Swift takes a C bool and queues the read on its main thread.
+    unsafe { sjel_ios_health_collect(manual) };
 }
 
 #[cfg(not(target_os = "ios"))]
-pub(crate) fn collect() {}
+pub(crate) fn collect(_manual: bool) {}
+
+#[derive(Default)]
+pub(crate) struct State {
+    pub status: String,
+    pub last_synced: Option<String>,
+    pub busy: bool,
+}
+
+/// Updates Settings using display-only status, without passing HealthKit values.
+///
+/// # Safety
+/// `status` must point to a NUL-terminated UTF-8 string; `last_synced` is either null or
+/// another such string. Both buffers must stay alive for the call.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sjel_ios_health_state(
+    status: *const std::ffi::c_char,
+    last_synced: *const std::ffi::c_char,
+    busy: bool,
+) {
+    // SAFETY: Both pointers follow the contract; Swift keeps them live with `withCString`.
+    let (status, last_synced) = unsafe {
+        let status = std::ffi::CStr::from_ptr(status)
+            .to_string_lossy()
+            .into_owned();
+        let last_synced = (!last_synced.is_null()).then(|| {
+            std::ffi::CStr::from_ptr(last_synced)
+                .to_string_lossy()
+                .into_owned()
+        });
+        (status, last_synced)
+    };
+    crate::announce(crate::Event::HealthState(State {
+        status,
+        last_synced,
+        busy,
+    }));
+}
 
 /// The upload's outcome: stored through `through`, or `error`. Swift keeps it and, on a failure,
 /// tries again at the next foreground.
@@ -50,8 +89,17 @@ pub(crate) fn finished(_outcome: Result<Option<String>, String>) {}
 /// What the Mac answers to a stored upload.
 #[derive(Deserialize)]
 pub(crate) struct Ack {
-    #[allow(dead_code)] // Read in tests; the phone only needs the success.
-    pub stored: u64,
+    stored: u64,
+}
+
+impl Ack {
+    pub(crate) fn confirm(self, through: Option<String>) -> Result<Option<String>, String> {
+        if self.stored > 0 {
+            Ok(through)
+        } else {
+            Err("The Mac did not store any Health values from this upload.".into())
+        }
+    }
 }
 
 /// The newest day an upload body carries, which the host saves once the Mac stored it.
@@ -92,6 +140,11 @@ mod tests {
         assert_eq!(through(body).as_deref(), Some("2026-11-19"));
         assert_eq!(through("not json"), None);
         let ack: Ack = serde_json::from_str(r#"{"stored":3}"#).unwrap();
-        assert_eq!(ack.stored, 3);
+        assert_eq!(
+            ack.confirm(through(body)).unwrap().as_deref(),
+            Some("2026-11-19")
+        );
+        assert!((Ack { stored: 0 }).confirm(through(body)).is_err());
+        assert_eq!((Ack { stored: 1 }).confirm(None).unwrap(), None);
     }
 }

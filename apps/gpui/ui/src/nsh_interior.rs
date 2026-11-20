@@ -1,5 +1,7 @@
 //! Room scan archive, revision review, placements and layout planning on the phone.
+#[cfg(not(target_os = "ios"))]
 use crate::nsh_ui::{action, caption, field, heading, snapshot};
+#[cfg(not(target_os = "ios"))]
 use nsh_core::prelude::*;
 use sjel_gpui_core::{
     interior::{
@@ -438,6 +440,9 @@ fn plan(kind: PlanningKind, refs: Vec<String>) {
     });
 }
 
+#[cfg(not(target_os = "ios"))]
+mod legacy {
+use super::*;
 #[component]
 fn RevisionDetail() -> impl IntoElement {
     let snap = snapshot(&feed().tx);
@@ -1129,3 +1134,12 @@ mod tests {
         assert!(state().snap.selected.is_none());
     }
 }
+
+}
+#[cfg(not(target_os = "ios"))]
+pub use legacy::interior_screen;
+
+#[cfg(target_os = "ios")]
+mod phone;
+#[cfg(target_os = "ios")]
+pub use phone::PhoneInterior;

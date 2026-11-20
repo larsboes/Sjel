@@ -2,24 +2,36 @@ import Foundation
 import PDFKit
 import UIKit
 
-// The views and folders behind the Documents reader (ios/src/nsh.rs, docs/plans/gpui.md §11).
+@_cdecl("sjel_ios_documents_pdf")
+public func sjelIOSDocumentsPdf(_ path: UnsafePointer<CChar>) {
+    let url = URL(fileURLWithPath: String(cString: path))
+    DispatchQueue.main.async { openPDF(url) }
+}
 
-/// A PDFKit view that fits the page width, for the `sjel.pdf` component. The caller owns the +1.
-@_cdecl("sjel_ios_pdf_view")
-public func sjelIOSPdfView() -> UnsafeMutableRawPointer {
+private func openPDF(_ url: URL) {
+    guard let host = activeGpuiController(for: .documents),
+          host.presentedViewController == nil else { return }
+    guard let document = PDFDocument(url: url) else {
+        let alert = UIAlertController(title: "Could not open the original",
+                                      message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        host.present(alert, animated: true)
+        return
+    }
     let view = PDFView()
     view.autoScales = true
     view.displayMode = .singlePageContinuous
     view.displayDirection = .vertical
     view.backgroundColor = .systemBackground
-    return Unmanaged.passRetained(view).toOpaque()
-}
-
-/// Loads the PDF at `path` into a view `sjel_ios_pdf_view` made.
-@_cdecl("sjel_ios_pdf_load")
-public func sjelIOSPdfLoad(_ view: UnsafeMutableRawPointer, _ path: UnsafePointer<CChar>) {
-    let pdfView = Unmanaged<PDFView>.fromOpaque(view).takeUnretainedValue()
-    pdfView.document = PDFDocument(url: URL(fileURLWithPath: String(cString: path)))
+    view.document = document
+    let reader = UIViewController()
+    reader.view = view
+    reader.title = "Original"
+    reader.navigationItem.rightBarButtonItem = UIBarButtonItem(
+        systemItem: .done, primaryAction: UIAction { [weak reader] _ in
+            reader?.dismiss(animated: true)
+        })
+    host.present(UINavigationController(rootViewController: reader), animated: true)
 }
 
 /// Creates `path` as a folder whose new files are unreadable while the phone is locked

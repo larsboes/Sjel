@@ -63,6 +63,7 @@ pub(crate) fn surface_card() -> View {
         .bg(move || nsh_base::theme().card)
 }
 
+#[cfg(not(target_os = "ios"))]
 pub(crate) fn metric_tile(
     label: impl Into<String>,
     value: impl Into<String>,
@@ -145,6 +146,7 @@ pub(crate) fn status_chip(label: impl Into<String>, highlight: bool) -> impl Int
         )
 }
 
+#[cfg(not(target_os = "ios"))]
 pub(crate) fn action_circle(
     glyph: &'static str,
     label: &'static str,
@@ -206,6 +208,7 @@ pub(crate) fn action_circle(
         )
 }
 
+#[cfg(not(target_os = "ios"))]
 pub(crate) fn progress_bar(ratio: f32) -> impl IntoElement {
     let clamped = ratio.clamp(0.0, 1.0);
     let width = 72.0_f32;
@@ -272,6 +275,7 @@ pub(crate) fn nav_bar(
         .child(trailing)
 }
 
+#[cfg(not(target_os = "ios"))]
 pub(crate) fn list_row(
     title: impl Into<String>,
     subtitle: impl Into<String>,
@@ -304,6 +308,7 @@ pub(crate) fn list_row(
     )
 }
 
+#[cfg(not(target_os = "ios"))]
 pub(crate) fn filter_drawer(
     title: impl Into<String>,
     summary: impl Into<String>,
@@ -354,6 +359,7 @@ pub(crate) fn filter_drawer(
         .child(body)
 }
 
+#[cfg(not(target_os = "ios"))]
 pub(crate) fn empty_state(title: impl Into<String>, detail: impl Into<String>) -> impl IntoElement {
     surface_card()
         .px_4()

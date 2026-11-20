@@ -156,6 +156,37 @@ pub(crate) fn announce(event: Event) {
     }
 }
 
+/// Starts the phone coordinator before UIKit delivers connection callbacks.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sjel_ios_phone_prepare() {
+    static PREPARED: OnceLock<()> = OnceLock::new();
+    PREPARED.get_or_init(|| {
+        crate::phone_system::prepare();
+        crate::start();
+    });
+}
+
+/// Routes an incoming UIKit URL through the phone coordinator.
+///
+/// # Safety
+///
+/// `link` is null or points to a NUL-terminated string valid for this call.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sjel_ios_open_link(link: *const std::ffi::c_char) {
+    if link.is_null() {
+        return;
+    }
+    // SAFETY: UIKit passes a string scoped to its withCString call.
+    if let Ok(link) = unsafe { std::ffi::CStr::from_ptr(link) }.to_str() {
+        sjel_ios_phone_prepare();
+        announce(Event::NotifyOpen(link.to_owned()));
+    }
+}
+
 /// Called by `host/Discovery.swift` with one browse answer, `{"nodes":[…],"denied":false}`.
 ///
 /// The Swift side browses `_sjel._tcp` and passes every TXT record it can use; this entry point
@@ -343,8 +374,8 @@ pub extern "C" fn sjel_ios_entered_background() {
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
 #[unsafe(no_mangle)]
-pub extern "C" fn sjel_ios_pinch(scale: f64, ended: bool) {
-    announce(Event::Pinch(scale, ended));
+pub extern "C" fn sjel_ios_pinch(scale: f64, x: f32, y: f32, ended: bool) {
+    announce(Event::Pinch(scale, (x, y), ended));
 }
 
 /// Called by `host/App.swift` with the answer to `sjel_ios_unlock`, on the main queue.
@@ -353,22 +384,4 @@ pub extern "C" fn sjel_ios_pinch(scale: f64, ended: bool) {
 #[unsafe(no_mangle)]
 pub extern "C" fn sjel_ios_unlocked(ok: bool) {
     announce(Event::Unlocked(ok));
-}
-
-/// Called by `host/App.swift` at launch: mounts the NSH screens into `container`, a
-/// `UIView`. Returns `false` for a null container or off the main thread.
-#[cfg(target_os = "ios")]
-#[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
-#[unsafe(no_mangle)]
-pub extern "C" fn sjel_ios_nsh_mount(container: *mut std::ffi::c_void) -> bool {
-    if container.is_null() {
-        return false;
-    }
-    // SAFETY: the host passes an unretained `UIView` it keeps in its hierarchy for the call.
-    let view = unsafe { &*container.cast::<objc2_ui_kit::UIView>() };
-    let mounted = crate::nsh::mount(view);
-    if mounted {
-        crate::start();
-    }
-    mounted
 }

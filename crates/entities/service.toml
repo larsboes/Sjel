@@ -6,6 +6,7 @@ build          = ["cargo", "build", "--locked", "--release", "--bin", "entities-
 port           = "8097"
 health_path    = "/health"
 ready_path     = "/ready"
+autostart      = "true"
 proxy_api_only = "true"
 
 # Read-only Google Contacts OAuth grant (Settings › Accounts).

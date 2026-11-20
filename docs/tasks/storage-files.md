@@ -83,11 +83,16 @@ shared-file path pointed at an absent file.
 The [Entities SQL rehearsal](../../research/benchmarks/storage-engine/README.md#entities-owner-only-rehearsal)
 matched the Turso WAL commit, rollback and SQLite restore against the SQLite control.
 
+The live gateway rebuilds the phone mirror from the Entities offline projection. A download
+matched the published digest, and a range response matched the requested bytes. The Entities
+watchdog keeps the endpoint available to both the mirror and Finder.
+
 ## Remaining migration gates
 
 - Verify a successful signed request from a paired client against the live Inventory owner.
-- Deploy the Entities offline export and verify a refreshed phone mirror.
-- Rehearse the Entities owner adapter, scheduled backup, and rollback on Turso WAL before
+- Verify a refresh on a paired iPhone.
+- Move the Entities contact imports, Journal job, and name registry behind the single
+  owner process. Rehearse its Turso WAL adapter, scheduled backup, and rollback before
   changing the live store.
 - Move Finder and the Now view to Calendar owner reads and replace its phone mirror table copy.
   [Route reads through owners](storage-owner-reads.md).

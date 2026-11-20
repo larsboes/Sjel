@@ -28,83 +28,58 @@ pub fn find_repo_root() -> Option<PathBuf> {
     None
 }
 
-/// Checks the repository for updates.
-pub fn check_git_updates(repo_root: &Path) -> Option<UpdateInfo> {
+/// Locate the source checkout recorded by the desktop installer.
+pub fn find_build_root() -> Option<PathBuf> {
+    match std::env::var_os("SJEL_DESKTOP_SOURCE_ROOT") {
+        Some(root) => {
+            let root = PathBuf::from(root);
+            root.join("apps/gpui/install").is_file().then_some(root)
+        }
+        None => find_repo_root(),
+    }
+}
+
+fn git(repo_root: &Path, arguments: &[&str]) -> Option<String> {
     let output = Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
+        .args(arguments)
         .current_dir(repo_root)
         .output()
         .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
 
-    if !output.status.success() {
-        return None;
-    }
+pub(super) fn can_rebuild(repo_root: &Path, running: &str, target: &str) -> bool {
+    running == "dev" || git(repo_root, &["merge-base", "--is-ancestor", running, target]).is_some()
+}
 
-    let latest_commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
+/// Checks the source checkout for commits that follow this build.
+pub fn check_git_updates(repo_root: &Path) -> Option<UpdateInfo> {
+    let target = git(repo_root, &["rev-parse", "HEAD"])?;
+    let latest_commit = git(repo_root, &["rev-parse", "--short", &target])?;
+    let can_rebuild = can_rebuild(repo_root, RUNNING_COMMIT, &target);
     let mut commits_behind = 0;
     let mut commits = Vec::new();
 
-    if RUNNING_COMMIT != latest_commit {
-        let rev_spec = format!("{}..HEAD", RUNNING_COMMIT);
-        if let Ok(count_out) = Command::new("git")
-            .args(["rev-list", "--count", &rev_spec])
-            .current_dir(repo_root)
-            .output()
-        {
-            if count_out.status.success() {
-                if let Ok(count_str) = String::from_utf8(count_out.stdout) {
-                    commits_behind = count_str.trim().parse::<usize>().unwrap_or(0);
-                }
-            }
-        }
-
-        let log_res = Command::new("git")
-            .args(["log", "--oneline", "-n", "6", &rev_spec])
-            .current_dir(repo_root)
-            .output();
-
-        let log_out = match log_res {
-            Ok(ref o) if o.status.success() && !o.stdout.is_empty() => Some(o),
-            _ => None,
-        };
-
-        let log_str = if let Some(o) = log_out {
-            String::from_utf8_lossy(&o.stdout).to_string()
-        } else {
-            Command::new("git")
-                .args(["log", "--oneline", "-n", "5", "HEAD"])
-                .current_dir(repo_root)
-                .output()
-                .ok()
-                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-                .unwrap_or_default()
-        };
-
-        for line in log_str.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            if let Some((sha, msg)) = line.split_once(' ') {
-                commits.push(CommitSummary {
-                    sha: sha.to_string(),
-                    message: msg.to_string(),
-                });
-            }
-        }
-
-        if commits_behind == 0 && !commits.is_empty() {
-            commits_behind = commits.len();
-        }
+    if can_rebuild && RUNNING_COMMIT != "dev" {
+        let range = format!("{RUNNING_COMMIT}..{target}");
+        commits_behind = git(repo_root, &["rev-list", "--count", &range])?
+            .parse()
+            .ok()?;
+        commits = git(repo_root, &["log", "--oneline", "-n", "6", &range])?
+            .lines()
+            .filter_map(|line| line.split_once(' '))
+            .map(|(sha, message)| CommitSummary {
+                sha: sha.to_owned(),
+                message: message.to_owned(),
+            })
+            .collect();
     }
 
-    let status_out = Command::new("git")
-        .args(["status", "--porcelain"])
-        .current_dir(repo_root)
-        .output()
-        .ok();
-    let has_uncommitted_changes = status_out.map(|o| !o.stdout.is_empty()).unwrap_or(false);
+    let has_uncommitted_changes =
+        git(repo_root, &["status", "--porcelain"]).is_some_and(|status| !status.is_empty());
 
     Some(UpdateInfo {
         running_commit: RUNNING_COMMIT,
@@ -114,5 +89,20 @@ pub fn check_git_updates(repo_root: &Path) -> Option<UpdateInfo> {
         commits,
         repo_root: repo_root.to_path_buf(),
         has_uncommitted_changes,
+        can_rebuild,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rebuild_only_accepts_the_current_revision_or_a_descendant() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        assert!(can_rebuild(root, "HEAD", "HEAD"));
+        assert!(can_rebuild(root, "HEAD^", "HEAD"));
+        assert!(!can_rebuild(root, "HEAD", "HEAD^"));
+        assert!(!can_rebuild(root, "missing-build-revision", "HEAD"));
+    }
 }

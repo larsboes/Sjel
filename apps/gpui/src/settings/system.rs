@@ -153,6 +153,13 @@ pub(super) fn updates(
 ) -> Vec<AnyElement> {
     let (repo, repo_color) = match &view.update_info {
         None => ("Checking…".to_owned(), palette.muted),
+        Some(info) if !info.can_rebuild => (
+            format!(
+                "{} · checkout does not contain this build",
+                info.latest_commit
+            ),
+            palette.amber,
+        ),
         Some(info) if info.commits_behind > 0 => (
             format!(
                 "{} · {} newer commit{}",
@@ -189,6 +196,10 @@ pub(super) fn updates(
         .update_info
         .as_ref()
         .is_some_and(|info| info.commits_behind > 0);
+    let rebuild_blocked = view
+        .update_info
+        .as_ref()
+        .is_some_and(|info| !info.can_rebuild);
     let version_action = if behind {
         div()
             .id("update-now-tip")
@@ -250,11 +261,17 @@ pub(super) fn updates(
                             Button::new("copy-install", "Copy")
                                 .variant(ButtonVariant::Ghost)
                                 .size(ControlSize::Sm)
-                                .on_click(|_, _, cx| {
-                                    cx.write_to_clipboard(ClipboardItem::new_string(
-                                        "apps/gpui/install".to_owned(),
-                                    ));
-                                }),
+                                .disabled(rebuild_blocked || view.update_info.is_none())
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    let Some(info) = &view.update_info else {
+                                        return;
+                                    };
+                                    let installer = info.repo_root.join("apps/gpui/install");
+                                    let quoted = installer.to_string_lossy().replace('\'', "'\\''");
+                                    cx.write_to_clipboard(ClipboardItem::new_string(format!(
+                                        "'{quoted}'"
+                                    )));
+                                })),
                         ),
                 )
                 .child(
@@ -262,7 +279,7 @@ pub(super) fn updates(
                         .variant(ButtonVariant::Primary)
                         .size(ControlSize::Sm)
                         .loading(building)
-                        .disabled(building)
+                        .disabled(building || rebuild_blocked)
                         .on_click(
                             cx.listener(|view, _, window, cx| view.trigger_rebuild(window, cx)),
                         ),

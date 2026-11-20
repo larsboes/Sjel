@@ -873,7 +873,7 @@ impl Workspace {
             let info = cx
                 .background_executor()
                 .spawn(async move {
-                    crate::update::find_repo_root()
+                    crate::update::find_build_root()
                         .and_then(|repo| crate::update::check_git_updates(&repo))
                 })
                 .await;
@@ -886,7 +886,7 @@ impl Workspace {
     }
 
     pub fn trigger_rebuild(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(repo_root) = crate::update::find_repo_root() else {
+        let Some(repo_root) = crate::update::find_build_root() else {
             window.push_toast(
                 Toast::new("Could not locate Sjel repository root.").severity(Severity::Danger),
                 cx,
@@ -1486,7 +1486,7 @@ impl Workspace {
             let info = cx
                 .background_executor()
                 .spawn(async move {
-                    crate::update::find_repo_root()
+                    crate::update::find_build_root()
                         .and_then(|r| crate::update::check_git_updates(&r))
                 })
                 .await;

@@ -85,6 +85,10 @@ project named here has a `watch` row in `../upstreams.toml`.
   both possible. The options named so far are support and sponsorship with a build-in-public
   video series (decisions, papers, measurements, in the style of James Simo's city-builder
   devlog), hosting, or a company. Undecided.
+- [Adaptive view formats](svelte-adaptive-ui.md): json-render, A2UI and OpenUI Lang compared as
+  view-document formats, with an adoption gate for the view format task.
+- [json-render admission audit](json-render-audit.md): the source and package review of
+  json-render 0.22.0 behind that comparison.
 
 ## To verify
 

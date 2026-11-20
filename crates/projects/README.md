@@ -28,6 +28,11 @@ projects reindex
 
 The service is managed through `tools/service-runner.sh` and its `service.toml` manifest. The live HTTP contract is available at `GET /routes`.
 
+The default build uses the shared store. The opt-in `turso-wal` build requires
+`SJEL_PROJECTS_DB_PATH` to name an existing, separate owner file. It provides a protected
+snapshot socket and refuses direct CLI access to the index. The
+[cutover task](../../docs/tasks/storage-projects-wal.md) tracks the remaining CLI and backup work.
+
 ## Private delivery workspaces
 
 `projects workspace` prepares projects from Markdown templates, adopts private project indexes and

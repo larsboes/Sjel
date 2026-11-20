@@ -1,15 +1,9 @@
-//! The Markdown files under `<overlay>/data/projects/` are the authority for every record; the
-//! shared store is their index.
+//! Markdown files are authoritative for Projects records. The database indexes their content.
 //!
 //! A write from Sjel writes the file first (whole file, temp-plus-rename, mode 0600) and the index
 //! second, and refuses when the file holds bytes the index has not seen: an edit made in another
 //! editor is never overwritten. [`Projects::reindex`] adopts such edits, drops rows whose file was
 //! deleted, and refuses a file whose frontmatter lowers its folder's data class.
-//!
-//! The database is LibSQL through `sjel-turso`, so every read and write is awaited. The rendered
-//! tree stays ordinary synchronous file I/O: it is a few KB per record on the overlay, and
-//! `markdown_root` walks directories with no async form. Keeping that split means the reactor
-//! waits on the database and never on a temp-file rename.
 
 use std::{
     fs,
@@ -18,8 +12,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[cfg(not(feature = "turso-wal"))]
+use engine::TransactionBehavior;
 use serde::Serialize;
-use sjel_turso::{libsql, Store};
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal::{Pool as Store, TransactionBehavior, NOW};
+#[cfg(not(feature = "turso-wal"))]
+use sjel_turso::{libsql as engine, Store, NOW};
+#[cfg(feature = "turso-wal")]
+use turso as engine;
 
 use crate::ops::SaveError;
 use crate::record::{check_attachment, Kind, Record};
@@ -27,8 +28,21 @@ use crate::record::{check_attachment, Kind, Record};
 pub const PREFIX: &str = "projects";
 type Fallible<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+#[cfg(not(feature = "turso-wal"))]
+type WriteTransaction<'conn> = engine::Transaction;
+#[cfg(feature = "turso-wal")]
+type WriteTransaction<'conn> = engine::transaction::Transaction<'conn>;
+
+async fn begin_write(conn: &mut engine::Connection) -> Fallible<WriteTransaction<'_>> {
+    Ok(conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .await?)
+}
+
 pub struct Projects {
     db: Store,
+    #[cfg(feature = "turso-wal")]
+    database: PathBuf,
     root: PathBuf,
     pub(crate) source_config: Option<PathBuf>,
 }
@@ -139,12 +153,34 @@ impl Projects {
     /// # Errors
     /// The database cannot be opened or migrated.
     pub async fn open(database: &Path, root: PathBuf) -> Fallible<Self> {
+        #[cfg(not(feature = "turso-wal"))]
         let db = Store::open(database, PREFIX, migrate).await?;
+        #[cfg(feature = "turso-wal")]
+        let db = {
+            let database = database.to_owned();
+            tokio::task::spawn_blocking(move || {
+                sjel_native_wal::open_pool(&database, PREFIX, migrate)
+                    .map_err(|error| error.to_string())
+            })
+            .await??
+        };
         Ok(Self {
             db,
+            #[cfg(feature = "turso-wal")]
+            database: database.canonicalize()?,
             root,
             source_config: None,
         })
+    }
+
+    /// Write a closed snapshot of the committed index.
+    ///
+    /// # Errors
+    /// The owner cannot open a reader or create the snapshot.
+    #[cfg(feature = "turso-wal")]
+    pub fn snapshot(&self, target: &Path) -> Result<(), String> {
+        let conn = self.db.get().map_err(|error| error.to_string())?;
+        sjel_native_wal::snapshot(&conn, &self.database, target).map_err(|error| error.to_string())
     }
 
     /// Select the deployment's read-only project task sources.
@@ -179,7 +215,8 @@ impl Projects {
         if crate::record::is_domain(&input.project) {
             return Err("mail evidence requires a project, not a domain".into());
         }
-        let tx = self.db.begin().await?;
+        let mut conn = self.db.connect().await?;
+        let tx = begin_write(&mut conn).await?;
         let mut rows = tx
             .query(
                 "SELECT 1 FROM projects_records WHERE project = ?1 AND archived = 0 LIMIT 1",
@@ -231,7 +268,8 @@ impl Projects {
         decision: &str,
         target: Option<(&str, &str)>,
     ) -> Fallible<Option<MailDecisionOutcome>> {
-        let tx = self.db.begin().await?;
+        let mut conn = self.db.connect().await?;
+        let tx = begin_write(&mut conn).await?;
         let mut rows = tx.query("SELECT id, payload, version, status FROM projects_mail_proposals WHERE id = ?1 AND version = ?2 AND status = 'pending'", (id, version)).await?;
         let Some(row) = rows.next().await? else {
             return Ok(None);
@@ -275,7 +313,7 @@ impl Projects {
                     fence
                 );
                 let record = Record::from_content(path, content)?;
-                let count = tx.execute(&format!("UPDATE projects_records SET content = ?1, updated_at = {} WHERE path = ?2 AND project = ?3 AND archived = 0 AND content = ?4", sjel_turso::NOW), (record.content.as_str(), path, proposal.input.project.as_str(), base)).await?;
+                let count = tx.execute(&format!("UPDATE projects_records SET content = ?1, updated_at = {} WHERE path = ?2 AND project = ?3 AND archived = 0 AND content = ?4", NOW), (record.content.as_str(), path, proposal.input.project.as_str(), base)).await?;
                 if count != 1 {
                     return Ok(None);
                 }
@@ -345,7 +383,8 @@ impl Projects {
             revision,
             add,
         } = target;
-        let tx = self.db.begin().await?;
+        let mut conn = self.db.connect().await?;
+        let tx = begin_write(&mut conn).await?;
         let mut rows = tx.query("SELECT path, content FROM projects_records WHERE path = ?1 AND project = ?2 AND archived = 0 AND kind = 'project' AND content = ?3 AND updated_at = ?4", (path, project, base, revision)).await?;
         let Some(row) = rows.next().await? else {
             return Ok(None);
@@ -361,7 +400,7 @@ impl Projects {
         }
         let changed = if add {
             let item_revision = verified_revision.ok_or("missing Inventory verification")?;
-            tx.execute(&format!("INSERT INTO projects_inventory_links (record_path, item_ref, verified_revision, reviewed_at) VALUES (?1, ?2, ?3, {}) ON CONFLICT(record_path,item_ref) DO NOTHING", sjel_turso::NOW), (path, item_ref, item_revision)).await?
+            tx.execute(&format!("INSERT INTO projects_inventory_links (record_path, item_ref, verified_revision, reviewed_at) VALUES (?1, ?2, ?3, {}) ON CONFLICT(record_path,item_ref) DO NOTHING", NOW), (path, item_ref, item_revision)).await?
         } else {
             tx.execute(
                 "DELETE FROM projects_inventory_links WHERE record_path = ?1 AND item_ref = ?2",
@@ -379,7 +418,8 @@ impl Projects {
     /// [`NewerFile`] when the file holds bytes the index has not seen; the write or the index
     /// update failed. A failed index update leaves the file written, and `reindex` adopts it.
     pub async fn put(&self, record: &Record) -> Fallible<()> {
-        let tx = self.db.begin().await?;
+        let mut conn = self.db.connect().await?;
+        let tx = begin_write(&mut conn).await?;
         let prior = Self::get_timed_on(&tx, &record.path)
             .await?
             .map(|(r, _)| r.content);
@@ -392,7 +432,8 @@ impl Projects {
 
     /// Checks the base under the index writer lock and keeps it through the file replacement.
     pub(crate) async fn save_checked(&self, record: &Record, base: Option<&str>) -> Fallible<()> {
-        let tx = self.db.begin().await?;
+        let mut conn = self.db.connect().await?;
+        let tx = begin_write(&mut conn).await?;
         let path = record.path.as_str();
         let prior = Self::get_timed_on(&tx, path).await?.map(|(r, _)| r.content);
         let disk = match fs::read_to_string(self.root.join(path)) {
@@ -445,7 +486,7 @@ impl Projects {
         }
     }
 
-    async fn index_on(tx: &libsql::Transaction, record: &Record) -> Fallible<()> {
+    async fn index_on(tx: &engine::Connection, record: &Record) -> Fallible<()> {
         tx.execute(
             &format!(
                 "INSERT INTO projects_records
@@ -455,7 +496,7 @@ impl Projects {
                    title = excluded.title, done = excluded.done, due = excluded.due,
                    priority = excluded.priority, archived = excluded.archived,
                    content = excluded.content, updated_at = excluded.updated_at",
-                now = sjel_turso::NOW
+                now = NOW
             ),
             (
                 record.path.as_str(),
@@ -532,7 +573,8 @@ impl Projects {
                 report.refused.push((id, reason));
                 continue;
             }
-            let tx = self.db.begin().await?;
+            let mut conn = self.db.connect().await?;
+            let tx = begin_write(&mut conn).await?;
             match fs::read(&file) {
                 Ok(content) if content == record.content.as_bytes() => {}
                 Ok(_) => continue,
@@ -553,7 +595,8 @@ impl Projects {
         let mut gone: Vec<&String> = rows.keys().filter(|path| !seen.contains(*path)).collect();
         gone.sort();
         for path in gone {
-            let tx = self.db.begin().await?;
+            let mut conn = self.db.connect().await?;
+            let tx = begin_write(&mut conn).await?;
             if self.root.join(path).try_exists()? {
                 continue;
             }
@@ -578,7 +621,8 @@ impl Projects {
     /// # Errors
     /// [`NewerFile`] when the file changed outside Sjel; the delete or the file removal failed.
     pub async fn remove(&self, path: &str) -> Fallible<bool> {
-        let tx = self.db.begin().await?;
+        let mut conn = self.db.connect().await?;
+        let tx = begin_write(&mut conn).await?;
         let prior = Self::get_timed_on(&tx, path).await?.map(|(r, _)| r.content);
         tx.execute(
             "DELETE FROM projects_inventory_links WHERE record_path = ?1",
@@ -605,7 +649,8 @@ impl Projects {
     /// # Errors
     /// The new path is invalid or occupied, or the source changed outside Sjel.
     pub async fn move_record(&self, from: &str, to: &str) -> Fallible<bool> {
-        let tx = self.db.begin().await?;
+        let mut conn = self.db.connect().await?;
+        let tx = begin_write(&mut conn).await?;
         if Self::get_timed_on(&tx, to).await?.is_some() {
             return Err(format!("{to}: a record is already there").into());
         }
@@ -664,7 +709,7 @@ impl Projects {
     }
 
     async fn get_timed_on(
-        conn: &libsql::Connection,
+        conn: &engine::Connection,
         path: &str,
     ) -> Fallible<Option<(Record, String)>> {
         let mut rows = conn
@@ -714,7 +759,7 @@ impl Projects {
         let mut rows = conn
             .query(
                 "SELECT path, content, updated_at FROM projects_records WHERE project = ?1 ORDER BY path",
-                vec![libsql::Value::from(project)],
+                vec![engine::Value::from(project)],
             )
             .await?;
         let mut records = Vec::new();
@@ -725,7 +770,7 @@ impl Projects {
         Ok(records)
     }
 
-    async fn query(&self, sql: &str, params: Vec<libsql::Value>) -> Fallible<Vec<Record>> {
+    async fn query(&self, sql: &str, params: Vec<engine::Value>) -> Fallible<Vec<Record>> {
         let conn = self.db.connect().await?;
         let mut rows = conn.query(sql, params).await?;
         let mut records = Vec::new();
@@ -826,7 +871,7 @@ impl Projects {
     }
 }
 
-fn proposal_from_row(row: &libsql::Row) -> Fallible<MailProposal> {
+fn proposal_from_row(row: &engine::Row) -> Fallible<MailProposal> {
     let payload: String = row.get(1)?;
     Ok(MailProposal {
         id: row.get(0)?,
@@ -838,17 +883,13 @@ fn proposal_from_row(row: &libsql::Row) -> Fallible<MailProposal> {
 
 /// `path, content` is the whole row a record needs: every other column is derived from the
 /// content when the record is read, so the file stays the single source of the fields.
-fn record_from_row(row: &libsql::Row) -> Fallible<Record> {
+fn record_from_row(row: &engine::Row) -> Fallible<Record> {
     let path: String = row.get(0)?;
     let content: String = row.get(1)?;
     Ok(Record::from_content(&path, content)?)
 }
 
-/// The table this capability owns in the shared file. `kind` and `priority` carry the same
-/// constraints `record.rs` enforces, so a hand-written row cannot disagree with a rendered one.
-async fn migrate(conn: libsql::Connection) -> Fallible<()> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS projects_records (
+const PROJECTS_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS projects_records (
             path TEXT PRIMARY KEY,
             project TEXT NOT NULL,
             kind TEXT NOT NULL CHECK (kind IN ('project', 'task', 'note')),
@@ -867,18 +908,35 @@ async fn migrate(conn: libsql::Connection) -> Fallible<()> {
             verified_revision INTEGER NOT NULL, reviewed_at TEXT NOT NULL,
             PRIMARY KEY (record_path, item_ref)
         );
-        CREATE INDEX IF NOT EXISTS projects_inventory_links_target ON projects_inventory_links (item_ref);
-        CREATE TABLE IF NOT EXISTS projects_mail_proposals (
+        CREATE INDEX IF NOT EXISTS projects_inventory_links_target ON projects_inventory_links (item_ref);";
+const MAIL_PROPOSAL_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS projects_mail_proposals (
             id INTEGER PRIMARY KEY,
             source_id TEXT NOT NULL, line_id TEXT NOT NULL, event TEXT NOT NULL,
             project TEXT NOT NULL, payload TEXT NOT NULL,
             version INTEGER NOT NULL DEFAULT 1,
-            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'rejected', 'approved_pending_action')),
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'rejected', 'approved_pending_action', 'approved_applied')),
             UNIQUE (source_id, line_id, event, project)
-        );",
-    )
-    .await?;
-    let mut rows = conn.query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'projects_mail_proposals'", ()).await?;
+        );";
+const MAIL_APPLICATION_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS projects_mail_applications (
+        proposal_id INTEGER PRIMARY KEY REFERENCES projects_mail_proposals(id),
+        target_path TEXT NOT NULL
+    )";
+const MAIL_PROPOSAL_DDL: &str =
+    "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'projects_mail_proposals'";
+const RENAME_PROPOSAL_TABLE: &str =
+    "ALTER TABLE projects_mail_proposals RENAME TO projects_mail_proposals_old";
+const MOVE_PROPOSALS: &str =
+    "INSERT INTO projects_mail_proposals SELECT * FROM projects_mail_proposals_old;
+     DROP TABLE projects_mail_proposals_old;";
+
+#[cfg(not(feature = "turso-wal"))]
+async fn migrate(conn: engine::Connection) -> Fallible<()> {
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .await?;
+    tx.execute_batch(PROJECTS_SCHEMA).await?;
+    tx.execute_batch(MAIL_PROPOSAL_SCHEMA).await?;
+    let mut rows = tx.query(MAIL_PROPOSAL_DDL, ()).await?;
     let sql: String = rows
         .next()
         .await?
@@ -886,20 +944,26 @@ async fn migrate(conn: libsql::Connection) -> Fallible<()> {
         .get(0)?;
     drop(rows);
     if !sql.contains("approved_applied") {
-        conn.execute_batch("BEGIN IMMEDIATE;
-            ALTER TABLE projects_mail_proposals RENAME TO projects_mail_proposals_old;
-            CREATE TABLE projects_mail_proposals (
-                id INTEGER PRIMARY KEY, source_id TEXT NOT NULL, line_id TEXT NOT NULL,
-                event TEXT NOT NULL, project TEXT NOT NULL, payload TEXT NOT NULL,
-                version INTEGER NOT NULL DEFAULT 1,
-                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'rejected', 'approved_pending_action', 'approved_applied')),
-                UNIQUE (source_id, line_id, event, project)
-            );
-            INSERT INTO projects_mail_proposals SELECT * FROM projects_mail_proposals_old;
-            DROP TABLE projects_mail_proposals_old;
-            COMMIT;").await?;
+        tx.execute(RENAME_PROPOSAL_TABLE, ()).await?;
+        tx.execute_batch(MAIL_PROPOSAL_SCHEMA).await?;
+        tx.execute_batch(MOVE_PROPOSALS).await?;
     }
-    conn.execute("CREATE TABLE IF NOT EXISTS projects_mail_applications (proposal_id INTEGER PRIMARY KEY REFERENCES projects_mail_proposals(id), target_path TEXT NOT NULL)", ()).await?;
+    tx.execute(MAIL_APPLICATION_SCHEMA, ()).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+#[cfg(feature = "turso-wal")]
+fn migrate(conn: &sjel_native_wal::Connection) -> Result<(), Box<dyn std::error::Error>> {
+    conn.execute_batch(PROJECTS_SCHEMA)?;
+    conn.execute_batch(MAIL_PROPOSAL_SCHEMA)?;
+    let sql: String = conn.query_row(MAIL_PROPOSAL_DDL, (), |row| row.get(0))?;
+    if !sql.contains("approved_applied") {
+        conn.execute(RENAME_PROPOSAL_TABLE, ())?;
+        conn.execute_batch(MAIL_PROPOSAL_SCHEMA)?;
+        conn.execute_batch(MOVE_PROPOSALS)?;
+    }
+    conn.execute(MAIL_APPLICATION_SCHEMA, ())?;
     Ok(())
 }
 
@@ -926,7 +990,15 @@ pub(crate) mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("sjel.db");
+        #[cfg(not(feature = "turso-wal"))]
         let conn = sjel_turso::open_local(&path).await.unwrap();
+        #[cfg(feature = "turso-wal")]
+        let conn = engine::Builder::new_local(path.to_str().unwrap())
+            .build()
+            .await
+            .unwrap()
+            .connect()
+            .unwrap();
         conn.execute_batch("CREATE TABLE projects_mail_proposals (id INTEGER PRIMARY KEY, source_id TEXT NOT NULL, line_id TEXT NOT NULL, event TEXT NOT NULL, project TEXT NOT NULL, payload TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'rejected', 'approved_pending_action')), UNIQUE (source_id, line_id, event, project)); INSERT INTO projects_mail_proposals VALUES (1, 'm', 'l', 'project_evidence', 'P', '{\"source_id\":\"m\",\"line_id\":\"l\",\"event\":\"project_evidence\",\"project\":\"P\",\"title\":\"t\",\"evidence\":\"e\",\"data_class\":\"c1\",\"task_suggestion\":null}', 2, 'approved_pending_action');").await.unwrap();
         drop(conn);
         let store = Projects::open(&path, dir.join("rendered")).await.unwrap();
@@ -943,6 +1015,22 @@ pub(crate) mod tests {
             format!("---\ntype: task\ndone: {done}\npriority: 1\n---\n\nbody\n"),
         )
         .unwrap()
+    }
+
+    #[cfg(feature = "turso-wal")]
+    #[tokio::test]
+    async fn the_owner_snapshot_restores_a_committed_record() {
+        let (projects, dir) = scratch("snapshot").await;
+        let record = task("Example/Tasks/Review.md", true);
+        projects.put(&record).await.unwrap();
+        let target = dir.join("restored.db");
+        projects.snapshot(&target).unwrap();
+        let restored = Projects::open(&target, dir.join("isolated")).await.unwrap();
+        let recovered = restored.get(&record.path).await.unwrap().unwrap();
+        assert_eq!(recovered.content, record.content);
+        assert!(recovered.done);
+        assert!(!restored.root().exists());
+        fs::remove_dir_all(dir).unwrap();
     }
 
     /// A write and its file change together.

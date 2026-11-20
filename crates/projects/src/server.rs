@@ -917,6 +917,18 @@ async fn serve() {
         }
     };
     let projects = Arc::new(projects);
+    #[cfg(feature = "turso-wal")]
+    {
+        let owner = projects.clone();
+        let target = sjel_config::overlay_data_dir("projects-wal-backup")
+            .expect("Projects snapshot requires an overlay")
+            .join("projects.db");
+        tokio::spawn(sjel_server::owner_snapshot::serve_at(
+            "projects",
+            target,
+            move |target| owner.snapshot(target),
+        ));
+    }
     tokio::spawn(reindex_loop(projects.clone()));
     sjel_server::serve_local_with("projects", port, router(projects), AGENT_ROUTES).await;
 }
@@ -950,9 +962,18 @@ async fn reindex_loop(projects: Arc<Projects>) {
 }
 
 fn main() {
-    tokio::runtime::Runtime::new()
-        .expect("tokio runtime could not start")
-        .block_on(serve());
+    let runtime = tokio::runtime::Runtime::new().expect("tokio runtime could not start");
+    if std::env::args().nth(1).as_deref() == Some("snapshot") {
+        #[cfg(feature = "turso-wal")]
+        match runtime.block_on(sjel_server::owner_snapshot::submit("projects")) {
+            Ok(()) => return,
+            Err(error) => eprintln!("projects: {error}"),
+        }
+        #[cfg(not(feature = "turso-wal"))]
+        eprintln!("projects: a snapshot requires the Turso WAL owner build");
+        std::process::exit(1);
+    }
+    runtime.block_on(serve());
 }
 
 #[cfg(test)]

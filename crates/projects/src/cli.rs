@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use projects::{open_default, ops};
+use projects::ops;
 
 const USAGE: &str = "usage: projects <command>
   list [--all|--done]                          open tasks of live projects
@@ -44,6 +44,13 @@ fn main() {
     }
 }
 
+async fn open_cli_store() -> Result<projects::Projects, Box<dyn std::error::Error + Send + Sync>> {
+    #[cfg(feature = "turso-wal")]
+    return Err("The Turso Projects build does not open an index from the CLI".into());
+    #[cfg(not(feature = "turso-wal"))]
+    projects::open_default().await
+}
+
 async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(command) = args.first() else {
@@ -61,7 +68,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .map(String::as_str)
             .ok_or(USAGE)
     };
-    let projects = open_default().await?;
+    let projects = open_cli_store().await?;
     // The files are the authority, so every command but the two that inspect the index starts
     // from them.
     if !matches!(command.as_str(), "verify" | "reindex") {

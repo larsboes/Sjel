@@ -243,6 +243,23 @@ The native owner acknowledges an HTTP create, answers the names job over its loc
 and exports a snapshot from the running process. The backup verifies and restores the archive
 against its receipt and finds the acknowledged entity in it.
 
+## Health and Projects owner rehearsals
+
+Build `health` and `projects-server` with `--no-default-features --features turso-wal`, and
+build the `projects` CLI with its default libSQL feature. Use short scratch paths, such as
+children of a directory created with `mktemp -d /tmp/sjel-wal.XXXXXX`, so the Unix socket
+paths fit macOS limits.
+
+```sh
+sh research/benchmarks/storage-engine/health-owner-rehearsal.sh "$health_bin" "$scratch/health"
+sh research/benchmarks/storage-engine/projects-owner-rehearsal.sh "$legacy_projects_bin" "$projects_server_bin" "$scratch/projects"
+```
+
+Health exercises owner import, read, backup, restore and staging with sequence preservation.
+Projects starts from a synthetic shared-store backup and checks the first owner archive for
+exact row parity across all four tables. It exercises owner reads and writes with the shared
+path absent. Neither rehearsal uses live data.
+
 ## Engine upgrade rehearsal
 
 `engine-upgrade-rehearsal.sh <turso version> <scratch>` restores every owner's latest

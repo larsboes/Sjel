@@ -65,15 +65,39 @@ pub async fn serve_with_jobs(
     snapshot: impl Fn(&Path, &Path) -> Result<(), String> + Clone + Send + Sync + 'static,
     jobs: Router,
 ) {
-    let socket = socket_path(owner).unwrap_or_else(|error| panic!("{owner}: {error}"));
     let target = sjel_config::overlay_data_dir(owner)
         .expect("owner snapshot requires an overlay")
         .join("snapshots")
         .join(format!("{owner}.db"));
+    serve_at_with_jobs(
+        owner,
+        target,
+        move |target| snapshot(&database, target),
+        jobs,
+    )
+    .await;
+}
+
+/// Serve snapshots at a fixed deployment path outside the owner's record tree.
+pub async fn serve_at(
+    owner: &str,
+    target: PathBuf,
+    snapshot: impl Fn(&Path) -> Result<(), String> + Clone + Send + Sync + 'static,
+) {
+    serve_at_with_jobs(owner, target, snapshot, Router::new()).await;
+}
+
+async fn serve_at_with_jobs(
+    owner: &str,
+    target: PathBuf,
+    snapshot: impl Fn(&Path) -> Result<(), String> + Clone + Send + Sync + 'static,
+    jobs: Router,
+) {
+    let socket = socket_path(owner).unwrap_or_else(|error| panic!("{owner}: {error}"));
     let router = jobs.route(
         "/snapshot",
         post(move || async move {
-            tokio::task::spawn_blocking(move || snapshot(&database, &target))
+            tokio::task::spawn_blocking(move || snapshot(&target))
                 .await
                 .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
                 .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?;

@@ -43,6 +43,7 @@ OWNERS = {
         "finance_transaction_candidates",
         "finance_transaction_projection",
     },
+    "health": {"health_days", "health_imports"},
     "places": {
         "places_climate_normals",
         "places_geocode_cache",
@@ -51,6 +52,12 @@ OWNERS = {
         "places_place_visits",
         "places_places",
         "places_transaction_places",
+    },
+    "projects": {
+        "projects_inventory_links",
+        "projects_mail_applications",
+        "projects_mail_proposals",
+        "projects_records",
     },
     "punctuality": {
         "punctuality_ingest_months",

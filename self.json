@@ -303,7 +303,13 @@
     },
     {
       "name": "health-wal-backup",
-      "kind": "capability"
+      "kind": "capability",
+      "service": {
+        "kind": "data",
+        "requires": [
+          "health"
+        ]
+      }
     },
     {
       "name": "host-net",
@@ -504,6 +510,16 @@
     {
       "name": "projects-api",
       "kind": "lib"
+    },
+    {
+      "name": "projects-wal-backup",
+      "kind": "capability",
+      "service": {
+        "kind": "data",
+        "requires": [
+          "projects"
+        ]
+      }
     },
     {
       "name": "pseudonymize",
@@ -2414,6 +2430,16 @@
     {
       "from": "projects",
       "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/projects/Cargo.toml"
+      ]
+    },
+    {
+      "from": "projects",
+      "to": "sjel-native-wal",
       "kinds": [
         "cargo-dep"
       ],

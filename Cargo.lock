@@ -6022,10 +6022,12 @@ dependencies = [
  "sjel-config",
  "sjel-http",
  "sjel-links",
+ "sjel-native-wal",
  "sjel-server",
  "sjel-turso",
  "tokio",
  "tower",
+ "turso",
 ]
 
 [[package]]

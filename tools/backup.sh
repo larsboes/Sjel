@@ -156,6 +156,9 @@ case "$SNAPSHOT_OWNER:$CAP:$SQLITE_ONLINE_REL" in
   health:health-wal-backup:data/health/snapshots/health.db)
     SNAPSHOT_BIN="${SJEL_HEALTH_BIN:-$SJEL_ROOT/target/release/health}"
     SNAPSHOT_LABEL=Health ;;
+  projects:projects-wal-backup:data/projects-wal-backup/projects.db)
+    SNAPSHOT_BIN="${SJEL_PROJECTS_BIN:-$SJEL_ROOT/target/release/projects-server}"
+    SNAPSHOT_LABEL=Projects ;;
   *) echo "backup.sh: owner snapshots require the registered owner and archive path" >&2; exit 1 ;;
 esac
 if [ -n "$SOURCE_FLAG" ] && { [ -n "$SQLITE_REL" ] || [ -n "$SQLITE_ONLINE_REL" ]; }; then

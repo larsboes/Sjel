@@ -19,6 +19,11 @@ path = "src/server.rs"
 name = "projects"
 path = "src/cli.rs"
 
+[features]
+default = ["libsql"]
+libsql = ["dep:sjel-turso"]
+turso-wal = ["dep:sjel-native-wal", "dep:turso"]
+
 [dependencies]
 axum.workspace = true
 chrono.workspace = true
@@ -34,12 +39,10 @@ sjel-config = { path = "../sjel-config" }
 sjel-http = { path = "../sjel-http" }
 sjel-links = { path = "../links" }
 sjel-server = { path = "../sjel-server" }
-# LibSQL, not `sjel-store`: the second capability cut over (PLAN.md Phase 4). The rows stay in the
-# shared file, and the app that already reads them directly (`apps/gpui` over raw `libsql`) now
-# shares the engine with the capability that writes them. `rusqlite` leaves this crate's graph with
-# it -- one binary cannot link both bundled SQLite libraries.
-sjel-turso = { path = "../sjel-turso" }
+sjel-turso = { path = "../sjel-turso", optional = true }
+sjel-native-wal = { path = "../sjel-native-wal", optional = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+turso = { version = "=0.8.4", default-features = false, optional = true }
 
 [dev-dependencies]
 # `ServiceExt::oneshot`, so the router test drives the wired handlers with no listener and no

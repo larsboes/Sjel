@@ -4,7 +4,7 @@ title: "Remove unused replica infrastructure"
 state: backlog
 area: storage
 kind: maintenance
-priority: 2
+priority: 1
 spec: docs/plans/storage.md
 ---
 

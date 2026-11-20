@@ -1,12 +1,15 @@
 ---
 id: storage-archive-backup
 title: "Protect the unsorted archive"
-state: verify
+state: done
 area: storage
 kind: fix
 priority: 0
 spec: docs/plans/storage.md
-blocked_by: "Owner decisions: a recurring target on a physical drive other than the archive drive, and removal of the staging left by failed runs."
+evidence:
+  - "The isolated restore of the operator's no-prune archive backup matched the receipt and every source path, file byte and link target."
+  - "On 2026-11-20 the owner ruled the external drive alone sufficient for the archive; recurring second-drive enrollment is declined, and a second connected drive stays optional."
+  - "All 11 staging directories left by failed runs were removed on 2026-11-20; the staging directory is empty."
 ---
 
 # Protect the unsorted archive
@@ -28,10 +31,9 @@ Protect the unsorted archive through the existing owner, without treating implem
 - The operator's no-prune backup completed on a separate physical device and left no staging
   from the successful run. The isolated restore matched the receipt and verified every source
   path, file byte, and symbolic link target. The disposable restore copy was removed.
-- Older protected staging remains untouched. Scheduler state could not be verified from the
-  managed environment. No schedule was changed.
 - The archive and the `backup-target` volume are on the same external drive, so the archive
   cannot enroll in the existing recurring contract. The `archive` capability is not enabled and
   has no scheduled attempts in `sjel backup runs`.
-- The backup staging directory holds 11 directories from failed runs between 2026-09-30 and
-  2026-11-19: five archive runs, four knowledge-base runs, one store run and one cleanup probe.
+- On 2026-11-20 the owner accepted the external drive as sufficient, with no recurring backup.
+  A drive failure leaves only the one-off restore-tested copy.
+- The 11 staging directories from failed runs between 2026-09-30 and 2026-11-19 were removed.

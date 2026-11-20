@@ -17,7 +17,7 @@ type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 #[serde(tag = "job", rename_all = "snake_case")]
 enum Job<'a> {
     Record {
-        journey: Cow<'a, Journey>,
+        journey: Box<Cow<'a, Journey>>,
         #[serde(borrow)]
         origin: Cow<'a, str>,
         #[serde(borrow)]
@@ -127,7 +127,7 @@ impl Client {
         session: Option<&str>,
     ) -> Fallible<bool> {
         self.run(Job::Record {
-            journey: Cow::Borrowed(journey),
+            journey: Box::new(Cow::Borrowed(journey)),
             origin: origin.into(),
             destination: destination.into(),
             reason: reason.into(),

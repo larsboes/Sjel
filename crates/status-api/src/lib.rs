@@ -5,11 +5,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-pub use setup_api::*;
-
+mod lan;
 mod storage;
+pub use lan::{LanInfo, LanStatus, ROUTE_STATUS_LAN};
 pub use storage::{
-    StorageDirectory, StorageDirectorySnapshot, StorageExplorer, ROUTE_STATUS_STORAGE_EXPLORER,
+    ROUTE_STATUS_STORAGE_EXPLORER, StorageDirectory, StorageDirectorySnapshot, StorageExplorer,
 };
 
 // --- Route Constants ---

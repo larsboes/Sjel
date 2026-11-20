@@ -24,6 +24,5 @@ Remove unused replica infrastructure through the existing owner, without treatin
 
 ## Verification
 
-The `libsql-server` upstream verdict is `reject`. The Mac app's replica tab is removed separately in
-[its follow-up](task-759d37d6-8ff9-41d6-a757-a8485d47df17.md) because the phone migration holds
-the app workspace lockfile.
+The `libsql-server` upstream verdict is `reject`. [The Mac follow-up](task-759d37d6-8ff9-41d6-a757-a8485d47df17.md)
+tracks removal of the replica controls and acceptance of the remaining device pairing view.

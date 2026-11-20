@@ -336,33 +336,6 @@ impl Shell {
         Ok(crate::research::default_research_view())
     }
 
-    /// Read what this machine still needs via `GET /api/sjel-status/setup`.
-    pub async fn setup_plans(&self) -> ShellResult<crate::setup::SetupPlans> {
-        self.json(Method::GET, setup_api::ROUTE_STATUS_SETUP, None, 30)
-            .await
-    }
-
-    /// Check connection to primary via `GET /api/sjel-status/setup/verify`.
-    pub async fn setup_verify(&self) -> ShellResult<crate::setup::SetupVerification> {
-        self.json(Method::GET, setup_api::ROUTE_STATUS_SETUP_VERIFY, None, 30)
-            .await
-    }
-
-    /// Apply setup steps via `POST /api/sjel-status/setup/apply`.
-    pub async fn setup_apply(
-        &self,
-        request: &crate::setup::SetupApplyRequest,
-    ) -> ShellResult<crate::setup::SetupApplied> {
-        let body = serde_json::to_value(request).unwrap_or(serde_json::Value::Null);
-        self.json(
-            Method::POST,
-            setup_api::ROUTE_STATUS_SETUP_APPLY,
-            Some(body),
-            60,
-        )
-        .await
-    }
-
     /// List paired devices via `GET /devices/api/devices`.
     pub async fn setup_devices(&self) -> ShellResult<Vec<crate::setup::PairedDevice>> {
         match self
@@ -393,7 +366,7 @@ impl Shell {
 
     /// This node's Same-Wi-Fi listener via `GET /api/sjel-status/lan`, or `None` when it has none.
     pub async fn setup_lan(&self) -> ShellResult<crate::setup::LanStatus> {
-        self.json(Method::GET, setup_api::ROUTE_STATUS_LAN, None, 10)
+        self.json(Method::GET, status_api::ROUTE_STATUS_LAN, None, 10)
             .await
     }
 
@@ -455,24 +428,17 @@ impl Shell {
             .await
     }
 
-    /// Load the combined view model for `/setup`: what this machine still needs, which devices it
-    /// trusts, which joins wait, and whether a phone can reach it at all.
+    /// Load trusted devices, pending joins, and the listener used for pairing.
     pub async fn setup_view(&self) -> ShellResult<crate::setup::SetupView> {
-        let plans = match self.setup_plans().await {
-            Ok(p) => p.components,
-            Err(_) => Vec::new(),
-        };
         let devices = self.setup_devices().await.unwrap_or_default();
         let pending_joins = self.setup_pending_joins().await.unwrap_or_default();
-        // A read that fails is not the same answer as a listener that is off, so the page is told
-        // which one happened (its Devices tab says so in words).
+        // A failed read does not mean the listener is off.
         let (lan, lan_error) = match self.setup_lan().await {
             Ok(status) => (status.listener().cloned(), None),
             Err(error) => (None, Some(error.to_string())),
         };
 
         Ok(crate::setup::SetupView {
-            plans,
             devices,
             pending_joins,
             lan,

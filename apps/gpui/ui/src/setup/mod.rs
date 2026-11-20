@@ -1,37 +1,19 @@
-//! Node Setup & Device Pairing: Probed machine requirements, Turso replica setup, and device pairing.
-//!
-//! Replaces the dashboard `/setup` route. Backed by `crates/sjel-status` and `crates/devices`.
+//! Device pairing and management on the Mac Setup page.
 
-pub mod devices;
-pub mod machine;
-pub mod types;
+mod devices;
 
-pub use types::*;
-
-use crate::ely::forms::TextInput;
-use gpui_kit::{
-    div, prelude::*, px, AnyElement, Context, Entity, IntoElement, Subscription, Window,
-};
+use gpui_kit::{div, prelude::*, px, Context, IntoElement, Window};
 use sjel_gpui_core::setup::{PairingChallenge, QrMatrix, SetupView};
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{note, placeholder, section};
-use crate::theme::{Palette, ThemeContext};
+use crate::theme::ThemeContext;
 
 pub struct SetupPage {
     pub(super) repo: Repo,
     pub(super) setup: Remote<SetupView>,
     pub(super) busy: Busy,
     pub(super) notice: Option<String>,
-    pub(super) write_error: Option<String>,
-
-    pub active_tab: SetupTab,
-    pub(super) verifying: bool,
-    pub(super) confirming_component: Option<String>,
-    /// The component whose apply is in flight, so the answer's sentence can name it: a `then`
-    /// callback gets no captured state, only the page.
-    pub(super) applying_component: Option<String>,
-    pub(super) applied_log: Vec<String>,
 
     /// The one-time code this Mac is showing, and the picture of it. Both are transient: a code is
     /// single-use and lives ten minutes, so nothing here survives a reload.
@@ -43,10 +25,6 @@ pub struct SetupPage {
     pub(super) pairing_host: Option<String>,
     /// The device whose revoke is waiting for a second press.
     pub(super) confirming_revoke: Option<String>,
-
-    pub(super) url_input: Option<(Entity<TextInput>, Subscription)>,
-    pub(super) credential_input: Option<(Entity<TextInput>, Subscription)>,
-    pub(super) interval_input: Option<(Entity<TextInput>, Subscription)>,
 }
 
 impl SetupPage {
@@ -56,13 +34,6 @@ impl SetupPage {
             setup: Remote::default(),
             busy: Busy::default(),
             notice: None,
-            write_error: None,
-
-            active_tab: SetupTab::Machine,
-            verifying: false,
-            confirming_component: None,
-            applying_component: None,
-            applied_log: Vec::new(),
 
             challenge: None,
             challenge_payload: None,
@@ -70,10 +41,6 @@ impl SetupPage {
             challenge_error: None,
             pairing_host: None,
             confirming_revoke: None,
-
-            url_input: None,
-            credential_input: None,
-            interval_input: None,
         }
     }
 
@@ -90,28 +57,6 @@ impl SetupPage {
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.load(cx);
-    }
-
-    pub fn switch_tab(&mut self, tab: SetupTab, cx: &mut Context<Self>) {
-        self.active_tab = tab;
-        cx.notify();
-    }
-
-    pub(super) fn render_tabs(&self, _palette: Palette, cx: &mut Context<Self>) -> AnyElement {
-        let page = cx.entity();
-        crate::primitives::sub_tabs(
-            "setup",
-            vec![
-                ("Machine Setup", None, self.active_tab == SetupTab::Machine),
-                ("Paired Devices", None, self.active_tab == SetupTab::Devices),
-            ],
-            move |index, _, cx| {
-                let tabs = [SetupTab::Machine, SetupTab::Devices];
-                if let Some(tab) = tabs.get(index) {
-                    page.update(cx, |page, cx| page.switch_tab(*tab, cx));
-                }
-            },
-        )
     }
 }
 
@@ -132,19 +77,7 @@ impl Render for SetupPage {
         if let Some(notice) = &self.notice {
             panels.push(note(notice.as_str(), palette.green));
         }
-        if let Some(error) = &self.write_error {
-            panels.push(note(error.as_str(), palette.red));
-        }
-
-        if cfg!(test) {
-            panels.push(self.render_tabs(palette, cx));
-        }
-
-        let active_content = match self.active_tab {
-            SetupTab::Machine => self.render_machine_tab(&view.plans, palette, window, cx),
-            SetupTab::Devices => self.render_devices_tab(&view, palette, cx),
-        };
-        panels.push(active_content);
+        panels.push(self.render_devices(&view, palette, cx));
 
         div()
             .flex()
@@ -161,62 +94,13 @@ mod tests {
     use super::*;
 
     #[gpui::test]
-    fn tabs_preserve_setup_drafts_and_mask_credentials(cx: &mut gpui::TestAppContext) {
-        use gpui_kit::Focusable;
-        use sjel_gpui_core::setup::SetupPlan;
-
-        let (page, cx) = crate::test_support::mount_root(cx, None, |_, _| {
+    fn setup_mounts_device_pairing_directly(cx: &mut gpui::TestAppContext) {
+        let (_, cx) = crate::test_support::mount_root(cx, None, |_, _| {
             let mut page =
                 SetupPage::new(Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)));
-            page.setup.value = Some(SetupView {
-                plans: vec![SetupPlan {
-                    component: "turso".into(),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            });
-            page.confirming_component = Some("turso".into());
+            page.setup.value = Some(SetupView::default());
             page
         });
-        let tabs = cx.update(|window, cx| {
-            window.blur(cx);
-            window.focus_next(cx);
-            let tabs = window.focused(cx).unwrap();
-            page.update(cx, |page, cx| {
-                let input = page.url_input.as_ref().unwrap().0.clone();
-                input.read(cx).focus_handle(cx).focus(window, cx);
-                assert!(page
-                    .credential_input
-                    .as_ref()
-                    .unwrap()
-                    .0
-                    .read(cx)
-                    .is_masked());
-            });
-            tabs
-        });
-        cx.simulate_input("libsql://example.invalid");
-        cx.update(|window, cx| tabs.focus(window, cx));
-        cx.simulate_keystrokes("right");
-        cx.run_until_parked();
-        page.read_with(cx, |page, _| assert_eq!(page.active_tab, SetupTab::Devices));
-        cx.simulate_keystrokes("left");
-        cx.run_until_parked();
-        page.read_with(cx, |page, cx| {
-            assert_eq!(page.active_tab, SetupTab::Machine);
-            assert_eq!(
-                page.url_input.as_ref().unwrap().0.read(cx).text(),
-                "libsql://example.invalid"
-            );
-        });
-    }
-
-    #[test]
-    fn test_setup_page_initial_state() {
-        let repo = Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp));
-        let page = SetupPage::new(repo);
-        assert_eq!(page.active_tab, SetupTab::Machine);
-        assert!(page.confirming_component.is_none());
-        assert!(!page.verifying);
+        assert!(cx.debug_bounds("setup-device-pairing").is_some());
     }
 }

@@ -1869,15 +1869,6 @@ impl Workspace {
                 let next = TABS[wrap(ix, TABS.len())];
                 rp.update(cx, |p, cx| p.switch_tab(next, cx));
             }
-            Page::Setup => {
-                use sjel_gpui_ui::setup::SetupTab;
-                const TABS: [SetupTab; 2] = [SetupTab::Machine, SetupTab::Devices];
-                let sp = self.ensure_setup_page(cx);
-                let cur = sp.read(cx).active_tab;
-                let ix = TABS.iter().position(|&t| t == cur).unwrap_or(0);
-                let next = TABS[wrap(ix, TABS.len())];
-                sp.update(cx, |p, cx| p.switch_tab(next, cx));
-            }
             Page::Travel => {
                 use sjel_gpui_core::travel::{TravelRoute, TripSection};
                 if self.travel.read(cx).active_plan_title().is_some() {

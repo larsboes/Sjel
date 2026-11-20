@@ -376,7 +376,7 @@ impl SetupPage {
             .into_any_element()
     }
 
-    pub(super) fn render_devices_tab(
+    pub(super) fn render_devices(
         &mut self,
         view: &SetupView,
         palette: Palette,
@@ -468,6 +468,7 @@ impl SetupPage {
                 ),
         );
 
+        let listener_card = listener_card.debug_selector(|| "setup-device-pairing".to_owned());
         panels.push(card(listener_card.into_any_element(), palette));
 
         // ── The code, once this Mac has minted one ───────────────────────────

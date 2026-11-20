@@ -21,7 +21,6 @@ use sjel_gpui_ui::inventory::InventoryTab;
 use sjel_gpui_ui::primitives::sub_tabs;
 use sjel_gpui_ui::projects::{ProjectSection, ProjectsTab};
 use sjel_gpui_ui::research::ResearchTab;
-use sjel_gpui_ui::setup::SetupTab;
 use sjel_gpui_ui::sidebar::Seat;
 use sjel_gpui_ui::systems::SystemsTab;
 use sjel_gpui_ui::theme::Palette;
@@ -1089,32 +1088,6 @@ fn tab_strip(
                         };
                         owner_res.update(cx, |view, cx| {
                             view.ensure_research_page(cx)
-                                .update(cx, |page, cx| page.switch_tab(next, cx));
-                        });
-                    },
-                ));
-        } else if current == Page::Setup {
-            let active_tab = view
-                .setup_page
-                .as_ref()
-                .map(|sp| sp.read(cx).active_tab)
-                .unwrap_or(SetupTab::Machine);
-            let owner_setup = cx.entity();
-            strip = strip
-                .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
-                .child(sub_tabs(
-                    "setup-header-sub",
-                    vec![
-                        ("Machine Setup", None, active_tab == SetupTab::Machine),
-                        ("Paired Devices", None, active_tab == SetupTab::Devices),
-                    ],
-                    move |ix, _, cx| {
-                        let next = match ix {
-                            0 => SetupTab::Machine,
-                            _ => SetupTab::Devices,
-                        };
-                        owner_setup.update(cx, |view, cx| {
-                            view.ensure_setup_page(cx)
                                 .update(cx, |page, cx| page.switch_tab(next, cx));
                         });
                     },

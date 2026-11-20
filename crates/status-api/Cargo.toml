@@ -9,7 +9,6 @@ publish = false
 
 [dependencies]
 civil-date = { path = "../civil-date" }
-setup-api = { path = "../setup-api" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 

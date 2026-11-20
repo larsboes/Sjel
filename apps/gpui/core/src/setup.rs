@@ -1,7 +1,4 @@
-//! Data models and pure reductions for Sjel Machine Setup & Device Pairing (`/setup`).
-//!
-//! Replaces the dashboard's `/setup` route. Backed by `crates/sjel-status` (`/api/sjel-status/setup*`,
-//! `/api/sjel-status/lan`) and `crates/devices` (`/api/devices`, `/api/pairing/*`).
+//! Device pairing view models, one-time codes and trusted-device state.
 
 use chrono::{Local, TimeZone};
 use serde::{Deserialize, Serialize};
@@ -9,12 +6,11 @@ use serde::{Deserialize, Serialize};
 pub use devices_api::{
     Device as PairedDevice, PairingChallenge, PairingRequest as SetupJoinRequest,
 };
-pub use setup_api::*;
+pub use status_api::{LanInfo, LanStatus};
 
-/// Full combined view model for the `/setup` native page.
+/// Devices and listener status for the native pairing page.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct SetupView {
-    pub plans: Vec<SetupPlan>,
     #[serde(default)]
     pub devices: Vec<PairedDevice>,
     #[serde(default)]
@@ -159,154 +155,9 @@ fn at(secs: i64) -> chrono::DateTime<chrono::FixedOffset> {
         .expect("a real instant")
 }
 
-// ── Pure Reductions ────────────────────────────────────────────────────────
-
-/// Merge fresh verification probes into existing setup plans.
-pub fn merge_verification_probes(
-    plans: &[SetupPlan],
-    verification: &SetupVerification,
-) -> Vec<SetupPlan> {
-    plans
-        .iter()
-        .map(|plan| {
-            if let Some(v) = verification
-                .components
-                .iter()
-                .find(|c| c.component == plan.component)
-            {
-                let mut updated = plan.clone();
-                updated.probes = v.probes.clone();
-                updated
-            } else {
-                plan.clone()
-            }
-        })
-        .collect()
-}
-
-/// Check if apply form fields contain any input to write.
-pub fn has_apply_input(url: &str, token: &str, interval: &str) -> bool {
-    !url.trim().is_empty()
-        || !token.trim().is_empty()
-        || (!interval.trim().is_empty() && interval.trim().parse::<u64>().unwrap_or(0) > 0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_probe_mark_helpers() {
-        assert_eq!(ProbeMark::Ok.symbol(), "✓");
-        assert_eq!(ProbeMark::Missing.symbol(), "✗");
-        assert_eq!(ProbeMark::Warn.symbol(), "!");
-        assert_eq!(ProbeMark::Blocked.symbol(), "·");
-
-        assert_eq!(ProbeMark::Ok.human_label(), "in place");
-        assert_eq!(ProbeMark::Missing.human_label(), "missing");
-        assert_eq!(ProbeMark::Warn.human_label(), "check it");
-        assert_eq!(ProbeMark::Blocked.human_label(), "needs you");
-    }
-
-    #[test]
-    fn test_applyable_steps_count() {
-        let plan = SetupPlan {
-            component: "turso".to_string(),
-            purpose: "replica".to_string(),
-            probes: vec![],
-            steps: vec![
-                SetupStep {
-                    label: "step 1".into(),
-                    detail: "done".into(),
-                    done: true,
-                },
-                SetupStep {
-                    label: "step 2".into(),
-                    detail: "pending".into(),
-                    done: false,
-                },
-                SetupStep {
-                    label: "step 3".into(),
-                    detail: "pending".into(),
-                    done: false,
-                },
-            ],
-        };
-        assert_eq!(plan.applyable_steps(), 2);
-    }
-
-    #[test]
-    fn test_has_apply_input() {
-        assert!(!has_apply_input("", "", ""));
-        assert!(!has_apply_input("   ", "", "0"));
-        assert!(has_apply_input("libsql://primary", "", ""));
-        assert!(has_apply_input("", "secret-token", ""));
-        assert!(has_apply_input("", "", "60"));
-    }
-
-    #[test]
-    fn test_merge_verification_probes() {
-        let plans = vec![SetupPlan {
-            component: "turso".into(),
-            purpose: "replica".into(),
-            probes: vec![SetupProbe {
-                id: "record".into(),
-                label: "deployment record".into(),
-                mark: "missing".into(),
-                detail: "no record".into(),
-            }],
-            steps: vec![],
-        }];
-
-        let verification = SetupVerification {
-            components: vec![SetupComponentVerification {
-                component: "turso".into(),
-                probes: vec![SetupProbe {
-                    id: "record".into(),
-                    label: "deployment record".into(),
-                    mark: "ok".into(),
-                    detail: "verified".into(),
-                }],
-            }],
-        };
-
-        let merged = merge_verification_probes(&plans, &verification);
-        assert_eq!(merged[0].probes[0].mark, "ok");
-        assert_eq!(merged[0].probes[0].detail, "verified");
-    }
-
-    #[test]
-    fn test_deserialize_live_setup_plan() {
-        let json = r#"{
-            "components": [
-                {
-                    "component": "turso",
-                    "purpose": "follow a remote Turso primary as a local replica",
-                    "probes": [
-                        {
-                            "id": "record",
-                            "label": "deployment record",
-                            "mark": "ok",
-                            "detail": "/config/deployment.env"
-                        }
-                    ],
-                    "steps": [
-                        {
-                            "label": "record SJEL_TURSO_URL",
-                            "detail": "already recorded",
-                            "done": true
-                        }
-                    ]
-                }
-            ]
-        }"#;
-
-        let plans: SetupPlans = serde_json::from_str(json).unwrap();
-        assert_eq!(plans.components.len(), 1);
-        assert_eq!(plans.components[0].component, "turso");
-        assert_eq!(plans.components[0].probes[0].parsed_mark(), ProbeMark::Ok);
-        assert!(plans.components[0].steps[0].done);
-    }
 
     /// The shape `GET /devices/api/devices` really answers (`Device` in the capability's store).
     fn live_device(status: &str) -> PairedDevice {

@@ -35,6 +35,7 @@ cat > "$work/bin/git" <<'SH'
 #!/bin/sh
 case "$*" in
   *rev-parse*) echo abc1234 ;;
+  *describe*prebuilt) echo v0.0.1-7-gprebuilt ;;
   *describe*) echo "${FIXTURE_VERSION:-v0.0.1}" ;;
   *) exit 1 ;;
 esac
@@ -163,6 +164,7 @@ builds="$(grep -c '^cargo ' "$work/calls")"
 SJEL_DESKTOP_PREBUILT="$work/artifact" SJEL_DESKTOP_PREBUILT_COMMIT=prebuilt ADMISSION=2 run --no-restart
 [ "$(grep -c '^cargo ' "$work/calls")" = "$builds" ] || fail 'prebuilt packaging invoked Cargo'
 contains "$SJEL_DESKTOP_APP_DEST/Contents/Info.plist" '<key>SjelBuildCommit</key><string>prebuilt</string>'
+contains "$SJEL_DESKTOP_APP_DEST/Contents/Info.plist" '<key>CFBundleVersion</key><string>v0.0.1-7-gprebuilt</string>'
 contains "$SJEL_DESKTOP_APP_DEST/Contents/Info.plist" '<key>SJEL_DESKTOP_BUILD_PROFILE</key><string>release</string>'
 if SJEL_DESKTOP_BUILD_PROFILE=invalid bash "$installer" > "$work/output" 2>&1; then fail 'invalid profile accepted'; fi
 if ADMISSION=2 bash "$installer" > "$work/output" 2>&1; then fail 'unknown profile compiled'; fi

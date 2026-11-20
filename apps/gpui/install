@@ -16,6 +16,9 @@ if [ -n "${SJEL_DESKTOP_PREBUILT:-}" ]; then
 fi
 restart=1
 build_only=0
+if [ -z "${SJEL_OVERLAY_ROOT:-}" ] && [ -n "${SJEL_PERSONAL_ROOT:-}" ]; then
+  export SJEL_OVERLAY_ROOT="$SJEL_PERSONAL_ROOT"
+fi
 # The overlay root: the app reaches comms' clip socket under it (libs/clip-socket).
 # shellcheck source=../../tools/lib/paths.sh
 . "$APP_DIR/../../tools/lib/paths.sh"
@@ -105,6 +108,8 @@ if [ "$native_maps" = 1 ]; then
   cp "$APP_DIR/Resources/MapLibre-LICENSES.txt" "$bundle/Contents/Resources/"
 fi
 version="$(git -C "$APP_DIR" describe --tags --always "$commit" 2>/dev/null || printf '%s\n' "$commit")"
+source_root="$(cd "$APP_DIR/../.." && pwd -P)"
+source_root_xml="$(printf '%s' "$source_root" | sed 's/\&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')"
 # A Finder or NSWorkspace launch gets only /usr/bin:/bin:/usr/sbin:/sbin; the app runs `sjel`.
 cat > "$bundle/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -134,6 +139,7 @@ cat > "$bundle/Contents/Info.plist" <<PLIST
   <dict>
     <key>SJEL_GPUI_NATIVE_MAPS</key><string>$native_maps</string>
     <key>SJEL_DESKTOP_BUILD_PROFILE</key><string>$profile</string>
+    <key>SJEL_DESKTOP_SOURCE_ROOT</key><string>$source_root_xml</string>
     <key>SJEL_PERSONAL_ROOT</key><string>$SJEL_OVERLAY_ROOT</string>
     <key>PATH</key><string>$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>

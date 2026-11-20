@@ -25,9 +25,9 @@ unsafe_code = "deny"
 [workspace.dependencies]
 sjel-gpui-core = { path = "core" }
 sjel-gpui-ui = { path = "ui", default-features = false }
-gpui-kit = { version = "=0.9.1", default-features = false, features = ["component"] }
+gpui-kit = { version = "=0.10.0", default-features = false, features = ["component"] }
 # Sjel's fork of Ely on GPUI Kit (docs/plans/gpui.md §11, Components from Ely).
-ely-gpui-component = { git = "https://github.com/larsboes/Ely-GPUI-Components", rev = "da7136f", default-features = false }
+ely-gpui-component = { git = "https://github.com/larsboes/Ely-GPUI-Components", rev = "da46de121383037033a40a9b9c8e9bddf03ada20", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
@@ -35,13 +35,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1" }
 libsql = { version = "0.10.0", default-features = false, features = ["core"] }
-zeroize = "=1.9.1"
+zeroize = "=1.9.2"
 
 [features]
 native-maps = ["sjel-gpui-ui/native-maps"]
 default = ["gpui-fast"]
 # Draws with GPUI Fast instead of the gpui-pre snapshot. The iOS app does not enable it.
-gpui-fast = ["gpui-kit/gpui-fast"]
+gpui-fast = ["sjel-gpui-ui/gpui-fast"]
 # The NSH trial (docs/plans/gpui.md §11): NSH screens inside the Mac app, drawn by GPUI Fast.
 nsh-trial = ["gpui-fast", "sjel-gpui-ui/nsh", "dep:nsh-platform-gpui", "dep:nsh-base"]
 
@@ -62,13 +62,13 @@ cpal = "0.18"
 
 [dependencies.nsh-platform-gpui]
 git = "https://github.com/longbridge/nsh"
-rev = "1894697155"
+rev = "e2479085c14362f3f42b008a5433c43e4fe16b91"
 default-features = false
 optional = true
 
 [dependencies.nsh-base]
 git = "https://github.com/longbridge/nsh"
-rev = "1894697155"
+rev = "e2479085c14362f3f42b008a5433c43e4fe16b91"
 optional = true
 
 [target.'cfg(target_os = "macos")'.dependencies]

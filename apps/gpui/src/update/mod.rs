@@ -11,7 +11,7 @@ pub mod rebuild;
 pub mod types;
 
 pub use diagnostics::read_cargo_output;
-pub use git::{check_git_updates, find_repo_root};
+pub use git::{check_git_updates, find_build_root, find_repo_root};
 pub use pill::header_pill;
 pub use rebuild::{execute_rebuild, launch_other_node, restart_local_shell};
 pub use types::{
@@ -34,6 +34,7 @@ mod tests {
             commits: vec![],
             repo_root: PathBuf::from("/tmp"),
             has_uncommitted_changes: false,
+            can_rebuild: true,
         };
         assert!(!same.is_update_available());
 
@@ -48,6 +49,7 @@ mod tests {
             }],
             repo_root: PathBuf::from("/tmp"),
             has_uncommitted_changes: false,
+            can_rebuild: true,
         };
         assert!(behind.is_update_available());
 
@@ -59,6 +61,7 @@ mod tests {
             commits: vec![],
             repo_root: PathBuf::from("/tmp"),
             has_uncommitted_changes: true,
+            can_rebuild: true,
         };
         assert!(!uncommitted.is_update_available());
     }

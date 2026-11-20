@@ -219,39 +219,17 @@ final class SjelMacViewModel: ObservableObject {
     /// Rebuilds and installs the desktop app in the background.
     func updateDesktopApp() {
         guard !isUpdatingDesktopApp else { return }
+        guard let source = DesktopUpdate.installedSource() else {
+            openProblem = "The installed desktop app has no available source checkout."
+            return
+        }
         isUpdatingDesktopApp = true
-        openProblem = "Building and updating Sjel Desktop…"
-        Task.detached {
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/bin/bash")
-            let home = FileManager.default.homeDirectoryForCurrentUser
-            let installScript = home.appendingPathComponent("Developer/Sjel/apps/gpui/install").path
-            if FileManager.default.fileExists(atPath: installScript) {
-                task.arguments = [installScript]
-            } else {
-                task.arguments = ["-c", "sjel app update desktop"]
-            }
-            let pipe = Pipe()
-            task.standardOutput = pipe
-            task.standardError = pipe
-            do {
-                try task.run()
-                task.waitUntilExit()
-                await MainActor.run {
-                    self.isUpdatingDesktopApp = false
-                    if task.terminationStatus == 0 {
-                        self.openProblem = "Sjel Desktop updated."
-                        self.desktopUpdate = nil
-                    } else {
-                        self.openProblem = "Desktop update failed (code \(task.terminationStatus))."
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    self.isUpdatingDesktopApp = false
-                    self.openProblem = "Desktop update error: \(error.localizedDescription)"
-                }
-            }
+        openProblem = "Checking for a Sjel Desktop update…"
+        Task {
+            let outcome = await Task.detached { DesktopUpdate.installUpdate(from: source) }.value
+            isUpdatingDesktopApp = false
+            openProblem = outcome
+            desktopUpdate = await DesktopUpdate.check()
         }
     }
 

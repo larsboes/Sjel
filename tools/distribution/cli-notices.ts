@@ -58,6 +58,7 @@ const rustSupplements = [
   { name: "qcms", versions: ["0.3.0"], license: "MIT", files: ["qcms-0.3.0.COPYING"] },
   { name: "xberg", versions: ["1.3.10"], license: "MIT", files: ["xberg-1.3.10.LICENSE", "xberg-1.3.10.THIRD_PARTY_LICENSES.md"] },
   { name: "xberg", versions: ["1.4.0"], license: "MIT", files: ["xberg-1.3.10.LICENSE", "xberg-1.4.0.THIRD_PARTY_LICENSES.md"] },
+  { name: "xberg", versions: ["1.4.2"], license: "MIT", files: ["xberg-1.3.10.LICENSE", "xberg-1.4.2.THIRD_PARTY_LICENSES.md"] },
 ];
 
 export function writeRustNotices(stage: string, sources: RustSource[], version: string, platform: string) {

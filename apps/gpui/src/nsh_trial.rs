@@ -72,6 +72,7 @@ pub fn open(cx: &mut App) {
     }
     let options = AppOptions {
         title: "Sjel (NSH)".to_owned(),
+        background: !crate::activates(),
         ..AppOptions::default()
     };
     options.components.register(

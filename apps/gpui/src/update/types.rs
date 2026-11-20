@@ -18,6 +18,7 @@ pub struct UpdateInfo {
     pub commits: Vec<CommitSummary>,
     pub repo_root: PathBuf,
     pub has_uncommitted_changes: bool,
+    pub can_rebuild: bool,
 }
 
 impl UpdateInfo {

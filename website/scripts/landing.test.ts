@@ -15,7 +15,7 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe("landing page", () => {
-  test("puts the installer in the hero and near the top of the README with publication warnings", () => {
+  test("keeps the installer in the hero and routes the README to its guide", () => {
     const command = "curl -LsSf https://github.com/larsboes/Sjel/releases/latest/download/install.sh | sh";
     const html = renderLanding({ units: [], upstreams: [] });
     const hero = html.slice(html.indexOf('<div class="hero">'), html.indexOf("<main>"));
@@ -28,12 +28,15 @@ describe("landing page", () => {
     expect(hero).not.toContain("git clone");
     expect(hero).not.toContain("tools/demo-up");
     expect(hero.indexOf(command)).toBeLessThan(hero.indexOf('<p class="lede">'));
+    const guidePath = "docs/operations/index.md";
     const readme = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
-    const firstSection = readme.slice(0, readme.indexOf("## What it is"));
-    expect(firstSection).toContain(command);
-    expect(firstSection).toContain("## Install the CLI");
-    expect(firstSection.indexOf(command)).toBeLessThan(firstSection.indexOf('<a href="LICENSE">'));
-    expect(firstSection).toContain("Awaiting public release: this URL is not live yet.");
+    expect(readme).toContain('href="#install"');
+    expect(readme).toContain(`(${guidePath}#cli-only-coding-installation)`);
+    expect(readme).not.toContain(command);
+
+    const guide = readFileSync(new URL(`../../${guidePath}`, import.meta.url), "utf8");
+    expect(guide).toContain(command);
+    expect(guide).toContain("These public URLs are not live");
   });
 
   test("every capability is listed and links to its reference page, an unmapped one under Platform", () => {

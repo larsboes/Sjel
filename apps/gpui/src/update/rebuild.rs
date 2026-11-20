@@ -2,8 +2,8 @@ use std::path::Path;
 use std::process::Command;
 
 use super::diagnostics::read_cargo_output;
-use super::git::find_repo_root;
-use super::types::BuildFailure;
+use super::git::{can_rebuild, find_repo_root};
+use super::types::{BuildFailure, RUNNING_COMMIT};
 
 /// Executes the install script.
 ///
@@ -11,6 +11,11 @@ use super::types::BuildFailure;
 /// record per error instead of one log: the panel can name the first one without a human reading
 /// 200 lines. The rendering stays inside each record, so the log is still readable.
 pub fn execute_rebuild(repo_root: &Path) -> Result<String, BuildFailure> {
+    if !can_rebuild(repo_root, RUNNING_COMMIT, "HEAD") {
+        return Err(BuildFailure::without_diagnostics(
+            "The source checkout does not contain the installed revision.".to_owned(),
+        ));
+    }
     let install_script = repo_root.join("apps/gpui/install");
     if !install_script.exists() {
         return Err(BuildFailure::without_diagnostics(format!(

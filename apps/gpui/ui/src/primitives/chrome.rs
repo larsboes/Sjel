@@ -31,16 +31,17 @@ pub fn sub_tabs(
             Choice::new(values[idx].clone(), text)
         })
         .collect::<Vec<_>>();
-    let strip = Tabs::new(id_prefix, choices, selected).on_change(move |value, window, cx| {
-        if let Some(idx) = values.iter().position(|candidate| candidate == value) {
-            on_select(idx, window, cx);
-        }
-    });
+    let strip = Tabs::new(id_prefix, choices, selected)
+        .scrollable()
+        .on_change(move |value, window, cx| {
+            if let Some(idx) = values.iter().position(|candidate| candidate == value) {
+                on_select(idx, window, cx);
+            }
+        });
     div()
         .id(SharedString::from(format!("{id_prefix}-scroll")))
         .debug_selector(move || format!("{id_prefix}-tabs"))
         .min_w_0()
-        .overflow_x_scroll()
         .child(strip)
         .into_any_element()
 }

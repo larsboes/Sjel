@@ -35,20 +35,9 @@ static LAST_STAMP: AtomicU64 = AtomicU64::new(0);
 
 type StoreResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-/// Deletion tombstone for incremental calendar sync (`DSH-9`).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct EntryTombstone {
-    pub id: String,
-    pub deleted_at: String,
-}
+pub use sync_contract::Tombstone as EntryTombstone;
 
-/// Incremental change feed since a cursor (`DSH-9`).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct EntryChanges {
-    pub cursor: String,
-    pub upserted: Vec<Entry>,
-    pub deleted: Vec<EntryTombstone>,
-}
+pub type EntryChanges = sync_contract::Changes<Entry>;
 
 fn generated_id(prefix: &str) -> String {
     let nanos = SystemTime::now()

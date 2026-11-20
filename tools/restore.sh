@@ -10,7 +10,7 @@ source "$TOOLS_DIR/lib/paths.sh"
 source "$TOOLS_DIR/lib/pipe.sh"
 
 usage() {
-  echo "usage: restore.sh <capability> <archive.tar.gz> [--receipt <receipt.json>] [--destination <empty-dir>] [--allow-legacy]" >&2
+  echo "usage: restore.sh <capability> <archive.tar.gz> [--receipt <receipt.json>] [--destination <empty-dir>] [--compare-archive-source <dir>] [--allow-legacy]" >&2
   exit 1
 }
 
@@ -21,6 +21,7 @@ shift 2
 
 DEST_ARG=""
 RECEIPT=""
+ARCHIVE_SOURCE=""
 ALLOW_LEGACY=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -32,6 +33,10 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || usage
       DEST_ARG="$2"; shift 2
       ;;
+    --compare-archive-source)
+      [ "$CAP" = archive ] && [ $# -ge 2 ] && [ -d "$2" ] || usage
+      ARCHIVE_SOURCE="$2"; shift 2
+      ;;
     --allow-legacy)
       ALLOW_LEGACY=1; shift
       ;;
@@ -42,6 +47,7 @@ done
 case "$CAP" in
   ''|*[!A-Za-z0-9._-]*) echo "restore.sh: invalid capability name" >&2; exit 1 ;;
 esac
+if [ "$CAP" = archive ]; then umask 077; fi
 
 # The manifest is read from the checkout by default. `SJEL_RESTORE_MANIFEST` exists for
 # tools/restore.test.sh: its container-path case needs a capability that declares
@@ -343,6 +349,49 @@ verify_sqlite_online() {
 
 if [ -n "$SQLITE_ONLINE_REL" ]; then
   verify_sqlite_online
+fi
+
+if [ -n "$ARCHIVE_SOURCE" ]; then
+  python3 - "$ARCHIVE_SOURCE" "$DEST/archive" "$DEST/archive-symlinks.json" <<'PY'
+import filecmp
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def fail(error):
+    raise error
+
+
+def inventory(root):
+    directories, files, links = set(), set(), {}
+    for directory, subdirs, names in os.walk(root, onerror=fail):
+        parent = Path(directory)
+        directories.add(parent.relative_to(root))
+        for name in subdirs + names:
+            path = parent / name
+            relative = path.relative_to(root)
+            if path.is_symlink():
+                links[relative.as_posix()] = os.readlink(path)
+            elif path.is_file():
+                files.add(relative)
+            elif not path.is_dir():
+                sys.exit("restore.sh: source or restored archive contains a special file")
+    return directories, files, links
+
+
+source, restored, metadata = map(Path, sys.argv[1:])
+source_dirs, source_files, source_links = inventory(source)
+restored_dirs, restored_files, restored_links = inventory(restored)
+if source_dirs != restored_dirs or source_files != restored_files:
+    sys.exit("restore.sh: restored paths differ from the source archive")
+if restored_links or source_links != json.loads(metadata.read_text(encoding="utf-8")):
+    sys.exit("restore.sh: recorded symbolic links differ from the source archive")
+if any(not filecmp.cmp(source / path, restored / path, shallow=False) for path in source_files):
+    sys.exit("restore.sh: restored file bytes differ from the source archive")
+print(f"  matching archive contents: {len(source_files)} files, {len(source_dirs)} directories, {len(source_links)} symbolic links")
+PY
 fi
 
 echo "✓ restore verified in isolation"

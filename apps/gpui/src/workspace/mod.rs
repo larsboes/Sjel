@@ -93,6 +93,7 @@ actions!(
         /// Deny or stop the selected row.
         RunSecondary,
         ClearSelection,
+        DismissOverlay,
         /// Turn to the previous page of the open document.
         DocPrevPage,
         /// Turn to the next page of the open document.
@@ -230,7 +231,7 @@ pub fn bind_keys(cx: &mut App) {
         // Inside the terminal the same key starts a new one (`ui/src/terminal.rs`).
         KeyBinding::new("cmd-t", OpenTerminal, None),
         KeyBinding::new("cmd-[", ClearSelection, None),
-        KeyBinding::new("escape", ClearSelection, Some("!Terminal")),
+        KeyBinding::new("escape", DismissOverlay, Some("!Terminal")),
         // Tabs inside the open area, the way Safari and Xcode step tabs
         KeyBinding::new("cmd-alt-right", NextPage, None),
         KeyBinding::new("shift-cmd-]", NextPage, None),
@@ -1728,9 +1729,26 @@ impl Workspace {
         self.cycle_soundscape_preset(window, cx);
     }
 
+    fn on_dismiss_overlay(
+        &mut self,
+        _: &DismissOverlay,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.finder.read(cx).is_open() {
+            if let Some(panel) = self
+                .soundscape_panel
+                .as_ref()
+                .filter(|panel| panel.read(cx).is_open())
+            {
+                panel.update(cx, |panel, cx| panel.set_open(false, cx));
+                return;
+            }
+        }
+        self.on_clear_selection(&ClearSelection, window, cx);
+    }
+
     fn on_clear_selection(&mut self, _: &ClearSelection, _: &mut Window, cx: &mut Context<Self>) {
-        // Escape is bound here for the whole window, and a binding is matched before any key
-        // listener runs, so this is where escape reaches an open finder.
         if self.finder.read(cx).is_open() {
             self.finder.update(cx, |finder, cx| finder.close(cx));
             return;
@@ -1901,6 +1919,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_select_next))
             .on_action(cx.listener(Self::on_select_previous))
             .on_action(cx.listener(Self::on_clear_selection))
+            .on_action(cx.listener(Self::on_dismiss_overlay))
             .on_action(cx.listener(Self::on_doc_prev_page))
             .on_action(cx.listener(Self::on_doc_next_page))
             .on_action(cx.listener(Self::on_doc_toggle_zoom))
@@ -2185,6 +2204,17 @@ mod tests {
             cx.update(|_, cx| again.read(cx).is_open()),
             "⌘0 did not open it"
         );
+
+        view.update_in(cx, |view, window, cx| {
+            view.selection.cursor = Some(0);
+            window.focus(&view.focus, cx);
+        });
+        cx.run_until_parked();
+        cx.simulate_keystrokes("escape");
+        assert!(!cx.update(|_, cx| again.read(cx).is_open()));
+        view.read_with(cx, |view, _| assert_eq!(view.selection.cursor, Some(0)));
+        cx.simulate_keystrokes("escape");
+        view.read_with(cx, |view, _| assert_eq!(view.selection.cursor, None));
     }
 
     /// `sjel://terminal` opens the edge on its own seat. The test endpoint is not loopback, so no

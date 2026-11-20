@@ -1,11 +1,13 @@
 ---
 id: sync-contract
 title: "Share domain sync contracts"
-state: backlog
+state: done
 area: storage
 kind: feature
 priority: 2
 spec: docs/plans/storage.md
+evidence:
+  - "The existing Calendar change-feed regression test passes unchanged with the shared envelope."
 ---
 
 # Share domain sync contracts

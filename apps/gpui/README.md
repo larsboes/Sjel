@@ -497,7 +497,7 @@ intent and says so in the header -- it writes nothing, and it never becomes a se
 | `⇧⌘N` | Next preset |
 | `m` | Open or fold the mixer |
 | `⌘0` or `⌘⇧M` | Slide the panel in, or away |
-| `Esc` | Close the player and keep listening |
+| `Esc` | Close the player from the drawer or page and keep listening |
 | `⌥←` or `⌥→` | Widen or narrow the focused player |
 
 A bar is its own control: press anywhere on the track to set the value, drag to sweep it. A dragged

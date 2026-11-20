@@ -26,6 +26,7 @@ turso-wal = ["dep:sjel-native-wal"]
 
 [dependencies]
 calendar-api = { path = "../calendar-api" }
+sync-contract = { path = "../sync-contract" }
 schemars.workspace = true
 # Howard Hinnant's civil-from-days pair, shared rather than copied. No
 # dependencies of its own, which is why the four copies existed.

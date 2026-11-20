@@ -53,6 +53,7 @@ latent condition that was always there and toward what made it visible today.
 | Several possible paths to the same symptom | Fault tree |
 | It already failed more than once | Recurrence pattern |
 | An incident that is over and needs a record | Blameless postmortem |
+| It came back after a fix, or a fix moved the problem | Systems structure |
 
 Two methods are allowed. Three means the failure is not yet stated precisely enough — go back to
 step 1.

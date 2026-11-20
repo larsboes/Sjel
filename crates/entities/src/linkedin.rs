@@ -107,12 +107,40 @@ pub fn parse(text: &str) -> Result<Parsed, String> {
 /// # Errors
 /// The text lacks the participant or date columns.
 pub fn last_messages(text: &str) -> Result<BTreeMap<String, String>, String> {
+    let rows = split_rows(text);
+    let Some((header, body)) = rows.split_first() else {
+        return Ok(BTreeMap::new());
+    };
+    let column = |name: &str| header.iter().position(|h| h.trim() == name);
+    let (Some(sender), Some(recipients), Some(date)) = (
+        column("SENDER PROFILE URL"),
+        column("RECIPIENT PROFILE URLS"),
+        column("DATE"),
+    ) else {
+        return Err(
+            "no SENDER PROFILE URL, RECIPIENT PROFILE URLS or DATE column: \
+                    is this a LinkedIn messages.csv?"
+                .into(),
+        );
+    };
     let mut latest: BTreeMap<String, String> = BTreeMap::new();
-    for conversation in conversations(text)? {
-        for profile in conversation.profiles {
-            let held = latest.entry(profile).or_default();
-            if *held < conversation.day {
-                held.clone_from(&conversation.day);
+    for row in body {
+        let Some(day) = row
+            .get(date)
+            .and_then(|d| d.trim().get(..10))
+            .filter(|d| entities_api::is_day(d))
+        else {
+            continue;
+        };
+        let urls = row.get(sender).into_iter().chain(row.get(recipients));
+        for url in urls.flat_map(|cell| cell.split([',', ' '])) {
+            let url = url.trim();
+            if url.is_empty() {
+                continue;
+            }
+            let held = latest.entry(profile_key(url)).or_default();
+            if held.as_str() < day {
+                *held = day.to_string();
             }
         }
     }
@@ -130,15 +158,17 @@ pub struct Conversation {
 /// date are left out.
 ///
 /// # Errors
-/// The text lacks the conversation, participant or date columns.
+/// The text has conversation IDs but lacks a participant or date column.
 pub fn conversations(text: &str) -> Result<Vec<Conversation>, String> {
     let rows = split_rows(text);
     let Some((header, body)) = rows.split_first() else {
         return Ok(Vec::new());
     };
     let column = |name: &str| header.iter().position(|h| h.trim() == name);
-    let (Some(id), Some(sender), Some(recipients), Some(date)) = (
-        column("CONVERSATION ID"),
+    let Some(id) = column("CONVERSATION ID") else {
+        return Ok(Vec::new());
+    };
+    let (Some(sender), Some(recipients), Some(date)) = (
         column("SENDER PROFILE URL"),
         column("RECIPIENT PROFILE URLS"),
         column("DATE"),
@@ -158,8 +188,14 @@ pub fn conversations(text: &str) -> Result<Vec<Conversation>, String> {
         else {
             continue;
         };
-        let key = row.get(id).map_or("", |c| c.trim()).to_string();
-        let conversation = by_id.entry(key).or_default();
+        let Some(key) = row
+            .get(id)
+            .map(|cell| cell.trim())
+            .filter(|key| !key.is_empty())
+        else {
+            continue;
+        };
+        let conversation = by_id.entry(key.to_owned()).or_default();
         if conversation.day.as_str() < day {
             conversation.day = day.to_string();
         }
@@ -392,6 +428,21 @@ c3,Bo,https://www.linkedin.com/in/bo,Me,https://www.linkedin.com/in/me,undated,x
         assert_eq!(latest["https://www.linkedin.com/in/cy"], "2025-12-24");
         assert_eq!(latest["https://www.linkedin.com/in/me"], "2026-03-01");
         assert!(last_messages("a,b\n1,2\n").is_err());
+    }
+
+    #[test]
+    fn last_contact_uses_message_participants_and_graph_ignores_missing_ids() {
+        let text = "CONVERSATION ID,SENDER PROFILE URL,RECIPIENT PROFILE URLS,DATE\n\
+group,https://www.linkedin.com/in/ada,https://www.linkedin.com/in/me,2026-01-01 10:00:00 UTC\n\
+group,https://www.linkedin.com/in/bo,https://www.linkedin.com/in/me,2026-02-01 10:00:00 UTC\n\
+,https://www.linkedin.com/in/cy,https://www.linkedin.com/in/me,2026-03-01 10:00:00 UTC\n";
+        let latest = last_messages(text).unwrap();
+        assert_eq!(latest["https://www.linkedin.com/in/ada"], "2026-01-01");
+        assert_eq!(latest["https://www.linkedin.com/in/cy"], "2026-03-01");
+
+        let graph = conversations(text).unwrap();
+        assert_eq!(graph.len(), 1);
+        assert!(!graph[0].profiles.contains("https://www.linkedin.com/in/cy"));
     }
 
     #[test]

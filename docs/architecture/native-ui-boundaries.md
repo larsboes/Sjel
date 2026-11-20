@@ -15,6 +15,9 @@ NSH owns mounted UIKit screens. A shared rule belongs in core or a capability, n
 Native heavy-media views preserve platform PDF/map behavior. Capability writes, stale-revision
 refusal, undo, proposals, sync status and cross-capability routing remain Sjel-owned.
 Current fork and renderer decisions live in [UI-stack research](../../research/ui-stack.md).
+Keep the host and Ely on the same GPUI Kit and engine versions. Match `gpui-pre-leaks` to Kit's
+`gpui-pre` version, and check the Mac NSH trial when GPUI Fast changes. The Mac trial shares the
+host's GPUI Fast instance; the phone uses the UIKit backend from the shared NSH revision.
 
 Phone Documents/Mail are online-first over signed device requests. Only selected offline
 documents and opened mail are retained with complete Data Protection. Offline actions queue

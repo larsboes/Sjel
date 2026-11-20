@@ -96,10 +96,10 @@ pub use documents_api::{
     DocumentExtractedPage, DocumentPage, DocumentPageRange, DocumentProposalRecord,
     DocumentSplitChildInput, DocumentSplitRequest, DocumentSplitSuggestion, DocumentSummary,
     DocumentUpload, DuplicateCandidate, DuplicateCandidateKind, DuplicateCandidatePage,
-    DuplicateDecision, DuplicateDecisionAction, DuplicateDecisionResponse, DuplicatePageRange,
-    DuplicatePartRelation, DuplicateSourceLocation, ProposalAbstentionReason, ProposalEvidence,
-    ProposalEvidenceSource, ProposalInvalidReason, ProposalOutcome, ProposalReview,
-    ProposalReviewEvent, ProposalSource,
+    DuplicateDecision, DuplicateDecisionAction, DuplicateDecisionResponse, DuplicateHistoryEntry,
+    DuplicatePageRange, DuplicatePartRelation, DuplicateReopenRequest, DuplicateSourceLocation,
+    ProposalAbstentionReason, ProposalEvidence, ProposalEvidenceSource, ProposalInvalidReason,
+    ProposalOutcome, ProposalReview, ProposalReviewEvent, ProposalSource,
 };
 
 pub use feed_api::{

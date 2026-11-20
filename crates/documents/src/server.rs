@@ -30,6 +30,15 @@ const DEFAULT_PORT: u16 = 8104;
 struct AnalyzeRequest {}
 
 const ROUTES: &[route_manifest::Route] = &[
+    route_manifest::get("GET", documents_api::ROUTE_DOCUMENT_CONTAINED_PAGES, "Locate one unambiguous sequence of matching pages in an original PDF."),
+    route_manifest::get("GET", documents_api::ROUTE_DOCUMENT_COLLECTION_MEMBERS, "List the documents in a collection."),
+    route_manifest::get("GET", documents_api::ROUTE_DOCUMENT_DUPLICATE_HISTORY, "Read duplicate review history and source receipts."),
+    route_manifest::Route {
+        method: "POST",
+        path: documents_api::ROUTE_DOCUMENT_DUPLICATE_REOPEN,
+        request_schema: Some(route_manifest::schema_of::<documents_api::DuplicateReopenRequest>),
+        summary: "Reopen a duplicate decision and restore filing states saved with it.",
+    },
     route_manifest::get("GET", "/health", "Check document service liveness."),
     route_manifest::get(
         "GET",
@@ -484,6 +493,87 @@ async fn review_duplicate(
     .await
 }
 
+async fn contained_pages(
+    State(library): State<Arc<Library>>,
+    Path((id, part_id)): Path<(String, String)>,
+) -> Result<Json<Option<documents_api::DocumentPageRange>>, ApiError> {
+    blocking(library, move |library| {
+        let parent = require_document(library, &id)?;
+        let part = require_document(library, &part_id)?;
+        if parent.media_type != "application/pdf" || parent.parent_id.is_some() || id == part_id {
+            return Ok(Json(None));
+        }
+        Ok(Json(crate::duplicates::contained_pages(&parent, &part)))
+    })
+    .await
+}
+
+async fn duplicate_history(
+    State(library): State<Arc<Library>>,
+    Query(query): Query<DuplicateQuery>,
+) -> Result<Json<Vec<documents_api::DuplicateHistoryEntry>>, ApiError> {
+    blocking(library, move |library| {
+        let history = library.duplicate_history()?;
+        let sources = library.sources()?;
+        let mut seen = std::collections::HashSet::new();
+        let entries = history
+            .into_iter()
+            .map(|record| {
+                let latest = seen.insert(record.decision.candidate_key.clone());
+                (latest, record)
+            })
+            .skip(query.offset.unwrap_or_default())
+            .take(query.limit.unwrap_or(50).clamp(1, 100));
+        let mut result = Vec::new();
+        for (latest, record) in entries {
+            let members = record
+                .decision
+                .member_ids
+                .iter()
+                .filter_map(|id| library.get(id).transpose())
+                .collect::<Result<Vec<_>, _>>()?;
+            let mut locations = record.locations.clone();
+            for (id, path) in &sources {
+                if record.decision.member_ids.contains(id)
+                    && !locations
+                        .iter()
+                        .any(|source| source.document_id == *id && source.path == *path)
+                {
+                    locations.push(documents_api::DuplicateSourceLocation {
+                        document_id: id.clone(),
+                        path: path.clone(),
+                    });
+                }
+            }
+            result.push(documents_api::DuplicateHistoryEntry {
+                can_reopen: latest && record.can_reopen(),
+                decision: record.decision,
+                decided_at: record.decided_at,
+                reopened_at: record.reopened_at,
+                members: summarize_documents(library, members.iter())?,
+                locations,
+            });
+        }
+        Ok(Json(result))
+    })
+    .await
+}
+
+async fn reopen_duplicate(
+    State(library): State<Arc<Library>>,
+    Json(request): Json<documents_api::DuplicateReopenRequest>,
+) -> Result<Json<Vec<Summary>>, ApiError> {
+    blocking(library, move |library| {
+        let ids = library.reopen_duplicate(&request)?;
+        let documents = ids
+            .iter()
+            .map(|id| require_document(library, id))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Json(summarize_documents(library, documents.iter())?))
+    })
+    .await
+}
+
 async fn list_collections(State(library): State<Arc<Library>>) -> Result<Json<Value>, ApiError> {
     blocking(library, |library| {
         Ok(Json(json!({"collections": library.collections()?})))
@@ -498,6 +588,25 @@ async fn create_collection(
     blocking(library, move |library| {
         let collection = library.create_collection(&request.name, request.category.as_deref())?;
         Ok((StatusCode::CREATED, Json(json!({"collection": collection}))))
+    })
+    .await
+}
+
+async fn collection_members(
+    State(library): State<Arc<Library>>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<Summary>>, ApiError> {
+    blocking(library, move |library| {
+        let collection = library
+            .collection(&id)?
+            .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "Collection not found.".into()))?;
+        let mut members = collection
+            .member_ids
+            .iter()
+            .filter_map(|id| library.get(id).transpose())
+            .collect::<Result<Vec<_>, _>>()?;
+        members.sort_by(|left, right| left.filename.cmp(&right.filename));
+        Ok(Json(summarize_documents(library, members.iter())?))
     })
     .await
 }
@@ -780,14 +889,26 @@ fn router(library: Arc<Library>) -> Router {
         .route("/api/documents/{id}/analyze", axum::routing::post(analyze))
         .route("/api/documents/{id}/children", get(children))
         .route("/api/documents/{id}/split", axum::routing::post(split))
+        .route(
+            documents_api::ROUTE_DOCUMENT_CONTAINED_PAGES,
+            get(contained_pages),
+        )
+        .route(
+            documents_api::ROUTE_DOCUMENT_DUPLICATE_HISTORY,
+            get(duplicate_history),
+        )
+        .route(
+            documents_api::ROUTE_DOCUMENT_DUPLICATE_REOPEN,
+            axum::routing::post(reopen_duplicate),
+        )
         .route("/api/documents/duplicates", get(duplicate_candidates))
         .route(
             documents_api::ROUTE_DOCUMENT_COLLECTIONS,
             get(list_collections).post(create_collection),
         )
         .route(
-            "/api/documents/collections/{id}/members",
-            axum::routing::post(update_collection),
+            documents_api::ROUTE_DOCUMENT_COLLECTION_MEMBERS,
+            get(collection_members).post(update_collection),
         )
         .route(
             "/api/documents/duplicates/review",
@@ -836,6 +957,12 @@ pub fn serve() -> Result<(), Box<dyn std::error::Error>> {
     runtime.spawn(proposal_backfill_worker(Arc::clone(&library)));
     runtime.spawn(analysis_backfill_worker(Arc::clone(&library)));
     runtime.spawn(duplicate_refresh_worker(Arc::clone(&library)));
+    let decisions = Arc::clone(&library);
+    runtime.spawn_blocking(move || {
+        if let Err(error) = decisions.backfill_duplicate_sidecars() {
+            eprintln!("documents: duplicate decision backfill failed: {error}");
+        }
+    });
     let http = sjel_server::serve(
         "documents",
         sjel_server::Reach::Loopback,
@@ -1107,6 +1234,21 @@ mod tests {
             json!(expected_members)
         );
         assert!(queue["candidates"][0].get("extracted_text").is_none());
+        {
+            let library = Library::open(&root.join("test.db"), root.join("library")).unwrap();
+            library
+                .record_source(&second, std::path::Path::new("/fixture/scan copy.txt"))
+                .unwrap();
+            library
+                .review(
+                    &second,
+                    &Review {
+                        category: "Bills".into(),
+                        project: None,
+                    },
+                )
+                .unwrap();
+        }
         let key = queue["candidates"][0]["candidate_key"].as_str().unwrap();
         let decision = json!({
             "candidate_key": key,
@@ -1143,6 +1285,98 @@ mod tests {
             .await
             .status(),
             StatusCode::OK
+        );
+        drop(app);
+        let rebuilt = Library::open(&root.join("rebuilt.db"), root.join("library")).unwrap();
+        rebuilt.restore_index().unwrap();
+        assert_eq!(
+            rebuilt.absorbed_ids().unwrap(),
+            std::collections::HashSet::from([second.clone()])
+        );
+        let app = router(Arc::new(rebuilt));
+        let history = json_body(
+            call(
+                &app,
+                "GET",
+                documents_api::ROUTE_DOCUMENT_DUPLICATE_HISTORY,
+                "",
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(history[0]["decision"], decision);
+        assert_eq!(history[0]["locations"][0]["path"], "/fixture/scan copy.txt");
+        assert_eq!(history[0]["can_reopen"], true);
+        let request = json!({ "candidate_key": key, "decided_at": history[0]["decided_at"] });
+        let restored = call(
+            &app,
+            "POST",
+            documents_api::ROUTE_DOCUMENT_DUPLICATE_REOPEN,
+            &request.to_string(),
+        )
+        .await;
+        assert_eq!(restored.status(), StatusCode::OK);
+        let restored = json_body(restored).await;
+        assert_eq!(restored[0]["id"], second);
+        assert_eq!(restored[0]["status"], "filed");
+        assert_eq!(restored[0]["category"], "Bills");
+        let review =
+            json_body(call(&app, "GET", "/api/documents/duplicates?kind=exact_copy", "").await)
+                .await;
+        assert_eq!(review["total"], 1);
+        drop(app);
+
+        let reopened = Library::open(&root.join("after-reopen.db"), root.join("library")).unwrap();
+        reopened.restore_index().unwrap();
+        assert!(reopened.duplicate_decisions().unwrap().is_empty());
+        assert_eq!(reopened.get(&second).unwrap().unwrap().status, "filed");
+        drop(reopened);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn collection_members_route_opens_and_edits_one_collection() {
+        let (app, root) = fixture();
+        let document = json_body(
+            call(
+                &app,
+                "POST",
+                "/api/documents?filename=invoice.txt",
+                "Synthetic invoice",
+            )
+            .await,
+        )
+        .await;
+        let id = document["document"]["id"].as_str().unwrap();
+        let collection = json_body(
+            call(
+                &app,
+                "POST",
+                documents_api::ROUTE_DOCUMENT_COLLECTIONS,
+                r#"{"name":"Invoices"}"#,
+            )
+            .await,
+        )
+        .await;
+        let collection_id = collection["collection"]["id"].as_str().unwrap();
+        let path = documents_api::ROUTE_DOCUMENT_COLLECTION_MEMBERS.replace("{id}", collection_id);
+        let add = json!({ "add": [id] });
+        assert_eq!(
+            call(&app, "POST", &path, &add.to_string()).await.status(),
+            StatusCode::OK
+        );
+        let members = json_body(call(&app, "GET", &path, "").await).await;
+        assert_eq!(members[0]["id"], id);
+        let remove = json!({ "remove": [id] });
+        assert_eq!(
+            call(&app, "POST", &path, &remove.to_string())
+                .await
+                .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            json_body(call(&app, "GET", &path, "").await).await,
+            json!([])
         );
         drop(app);
         std::fs::remove_dir_all(root).unwrap();

@@ -37,6 +37,7 @@ pub mod context;
 pub mod cv;
 pub mod data;
 pub mod device;
+pub mod document_queue;
 pub mod environment;
 pub mod finance;
 pub mod inline;

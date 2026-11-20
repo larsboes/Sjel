@@ -8,6 +8,7 @@ use gpui::{
     div, img, prelude::*, px, rgb, rgba, Context, Entity, FontWeight, ObjectFit, ScrollHandle,
     StyledImage, Window,
 };
+use sjel_gpui_core::document_queue::SavedSplit;
 use sjel_gpui_core::shell::{
     self, DocumentCollection, DocumentDetail, DocumentPageRange, DocumentSplitChildInput,
     DocumentSplitRequest, DocumentSummary, ShellError,
@@ -20,7 +21,11 @@ use crate::ely::primitives::Tooltip;
 use crate::ely::theme::ControlSize;
 use crate::theme::Palette;
 
-use super::{viewer::Reader, Documents};
+use super::{
+    split_preview::BoundaryPreview,
+    viewer::{Reader, Zoom},
+    Documents,
+};
 
 pub(super) const PAGES_PER_GRID: usize = 12;
 
@@ -31,10 +36,16 @@ pub(super) struct SplitPicker {
     collections: Remote<Vec<DocumentCollection>>,
     collection_id: Option<String>,
     scroll: ScrollHandle,
+    pub(super) preview: Option<BoundaryPreview>,
+    matching: Remote<Option<DocumentPageRange>>,
+    saved: Option<SavedSplit>,
 }
 
-#[cfg(test)]
 impl SplitPicker {
+    pub(super) fn matched_span(&self) -> Option<DocumentPageRange> {
+        self.matching.value.flatten()
+    }
+
     pub(super) fn has_cut(&self, before: u32) -> bool {
         self.draft
             .as_ref()
@@ -45,6 +56,8 @@ impl SplitPicker {
 struct SplitDraft {
     cuts: BTreeSet<u32>,
     names: BTreeMap<u32, Entity<TextInput>>,
+    edited: bool,
+    pending_names: BTreeMap<u32, String>,
 }
 
 impl SplitDraft {
@@ -61,12 +74,16 @@ impl SplitDraft {
         Self {
             cuts,
             names: BTreeMap::new(),
+            edited: false,
+            pending_names: BTreeMap::new(),
         }
     }
 
     fn toggle(&mut self, before: u32) {
+        self.edited = true;
         if self.cuts.remove(&before) {
             self.names.remove(&before);
+            self.pending_names.remove(&before);
         } else {
             self.cuts.insert(before);
         }
@@ -115,20 +132,139 @@ fn pdf_filename(name: &str) -> String {
 
 impl Documents {
     pub(super) fn begin_split_picker(&mut self, cx: &mut Context<Self>) {
-        if self.selected.is_none() || self.split_picker.is_some() {
+        let Some(id) = self.selected.clone() else {
+            return;
+        };
+        if self.split_picker.is_some() {
             return;
         }
         self.workflow_error = None;
+        let saved = self.split_queue.state.drafts.get(&id).cloned();
         self.split_picker = Some(SplitPicker {
-            offset: self.reader.page / PAGES_PER_GRID * PAGES_PER_GRID,
+            offset: saved.as_ref().map_or(
+                self.reader.page / PAGES_PER_GRID * PAGES_PER_GRID,
+                |draft| draft.offset,
+            ),
+            collection_id: saved.as_ref().and_then(|draft| draft.collection_id.clone()),
+            saved,
             ..SplitPicker::default()
         });
+        if self.filter == super::Filter::BigDocuments {
+            self.split_queue.state.resume = Some(id);
+            self.save_split_queue(cx);
+        }
         self.load_split_collections(cx);
         self.request_thumbnails(cx);
         cx.notify();
     }
 
+    pub(super) fn open_contained_split(
+        &mut self,
+        id: String,
+        part: String,
+        cx: &mut Context<Self>,
+    ) {
+        self.set_duplicate_mode(false, cx);
+        self.open(id.clone(), cx);
+        if self.selected.as_ref() != Some(&id) {
+            return;
+        }
+        self.begin_split_picker(cx);
+        let (Some(picker), Ok(shell)) = (&mut self.split_picker, self.repo.shell()) else {
+            return;
+        };
+        picker.matching = Remote::new_loading();
+        let expected = id.clone();
+        let work = shell::run(async move { shell.contained_document_pages(&id, &part).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.selected.as_ref() != Some(&expected) {
+                    return;
+                }
+                let Some(picker) = &mut view.split_picker else {
+                    return;
+                };
+                let auto_apply = picker.saved.is_none()
+                    && picker.draft.as_ref().is_none_or(|draft| !draft.edited);
+                picker.matching.settle(result);
+                if auto_apply {
+                    view.apply_matched_span(cx);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn apply_matched_span(&mut self, cx: &mut Context<Self>) {
+        let Some(picker) = &mut self.split_picker else {
+            return;
+        };
+        if let Some(Some(range)) = picker.matching.value {
+            if let Some(draft) = &mut picker.draft {
+                add_matched_cuts(draft, range, self.reader.pages as u32);
+            }
+            picker.offset = (range.first as usize - 1) / PAGES_PER_GRID * PAGES_PER_GRID;
+            self.request_thumbnails(cx);
+            cx.notify();
+        }
+    }
+
+    pub(super) fn toggle_split_cut(&mut self, before: u32, cx: &mut Context<Self>) {
+        if self.workflow_busy.as_deref() == Some("split") {
+            return;
+        }
+        if let Some(draft) = self
+            .split_picker
+            .as_mut()
+            .and_then(|picker| picker.draft.as_mut())
+        {
+            draft.toggle(before);
+            self.workflow_error = None;
+            self.remember_split_draft(cx);
+            cx.notify();
+        }
+    }
+
+    fn remember_split_draft(&mut self, cx: &mut Context<Self>) {
+        if self.filter != super::Filter::BigDocuments {
+            return;
+        }
+        let (Some(id), Some(picker)) = (self.selected.clone(), &self.split_picker) else {
+            return;
+        };
+        let Some(draft) = &picker.draft else {
+            return;
+        };
+        let mut names = draft.pending_names.clone();
+        for (start, input) in &draft.names {
+            names.insert(*start, input.read(cx).text().to_owned());
+        }
+        self.split_queue.state.drafts.insert(
+            id,
+            SavedSplit {
+                cuts: draft.cuts.clone(),
+                names,
+                offset: picker.offset,
+                collection_id: picker.collection_id.clone(),
+            },
+        );
+        self.save_split_queue(cx);
+    }
+
+    fn defer_split(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.selected.clone() else {
+            return;
+        };
+        self.split_queue.state.deferred.insert(id.clone());
+        self.close_split_picker(cx);
+        self.save_split_queue(cx);
+        self.advance_split_queue(&id, cx);
+    }
+
     pub(super) fn close_split_picker(&mut self, cx: &mut Context<Self>) {
+        self.remember_split_draft(cx);
         self.split_picker = None;
         self.workflow_error = None;
         if self.reader.show_thumbnails {
@@ -176,13 +312,14 @@ impl Documents {
             if next < self.reader.pages {
                 picker.offset = next;
                 picker.scroll.set_offset(gpui::point(px(0.), px(0.)));
+                self.remember_split_draft(cx);
                 self.request_thumbnails(cx);
                 cx.notify();
             }
         }
     }
 
-    fn submit_split(&mut self, cx: &mut Context<Self>) {
+    fn submit_split(&mut self, next: bool, cx: &mut Context<Self>) {
         let (Some(id), Some(detail), Some(picker)) = (
             self.selected.clone(),
             &self.detail.value,
@@ -271,7 +408,18 @@ impl Documents {
                 view.workflow_busy = None;
                 match result {
                     Ok((children, parent)) => {
+                        view.split_picker = None;
                         view.close_split_picker(cx);
+                        let queue = &mut view.split_queue.state;
+                        let was_resumed = queue.resume.as_ref() == Some(&expected);
+                        if was_resumed {
+                            queue.resume = None;
+                        }
+                        let removed = queue.drafts.remove(&expected).is_some();
+                        let deferred = queue.deferred.remove(&expected);
+                        if was_resumed || removed || deferred {
+                            view.save_split_queue(cx);
+                        }
                         let detail = view.detail.value.as_mut();
                         if let Some(detail) = detail {
                             match parent {
@@ -298,6 +446,9 @@ impl Documents {
                         view.reader_tab = 0;
                         view.page_offset = 0;
                         view.order_rev = view.order_rev.wrapping_add(1);
+                        if next {
+                            view.advance_split_queue(&expected, cx);
+                        }
                     }
                     Err(error) => {
                         if let Some(draft) = view
@@ -325,6 +476,7 @@ impl Documents {
     ) -> gpui::Div {
         let palette = self.palette.unwrap_or_else(Palette::dark);
         let saving = self.workflow_busy.as_deref() == Some("split");
+        let queue = self.filter == super::Filter::BigDocuments;
         let title = self.detail.value.as_ref().map_or_else(
             || "Split PDF".to_owned(),
             |detail| format!("Split · {}", detail.document.filename),
@@ -343,6 +495,14 @@ impl Documents {
                         .font_weight(FontWeight::SEMIBOLD)
                         .child(title),
                 )
+                .when(queue, |bar| {
+                    bar.child(
+                        Button::new("split-defer", "Defer")
+                            .size(ControlSize::Sm)
+                            .disabled(saving)
+                            .on_click(cx.listener(|view, _, _, cx| view.defer_split(cx))),
+                    )
+                })
                 .child(
                     Button::new("split-back", "Back to reader")
                         .size(ControlSize::Sm)
@@ -376,12 +536,31 @@ impl Documents {
         if pages == 1 {
             return base.child("This PDF has one page.");
         }
+        if let Some(preview) = self
+            .split_picker
+            .as_ref()
+            .and_then(|picker| picker.preview.as_ref())
+        {
+            return base.child(self.preview_boundary(preview, cx));
+        }
         let Some(picker) = &mut self.split_picker else {
             return base;
         };
-        let draft = picker
-            .draft
-            .get_or_insert_with(|| SplitDraft::new(detail, pages));
+        let draft = picker.draft.get_or_insert_with(|| {
+            let mut draft = SplitDraft::new(detail, pages);
+            if let Some(saved) = picker.saved.take() {
+                draft.edited = true;
+                draft.cuts = saved
+                    .cuts
+                    .into_iter()
+                    .filter(|page| (2..=pages).contains(page))
+                    .collect();
+                draft.pending_names = saved.names;
+            } else if let Some(Some(range)) = picker.matching.value {
+                add_matched_cuts(&mut draft, range, pages);
+            }
+            draft
+        });
         let count = draft.cuts.len() + 1;
         let start = picker.offset;
         let end = (start + PAGES_PER_GRID).min(self.reader.pages);
@@ -398,6 +577,23 @@ impl Documents {
             .children(render_collection(picker, saving, palette, cx));
         let ready = split_ready(detail, pages);
         let wide = window.viewport_size().width >= px(720.);
+        let match_status = if picker.matching.loading {
+            Some("Locating matching pages…".to_owned())
+        } else if let Some(error) = &picker.matching.error {
+            Some(format!("Could not locate the matching pages: {error}"))
+        } else {
+            picker.matching.value.map(|range| {
+                range.map_or_else(
+                    || "No unambiguous matching page span found.".into(),
+                    |range| {
+                        format!(
+                            "Contained document matches pages {}–{}",
+                            range.first, range.last
+                        )
+                    },
+                )
+            })
+        };
         base.child(
             div()
                 .flex()
@@ -422,6 +618,19 @@ impl Documents {
                         .on_click(cx.listener(|view, _, _, cx| view.step_split_grid(true, cx))),
                 ),
         )
+        .children(match_status.map(|status| {
+            div().flex().items_center().gap_2().child(status).when(
+                picker.matching.value.flatten().is_some(),
+                |bar| {
+                    bar.child(
+                        Button::new("split-apply-matched", "Use matched page span")
+                            .size(ControlSize::Sm)
+                            .disabled(saving)
+                            .on_click(cx.listener(|view, _, _, cx| view.apply_matched_span(cx))),
+                    )
+                },
+            )
+        }))
         .child(
             div()
                 .id("split-content")
@@ -457,8 +666,15 @@ impl Documents {
                     )
                     .primary()
                     .disabled(count < 2 || !ready || self.workflow_busy.is_some())
-                    .on_click(cx.listener(|view, _, _, cx| view.submit_split(cx))),
+                    .on_click(cx.listener(|view, _, _, cx| view.submit_split(false, cx))),
                 )
+                .when(queue, |bar| {
+                    bar.child(
+                        Button::new("split-save-next", "Save and open next")
+                            .disabled(count < 2 || !ready || self.workflow_busy.is_some())
+                            .on_click(cx.listener(|view, _, _, cx| view.submit_split(true, cx))),
+                    )
+                })
                 .when(!ready, |bar| {
                     bar.child(
                         Button::new(
@@ -558,7 +774,6 @@ fn render_grid(
                     card.child(
                         div()
                             .id(("split-boundary", page))
-                            .debug_selector(move || format!("split-cut-{before}"))
                             .tooltip(Tooltip::text(suggestion.map_or_else(
                                 || format!("{action} after page {number}"),
                                 |evidence| {
@@ -569,25 +784,42 @@ fn render_grid(
                                 },
                             )))
                             .child(
-                                Button::new(("split-cut", page), if cut { "Cut" } else { "+ Cut" })
-                                    .size(ControlSize::Sm)
-                                    .variant(if cut {
-                                        ButtonVariant::Secondary
-                                    } else {
-                                        ButtonVariant::Ghost
-                                    })
-                                    .disabled(saving)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        if let Some(draft) = view
-                                            .split_picker
-                                            .as_mut()
-                                            .and_then(|picker| picker.draft.as_mut())
-                                        {
-                                            draft.toggle(before);
-                                            view.workflow_error = None;
-                                            cx.notify();
-                                        }
-                                    })),
+                                div()
+                                    .debug_selector(move || format!("split-cut-{before}"))
+                                    .child(
+                                        Button::new(
+                                            ("split-cut", page),
+                                            if cut { "Cut" } else { "+ Cut" },
+                                        )
+                                        .size(ControlSize::Sm)
+                                        .variant(if cut {
+                                            ButtonVariant::Secondary
+                                        } else {
+                                            ButtonVariant::Ghost
+                                        })
+                                        .disabled(saving)
+                                        .on_click(
+                                            cx.listener(move |view, _, _, cx| {
+                                                view.toggle_split_cut(before, cx)
+                                            }),
+                                        ),
+                                    ),
+                            )
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .debug_selector(move || format!("split-inspect-{before}"))
+                                    .child(
+                                        Button::new(("inspect-split-boundary", page), "Inspect")
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Ghost)
+                                            .disabled(saving)
+                                            .on_click(cx.listener(move |view, _, _, cx| {
+                                                view.inspect_boundary(page + 1, Zoom::Width, cx)
+                                            })),
+                                    ),
                             ),
                     )
                 }),
@@ -621,11 +853,15 @@ fn render_pieces(
         let pages = last - first + 1;
         let placeholder = default_name(&detail.document.filename, range);
         let name = draft.names.entry(first).or_insert_with(|| {
-            cx.new(|cx| {
+            let name = cx.new(|cx| {
                 TextInput::new(window, cx)
                     .placeholder(placeholder.clone())
                     .label(format!("Filename for piece starting on page {first}"))
-            })
+            });
+            if let Some(text) = draft.pending_names.remove(&first) {
+                name.update(cx, |input, cx| input.set_text(text, cx));
+            }
+            name
         });
         if name.read(cx).placeholder_text().as_ref() != placeholder {
             name.update(cx, |input, cx| input.set_placeholder(placeholder, cx));
@@ -682,6 +918,7 @@ fn render_collection(
                         entity.update(cx, |view, cx| {
                             if let Some(picker) = &mut view.split_picker {
                                 picker.collection_id = (!id.is_empty()).then(|| id.to_string());
+                                view.remember_split_draft(cx);
                                 cx.notify();
                             }
                         });
@@ -705,6 +942,27 @@ fn render_collection(
                     .on_click(cx.listener(|view, _, _, cx| view.load_split_collections(cx))),
             )
     })
+}
+
+fn add_matched_cuts(draft: &mut SplitDraft, range: DocumentPageRange, pages: u32) {
+    if range.first == 0 || range.last > pages || range.first > range.last {
+        return;
+    }
+    draft
+        .cuts
+        .retain(|cut| *cut <= range.first || *cut > range.last);
+    draft
+        .names
+        .retain(|start, _| *start == 1 || draft.cuts.contains(start));
+    draft
+        .pending_names
+        .retain(|start, _| *start == 1 || draft.cuts.contains(start));
+    if range.first > 1 {
+        draft.cuts.insert(range.first);
+    }
+    if range.last < pages {
+        draft.cuts.insert(range.last + 1);
+    }
 }
 
 fn split_ready(detail: &DocumentDetail, pages: u32) -> bool {

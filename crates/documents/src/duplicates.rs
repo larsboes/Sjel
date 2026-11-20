@@ -290,6 +290,49 @@ fn shingles(text: &str) -> HashSet<u64> {
         .collect()
 }
 
+/// Locate one unambiguous run of matching pages in the original.
+pub(crate) fn contained_pages(
+    parent: &Document,
+    part: &Document,
+) -> Option<documents_api::DocumentPageRange> {
+    if part.pages.is_empty() || part.pages.len() >= parent.pages.len() {
+        return None;
+    }
+    let page_sets = |document: &Document| {
+        document
+            .pages
+            .iter()
+            .enumerate()
+            .map(|(index, page)| {
+                if page.failure.is_some() || page.page_number != index as u32 + 1 {
+                    return None;
+                }
+                let terms = shingles(&page.text);
+                (terms.len() >= MIN_SHINGLES).then_some(terms)
+            })
+            .collect::<Vec<_>>()
+    };
+    let part = page_sets(part).into_iter().collect::<Option<Vec<_>>>()?;
+    let parent = page_sets(parent);
+    let mut runs = parent.windows(part.len()).enumerate().filter(|(_, run)| {
+        run.iter().zip(&part).all(|(page, part)| {
+            page.as_ref().is_some_and(|page| {
+                let common = page.intersection(part).count();
+                common as f64 / page.union(part).count() as f64 >= PART_MIN_CONTAINMENT
+            })
+        })
+    });
+    let (start, _) = runs.next()?;
+    if runs.next().is_some() {
+        return None;
+    }
+    documents_api::DocumentPageRange::new(
+        u32::try_from(start + 1).ok()?,
+        u32::try_from(start + part.len()).ok()?,
+    )
+    .ok()
+}
+
 /// The record that keeps a group: filed before inbox before archived, then the earliest
 /// import, then the lowest id.
 pub fn preferred<'a>(documents: impl IntoIterator<Item = &'a Document>) -> Option<&'a Document> {
@@ -316,6 +359,34 @@ pub fn open_candidates(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contained_pages_require_one_unambiguous_contiguous_match() {
+        let with_pages = |bodies: &[&str]| {
+            let mut record = doc("a", "a", "");
+            record.pages = bodies
+                .iter()
+                .enumerate()
+                .map(|(index, text)| sjel_extraction::ExtractedPage {
+                    page_number: index as u32 + 1,
+                    text: (*text).into(),
+                    failure: None,
+                    engine: "fixture".into(),
+                })
+                .collect();
+            record
+        };
+        let part = with_pages(&[LETTER, OTHER]);
+        let unique = with_pages(&[OTHER, LETTER, OTHER, LETTER]);
+        let repeated = with_pages(&[LETTER, OTHER, LETTER, OTHER]);
+        let reversed = with_pages(&[OTHER, LETTER, LETTER]);
+        assert_eq!(
+            contained_pages(&unique, &part),
+            documents_api::DocumentPageRange::new(2, 3).ok()
+        );
+        assert_eq!(contained_pages(&repeated, &part), None);
+        assert_eq!(contained_pages(&reversed, &part), None);
+    }
 
     const LETTER: &str = "Sehr geehrte Damen und Herren, hiermit erhalten Sie einen Gutschein \
         im Wert von einhundert Euro fuer Ihre naechste Buchung. Der Gutschein ist bis zum \

@@ -26,7 +26,7 @@ Complete reviewable document decisions through the existing owner, with implemen
 ## Evidence
 
 - The owner merges a confirmed group: `save_duplicate_decision` archives every member except the survivor in the decision's transaction and writes their record sidecars (`crates/documents/src/library.rs`). Archived members keep originals and source paths and leave the review queue (`open_candidates` in `crates/documents/src/server.rs`).
-- Duplicate decision rows have no versioned sidecar. A dismissal and the absorbed-record link are lost on `restore-index`, while the archived status survives.
+- Duplicate history uses versioned sidecars. The owner restores decisions, source receipts, and reopen state during `restore-index`. New merges save the absorbed records’ prior filing state. Older merges can appear in history with no saved filing state to restore.
 - Folder imports reuse the record for known bytes (`Library::intake_known`), and `inbox --dry-run` reports new and stored files by hash. `documents merge-copies --apply` merged 174 exact-copy groups and archived 199 records on the live library; a second run reports 0 groups. A catalog backup preceded it.
 - Every eligible file in the Extreme archive folders was already stored: 0 new of 1,405 across eight folders.
 - The Documents owner stores collections in tables and rebuilds them from sidecars. The Mac split picker can assign every piece to an existing collection in the split request.
@@ -36,5 +36,10 @@ Complete reviewable document decisions through the existing owner, with implemen
 - One PDF page view (`apps/gpui/ui/src/pdf_kit/view.rs`) serves the reader, filing compare and duplicate panes with fit page, fit width and 50–400 % zoom. Native acceptance of scrolling and zoom has not run.
 - The list reads cached derived values instead of extracted text: 500 rows in about 27 ms instead of 1.0–1.65 s. Duplicate candidates over active records are cached per library revision: about 0.1 s warm instead of about 17 s.
 - **Big documents** orders analyzed, unsplit originals by descending page count. The reader preselects suggested cuts and shows editable cuts, names, and live page counts. The owner stores one PDF per range and refreshes duplicate candidates in the background after a split.
-- Documents tests pass on Turso WAL (64) and SQLite (65). The split test verifies that the source bytes stay intact, the named pieces enter duplicate review, and an index rebuild restores the pieces and their collection. The 17 headless Documents UI tests cover the queue order and the picker’s editable suggested cuts.
-- The installed Mac app still needs visual acceptance of the picker, PDF scrolling and zoom, and a real multi-page split.
+- The queue saves the active bundle, draft cuts, and deferred entries locally. **Save and open next** continues with the next eligible bundle. The queue shows the count of original PDFs awaiting page analysis.
+- The picker compares the PDF pages on both sides of a cut with the shared zoom and scroll controls. A contained candidate supplies cuts at the edges of one uniquely matching contiguous span. Ambiguous matches leave the draft available for manual review.
+- **Collections** opens from the library and the active document. It lists members and supports adding the active document or removing a member.
+- **Decision history** shows the kept record, archived members, and source receipts. Reopening a recorded merge restores its saved filing states. A later manual change clears reopening eligibility.
+- Documents tests pass on Turso WAL (66) and SQLite (67). The tests exercise contiguous matching, collection membership writes, split and merge reconstruction, source receipts, and restoring a filed record when a merge is reopened.
+- The full GPUI UI suite passed 248 headless tests, including rendering both pages at a cut and changing the gap and zoom without losing cuts.
+- Installed Mac acceptance still needs three real bundles, including boundary preview, PDF scrolling and zoom, and a multi-page split. The background desktop bridge did not return a window for the installed app.

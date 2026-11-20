@@ -190,18 +190,19 @@ pub struct ScratchpadState {
     pub history: Vec<SortOutcome>,
 }
 
+pub(crate) fn local_app_state_path(filename: &str) -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os("SJEL_CONFIG_DIR") {
+        return Some(PathBuf::from(dir).join(filename));
+    }
+    if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
+        return Some(PathBuf::from(dir).join("sjel").join(filename));
+    }
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config/sjel").join(filename))
+}
+
 impl ScratchpadState {
     pub fn config_path() -> Option<PathBuf> {
-        if let Ok(dir) = std::env::var("SJEL_CONFIG_DIR") {
-            return Some(PathBuf::from(dir).join("scratchpad.json"));
-        }
-        if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-            return Some(PathBuf::from(xdg).join("sjel/scratchpad.json"));
-        }
-        if let Ok(home) = std::env::var("HOME") {
-            return Some(PathBuf::from(home).join(".config/sjel/scratchpad.json"));
-        }
-        None
+        local_app_state_path("scratchpad.json")
     }
 
     pub fn load() -> Self {

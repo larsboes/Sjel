@@ -149,6 +149,87 @@ impl Shell {
         Ok(response.collections)
     }
 
+    pub async fn document_collection_members(&self, id: &str) -> ShellResult<Vec<DocumentSummary>> {
+        let path = collection_members_path(id)?;
+        self.json(Method::GET, &path, None, 20).await
+    }
+
+    pub async fn change_document_collection(
+        &self,
+        collection_id: &str,
+        document_id: String,
+        add: bool,
+    ) -> ShellResult<DocumentCollection> {
+        #[derive(serde::Deserialize)]
+        struct Response {
+            collection: DocumentCollection,
+        }
+        let path = collection_members_path(collection_id)?;
+        let mut request = documents_api::DocumentCollectionMembers::default();
+        if add {
+            request.add.push(document_id);
+        } else {
+            request.remove.push(document_id);
+        }
+        let response: Response = self
+            .json(Method::POST, &path, Some(body(&request)?), 15)
+            .await?;
+        Ok(response.collection)
+    }
+
+    pub async fn contained_document_pages(
+        &self,
+        id: &str,
+        part: &str,
+    ) -> ShellResult<Option<DocumentPageRange>> {
+        if !is_sha256(id) || !is_sha256(part) {
+            return Err(ShellError::Refused(
+                400,
+                Some("Invalid document ID.".into()),
+            ));
+        }
+        self.json(
+            Method::GET,
+            &proxied_id(
+                documents_api::PROXY_PREFIX,
+                documents_api::ROUTE_DOCUMENT_CONTAINED_PAGES,
+                id,
+            )
+            .replace("{part_id}", part),
+            None,
+            20,
+        )
+        .await
+    }
+
+    pub async fn duplicate_history(
+        &self,
+        offset: usize,
+    ) -> ShellResult<Vec<DuplicateHistoryEntry>> {
+        let route = proxied(
+            documents_api::PROXY_PREFIX,
+            documents_api::ROUTE_DOCUMENT_DUPLICATE_HISTORY,
+        );
+        self.json(Method::GET, &format!("{route}?offset={offset}"), None, 20)
+            .await
+    }
+
+    pub async fn reopen_duplicate(
+        &self,
+        request: &DuplicateReopenRequest,
+    ) -> ShellResult<Vec<DocumentSummary>> {
+        self.json(
+            Method::POST,
+            &proxied(
+                documents_api::PROXY_PREFIX,
+                documents_api::ROUTE_DOCUMENT_DUPLICATE_REOPEN,
+            ),
+            Some(body(request)?),
+            15,
+        )
+        .await
+    }
+
     /// Create child records for a complete, operator-approved PDF partition.
     pub async fn split_document(
         &self,
@@ -448,4 +529,18 @@ mod path_tests {
         );
         assert_eq!(document_path("../etc"), None);
     }
+}
+
+fn collection_members_path(id: &str) -> ShellResult<String> {
+    if id.len() != 32 || !id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(ShellError::Refused(
+            400,
+            Some("Invalid collection ID.".into()),
+        ));
+    }
+    Ok(proxied_id(
+        documents_api::PROXY_PREFIX,
+        documents_api::ROUTE_DOCUMENT_COLLECTION_MEMBERS,
+        id,
+    ))
 }

@@ -61,6 +61,7 @@ impl Documents {
 
     pub(super) fn set_duplicate_mode(&mut self, enabled: bool, cx: &mut Context<Self>) {
         self.duplicate_mode = enabled;
+        self.history.open = false;
         if enabled {
             self.duplicate_offset = 0;
             self.duplicate_selection = None;
@@ -306,6 +307,7 @@ impl Documents {
                 )),
         );
 
+        body = body.child(self.history_button(cx));
         if let Some(error) = &self.duplicate_error {
             body = body.child(
                 div()
@@ -535,6 +537,8 @@ impl Documents {
                             let parent_id = parent
                                 .map(|part| part.parent_id.clone())
                                 .unwrap_or_default();
+                            let part_id =
+                                parent.map(|part| part.part_id.clone()).unwrap_or_default();
                             let can_split = rows
                                 .iter()
                                 .find(|row| row.id == parent_id)
@@ -548,9 +552,11 @@ impl Documents {
                                     .size(ControlSize::Sm)
                                     .on_click(cx.listener(
                                         move |view, _, _, cx| {
-                                            view.set_duplicate_mode(false, cx);
-                                            view.open(parent_id.clone(), cx);
-                                            view.begin_split_picker(cx);
+                                            view.open_contained_split(
+                                                parent_id.clone(),
+                                                part_id.clone(),
+                                                cx,
+                                            );
                                         },
                                     )),
                                 )

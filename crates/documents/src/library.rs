@@ -22,6 +22,7 @@ use crate::review::DuplicateDecision;
 
 mod collections;
 mod duplicate_cache;
+mod duplicate_history;
 mod listing;
 
 pub use listing::{Derived, ListRow};
@@ -129,6 +130,7 @@ pub struct Library {
     classification: crate::classification::ClassificationConfig,
     rule_proposal_lock: Mutex<()>,
     collection_write_lock: Mutex<()>,
+    duplicate_write_lock: Mutex<()>,
     revision: std::sync::atomic::AtomicU64,
     duplicate_cache: Mutex<duplicate_cache::DuplicateCache>,
     pub(crate) split_completed: tokio::sync::Notify,
@@ -170,6 +172,7 @@ impl Library {
             classification,
             rule_proposal_lock: Mutex::new(()),
             collection_write_lock: Mutex::new(()),
+            duplicate_write_lock: Mutex::new(()),
             revision: std::sync::atomic::AtomicU64::new(0),
             duplicate_cache: Mutex::new(duplicate_cache::DuplicateCache::default()),
             split_completed: tokio::sync::Notify::new(),
@@ -1463,90 +1466,6 @@ impl Library {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
-    /// Read saved human decisions for duplicate candidates.
-    ///
-    /// # Errors
-    /// The review table cannot be read or a persisted decision is malformed.
-    pub fn duplicate_decisions(&self) -> Fallible<Vec<DuplicateDecision>> {
-        let conn = self
-            .pool
-            .get()
-            .map_err(|e| LibraryError::Store(e.to_string()))?;
-        let mut statement = conn.prepare(
-            "SELECT decision_json FROM documents_duplicate_reviews ORDER BY candidate_key",
-        )?;
-        let rows = statement.query_map(params![], |row| row.get::<_, String>(0))?;
-        rows.map(|row| {
-            let json = row?;
-            serde_json::from_str(&json).map_err(|error| {
-                LibraryError::Invalid(format!("stored duplicate decision: {error}"))
-            })
-        })
-        .collect()
-    }
-
-    /// Persist an operator decision. A confirmed group also archives every member except the
-    /// survivor, in the same transaction, and returns the archived ids. Originals, source
-    /// paths and records are never deleted.
-    ///
-    /// # Errors
-    /// The decision is invalid, a referenced record is missing, or persistence fails.
-    pub fn save_duplicate_decision(&self, decision: &DuplicateDecision) -> Fallible<Vec<String>> {
-        let _stale = self.stale_after();
-        decision
-            .validate()
-            .map_err(|error| LibraryError::Invalid(error.to_string()))?;
-        let decision_json = serde_json::to_string(decision)
-            .map_err(|error| LibraryError::Invalid(format!("duplicate decision: {error}")))?;
-        let mut conn = self
-            .pool
-            .get()
-            .map_err(|e| LibraryError::Store(e.to_string()))?;
-        let transaction = engine::write_transaction(&mut conn)?;
-        for id in &decision.member_ids {
-            let exists = transaction
-                .query_row(
-                    "SELECT 1 FROM documents_items WHERE id = ?1",
-                    params![id.as_str()],
-                    |row| row.get::<_, i64>(0),
-                )
-                .optional()?
-                .is_some();
-            if !exists {
-                return Err(LibraryError::Invalid(
-                    "duplicate candidate includes a missing document".into(),
-                ));
-            }
-        }
-        transaction.execute(
-            "INSERT INTO documents_duplicate_reviews (candidate_key, decision_json, updated_at)
-             VALUES (?1, ?2, ?3)
-             ON CONFLICT (candidate_key) DO UPDATE SET
-                 decision_json = excluded.decision_json,
-                 updated_at = excluded.updated_at",
-            params![
-                decision.candidate_key.as_str(),
-                decision_json,
-                chrono::Utc::now().to_rfc3339()
-            ],
-        )?;
-        let absorbed = decision.absorbed_ids();
-        for id in &absorbed {
-            transaction.execute(
-                "UPDATE documents_items SET status = 'archived' WHERE id = ?1",
-                params![id.as_str()],
-            )?;
-        }
-        transaction.commit()?;
-        for id in &absorbed {
-            let document = self
-                .get(id)?
-                .ok_or_else(|| LibraryError::Invalid("merged record disappeared".into()))?;
-            self.write_record(&document)?;
-        }
-        Ok(absorbed)
-    }
-
     /// Ids that a confirmed group archived. They leave the duplicate review queue.
     ///
     /// # Errors
@@ -1588,6 +1507,7 @@ impl Library {
     /// The id/category/project is invalid, or the document does not exist.
     pub fn review(&self, id: &str, review: &Review) -> Fallible<Document> {
         let _stale = self.stale_after();
+        let _lock = self.lock_duplicate_writes()?;
         check_id(id)?;
         let category = safe_category(&review.category)?;
         let project = review.project.as_deref().map(safe_project).transpose()?;
@@ -1606,6 +1526,8 @@ impl Library {
             .get(id)?
             .ok_or_else(|| LibraryError::Invalid("reviewed record disappeared".into()))?;
         self.write_record(&document)?;
+        drop(conn);
+        self.release_duplicate_archive(id)?;
         Ok(document)
     }
 
@@ -1615,6 +1537,7 @@ impl Library {
     /// The id is malformed or no matching document exists.
     pub fn archive(&self, id: &str) -> Fallible<Document> {
         let _stale = self.stale_after();
+        let _lock = self.lock_duplicate_writes()?;
         check_id(id)?;
         let conn = self
             .pool
@@ -1631,6 +1554,8 @@ impl Library {
             .get(id)?
             .ok_or_else(|| LibraryError::Invalid("archived record disappeared".into()))?;
         self.write_record(&document)?;
+        drop(conn);
+        self.release_duplicate_archive(id)?;
         Ok(document)
     }
 
@@ -1710,6 +1635,7 @@ impl Library {
         }
         self.restore_proposal_sidecars()?;
         self.restore_collection_sidecars()?;
+        self.restore_duplicate_sidecars()?;
         self.backfill_rule_proposals()?;
         Ok((restored, unchanged))
     }
@@ -2101,6 +2027,11 @@ fn migrate(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
         CREATE TABLE IF NOT EXISTS documents_duplicate_reviews (
             candidate_key TEXT PRIMARY KEY,
             decision_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS documents_duplicate_history (
+            candidate_key TEXT PRIMARY KEY,
+            history_json TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS documents_classification_proposals (

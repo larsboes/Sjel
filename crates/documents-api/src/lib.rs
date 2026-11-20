@@ -19,13 +19,17 @@ pub const ROUTE_DOCUMENT_DUPLICATES: &str = "/api/documents/duplicates";
 pub const ROUTE_DOCUMENT_DUPLICATES_REVIEW: &str = "/api/documents/duplicates/review";
 pub const ROUTE_DOCUMENT_SPLIT: &str = "/api/documents/{id}/split";
 pub const ROUTE_DOCUMENT_COLLECTIONS: &str = "/api/documents/collections";
+pub const ROUTE_DOCUMENT_COLLECTION_MEMBERS: &str = "/api/documents/collections/{id}/members";
+pub const ROUTE_DOCUMENT_CONTAINED_PAGES: &str = "/api/documents/{id}/contained-pages/{part_id}";
+pub const ROUTE_DOCUMENT_DUPLICATE_HISTORY: &str = "/api/documents/duplicates/history";
+pub const ROUTE_DOCUMENT_DUPLICATE_REOPEN: &str = "/api/documents/duplicates/reopen";
 pub const ROUTE_DOCUMENT_PROPOSALS_REGENERATE: &str = "/api/documents/{id}/proposals/regenerate";
 pub const ROUTE_DOCUMENT_PROPOSALS_MODEL: &str = "/api/documents/{id}/proposals/model";
 pub const ROUTE_DOCUMENT_PROPOSAL_REVIEW: &str =
     "/api/documents/{id}/proposals/{proposal_id}/review";
 
 /// Every route constant above. The server test checks each one against its manifest.
-pub const ALL_ROUTES: [&str; 13] = [
+pub const ALL_ROUTES: [&str; 17] = [
     ROUTE_DOCUMENTS,
     ROUTE_FINDER,
     ROUTE_DOCUMENT_BY_ID,
@@ -36,6 +40,10 @@ pub const ALL_ROUTES: [&str; 13] = [
     ROUTE_DOCUMENT_DUPLICATES_REVIEW,
     ROUTE_DOCUMENT_SPLIT,
     ROUTE_DOCUMENT_COLLECTIONS,
+    ROUTE_DOCUMENT_COLLECTION_MEMBERS,
+    ROUTE_DOCUMENT_CONTAINED_PAGES,
+    ROUTE_DOCUMENT_DUPLICATE_HISTORY,
+    ROUTE_DOCUMENT_DUPLICATE_REOPEN,
     ROUTE_DOCUMENT_PROPOSALS_REGENERATE,
     ROUTE_DOCUMENT_PROPOSALS_MODEL,
     ROUTE_DOCUMENT_PROPOSAL_REVIEW,
@@ -501,6 +509,22 @@ pub struct DuplicateDecision {
     pub kind: DuplicateCandidateKind,
     pub member_ids: Vec<String>,
     pub action: DuplicateDecisionAction,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct DuplicateHistoryEntry {
+    pub decision: DuplicateDecision,
+    pub decided_at: String,
+    pub reopened_at: Option<String>,
+    pub can_reopen: bool,
+    pub members: Vec<DocumentSummary>,
+    pub locations: Vec<DuplicateSourceLocation>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct DuplicateReopenRequest {
+    pub candidate_key: String,
+    pub decided_at: String,
 }
 
 /// A partition or decision does not satisfy the candidate contract.

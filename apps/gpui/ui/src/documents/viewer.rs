@@ -383,6 +383,14 @@ impl Documents {
                 match result {
                     Ok(pages) => {
                         view.reader.pages = pages;
+                        if let Some(picker) = &mut view.split_picker {
+                            let limit = pages.saturating_sub(1);
+                            if picker.offset > limit {
+                                let size = super::split_picker::PAGES_PER_GRID;
+                                picker.offset = limit / size * size;
+                            }
+                        }
+
                         if let Some(range) = view
                             .detail
                             .value

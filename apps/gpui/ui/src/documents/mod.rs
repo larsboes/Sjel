@@ -28,9 +28,13 @@ use crate::ely::theme::Density as ElyDensity;
 use crate::primitives::{filter_pill, sub_tabs, SortOrder};
 use crate::theme::{tint, Density, Palette};
 
+mod collections;
+mod duplicate_history;
 mod duplicates;
 mod proposals;
 mod split_picker;
+mod split_preview;
+mod split_queue;
 pub mod viewer;
 
 use proposals::{proposal_panel, workflow_panel};
@@ -317,6 +321,9 @@ pub struct Documents {
     pub(super) preferred_id: Option<String>,
     pub(super) duplicate_error: Option<String>,
     split_picker: Option<split_picker::SplitPicker>,
+    split_queue: split_queue::Queue,
+    collections: collections::Collections,
+    history: duplicate_history::History,
     pub(super) proposal_busy: Option<String>,
     pub(super) proposal_error: Option<String>,
     pub(super) proposal_notice: Option<String>,
@@ -385,6 +392,9 @@ impl Documents {
             preferred_id: None,
             duplicate_error: None,
             split_picker: None,
+            split_queue: split_queue::Queue::load(),
+            collections: collections::Collections::default(),
+            history: duplicate_history::History::default(),
             proposal_busy: None,
             proposal_error: None,
             proposal_notice: None,
@@ -578,6 +588,11 @@ impl Documents {
 
     /// Clear the active document and close the reader, returning the view to the full table.
     pub fn close(&mut self, cx: &mut Context<Self>) {
+        if self.collections.open {
+            self.collections.open = false;
+            cx.notify();
+            return;
+        }
         if self.workflow_busy.as_deref() == Some("split") {
             return;
         }
@@ -929,6 +944,9 @@ impl Documents {
                     summary_counts[5] += 1;
                 }
                 if self.filter.matches(row)
+                    && (!big_documents
+                        || self.split_queue.state.deferred.contains(&row.id)
+                            == self.split_queue.show_deferred)
                     && (big_documents
                         || self.category_filter.as_deref().is_none_or(|category| {
                             row.category.as_deref().unwrap_or("") == category
@@ -960,11 +978,8 @@ impl Documents {
         }
         self.counts = summary_counts;
         self.total_filtered = picked.len();
-        let page_start = if self.total_filtered > 500 {
-            (self.page_offset / 500) * 500
-        } else {
-            0
-        };
+        let page_start = self.page_offset.min(self.total_filtered.saturating_sub(1)) / 500 * 500;
+        self.page_offset = page_start;
         let page_end = (page_start + 500).min(self.total_filtered);
         let visible_picked = if self.total_filtered > 500 {
             &picked[page_start..page_end]
@@ -976,7 +991,7 @@ impl Documents {
             .iter()
             .map(|index| DocRow { index: *index })
             .collect();
-        self.order_key = Some(key);
+        self.order_key = Some((key.0, key.1, page_start));
         self.list.reset(order.len());
         self.order = order;
     }
@@ -1235,6 +1250,9 @@ impl Documents {
 impl Render for Documents {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self.palette.unwrap_or_else(Palette::dark);
+        if self.collections.open {
+            return self.collection_workspace(palette, cx);
+        }
         if self.duplicate_mode {
             return div()
                 .size_full()
@@ -1262,7 +1280,11 @@ impl Render for Documents {
                                 ),
                         ),
                 )
-                .child(self.duplicate_workspace(cx));
+                .child(if self.history.open {
+                    self.history_workspace(palette, cx)
+                } else {
+                    self.duplicate_workspace(cx)
+                });
         }
         if self.split_picker.is_some() {
             return self.split_picker_view(window, cx);
@@ -1368,6 +1390,16 @@ impl Render for Documents {
                             .disabled(uploading > 0)
                             .on_click(cx.listener(Self::prompt_import)),
                         )
+                        .when(selected.is_none(), |actions| {
+                            actions.child(
+                                Button::new("documents-collections", "Collections")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(
+                                        cx.listener(|view, _, _, cx| view.open_collections(cx)),
+                                    ),
+                            )
+                        })
                         .when(!narrow, |actions| {
                             actions.child(
                                 Button::new("documents-duplicate-review", "Review duplicates")
@@ -1380,6 +1412,9 @@ impl Render for Documents {
                         }),
                 ),
         );
+        if big_documents {
+            table = table.child(self.queue_controls(palette, cx));
+        }
         let (sort_col, sort_order) = self.sort;
         table = table.child(
             div()
@@ -1624,16 +1659,30 @@ impl Render for Documents {
                         .gap_2()
                         .child(div().flex_1().min_w_0().child(detail))
                         .child(
-                            Button::new(
-                                "document-close",
-                                if mobile {
-                                    "← Documents"
-                                } else {
-                                    "Close ✕ (Esc)"
-                                },
-                            )
-                            .size(ControlSize::Sm)
-                            .on_click(cx.listener(|view, _, _, cx| view.close(cx))),
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_2()
+                                .child(
+                                    Button::new(
+                                        "document-close",
+                                        if mobile {
+                                            "← Documents"
+                                        } else {
+                                            "Close ✕ (Esc)"
+                                        },
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .on_click(cx.listener(|view, _, _, cx| view.close(cx))),
+                                )
+                                .child(
+                                    Button::new("document-open-collections", "Collections")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
+                                        .on_click(
+                                            cx.listener(|view, _, _, cx| view.open_collections(cx)),
+                                        ),
+                                ),
                         ),
                 )
                 .child(
@@ -2474,6 +2523,38 @@ mod tests {
         }
     }
 
+    struct TestPdfRenderer;
+
+    impl super::PdfRenderer for TestPdfRenderer {
+        fn info(
+            &self,
+            _: std::sync::Arc<Vec<u8>>,
+        ) -> futures::channel::oneshot::Receiver<Result<usize, super::PdfError>> {
+            let (send, answer) = futures::channel::oneshot::channel();
+            send.send(Ok(3)).unwrap();
+            answer
+        }
+
+        fn render(
+            &self,
+            _: std::sync::Arc<Vec<u8>>,
+            page: usize,
+            width: u32,
+        ) -> futures::channel::oneshot::Receiver<
+            Result<std::sync::Arc<gpui::RenderImage>, super::PdfError>,
+        > {
+            let (send, answer) = futures::channel::oneshot::channel();
+            let frame = image::Frame::new(image::RgbaImage::from_pixel(
+                width,
+                12,
+                image::Rgba([page as u8, 5, 90, 255]),
+            ));
+            send.send(Ok(std::sync::Arc::new(gpui::RenderImage::new(vec![frame]))))
+                .unwrap();
+            answer
+        }
+    }
+
     #[gpui::test]
     fn reader_controls_keep_page_identity_and_split_edits_unsaved(cx: &mut TestAppContext) {
         use sjel_gpui_core::shell::{
@@ -2482,7 +2563,11 @@ mod tests {
         };
 
         let (page, cx) = crate::test_support::mount_root(cx, None, |_, _| {
-            let mut page = Documents::new(Repo::new(Err(ShellError::NotSetUp)));
+            let mut page = Documents::with_renderer(
+                Repo::new(Err(ShellError::NotSetUp)),
+                Ok(std::sync::Arc::new(TestPdfRenderer)),
+            );
+            page.reader.bytes = Some(std::sync::Arc::new(Vec::new()));
             let mut document = summary("invoice", None, "invoice.pdf");
             document.page_count = 3;
             page.rows.value = Some(vec![document.clone()]);
@@ -2548,6 +2633,40 @@ mod tests {
         page.read_with(cx, |page, _| {
             assert!(page.split_picker.as_ref().unwrap().has_cut(3));
         });
+        let inspect = cx.debug_bounds("split-inspect-3").unwrap();
+        cx.simulate_click(inspect.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(
+                page.split_picker
+                    .as_ref()
+                    .unwrap()
+                    .preview
+                    .as_ref()
+                    .unwrap()
+                    .rendered_pair(),
+                Some((2, Zoom::Width))
+            );
+        });
+        page.update(cx, |page, cx| {
+            page.inspect_boundary(1, Zoom::Percent(150), cx)
+        });
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(
+                page.split_picker
+                    .as_ref()
+                    .unwrap()
+                    .preview
+                    .as_ref()
+                    .unwrap()
+                    .rendered_pair(),
+                Some((1, Zoom::Percent(150)))
+            );
+        });
+        let back = cx.debug_bounds("split-preview-back-control").unwrap();
+        cx.simulate_click(back.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
         let cut = cx.debug_bounds("split-cut-2").unwrap();
         cx.simulate_click(cut.center(), gpui::Modifiers::none());
         cx.run_until_parked();

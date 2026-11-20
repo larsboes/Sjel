@@ -32,15 +32,16 @@ fail immediately when it upgrades a read lock, even with a busy timeout configur
 Migrations run once per database file and table prefix in each process, through
 `sjel_store::migrate_once`. The migration transaction also takes the write lock first.
 
-## LibSQL integration
+## Engines
 
-[`sjel-turso`](../../crates/sjel-turso/README.md) opens local libSQL databases and owns connection
-setup and migrations. The current Sjel integration does not use embedded replicas; that support was
-removed before it was used.
+Owners that have moved off the shared store open their own Turso WAL file. Inventory links the
+`turso` crate directly; Calendar, Documents, Entities, Finance, Places, Punctuality, Software and
+Transit open connections through `crates/sjel-native-wal`. The task
+[Split capability databases](../tasks/storage-files.md) lists the owners and their cutover evidence.
 
-Each binary links either `sjel-store` (rusqlite) or `sjel-turso` (libSQL), never both. Both engines
-currently use the shared database file. The engine choice does not split capability data into
-separate files.
+Capabilities that have not moved use the shared database file, through `sjel-store` (rusqlite)
+or [`sjel-turso`](../../crates/sjel-turso/README.md) (libSQL). No integration uses embedded
+replicas. Each binary links one engine for a given database file.
 
 ## Path indirection & state mounts
 

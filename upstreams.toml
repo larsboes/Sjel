@@ -405,11 +405,11 @@ why = "Checked 2026-10-24: indradb-lib 5.0.0 was published 2025-08-16 and the re
 
 [turso]
 url = "https://github.com/tursodatabase/turso"
-verdict = "evaluate"
+verdict = "adopt"
 license = "MIT"
-summary = "Local native WAL engine candidate for the Inventory owner"
-why = "The owner-only replay and snapshot probes verify acknowledged Inventory writes, an atomic rollback with an explicit rollback call, and SQLite recovery. The candidate build disables optional sync, FTS, and the allocator replacement. The shared store remains on libSQL while the Inventory API and backup acceptance remain open."
-revisit = "Review the workspace build, owner API parity, scheduled owner restore, and rollback before adoption. Documents still requires a search replacement with equivalent behavior."
+summary = "Native WAL engine for capability-owned database files"
+why = "Inventory, Entities, Calendar, Software, Punctuality, Documents, Finance, Places and Transit run on their own Turso WAL files. Each cutover restored a receipt-backed backup with exact row parity (docs/tasks/storage-files.md). Builds disable optional sync, FTS and the allocator replacement. Documents replaces FTS with its own Unicode61-compatible search."
+revisit = "MVCC needs logical-log recovery and proof that backups keep committed writes during concurrent use before any owner switches to it."
 
 [bun]
 url = "https://github.com/oven-sh/bun"

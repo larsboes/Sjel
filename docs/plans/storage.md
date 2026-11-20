@@ -6,7 +6,7 @@ system, not an already-completed split.
 
 ## Decisions
 
-- Move to one database per capability. Use Turso WAL for the Inventory pilot.
+- Move to one database per capability, each on its own Turso WAL file.
 - Capabilities own writes and cross-owner reads. No whole-file phone replication bypasses owners.
 - Private configuration stays in the overlay; personal data belongs outside Git repositories.
 - Knowledge prose stays in the learning vault; Projects owns project prose; typed facts stay in owners.

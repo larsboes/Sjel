@@ -14,13 +14,11 @@ pub mod types;
 pub use actions::*;
 pub use types::*;
 
-use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::forms::{InputEvent, TextInput};
-use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{
-    div, point, prelude::*, px, rgb, AnyElement, Context, Entity, FocusHandle, FontWeight,
-    ListAlignment, ListOffset, ListState, ScrollHandle, SharedString, Subscription, Window,
+    div, point, prelude::*, px, rgb, Context, Entity, FocusHandle, ListAlignment, ListOffset,
+    ListState, ScrollHandle, Subscription, Window,
 };
 use sjel_gpui_core::shell::{
     self, CalendarGoogleExportOptIn, CalendarGoogleExportReport, CloudDerivativePreview,
@@ -222,6 +220,16 @@ impl Feed {
         }
     }
 
+    pub fn open_quick_clip(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.tab = Tab::Clips;
+        self.reading = None;
+        self.clips.update(cx, |clips, cx| {
+            clips.open_composer(window, cx);
+        });
+        self.activate(cx);
+        cx.notify();
+    }
+
     pub fn load(&mut self, cx: &mut Context<Self>) {
         let shell = match self.repo.shell() {
             Ok(shell) => shell,
@@ -345,7 +353,7 @@ impl Feed {
         in_view(self.rows.value.iter().flatten(), self.filter, self.stream)
     }
 
-    pub(crate) fn count(&self, filter: Filter) -> usize {
+    pub fn count(&self, filter: Filter) -> usize {
         match filter {
             Filter::New => self.reading_counts[0],
             Filter::Kept => self.reading_counts[1],
@@ -501,51 +509,6 @@ impl Feed {
         self.cursor = None;
         cx.notify();
     }
-
-    /// The page title and the native Feed task switch.
-    pub(crate) fn title_row(&self, cx: &mut Context<Self>) -> AnyElement {
-        let tab = |label: &'static str, tab: Tab, cx: &mut Context<Self>| {
-            Button::new(SharedString::from(format!("feed-tab-{label}")), label)
-                .size(ControlSize::Sm)
-                .variant(if self.tab == tab {
-                    ButtonVariant::Primary
-                } else {
-                    ButtonVariant::Ghost
-                })
-                .on_click(cx.listener(move |view, _, _, cx| view.set_tab(tab, cx)))
-        };
-        div()
-            .flex()
-            .items_center()
-            .gap_3()
-            .child(
-                div()
-                    .text_xl()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Feed"),
-            )
-            .child(tab("Reading", Tab::Reading, cx))
-            .child(tab("Review", Tab::Review, cx))
-            .child(tab("Library", Tab::Library, cx))
-            .child(tab("Discover", Tab::Discover, cx))
-            .child(tab("Mail", Tab::Mail, cx))
-            .child(tab("Clips", Tab::Clips, cx))
-            .child(div().flex_1())
-            .child(
-                Button::new("feed-quick-clip", "+ Quick Clip")
-                    .size(ControlSize::Sm)
-                    .on_click(cx.listener(|view, _, window, cx| {
-                        view.tab = Tab::Clips;
-                        view.reading = None;
-                        view.clips.update(cx, |clips, cx| {
-                            clips.open_composer(window, cx);
-                        });
-                        view.activate(cx);
-                        cx.notify();
-                    })),
-            )
-            .into_any_element()
-    }
 }
 
 impl gpui_kit::Render for Feed {
@@ -557,28 +520,14 @@ impl gpui_kit::Render for Feed {
         let reading = self.tab == Tab::Reading
             || (!matches!(self.tab, Tab::Mail | Tab::Clips) && self.reading.is_some());
         let body = if self.tab == Tab::Mail {
-            div()
-                .flex()
-                .flex_col()
-                .gap_3()
-                .child(self.title_row(cx))
-                .child(self.mail.clone())
-                .into_any_element()
+            self.mail.clone().into_any_element()
         } else if self.tab == Tab::Clips {
-            div()
-                .flex()
-                .flex_col()
-                .gap_3()
-                .child(self.title_row(cx))
-                .child(self.clips.clone())
-                .into_any_element()
+            self.clips.clone().into_any_element()
         } else if self.tab == Tab::Discover {
             div()
-                .flex()
-                .flex_col()
-                .gap_3()
-                .child(self.title_row(cx))
-                .child(div().flex_1().min_h_0().child(self.discover.clone()))
+                .flex_1()
+                .min_h_0()
+                .child(self.discover.clone())
                 .into_any_element()
         } else if self.reading.is_some() {
             self.reader(palette, window, cx)

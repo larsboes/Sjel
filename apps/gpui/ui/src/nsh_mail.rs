@@ -536,22 +536,14 @@ fn thread_list(
     open_thread: OpenThread,
 ) -> impl IntoElement {
     let status_chip = move |target: StatusFilter| {
-        button()
-            .px_3()
-            .py_1()
-            .on_press(move || status_filter.set(target))
-            .child(
-                text(move || {
-                    let count =
-                        rows.with(|all| all.iter().filter(|m| target.matches(&m.status)).count());
-                    if status_filter.get() == target {
-                        format!("{} ({count}) •", target.label())
-                    } else {
-                        format!("{} ({count})", target.label())
-                    }
-                })
-                .text_xs(),
-            )
+        dynamic(move || {
+            let count = rows.with(|all| all.iter().filter(|m| target.matches(&m.status)).count());
+            let active = status_filter.get() == target;
+            crate::nsh_ui::pill_tab(format!("{} ({count})", target.label()), active, move || {
+                status_filter.set(target)
+            })
+            .into_element()
+        })
     };
 
     let cat_chip = move |key: Option<&'static str>, label: &'static str| {
@@ -687,21 +679,55 @@ fn thread_reader(proposal: MailProposal, open_thread: OpenThread) -> impl IntoEl
     let id_secret = id.clone();
     let waiting = proposal.waiting;
     let model = model_summary(&proposal);
+    let more_actions = signal(false);
     let attention_id =
         (proposal.gmail_sync_status.as_deref() == Some("attention")).then(|| id.clone());
 
-    let top_actions = view()
+    let top_nav = view()
         .flex_row()
-        .px_2()
-        .gap_1()
+        .items_center()
+        .justify_between()
+        .px_4()
+        .py_1p5()
         .child(action_btn("‹ Mail", move || {
             open_thread.proposal.set(None);
             open_thread.detail.set(None);
             open_thread.detail_error.set(None);
             open_thread.pending_confirm.set(None);
         }))
-        .child(action_btn("Dismiss", move || {
-            request_or_run(id_dismiss.clone(), MailAction::Dismiss, open_thread);
+        .child(
+            button()
+                .px_3()
+                .py_1p5()
+                .rounded_full()
+                .border(px(1.0))
+                .border_color(move || nsh_base::theme().border)
+                .bg(move || nsh_base::theme().card)
+                .on_press(move || more_actions.update(|v| *v = !*v))
+                .child(
+                    text(move || {
+                        if more_actions.get() {
+                            "Hide actions"
+                        } else {
+                            "Category & More"
+                        }
+                    })
+                    .text_xs()
+                    .font_weight(FontWeight::SEMIBOLD),
+                ),
+        );
+
+    let bottom_triage_bar = crate::nsh_ui::surface_card()
+        .mx_4()
+        .mb_2()
+        .px_2()
+        .py_1p5()
+        .flex_row()
+        .items_center()
+        .justify_between()
+        .gap_2()
+        .child(action_btn("Archive", move || {
+            request_or_run(id_archive.clone(), MailAction::Archive, open_thread);
         }))
         .child(action_btn(
             if waiting { "Clear waiting" } else { "Waiting" },
@@ -714,18 +740,8 @@ fn thread_reader(proposal: MailProposal, open_thread: OpenThread) -> impl IntoEl
                 request_or_run(id_wait.clone(), act, open_thread);
             },
         ))
-        .child(action_btn("Archive", move || {
-            request_or_run(id_archive.clone(), MailAction::Archive, open_thread);
-        }))
-        .child(action_btn("Trash", move || {
-            request_or_run(id_trash.clone(), MailAction::Trash, open_thread);
-        }))
-        .child(action_btn("Secret (c3)", move || {
-            request_or_run(
-                id_secret.clone(),
-                MailAction::SetDataClass("c3".into()),
-                open_thread,
-            );
+        .child(action_btn("Dismiss", move || {
+            request_or_run(id_dismiss.clone(), MailAction::Dismiss, open_thread);
         }));
 
     let id_for_confirm = id.clone();
@@ -733,9 +749,10 @@ fn thread_reader(proposal: MailProposal, open_thread: OpenThread) -> impl IntoEl
         Some(pending) => {
             let prompt = pending.confirmation(1).unwrap_or_default();
             let id_yes = id_for_confirm.clone();
-            view()
+            crate::nsh_ui::surface_card()
+                .mx_4()
                 .px_4()
-                .py_2()
+                .py_2p5()
                 .gap_2()
                 .child(text(prompt).text_sm().font_weight(FontWeight::MEDIUM))
                 .child(
@@ -756,30 +773,61 @@ fn thread_reader(proposal: MailProposal, open_thread: OpenThread) -> impl IntoEl
     });
 
     let id_for_cats = id.clone();
-    let mut category_buttons = view().flex_row().gap_2();
-    for (key, label) in CATEGORIES {
-        let cat_id = id_for_cats.clone();
-        let cat_key = (*key).to_owned();
-        category_buttons = category_buttons.child(
-            button()
-                .px_2()
-                .py_1()
-                .on_press(move || {
-                    request_or_run(
-                        cat_id.clone(),
-                        MailAction::Categorize(cat_key.clone()),
-                        open_thread,
-                    );
-                })
-                .child(text(format!("→ {label}")).text_xs()),
-        );
-    }
+    let current_stream = proposal.stream.clone();
+    let secondary_drawer = dynamic(move || {
+        more_actions.get().then(|| {
+            let mut category_buttons = view().flex_row().flex_wrap().gap_1p5();
+            for (key, label) in CATEGORIES {
+                let cat_id = id_for_cats.clone();
+                let cat_key = (*key).to_owned();
+                category_buttons = category_buttons.child(crate::nsh_ui::pill_tab(
+                    format!("→ {label}"),
+                    current_stream == *key,
+                    move || {
+                        request_or_run(
+                            cat_id.clone(),
+                            MailAction::Categorize(cat_key.clone()),
+                            open_thread,
+                        );
+                    },
+                ));
+            }
+            let trash_id = id_trash.clone();
+            let secret_id = id_secret.clone();
+            crate::nsh_ui::surface_card()
+                .mx_4()
+                .mb_2()
+                .p_3()
+                .gap_2()
+                .child(crate::nsh_ui::section_heading("MOVE TO STREAM"))
+                .child(category_buttons)
+                .child(crate::nsh_ui::section_heading("SENSITIVE & DESTRUCTIVE"))
+                .child(
+                    view()
+                        .flex_row()
+                        .gap_2()
+                        .child(action_btn("Trash", move || {
+                            request_or_run(trash_id.clone(), MailAction::Trash, open_thread);
+                        }))
+                        .child(action_btn("Secret (c3)", move || {
+                            request_or_run(
+                                secret_id.clone(),
+                                MailAction::SetDataClass("c3".into()),
+                                open_thread,
+                            );
+                        })),
+                )
+                .into_element()
+        })
+    });
 
     let model_strip = model.map(|(line, proposed)| {
         let id_accept = id.clone();
-        view()
-            .px_4()
-            .py_1()
+        crate::nsh_ui::surface_card()
+            .mx_4()
+            .mb_2()
+            .px_3()
+            .py_2()
             .gap_1()
             .child(text(line).text_xs())
             .child(proposed.map(|stream| {
@@ -797,18 +845,27 @@ fn thread_reader(proposal: MailProposal, open_thread: OpenThread) -> impl IntoEl
     let attention_strip = attention_id.map(|att_id| {
         let retry_id = att_id.clone();
         let cancel_id = att_id;
-        view()
+        crate::nsh_ui::surface_card()
+            .mx_4()
+            .mb_2()
+            .px_3()
+            .py_2()
             .flex_row()
-            .px_4()
-            .py_1()
+            .items_center()
+            .justify_between()
             .gap_2()
             .child(text("Automatic Gmail retries stopped.").text_xs())
-            .child(action_btn("Retry", move || {
-                apply_gmail_job(retry_id.clone(), "retry");
-            }))
-            .child(action_btn("Cancel sync", move || {
-                apply_gmail_job(cancel_id.clone(), "cancel");
-            }))
+            .child(
+                view()
+                    .flex_row()
+                    .gap_2()
+                    .child(action_btn("Retry", move || {
+                        apply_gmail_job(retry_id.clone(), "retry");
+                    }))
+                    .child(action_btn("Cancel sync", move || {
+                        apply_gmail_job(cancel_id.clone(), "cancel");
+                    })),
+            )
     });
 
     let fallback_snippet = proposal
@@ -821,9 +878,9 @@ fn thread_reader(proposal: MailProposal, open_thread: OpenThread) -> impl IntoEl
 
     view()
         .flex_1()
-        .child(top_actions)
+        .child(top_nav)
         .child(confirm_strip)
-        .child(scroll().horizontal().px_4().pb_2().child(category_buttons))
+        .child(secondary_drawer)
         .child(model_strip)
         .child(attention_strip)
         .child(
@@ -860,6 +917,7 @@ fn thread_reader(proposal: MailProposal, open_thread: OpenThread) -> impl IntoEl
                     })),
             ),
         )
+        .child(bottom_triage_bar)
 }
 
 #[cfg(test)]

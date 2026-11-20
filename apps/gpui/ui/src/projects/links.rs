@@ -1,8 +1,14 @@
 //! Inventory item linking and verification for project records.
 
+use std::rc::Rc;
+
+use crate::ely::data_display::Tone;
+use crate::ely::layout::Sheet;
+use crate::ely::primitives::Place;
+use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
-use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context};
+use gpui_kit::{div, prelude::*, px, rems, rgb, rgba, AnyElement, Context};
 
 use crate::data::Remote;
 use crate::theme::Palette;
@@ -271,106 +277,230 @@ impl Projects {
                 body = body.child(div().text_sm().child(message.clone()));
             }
             if let Some(links) = &self.links.value {
-                body = body.child("Existing links (current Inventory state not checked):");
-                if links.is_empty() {
-                    body = body.child("No links for this record.");
-                }
-                for link in links {
-                    let item_ref = link.item_ref.clone();
-                    let label = self
-                        .link_items
-                        .value
-                        .as_ref()
-                        .and_then(|items| {
-                            items.iter().find(|row| {
-                                shell::inventory_reference(&row.item.id).as_deref()
-                                    == Some(item_ref.as_str())
-                            })
+                let columns = vec![
+                    Column::new("label", "LINKED ITEM").min_width(rems(12.)),
+                    Column::new("reference", "REFERENCE").width(rems(9.)),
+                    Column::new("revision", "VERIFIED REV").width(rems(8.)),
+                    Column::new("actions", "")
+                        .width(rems(9.))
+                        .actions([RowAction::new("remove", "Review removal")]),
+                ];
+                let rows: Rc<Vec<Row>> = Rc::new(
+                    links
+                        .iter()
+                        .map(|link| {
+                            let label = self
+                                .link_items
+                                .value
+                                .as_ref()
+                                .and_then(|items| {
+                                    items.iter().find(|row| {
+                                        shell::inventory_reference(&row.item.id).as_deref()
+                                            == Some(link.item_ref.as_str())
+                                    })
+                                })
+                                .map(|row| row.item.label.clone())
+                                .unwrap_or_else(|| "Inventory item unavailable".into());
+                            Row::new(
+                                link.item_ref.clone(),
+                                [
+                                    Cell::Text(label.into()),
+                                    Cell::Text(link.item_ref.clone().into()),
+                                    Cell::Tag(
+                                        format!("rev {}", link.verified_revision).into(),
+                                        Tone::Neutral,
+                                    ),
+                                    Cell::Actions(vec!["remove".into()]),
+                                ],
+                            )
                         })
-                        .map(|row| row.item.label.clone())
-                        .unwrap_or_else(|| "Inventory item unavailable".into());
-                    let label_review = label.clone();
-                    body = body.child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(format!(
-                                "{label} · {} · last verified revision {}",
-                                link.item_ref, link.verified_revision
-                            ))
-                            .child(
-                                Button::new(format!("link-remove-{}", link.item_ref))
-                                    .small()
-                                    .label("Review removal")
-                                    .disabled(self.link_busy)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.review_inventory_link(
-                                            item_ref.clone(),
-                                            label_review.clone(),
-                                            None,
-                                            true,
-                                            cx,
-                                        )
-                                    })),
-                            ),
-                    );
-                }
+                        .collect(),
+                );
+                let labels_by_ref: std::collections::HashMap<String, String> = links
+                    .iter()
+                    .map(|link| {
+                        let label = self
+                            .link_items
+                            .value
+                            .as_ref()
+                            .and_then(|items| {
+                                items.iter().find(|row| {
+                                    shell::inventory_reference(&row.item.id).as_deref()
+                                        == Some(link.item_ref.as_str())
+                                })
+                            })
+                            .map(|row| row.item.label.clone())
+                            .unwrap_or_else(|| "Inventory item unavailable".into());
+                        (link.item_ref.clone(), label)
+                    })
+                    .collect();
+                let on_act = cx.entity();
+                body = body.child("Existing links (current Inventory state not checked):").child(
+                    DataTable::new("project-existing-links-table", columns)
+                        .label("Existing inventory links")
+                        .rows(rows)
+                        .on_action(move |key, action, _, cx| {
+                            if action.as_ref() == "remove" {
+                                let item_ref = key.to_string();
+                                let label = labels_by_ref
+                                    .get(&item_ref)
+                                    .cloned()
+                                    .unwrap_or_else(|| "Inventory item unavailable".into());
+                                on_act.update(cx, |view, cx| {
+                                    view.review_inventory_link(item_ref, label, None, true, cx);
+                                });
+                            }
+                        })
+                        .empty("No links for this record."),
+                );
             }
             if let Some(items) = &self.link_items.value {
-                body = body.child("Choose an owned Inventory item:");
                 let owned: Vec<_> = items
                     .iter()
                     .filter(|row| row.state.as_deref() == Some("owned"))
+                    .filter_map(|row| {
+                        shell::inventory_reference(&row.item.id).map(|item_ref| (row, item_ref))
+                    })
                     .collect();
-                if owned.is_empty() {
-                    body = body.child("No owned Inventory items are available.");
-                }
-                for row in owned {
-                    let Some(item_ref) = shell::inventory_reference(&row.item.id) else {
-                        continue;
-                    };
-                    let id = row.item.id.clone();
-                    let label = row.item.label.clone();
-                    body = body.child(
-                        Button::new(format!("link-item-{item_ref}"))
-                            .small()
-                            .label(format!("{} · {}", label, id))
-                            .disabled(self.link_busy)
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.review_inventory_link(
-                                    item_ref.clone(),
-                                    format!("{} · {}", label, id),
-                                    Some(id.clone()),
-                                    false,
-                                    cx,
-                                )
-                            })),
-                    );
-                }
+                let columns = vec![
+                    Column::new("label", "OWNED ASSET").min_width(rems(14.)),
+                    Column::new("id", "ITEM ID").width(rems(9.)),
+                    Column::new("ref", "TYPED REF").width(rems(9.)),
+                    Column::new("actions", "")
+                        .width(rems(8.))
+                        .actions([RowAction::new("link", "Link item")]),
+                ];
+                let rows: Rc<Vec<Row>> = Rc::new(
+                    owned
+                        .iter()
+                        .map(|(row, item_ref)| {
+                            Row::new(
+                                item_ref.clone(),
+                                [
+                                    Cell::Text(row.item.label.clone().into()),
+                                    Cell::Text(row.item.id.clone().into()),
+                                    Cell::Text(item_ref.clone().into()),
+                                    Cell::Actions(vec!["link".into()]),
+                                ],
+                            )
+                        })
+                        .collect(),
+                );
+                let owned_map: std::collections::HashMap<String, (String, String)> = owned
+                    .iter()
+                    .map(|(row, item_ref)| {
+                        (
+                            item_ref.clone(),
+                            (row.item.label.clone(), row.item.id.clone()),
+                        )
+                    })
+                    .collect();
+                let on_act = cx.entity();
+                body = body.child("Choose an owned Inventory item:").child(
+                    DataTable::new("project-owned-inventory-table", columns)
+                        .label("Owned inventory items")
+                        .rows(rows)
+                        .on_action(move |key, action, _, cx| {
+                            if action.as_ref() == "link" {
+                                if let Some((label, id)) = owned_map.get(key.as_ref()).cloned() {
+                                    let item_ref = key.to_string();
+                                    on_act.update(cx, |view, cx| {
+                                        view.review_inventory_link(
+                                            item_ref,
+                                            format!("{label} · {id}"),
+                                            Some(id),
+                                            false,
+                                            cx,
+                                        );
+                                    });
+                                }
+                            }
+                        })
+                        .empty("No owned Inventory items are available."),
+                );
             }
             if self.link_busy {
                 body = body.child("Checking or saving…");
             }
-            if let Some(review) = &self.link_review {
-                body = body.child(div().flex().flex_col().gap_2().p_3().border_1().border_color(rgba(palette.border))
-                    .child(if review.remove { "Confirm removal" } else { "Confirm link" })
-                    .child(format!("Project record: {} · {}", review.record.title, review.record.path))
-                    .child(format!("Inventory: {} · {}", review.item_label, review.item_ref))
-                    .child(if review.remove { "Removal does not check whether the Inventory item still exists." } else { "Inventory was checked as owned. The server checks again when you confirm." })
-                    .child(format!("Project revision: {}", review.record.updated_at))
-                    .child(Button::new("link-confirm").small().primary().label(if review.remove { "Confirm removal" } else { "Confirm link" }).disabled(self.link_busy)
-                        .on_click(cx.listener(|view, _, _, cx| view.confirm_inventory_link(cx))))
-                    .child(Button::new("link-cancel").small().ghost().label("Cancel").disabled(self.link_busy)
-                        .on_click(cx.listener(|view, _, _, cx| { view.link_review = None; cx.notify(); }))));
-            }
         }
+        let review_sheet = self.link_review.as_ref().map(|review| {
+            let close_entity = cx.entity();
+            let sheet_title = if review.remove {
+                "Confirm Link Removal"
+            } else {
+                "Confirm Inventory Link"
+            };
+            Sheet::new(
+                "project-inventory-link-sheet",
+                Place::Right,
+                sheet_title,
+                move |_, cx| {
+                    close_entity.update(cx, |view, cx| {
+                        if !view.link_busy {
+                            view.link_review = None;
+                            cx.notify();
+                        }
+                    });
+                },
+            )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_3()
+                        .p_3()
+                        .border_1()
+                        .border_color(rgba(palette.border))
+                        .rounded(px(6.))
+                        .child(format!(
+                            "Project record: {} · {}",
+                            review.record.title, review.record.path
+                        ))
+                        .child(format!(
+                            "Inventory: {} · {}",
+                            review.item_label, review.item_ref
+                        ))
+                        .child(format!("Project revision: {}", review.record.updated_at))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    Button::new("link-confirm")
+                                        .small()
+                                        .primary()
+                                        .label(if review.remove {
+                                            "Confirm removal"
+                                        } else {
+                                            "Confirm link"
+                                        })
+                                        .disabled(self.link_busy)
+                                        .on_click(cx.listener(|view, _, _, cx| {
+                                            view.confirm_inventory_link(cx)
+                                        })),
+                                )
+                                .child(
+                                    Button::new("link-cancel")
+                                        .small()
+                                        .ghost()
+                                        .label("Cancel")
+                                        .disabled(self.link_busy)
+                                        .on_click(cx.listener(|view, _, _, cx| {
+                                            view.link_review = None;
+                                            cx.notify();
+                                        })),
+                                ),
+                        ),
+                )
+        });
         div()
             .id("project-links-scroll")
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
             .child(body)
+            .children(review_sheet)
             .into_any_element()
     }
 }

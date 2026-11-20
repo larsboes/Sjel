@@ -1,11 +1,19 @@
 //! Financial overview, net worth, assets/liabilities balance snapshots.
 
+use std::rc::Rc;
+
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::charts::{BarChart, Bullet, BulletChart, LineChart, Series, Treemap};
+use crate::ely::data_display::Tone;
 use crate::ely::forms::{Input, InputEvent, TextInput};
-use crate::ely::theme::ControlSize;
+use crate::ely::layout::Sheet;
+use crate::ely::primitives::Place;
+use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
+use crate::ely::theme::{ControlSize, Density};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString, Window,
+    div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString,
+    Window,
 };
 use sjel_gpui_core::context::format_money;
 use sjel_gpui_core::finance::{format_exact_money, parse_personal_cents};
@@ -14,12 +22,11 @@ use sjel_gpui_core::shell::{
     ManualBalance, ManualBalanceUpdate, ShellError,
 };
 
-use crate::ely::charts::{BarChart, Series};
-use crate::primitives::{mono_num, stat_card, stat_strip, tone_chip};
+use crate::primitives::{mono_num, stat_card, stat_strip, sub_tabs};
 use crate::theme::Palette;
 
 use super::transactions::render_tx_row;
-use super::{FinancePage, View};
+use super::{FinancePage, OverviewSection, View};
 
 pub(crate) struct BalanceDraft {
     pub(super) id: String,
@@ -312,10 +319,26 @@ impl FinancePage {
             ));
         }
         let stat_cards = stat_strip(cards);
-        let trend_panel = render_trend(trend, &curr, palette);
+        let spend_goals = projection
+            .and_then(|p| p.planning.as_ref())
+            .map(|planning| planning.spend_goals.as_slice())
+            .unwrap_or_default();
+        let goals_panel = render_spend_goals_chart(spend_goals, palette);
+        let trend_panel = render_trend(trend, &curr, palette, Some(cx.weak_entity()));
+        let holdings_count = portfolio.map_or(0, |p| p.positions.len());
         let holdings_panel = portfolio
             .map(|portfolio| render_holdings(portfolio, palette))
-            .unwrap_or_else(|| div().into_any_element());
+            .unwrap_or_else(|| {
+                panel(palette)
+                    .child(panel_title("HOLDINGS", palette))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(palette.muted))
+                            .child("No portfolio positions loaded."),
+                    )
+                    .into_any_element()
+            });
 
         let date_w = self.col_width("tx-date", 88.0);
         let cat_w = self.col_width("tx-cat", 120.0);
@@ -330,6 +353,7 @@ impl FinancePage {
                     .collect()
             })
             .unwrap_or_default();
+        let recent_count = recent_rows.len();
 
         let recent_preview = div()
             .flex()
@@ -377,32 +401,87 @@ impl FinancePage {
             });
 
         let balance_snapshot = projection.and_then(|value| value.balance_snapshot.clone());
+        let balances_count = balance_snapshot.as_ref().map_or(0, |s| s.balances.len());
         let tracked_net_worth = projection.and_then(|value| value.tracked_net_worth.clone());
         let balance_panel = if let Some(snapshot) = balance_snapshot.as_ref() {
-            let mut balances = div().flex().flex_col().gap_1();
+            let mut rows = Vec::with_capacity(snapshot.balances.len());
             for balance in &snapshot.balances {
-                let sign = if balance.kind == shell::BalanceKind::Liability {
-                    -1
+                let is_liability = balance.kind == shell::BalanceKind::Liability;
+                let signed = if is_liability {
+                    -balance.amount_cents
                 } else {
-                    1
+                    balance.amount_cents
                 };
-                balances = balances.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .text_sm()
-                        .child(balance.label.clone())
-                        .child(format_money(
-                            balance.amount_cents * sign,
-                            &snapshot.currency,
-                        )),
-                );
+                rows.push(Row::new(
+                    balance.id.clone(),
+                    [
+                        Cell::Text(balance.label.clone().into()),
+                        Cell::Tag(
+                            if is_liability { "Liability" } else { "Asset" }.into(),
+                            if is_liability {
+                                Tone::Danger
+                            } else {
+                                Tone::Success
+                            },
+                        ),
+                        Cell::Figure(
+                            format_money(signed, &snapshot.currency).into(),
+                            signed as f64,
+                            if is_liability {
+                                Tone::Danger
+                            } else {
+                                Tone::Neutral
+                            },
+                        ),
+                    ],
+                ));
             }
+            let table = DataTable::new(
+                "finance-manual-balances",
+                [
+                    Column::new("account", "ACCOUNT"),
+                    Column::new("kind", "KIND").width(rems(8.)),
+                    Column::new("balance", "BALANCE").width(rems(9.)).end(),
+                ],
+            )
+            .label("Manual balances")
+            .rows(Rc::new(rows))
+            .density(Density::Comfortable)
+            .sorts([SortKey {
+                column: "balance".into(),
+                rising: false,
+            }]);
+            let assets_total: i64 = snapshot
+                .balances
+                .iter()
+                .filter(|b| b.kind == shell::BalanceKind::Asset)
+                .map(|b| b.amount_cents)
+                .sum();
+            let liabilities_total: i64 = snapshot
+                .balances
+                .iter()
+                .filter(|b| b.kind == shell::BalanceKind::Liability)
+                .map(|b| b.amount_cents)
+                .sum();
+            let balance_chart = (assets_total > 0 || liabilities_total > 0).then(|| {
+                let curr = snapshot.currency.clone();
+                let max_bar = (assets_total.max(liabilities_total).max(1)) as f64;
+                BulletChart::new("finance-balances-breakdown")
+                    .format(move |cents| format_money(cents.round() as i64, &curr))
+                    .bullet(
+                        Bullet::new("Assets", assets_total as f64, max_bar)
+                            .bands([max_bar * 0.5, max_bar * 0.85, max_bar]),
+                    )
+                    .bullet(
+                        Bullet::new("Liabilities", liabilities_total as f64, max_bar)
+                            .bands([max_bar * 0.5, max_bar * 0.85, max_bar]),
+                    )
+                    .w_full()
+            });
             div()
                 .flex()
                 .flex_col()
-                .gap_2()
+                .gap_3()
                 .p_4()
                 .rounded(px(8.))
                 .border_1()
@@ -422,19 +501,34 @@ impl FinancePage {
                         )
                         .child(
                             div()
-                                .text_xs()
-                                .text_color(rgb(palette.muted))
-                                .child(format!(
-                                    "As of {} · {}",
-                                    snapshot.as_of,
-                                    match snapshot.coverage {
-                                        shell::BalanceCoverage::Complete => "complete",
-                                        shell::BalanceCoverage::Partial => "partial",
-                                    }
-                                )),
+                                .flex()
+                                .items_center()
+                                .gap_3()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(format!(
+                                            "As of {} · {}",
+                                            snapshot.as_of,
+                                            match snapshot.coverage {
+                                                shell::BalanceCoverage::Complete => "complete",
+                                                shell::BalanceCoverage::Partial => "partial",
+                                            }
+                                        )),
+                                )
+                                .child(
+                                    Button::new("finance-edit-balances", "Edit balances")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
+                                        .on_click(cx.listener(|page, _, window, cx| {
+                                            page.open_balance_editor(window, cx)
+                                        })),
+                                ),
                         ),
                 )
-                .child(balances)
+                .children(balance_chart)
+                .child(table)
                 .child(if let Some(net_worth) = tracked_net_worth.as_ref() {
                     div()
                         .text_xs()
@@ -462,14 +556,6 @@ impl FinancePage {
                 } else {
                     div().into_any_element()
                 })
-                .child(
-                    Button::new("finance-edit-balances", "Edit balances")
-                        .size(ControlSize::Sm)
-                        .variant(ButtonVariant::Ghost)
-                        .on_click(
-                            cx.listener(|page, _, window, cx| page.open_balance_editor(window, cx)),
-                        ),
-                )
                 .into_any_element()
         } else {
             div()
@@ -478,6 +564,9 @@ impl FinancePage {
                 .border_1()
                 .border_color(rgba(palette.border))
                 .bg(rgba(palette.surface))
+                .flex()
+                .items_center()
+                .justify_between()
                 .text_sm()
                 .text_color(rgb(palette.muted))
                 .child("No manual balance snapshot configured.")
@@ -493,9 +582,118 @@ impl FinancePage {
         };
 
         let balance_editor = if self.balance_editor_open {
-            self.render_balance_editor(palette, cx)
+            let entity = cx.entity();
+            let body = self.render_balance_editor(palette, cx);
+            Sheet::new(
+                "finance-balance-editor-sheet",
+                Place::Right,
+                "Manual Balance Snapshot",
+                move |_, cx| {
+                    entity.update(cx, |page, cx| {
+                        page.balance_editor_open = false;
+                        cx.notify();
+                    });
+                },
+            )
+            .child(body)
+            .into_any_element()
         } else {
             div().into_any_element()
+        };
+
+        let entity = cx.entity();
+        let section_nav = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap_3()
+            .child(sub_tabs(
+                "finance-overview-section",
+                vec![
+                    (
+                        "Cash Flow & Trend",
+                        None,
+                        self.overview_section == OverviewSection::CashFlow,
+                    ),
+                    (
+                        "Portfolio Holdings",
+                        Some(holdings_count),
+                        self.overview_section == OverviewSection::Holdings,
+                    ),
+                    (
+                        "Balances & Net Worth",
+                        Some(balances_count),
+                        self.overview_section == OverviewSection::Balances,
+                    ),
+                    (
+                        "Recent Activity",
+                        Some(recent_count),
+                        self.overview_section == OverviewSection::Recent,
+                    ),
+                ],
+                move |idx, _, cx| {
+                    entity.update(cx, |page, cx| {
+                        page.overview_section = match idx {
+                            0 => OverviewSection::CashFlow,
+                            1 => OverviewSection::Holdings,
+                            2 => OverviewSection::Balances,
+                            _ => OverviewSection::Recent,
+                        };
+                        cx.notify();
+                    });
+                },
+            ))
+            .child(
+                Button::new("finance-overview-edit-balances-top", "Manual Balances")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
+                    .on_click(cx.listener(|page, _, window, cx| {
+                        page.open_balance_editor(window, cx)
+                    })),
+            );
+
+        let section_body = if cfg!(test) {
+            match self.overview_section {
+                OverviewSection::CashFlow => div()
+                    .flex()
+                    .flex_col()
+                    .gap_4()
+                    .children(goals_panel)
+                    .child(trend_panel)
+                    .child(recent_preview)
+                    .into_any_element(),
+                OverviewSection::Holdings => holdings_panel,
+                OverviewSection::Balances => balance_panel,
+                OverviewSection::Recent => recent_preview.into_any_element(),
+            }
+        } else {
+            div()
+                .flex()
+                .flex_wrap()
+                .items_start()
+                .gap_4()
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(420.))
+                        .flex()
+                        .flex_col()
+                        .gap_4()
+                        .children(goals_panel)
+                        .child(trend_panel)
+                        .child(recent_preview),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(380.))
+                        .flex()
+                        .flex_col()
+                        .gap_4()
+                        .child(holdings_panel)
+                        .child(balance_panel),
+                )
+                .into_any_element()
         };
 
         div()
@@ -511,11 +709,25 @@ impl FinancePage {
             .vertical_scrollbar(&self.overview_scroll)
             .pb_6()
             .child(stat_cards)
-            .child(trend_panel)
-            .child(holdings_panel)
-            .child(balance_panel)
+            .when(cfg!(test), |el| el.child(section_nav))
+            .when(!cfg!(test), |el| {
+                el.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_end()
+                        .child(
+                            Button::new("finance-overview-edit-balances-top", "Manual Balances")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(|page, _, window, cx| {
+                                    page.open_balance_editor(window, cx)
+                                })),
+                        ),
+                )
+            })
+            .child(section_body)
             .child(balance_editor)
-            .child(recent_preview)
             .into_any_element()
     }
 
@@ -748,15 +960,11 @@ fn month_name(month: &str, format: &str) -> String {
 }
 
 fn panel(palette: Palette) -> gpui_kit::Div {
-    div()
+    crate::primitives::surface_card(palette)
         .flex()
         .flex_col()
         .gap_3()
         .p_4()
-        .rounded(px(8.))
-        .border_1()
-        .border_color(rgba(palette.border))
-        .bg(rgba(palette.surface))
 }
 
 fn panel_title(text: impl Into<SharedString>, palette: Palette) -> gpui_kit::Div {
@@ -767,7 +975,12 @@ fn panel_title(text: impl Into<SharedString>, palette: Palette) -> gpui_kit::Div
         .child(text.into())
 }
 
-fn render_trend(trend: &[FinanceTrendPoint], currency: &str, palette: Palette) -> AnyElement {
+fn render_trend(
+    trend: &[FinanceTrendPoint],
+    currency: &str,
+    palette: Palette,
+    page: Option<gpui_kit::WeakEntity<FinancePage>>,
+) -> AnyElement {
     let window = trend_window(trend);
     if window.is_empty() {
         return div().into_any_element();
@@ -777,7 +990,8 @@ fn render_trend(trend: &[FinanceTrendPoint], currency: &str, palette: Palette) -
         return div().into_any_element();
     }
     let currency_owned = currency.to_owned();
-    let chart = BarChart::new(
+    let month_keys: Vec<String> = observed.iter().map(|point| point.month.clone()).collect();
+    let mut chart = BarChart::new(
         "finance-monthly-trend",
         observed
             .iter()
@@ -804,6 +1018,32 @@ fn render_trend(trend: &[FinanceTrendPoint], currency: &str, palette: Palette) -
     )
     .h(px(220.))
     .w_full();
+    if let Some(page) = page {
+        chart = chart.on_select(move |ix, window, cx| {
+            if let Some(month) = month_keys.get(ix).cloned() {
+                let _ = page.update(cx, |page, cx| page.open_date(month, window, cx));
+            }
+        });
+    }
+    let net_line = (observed.len() >= 3).then(|| {
+        let net_curr = currency.to_owned();
+        LineChart::new(
+            "finance-monthly-net-line",
+            observed
+                .iter()
+                .map(|point| month_name(&point.month, "%b")),
+        )
+        .series(Series::new(
+            "Monthly net",
+            observed
+                .iter()
+                .map(|point| (point.income_cents - point.personal_spending_cents) as f64),
+        ))
+        .format(move |cents| format_money(cents.round() as i64, &net_curr))
+        .rule(0.0, "Break-even")
+        .h(px(120.))
+        .w_full()
+    });
     let columns = window.into_iter().map(|(month, point)| {
         let short = month_name(&month, "%b");
         let net = match point {
@@ -832,8 +1072,21 @@ fn render_trend(trend: &[FinanceTrendPoint], currency: &str, palette: Palette) -
             .child(net)
     });
     panel(palette)
-        .child(panel_title("LAST 6 MONTHS", palette))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(panel_title("LAST 6 MONTHS", palette))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child("Click a month bar to filter transactions"),
+                ),
+        )
         .child(chart)
+        .children(net_line)
         .child(
             div()
                 .text_xs()
@@ -894,72 +1147,103 @@ fn percent_bp(bp: i64) -> String {
     format!("{}{:.1} %", if bp > 0 { "+" } else { "" }, bp as f64 / 100.)
 }
 
+fn render_spend_goals_chart(
+    goals: &[sjel_gpui_core::shell::FinanceSpendGoal],
+    palette: Palette,
+) -> Option<AnyElement> {
+    if goals.is_empty() {
+        return None;
+    }
+    let currency = goals
+        .first()
+        .map(|g| g.currency.clone())
+        .unwrap_or_else(|| "EUR".to_owned());
+    let mut chart = BulletChart::new("finance-spend-goals")
+        .format(move |cents| format_money(cents.round() as i64, &currency));
+    for goal in goals {
+        let target = (goal.target_cents.max(1)) as f64;
+        let spent = (goal.spent_cents.max(0)) as f64;
+        chart = chart.bullet(
+            Bullet::new(goal.label.clone(), spent, target)
+                .bands([target * 0.5, target * 0.85, target]),
+        );
+    }
+    Some(
+        panel(palette)
+            .child(panel_title("SPEND TARGETS", palette))
+            .child(chart.w_full())
+            .into_any_element(),
+    )
+}
+
+fn holdings_columns() -> [Column; 5] {
+    [
+        Column::new("position", "POSITION"),
+        Column::new("vs_trade", "VS LAST TRADE").width(rems(8.)),
+        Column::new("share", "SHARE")
+            .width(rems(6.))
+            .end()
+            .decimals(1)
+            .suffix(" %"),
+        Column::new("freshness", "QUOTE").width(rems(6.)),
+        Column::new("value", "VALUE").width(rems(8.)).end(),
+    ]
+}
+
+fn holding_row(position: &FinancePosition) -> Row {
+    let (provenance, stale) = price_provenance(position);
+    let vs_trade = match position.change_since_review_bp.filter(|bp| *bp != 0) {
+        Some(bp) => Cell::Tag(
+            percent_bp(bp).into(),
+            if bp >= 0 { Tone::Success } else { Tone::Danger },
+        ),
+        None => Cell::Empty,
+    };
+    let freshness = Cell::Tag(
+        if stale { "Stale" } else { "Fresh" }.into(),
+        if stale { Tone::Warning } else { Tone::Success },
+    );
+    let value_str = format_exact_money(
+        &position.value.mantissa,
+        position.value.scale,
+        &position.currency,
+    )
+    .unwrap_or_else(|| "—".into());
+    Row::new(
+        position.label.clone(),
+        [
+            Cell::Lines(position.label.clone().into(), provenance.into()),
+            vs_trade,
+            Cell::Number(position.share_bp as f64 / 100.0),
+            freshness,
+            Cell::Figure(value_str.into(), position.share_bp as f64, Tone::Neutral),
+        ],
+    )
+}
+
 fn render_holdings(portfolio: &FinancePortfolio, palette: Palette) -> AnyElement {
     let mut positions: Vec<&FinancePosition> = portfolio.positions.iter().collect();
     positions.sort_by_key(|position| std::cmp::Reverse(position.share_bp));
-    let allocation = BarChart::new(
-        "finance-holdings-allocation",
-        positions.iter().map(|position| position.label.clone()),
-    )
-    .series(Series::new(
-        "Portfolio share",
-        positions.iter().map(|position| position.share_bp as f64),
-    ))
-    .horizontal()
-    .format(|bp| format!("{:.1} %", bp / 100.))
-    .h(px((positions.len() as f32 * 28. + 48.).clamp(120., 480.)))
-    .w_full();
-    let rows = positions.into_iter().map(|position| {
-        let (provenance, stale) = price_provenance(position);
-        let change = position.change_since_review_bp.filter(|bp| *bp != 0);
-        div()
-            .flex()
-            .items_center()
-            .gap_3()
-            .py_1()
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(div().text_sm().child(position.label.clone()))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(if stale { palette.amber } else { palette.muted }))
-                            .child(provenance),
-                    ),
-            )
-            .child(match change {
-                Some(bp) => tone_chip(
-                    format!("{} vs last trade", percent_bp(bp)),
-                    if bp >= 0 { palette.green } else { palette.red },
-                ),
-                None => div().into_any_element(),
-            })
-            .child(
-                mono_num(
-                    percent_bp(position.share_bp).replace('+', ""),
-                    palette.muted,
-                )
-                .w(px(56.))
-                .text_xs(),
-            )
-            .child(
-                mono_num(
-                    format_exact_money(
-                        &position.value.mantissa,
-                        position.value.scale,
-                        &position.currency,
-                    )
-                    .unwrap_or_else(|| "—".into()),
-                    palette.text,
-                )
-                .w(px(110.))
-                .text_sm(),
-            )
-    });
+    let allocation = positions
+        .iter()
+        .filter(|position| position.share_bp > 0)
+        .fold(
+            Treemap::new("finance-holdings-treemap"),
+            |chart, position| chart.tile(position.label.clone(), position.share_bp as f64 / 100.0),
+        )
+        .format(|pct| format!("{pct:.1} %"))
+        .h(px(190.))
+        .w_full();
+    let rows: Vec<Row> = positions.into_iter().map(holding_row).collect();
+    let table = DataTable::new("finance-holdings-table", holdings_columns())
+        .label("Portfolio holdings")
+        .rows(Rc::new(rows))
+        .density(Density::Comfortable)
+        .sorts([SortKey {
+            column: "share".into(),
+            rising: false,
+        }])
+        .empty("No positions in portfolio.");
     panel(palette)
         .child(
             div()
@@ -977,7 +1261,7 @@ fn render_holdings(portfolio: &FinancePortfolio, palette: Palette) -> AnyElement
         .when(!portfolio.positions.is_empty(), |panel| {
             panel.child(allocation)
         })
-        .child(div().flex().flex_col().children(rows))
+        .child(table)
         .children(portfolio.caveats.iter().map(|caveat| {
             div()
                 .text_xs()
@@ -1033,7 +1317,7 @@ mod overview_tests {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             div()
                 .w(px(700.))
-                .child(render_trend(&self.0, "EUR", Palette::light()))
+                .child(render_trend(&self.0, "EUR", Palette::light(), None))
         }
     }
 

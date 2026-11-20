@@ -23,6 +23,8 @@ pub(crate) fn phone_screen(target: &Target) -> Screen {
         Target::Native(Page::Inbox) => Screen::Tab(Tab::Inbox),
         Target::Native(Page::Travel) => Screen::Tab(Tab::Travel),
         Target::Native(Page::Documents) => Screen::Tab(Tab::Documents),
+        Target::Native(Page::Finance) => Screen::Tab(Tab::Finance),
+        Target::Native(Page::Inventory) => Screen::Tab(Tab::Inventory),
         Target::Native(Page::Settings | Page::Setup) => Screen::Tab(Tab::Settings),
         Target::Native(Page::Feed) | Target::Feed(FeedTab::Mail) | Target::MailEntry(_) => {
             Screen::Tab(Tab::Mail)
@@ -83,6 +85,14 @@ impl AppState {
             }
             Tab::Mail => NshPage::Mail,
             Tab::Documents => NshPage::Documents,
+            Tab::Finance => {
+                sjel_gpui_ui::nsh_finance::load();
+                NshPage::Finance
+            }
+            Tab::Inventory => {
+                sjel_gpui_ui::nsh_inventory::load();
+                NshPage::Inventory
+            }
         };
         set_nsh_page(page);
     }
@@ -128,6 +138,8 @@ impl AppState {
             TodayEvent::Documents => self.select_tab(Tab::Documents),
             TodayEvent::Projects => self.select_tab(Tab::Projects),
             TodayEvent::Interior => self.select_tab(Tab::Interior),
+            TodayEvent::Finance => self.select_tab(Tab::Finance),
+            TodayEvent::Inventory => self.select_tab(Tab::Inventory),
         }
     }
 }
@@ -157,7 +169,9 @@ mod tests {
         assert_eq!(open("sjel://terminal"), Screen::Terminal);
         assert_eq!(open("sjel://interior"), Screen::Tab(Tab::Interior));
         assert!(matches!(open("sjel://travel/map"), Screen::Travel(_)));
-        assert_eq!(open("sjel://finance"), Screen::Mac("Finance"));
+        assert_eq!(open("sjel://finance"), Screen::Tab(Tab::Finance));
+        assert_eq!(open("sjel://inventory"), Screen::Tab(Tab::Inventory));
+        assert_eq!(open("sjel://backup"), Screen::Mac("Backup"));
         assert!(matches!(open("sjel://no-such-page"), Screen::Mac(_)));
     }
 }

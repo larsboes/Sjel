@@ -49,6 +49,8 @@ pub(crate) fn launch_tab() -> Tab {
         "settings" => Tab::Settings,
         "mail" => Tab::Mail,
         "documents" => Tab::Documents,
+        "finance" => Tab::Finance,
+        "inventory" | "wishlist" => Tab::Inventory,
         _ => Tab::Today,
     }
 }

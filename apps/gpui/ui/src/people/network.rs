@@ -86,6 +86,26 @@ impl PeoplePage {
                     .variant(ButtonVariant::Ghost)
                     .disabled(found == 0)
                     .on_click(cx.listener(|page, _, _, cx| page.step_selection(true, cx))),
+            )
+            .child(
+                Button::new(
+                    "people-network-connected-only",
+                    if self.network_connected_only {
+                        "Connected only: on"
+                    } else {
+                        "Connected only"
+                    },
+                )
+                .size(ControlSize::Sm)
+                .variant(if self.network_connected_only {
+                    ButtonVariant::Primary
+                } else {
+                    ButtonVariant::Ghost
+                })
+                .on_click(cx.listener(|page, _, _, cx| {
+                    page.network_connected_only = !page.network_connected_only;
+                    cx.notify();
+                })),
             );
 
         let frame = div()
@@ -125,6 +145,7 @@ impl PeoplePage {
                     .selected_id
                     .as_deref()
                     .and_then(|id| graph.nodes.iter().position(|n| n.id == id));
+                let connected_only = self.network_connected_only;
                 let bounds = self.network_bounds.clone();
                 let paint_graph = graph.clone();
                 let paint_bounds = bounds.clone();
@@ -134,7 +155,7 @@ impl PeoplePage {
                         if paint_bounds.replace(Some(bounds)) != Some(bounds) {
                             window.refresh();
                         }
-                        paint(&paint_graph, selected, palette, bounds, window);
+                        paint(&paint_graph, selected, connected_only, palette, bounds, window);
                     },
                 )
                 .absolute()
@@ -194,6 +215,8 @@ impl PeoplePage {
     ) -> AnyElement {
         let mut rows = div().flex().flex_col().gap_2();
         let text = |label: String| div().text_sm().text_color(rgb(palette.muted)).child(label);
+        let mut ego_graph: Option<AnyElement> = None;
+        let mut link_summary = String::new();
         if let Some(error) = &self.graph.error {
             rows = rows.child(text(format!("Could not refresh links: {error}")));
         }
@@ -204,7 +227,26 @@ impl PeoplePage {
                 .position(|n| n.id == id)
                 .map(|i| (graph, i))
         }) {
+            let direct_count = graph.links_of(i).count();
+            let second_deg = graph.second_degree(i);
             let group = graph.nodes[i].group.map(|g| &graph.groups[g]);
+            let coworkers_count = group.map_or(0, |g| g.count.saturating_sub(1));
+            if direct_count > 0 || coworkers_count > 0 || !second_deg.is_empty() {
+                let mut parts = Vec::new();
+                if direct_count > 0 {
+                    parts.push(format!("{direct_count} direct"));
+                }
+                if !second_deg.is_empty() {
+                    parts.push(format!("{} 2nd-degree", second_deg.len()));
+                }
+                if coworkers_count > 0 {
+                    parts.push(format!("{coworkers_count} coworkers"));
+                }
+                link_summary = parts.join(" · ");
+                if self.show_ego_graph {
+                    ego_graph = Some(self.render_ego_graph(graph, i, palette, cx));
+                }
+            }
             if let Some(group) = group {
                 rows = rows.child(text(format!(
                     "Shares {} with {} others",
@@ -318,16 +360,7 @@ impl PeoplePage {
             rows = rows.child(text("Loading links…".to_owned()));
         }
         let to = id.to_owned();
-        if self.writer().is_some() && self.derived.parsed.len() > 1 {
-            rows = rows.child(
-                Button::new("people-add-introduction", "Record introduction")
-                    .size(ControlSize::Sm)
-                    .variant(ButtonVariant::Ghost)
-                    .on_click(cx.listener(move |page, _, window, cx| {
-                        page.open_form(FormKind::Introduction(to.clone()), window, cx);
-                    })),
-            );
-        }
+        let can_introduce = self.writer().is_some() && self.derived.parsed.len() > 1;
         div()
             .p_4()
             .rounded(px(8.))
@@ -337,15 +370,292 @@ impl PeoplePage {
             .flex_none()
             .flex()
             .flex_col()
-            .gap_2()
+            .gap_3()
             .child(
                 div()
-                    .text_xs()
-                    .font_weight(gpui_kit::FontWeight::MEDIUM)
-                    .text_color(rgb(palette.muted))
-                    .child("NETWORK"),
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                                    .text_color(rgb(palette.muted))
+                                    .child("NETWORK & GRAPH"),
+                            )
+                            .when(!link_summary.is_empty(), |el| {
+                                el.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(format!("· {link_summary}")),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .when(ego_graph.is_some() || !link_summary.is_empty(), |el| {
+                                el.child(
+                                    Button::new(
+                                        "people-toggle-ego-graph",
+                                        if self.show_ego_graph {
+                                            "Hide graph"
+                                        } else {
+                                            "Show graph"
+                                        },
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(cx.listener(|page, _, _, cx| {
+                                        page.show_ego_graph = !page.show_ego_graph;
+                                        cx.notify();
+                                    })),
+                                )
+                            })
+                            .when(can_introduce, |el| {
+                                el.child(
+                                    Button::new("people-add-introduction", "+ Introduction")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Ghost)
+                                        .on_click(cx.listener(move |page, _, window, cx| {
+                                            page.open_form(
+                                                FormKind::Introduction(to.clone()),
+                                                window,
+                                                cx,
+                                            );
+                                        })),
+                                )
+                            }),
+                    ),
             )
+            .children(ego_graph)
             .child(rows)
+            .into_any_element()
+    }
+
+    /// Radial 1-hop + coworker + 2nd-degree ego-graph centered on node `center_ix`.
+    fn render_ego_graph(
+        &self,
+        graph: &Layout,
+        center_ix: usize,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let center_name = graph.nodes[center_ix].name.clone();
+        let mut neighbors: Vec<(usize, String, bool)> = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        seen.insert(center_ix);
+        for (other, edge) in graph.links_of(center_ix) {
+            if seen.insert(other) {
+                let kind = if edge.kind == "introduced" {
+                    if edge.from == center_ix {
+                        "introduced"
+                    } else {
+                        "intro by"
+                    }
+                } else {
+                    "chat"
+                };
+                neighbors.push((other, kind.to_owned(), true));
+            }
+        }
+        if let Some(group_ix) = graph.nodes[center_ix].group {
+            for (ix, node) in graph.nodes.iter().enumerate() {
+                if node.group == Some(group_ix) && !node.is_self && seen.insert(ix) && neighbors.len() < 10 {
+                    neighbors.push((ix, "coworker".to_owned(), false));
+                }
+            }
+        }
+        let second_deg: Vec<(usize, usize)> = graph
+            .second_degree(center_ix)
+            .into_iter()
+            .filter(|(_, other)| seen.insert(*other))
+            .take(6)
+            .collect();
+
+        let width: f32 = 520.0;
+        let height: f32 = 220.0;
+        let cx_px = width / 2.0;
+        let cy_px = height / 2.0;
+        let inner_rx: f32 = 148.0;
+        let inner_ry: f32 = 68.0;
+        let outer_rx: f32 = 215.0;
+        let outer_ry: f32 = 94.0;
+
+        let mut node_coords: Vec<(usize, f32, f32, bool, String, bool)> = Vec::new();
+        let n_inner = neighbors.len().max(1);
+        for (idx, (node_ix, rel, is_direct_edge)) in neighbors.iter().enumerate() {
+            let angle = -std::f32::consts::FRAC_PI_2
+                + (idx as f32 / n_inner as f32) * std::f32::consts::TAU;
+            let x = cx_px + inner_rx * angle.cos();
+            let y = cy_px + inner_ry * angle.sin();
+            node_coords.push((*node_ix, x, y, *is_direct_edge, rel.clone(), true));
+        }
+
+        let mut outer_coords: Vec<(usize, usize, f32, f32)> = Vec::new();
+        let n_outer = second_deg.len().max(1);
+        for (idx, (via, other)) in second_deg.iter().enumerate() {
+            let angle = -std::f32::consts::FRAC_PI_2
+                + 0.35
+                + (idx as f32 / n_outer as f32) * std::f32::consts::TAU;
+            let x = cx_px + outer_rx * angle.cos();
+            let y = cy_px + outer_ry * angle.sin();
+            outer_coords.push((*via, *other, x, y));
+        }
+
+        let paint_inner = node_coords
+            .iter()
+            .map(|(ix, x, y, direct, _, _)| (*ix, *x, *y, *direct))
+            .collect::<Vec<_>>();
+        let paint_outer = outer_coords.clone();
+        let canvas = gpui_kit::canvas(
+            move |bounds, _, _| bounds,
+            move |bounds, _, window, _| {
+                let ox = f32::from(bounds.origin.x);
+                let oy = f32::from(bounds.origin.y);
+                let sx = f32::from(bounds.size.width) / width;
+                let sy = f32::from(bounds.size.height) / height;
+                let scale_pt = |x: f32, y: f32| (ox + x * sx, oy + y * sy);
+                let (cx_w, cy_w) = scale_pt(cx_px, cy_px);
+
+                for (ix, x, y, is_direct) in &paint_inner {
+                    let (nx, ny) = scale_pt(*x, *y);
+                    let mut line = gpui_kit::PathBuilder::stroke(px(if *is_direct { 1.8 } else { 1.0 }));
+                    line.move_to(point(px(cx_w), px(cy_w)));
+                    line.line_to(point(px(nx), px(ny)));
+                    if let Ok(path) = line.build() {
+                        let color = if *is_direct {
+                            tint(palette.accent, 0xcc)
+                        } else {
+                            tint(palette.muted, 0x66)
+                        };
+                        window.paint_path(path, rgba(color));
+                    }
+                    for (via, _, ox2, oy2) in &paint_outer {
+                        if via == ix {
+                            let (vx, vy) = scale_pt(*ox2, *oy2);
+                            let mut l2 = gpui_kit::PathBuilder::stroke(px(1.0));
+                            l2.move_to(point(px(nx), px(ny)));
+                            l2.line_to(point(px(vx), px(vy)));
+                            if let Ok(p2) = l2.build() {
+                                window.paint_path(p2, rgba(tint(palette.amber, 0x88)));
+                            }
+                        }
+                    }
+                }
+            },
+        )
+        .absolute()
+        .size_full();
+
+        let mut pills: Vec<AnyElement> = Vec::new();
+        // Center person pill
+        pills.push(
+            div()
+                .absolute()
+                .left(px(cx_px - 56.0))
+                .top(px(cy_px - 13.0))
+                .w(px(112.0))
+                .px_2()
+                .py_1()
+                .rounded_full()
+                .bg(rgb(palette.accent))
+                .text_xs()
+                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                .text_color(rgb(0xffffff))
+                .truncate()
+                .flex()
+                .justify_center()
+                .child(center_name)
+                .into_any_element(),
+        );
+
+        for (node_ix, x, y, is_direct, rel, _) in node_coords {
+            let node = &graph.nodes[node_ix];
+            let target_id = node.id.clone();
+            let clickable = !node.is_self;
+            let label = format!("{} · {rel}", node.name);
+            pills.push(
+                div()
+                    .id(SharedString::from(format!("ego-node-{node_ix}")))
+                    .absolute()
+                    .left(px((x - 58.0).clamp(4.0, width - 120.0)))
+                    .top(px((y - 11.0).clamp(4.0, height - 26.0)))
+                    .max_w(px(118.0))
+                    .px_2()
+                    .py_0p5()
+                    .rounded_full()
+                    .border_1()
+                    .border_color(rgba(if is_direct {
+                        tint(palette.accent, 0x88)
+                    } else {
+                        palette.border
+                    }))
+                    .bg(rgba(palette.raised))
+                    .text_xs()
+                    .text_color(rgb(palette.text))
+                    .truncate()
+                    .when(clickable, |el| {
+                        el.cursor_pointer()
+                            .hover(move |s| s.border_color(rgb(palette.accent)))
+                            .on_click(cx.listener(move |page, _, _, cx| {
+                                page.select_person(Some(target_id.clone()), cx);
+                            }))
+                    })
+                    .child(label)
+                    .into_any_element(),
+            );
+        }
+
+        for (_, other_ix, x, y) in outer_coords {
+            let node = &graph.nodes[other_ix];
+            let target_id = node.id.clone();
+            pills.push(
+                div()
+                    .id(SharedString::from(format!("ego-outer-{other_ix}")))
+                    .absolute()
+                    .left(px((x - 48.0).clamp(4.0, width - 102.0)))
+                    .top(px((y - 10.0).clamp(4.0, height - 24.0)))
+                    .max_w(px(98.0))
+                    .px_1p5()
+                    .py(px(1.0))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(rgba(tint(palette.amber, 0x66)))
+                    .bg(rgba(palette.surface))
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .truncate()
+                    .cursor_pointer()
+                    .hover(move |s| s.text_color(rgb(palette.text)))
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        page.select_person(Some(target_id.clone()), cx);
+                    }))
+                    .child(node.name.clone())
+                    .into_any_element(),
+            );
+        }
+
+        div()
+            .w_full()
+            .h(px(height))
+            .rounded(px(6.))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .bg(rgba(tint(palette.raised, 0x55)))
+            .relative()
+            .overflow_hidden()
+            .child(canvas)
+            .children(pills)
             .into_any_element()
     }
 }
@@ -381,6 +691,7 @@ fn circle(window: &mut gpui_kit::Window, x: f32, y: f32, r: f32, fill: u32, bord
 fn paint(
     graph: &Layout,
     selected: Option<usize>,
+    connected_only: bool,
     palette: Palette,
     bounds: Bounds<Pixels>,
     window: &mut gpui_kit::Window,
@@ -445,6 +756,10 @@ fn paint(
         }
     }
     for (i, node) in graph.nodes.iter().enumerate() {
+        let has_edge = graph.links_of(i).next().is_some();
+        if connected_only && !node.is_self && !has_edge && Some(i) != selected {
+            continue;
+        }
         let (x, y) = at(node.x, node.y);
         if node.is_self {
             circle(window, x, y, r * 2.2, tint(palette.accent, 0xff), None);
@@ -512,11 +827,19 @@ fn labels(
                 .into_any_element(),
         );
     }
+    let mut neighbor_set = std::collections::BTreeSet::new();
+    if let Some(sel) = selected {
+        for (other, _) in graph.links_of(sel).take(12) {
+            neighbor_set.insert(other);
+        }
+    }
     for (index, node) in graph
         .nodes
         .iter()
         .enumerate()
-        .filter(|(index, node)| node.is_self || Some(*index) == selected)
+        .filter(|(index, node)| {
+            node.is_self || Some(*index) == selected || neighbor_set.contains(index)
+        })
     {
         let (x, y) = (cx + node.x * side - ox, cy + node.y * side - oy);
         out.push(

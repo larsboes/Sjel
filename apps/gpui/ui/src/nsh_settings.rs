@@ -127,25 +127,27 @@ fn muted() -> AdaptiveColor {
 }
 
 fn card() -> View {
-    view()
-        .p_4()
-        .gap_3()
-        .rounded_lg()
-        .border(px(1.0))
-        .border_color(move || nsh_base::theme().border)
-        .bg(move || nsh_base::theme().card)
+    crate::nsh_ui::surface_card().p_4().gap_3()
 }
 
 fn pill(label: impl Into<String>, enabled: bool, action: SettingsAction) -> impl IntoElement {
     button()
         .px_4()
         .py_2()
-        .rounded_lg()
+        .rounded_full()
+        .border(px(1.0))
+        .border_color(move || {
+            if enabled {
+                nsh_base::theme().primary
+            } else {
+                nsh_base::theme().border
+            }
+        })
         .bg(move || {
             if enabled {
                 nsh_base::theme().primary
             } else {
-                nsh_base::theme().muted
+                nsh_base::theme().card
             }
         })
         .on_press(move || {

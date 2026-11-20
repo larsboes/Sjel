@@ -93,7 +93,7 @@ impl CalendarPage {
         cx.notify();
     }
 
-    pub(super) fn toggle_proposals(&mut self, cx: &mut Context<Self>) {
+    pub fn toggle_proposals(&mut self, cx: &mut Context<Self>) {
         self.reviewing_proposals = !self.reviewing_proposals;
         self.proposal_confirm_remove = None;
         if self.reviewing_proposals {

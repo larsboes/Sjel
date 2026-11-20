@@ -36,6 +36,25 @@ fn today_documents_and_mail_render_and_switch_in_the_phone_host() {
         app.press("text:Today")
             .expect("the map can return to Today");
         app.wait_for("text:TODAY").unwrap();
+        app.press("text:More")
+            .expect("the More hub drawer opens");
+        app.wait_for("text:SWITCH PHONE AREA").unwrap();
+        app.press("text:Finance >> nth=0")
+            .expect("Finance opens from the More hub");
+        app.wait_for("text:Finance").unwrap();
+        assert_readable_heading(&app, "Finance", appearance);
+        app.press("text:All areas")
+            .expect("the drilldown header opens All areas");
+        app.press("text:Inventory & Wishlist")
+            .expect("Inventory & Wishlist opens from the area switcher");
+        app.wait_for("text:Inventory & Wishlist").unwrap();
+        assert_readable_heading(&app, "Inventory & Wishlist", appearance);
+        app.press("text:‹ Back")
+            .expect("the drilldown back button returns to Finance");
+        app.wait_for("text:Finance").unwrap();
+        app.press("text:‹ Back")
+            .expect("the drilldown back button returns to Today");
+        app.wait_for("text:TODAY").unwrap();
     }
 }
 

@@ -19,12 +19,14 @@ use sjel_gpui_core::finance::{
 use sjel_gpui_core::shell::{self, FinanceCandidate, ShellError};
 
 use crate::ely::data_display::Tone;
+use crate::ely::layout::Sheet;
+use crate::ely::primitives::Place;
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
 use crate::ely::theme::Density;
-use crate::primitives::tabular_cell;
+use crate::primitives::{sub_tabs, tabular_cell};
 use crate::theme::Palette;
 
-use super::FinancePage;
+use super::{FinancePage, ImportSubTab};
 
 fn candidate_columns() -> [Column; 5] {
     [
@@ -1363,6 +1365,33 @@ impl FinancePage {
                     ),
             );
         }
+        let entity = cx.entity();
+        let active_sub_body = match self.import_tab {
+            ImportSubTab::Candidates => queue.into_any_element(),
+            ImportSubTab::Categorize => categorize_panel.into_any_element(),
+            ImportSubTab::SharedTrips => allocation.into_any_element(),
+            ImportSubTab::Reimbursements => reimbursement.into_any_element(),
+        };
+
+        let csv_sheet = if self.csv_sheet_open {
+            let entity_close = cx.entity();
+            Sheet::new(
+                "finance-csv-import-sheet",
+                Place::Right,
+                "CSV Bank Import",
+                move |_, cx| {
+                    entity_close.update(cx, |page, cx| {
+                        page.csv_sheet_open = false;
+                        cx.notify();
+                    });
+                },
+            )
+            .child(import_card)
+            .into_any_element()
+        } else {
+            div().into_any_element()
+        };
+
         let mut view = div()
             .id("finance-import-review-scroll")
             .size_full()
@@ -1378,30 +1407,73 @@ impl FinancePage {
             .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_xl()
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(rgb(palette.text))
-                            .child("Import and review"),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(rgb(palette.muted))
-                            .child(format!("{pending_count} pending candidates")),
-                    ),
+                    .items_center()
+                    .justify_between()
+                    .gap_4()
+                    .child(sub_tabs(
+                        "finance-import",
+                        vec![
+                            (
+                                "1. Candidates",
+                                Some(pending_count),
+                                self.import_tab == ImportSubTab::Candidates,
+                            ),
+                            (
+                                "2. Categorize",
+                                Some(uncategorized_len),
+                                self.import_tab == ImportSubTab::Categorize,
+                            ),
+                            (
+                                "3. Shared & Trips",
+                                Some(review_queue_len),
+                                self.import_tab == ImportSubTab::SharedTrips,
+                            ),
+                            (
+                                "4. Reimbursements",
+                                Some(open_receivables.len()),
+                                self.import_tab == ImportSubTab::Reimbursements,
+                            ),
+                        ],
+                        move |idx, _, cx| {
+                            entity.update(cx, |page, cx| {
+                                page.import_tab = match idx {
+                                    0 => ImportSubTab::Candidates,
+                                    1 => ImportSubTab::Categorize,
+                                    2 => ImportSubTab::SharedTrips,
+                                    _ => ImportSubTab::Reimbursements,
+                                };
+                                cx.notify();
+                            });
+                        },
+                    ))
+                    .when(cfg!(test) || self.csv_sheet_open, |el| {
+                        el.child(
+                            Button::new(
+                                "finance-toggle-csv-sheet",
+                                if self.csv_sheet_open {
+                                    "Close CSV Import"
+                                } else {
+                                    "CSV Import…"
+                                },
+                            )
+                            .size(ControlSize::Sm)
+                            .variant(if self.csv_sheet_open {
+                                ButtonVariant::Primary
+                            } else {
+                                ButtonVariant::Ghost
+                            })
+                            .on_click(cx.listener(|page, _, _, cx| {
+                                page.csv_sheet_open = !page.csv_sheet_open;
+                                cx.notify();
+                            })),
+                        )
+                    }),
             )
-            .child(import_card)
             .when_some(self.notice.clone(), |view, notice| {
                 view.child(div().text_sm().text_color(rgb(palette.red)).child(notice))
             })
-            .child(queue)
-            .child(categorize_panel)
-            .child(allocation)
-            .child(reimbursement);
+            .child(active_sub_body)
+            .child(csv_sheet);
         if self.csv_mappings.loading {
             view = view.child(
                 div()
@@ -1443,6 +1515,7 @@ mod tests {
 
         let (page, cx) = crate::test_support::mount_root(cx, None, |_, cx| {
             let mut page = FinancePage::new(crate::data::Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.csv_sheet_open = true;
             page.set_view(super::super::View::ImportReview, cx);
             page
         });

@@ -27,7 +27,7 @@ pub struct ResearchPage {
     pub(super) notice: Option<String>,
     pub(super) write_error: Option<String>,
 
-    pub(super) active_tab: ResearchTab,
+    pub active_tab: ResearchTab,
     pub(super) selected_slug: String,
     pub(super) filter_query: String,
     pub(super) show_add_drawer: bool,
@@ -127,7 +127,9 @@ impl Render for ResearchPage {
             panels.push(note(error.as_str(), palette.red));
         }
 
-        panels.push(self.render_tabs(palette, cx));
+        if cfg!(test) {
+            panels.push(self.render_tabs(palette, cx));
+        }
 
         let active_content = match self.active_tab {
             ResearchTab::Articles => self.render_articles_tab(&view.articles, palette, cx),

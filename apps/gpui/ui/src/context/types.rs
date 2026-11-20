@@ -13,6 +13,7 @@ pub enum ContextEvent {
     OpenFinance {
         day: NaiveDate,
     },
+    OpenInbox,
 }
 
 actions!(

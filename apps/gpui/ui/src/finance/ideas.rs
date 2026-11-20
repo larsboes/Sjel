@@ -2,7 +2,9 @@
 //! a new one. Plan: `docs/plans/finance.md`, section 6.
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::charts::{Bullet, BulletChart};
 use crate::ely::forms::{Input, TextInput};
+use crate::ely::layout::Collapsible;
 use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{
@@ -11,10 +13,10 @@ use gpui_kit::{
 use sjel_gpui_core::finance::format_exact_money;
 use sjel_gpui_core::shell::{self, FinanceIdea, FinanceIdeaDraft, FinanceIdeaTrigger, ShellError};
 
-use crate::primitives::tone_chip;
+use crate::primitives::{sub_tabs, tone_chip};
 use crate::theme::Palette;
 
-use super::FinancePage;
+use super::{FinancePage, IdeaDetailTab};
 
 const STANCES: [&str; 4] = ["hold", "watch", "enter", "exit"];
 
@@ -420,13 +422,40 @@ impl FinancePage {
                 .child(div().text_xs().text_color(rgb(palette.muted)).child(detail))
         });
 
+        let list_header = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(title("IDEAS", palette))
+            .child(
+                Button::new(
+                    "idea-toggle-new",
+                    if self.new_idea_open {
+                        "Cancel"
+                    } else {
+                        "+ New idea"
+                    },
+                )
+                .size(ControlSize::Sm)
+                .variant(if self.new_idea_open {
+                    ButtonVariant::Ghost
+                } else {
+                    ButtonVariant::Primary
+                })
+                .on_click(cx.listener(|page, _, _, cx| {
+                    page.new_idea_open = !page.new_idea_open;
+                    cx.notify();
+                })),
+            );
+
         let list = div()
             .w(px(320.))
             .flex_none()
             .flex()
             .flex_col()
             .gap_3()
-            .child(new_form)
+            .child(list_header)
+            .child(Collapsible::new("idea-new-collapse", self.new_idea_open).child(new_form))
             .child(div().flex().flex_col().gap_1().children(rows))
             .when(
                 self.ideas.value.as_ref().is_some_and(Vec::is_empty),
@@ -622,6 +651,41 @@ impl FinancePage {
                 cx.notify();
             }))
         };
+        let level_chart = idea.price.as_ref().and_then(|price| {
+            let now = decimal(&price.price.mantissa, price.price.scale)?;
+            if now <= 0.0 {
+                return None;
+            }
+            let matching: Vec<_> = idea
+                .current
+                .triggers
+                .iter()
+                .filter(|t| t.currency.eq_ignore_ascii_case(&price.currency))
+                .filter_map(|t| {
+                    let level = t.price.parse::<f64>().ok()?;
+                    Some((t, level))
+                })
+                .collect();
+            if matching.is_empty() {
+                return None;
+            }
+            let curr = price.currency.clone();
+            let mut chart = BulletChart::new(SharedString::from(format!("idea-levels-{}", idea.id)))
+                .format(move |val| format!("{val:.2} {curr}"));
+            for (trigger, level) in matching {
+                let ceiling = now.max(level) * 1.15;
+                chart = chart.bullet(
+                    Bullet::new(
+                        format!("{} {}", trigger.direction, trigger.price),
+                        now,
+                        level,
+                    )
+                    .bands([ceiling * 0.5, ceiling * 0.85, ceiling]),
+                );
+            }
+            Some(chart.w_full())
+        });
+
         let levels = panel()
             .child(title("PRICE LEVELS", palette))
             .child(
@@ -630,6 +694,7 @@ impl FinancePage {
                     .text_color(rgb(palette.muted))
                     .child("A crossing creates a task due that day; it fires again only after the price crosses back."),
             )
+            .children(level_chart)
             .children(levels)
             .child(
                 div()
@@ -750,17 +815,69 @@ impl FinancePage {
                     .child(format!("{}: {thesis}", at.get(..10).unwrap_or_default()))
             }));
 
+        let entity = cx.entity();
+        let detail_nav = sub_tabs(
+            "finance-idea-detail",
+            vec![
+                (
+                    "Thesis & Levels",
+                    Some(idea.current.triggers.len()),
+                    self.idea_detail_tab == IdeaDetailTab::ThesisLevels,
+                ),
+                (
+                    "Model Review & Research",
+                    Some(idea.research.len()),
+                    self.idea_detail_tab == IdeaDetailTab::ReviewResearch,
+                ),
+                (
+                    "Notes & History",
+                    Some(idea.notes.len()),
+                    self.idea_detail_tab == IdeaDetailTab::NotesHistory,
+                ),
+            ],
+            move |idx, _, cx| {
+                entity.update(cx, |page, cx| {
+                    page.idea_detail_tab = match idx {
+                        0 => IdeaDetailTab::ThesisLevels,
+                        1 => IdeaDetailTab::ReviewResearch,
+                        _ => IdeaDetailTab::NotesHistory,
+                    };
+                    cx.notify();
+                });
+            },
+        );
+
+        let detail_body = match self.idea_detail_tab {
+            IdeaDetailTab::ThesisLevels => div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(thesis)
+                .child(levels)
+                .into_any_element(),
+            IdeaDetailTab::ReviewResearch => div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(review)
+                .child(research)
+                .into_any_element(),
+            IdeaDetailTab::NotesHistory => div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(notes)
+                .child(history)
+                .into_any_element(),
+        };
+
         div()
             .flex()
             .flex_col()
             .gap_3()
             .child(header)
-            .child(thesis)
-            .child(levels)
-            .child(review)
-            .child(research)
-            .child(notes)
-            .child(history)
+            .child(detail_nav)
+            .child(detail_body)
             .into_any_element()
     }
 }

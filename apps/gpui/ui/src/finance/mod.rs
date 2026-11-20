@@ -1,9 +1,8 @@
 //! Native Finance page (`/finance`): personal ledger, transaction search,
 //! account breakdowns, and recurring subscription tracking.
 
-use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::forms::{InputEvent, TextInput};
-use crate::ely::theme::ControlSize;
+use crate::ely::theme::Density as TableDensity;
 use gpui_kit::{
     actions, div, prelude::*, px, App, Context, Entity, FocusHandle, Focusable, KeyBinding,
     ScrollHandle, SharedString, Subscription, Window,
@@ -15,7 +14,7 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::primitives::{column_width, key_bar};
+use crate::primitives::{column_width, key_bar, sub_tabs};
 use crate::theme::{Palette, ThemeContext};
 
 actions!(
@@ -58,6 +57,52 @@ pub enum View {
     Ideas,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum OverviewSection {
+    #[default]
+    CashFlow,
+    Holdings,
+    Balances,
+    Recent,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ImportSubTab {
+    #[default]
+    Candidates,
+    Categorize,
+    SharedTrips,
+    Reimbursements,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum IdeaDetailTab {
+    #[default]
+    ThesisLevels,
+    ReviewResearch,
+    NotesHistory,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TxPeriod {
+    #[default]
+    All,
+    ThisMonth,
+    LastMonth,
+    ThreeMonths,
+}
+
+impl TxPeriod {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::ThisMonth => "This month",
+            Self::LastMonth => "Last month",
+            Self::ThreeMonths => "3M",
+        }
+    }
+}
+
 mod ideas;
 mod import;
 mod overview;
@@ -72,6 +117,11 @@ pub struct FinancePage {
     pub(super) repo: Repo,
     pub(super) palette: Option<Palette>,
     pub view: View,
+    pub overview_section: OverviewSection,
+    pub import_tab: ImportSubTab,
+    pub csv_sheet_open: bool,
+    pub tx_hidden: Vec<SharedString>,
+    pub tx_density: TableDensity,
     pub dashboard: Remote<FinanceDashboardProjection>,
     pub subscriptions: Remote<Vec<SubscriptionRecord>>,
     pub(super) trip_plans: Remote<Vec<sjel_gpui_core::travel::Plan>>,
@@ -109,6 +159,10 @@ pub struct FinancePage {
     pub(super) balance_fields: Vec<BalanceDraft>,
     pub search_query: String,
     pub selected_category: Option<String>,
+    pub selected_account: Option<String>,
+    pub tx_period: TxPeriod,
+    pub tx_charts_open: bool,
+    pub sub_status_filter: Option<&'static str>,
     pub(super) import_rows: std::rc::Rc<Vec<crate::ely::tables::Row>>,
     pub(super) import_rows_key: Option<(Option<std::time::Instant>, u64, usize, Option<String>)>,
     pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
@@ -132,6 +186,8 @@ pub struct FinancePage {
     pub(super) new_idea_stance: &'static str,
     pub(super) level_direction: &'static str,
     pub ideas_scroll: ScrollHandle,
+    pub(super) idea_detail_tab: IdeaDetailTab,
+    pub(super) new_idea_open: bool,
     pub(super) reviewing: bool,
     pub(super) reclass_highlight: usize,
 }
@@ -142,6 +198,11 @@ impl FinancePage {
             repo,
             palette: None,
             view: View::Overview,
+            overview_section: OverviewSection::default(),
+            import_tab: ImportSubTab::default(),
+            csv_sheet_open: false,
+            tx_hidden: Vec::new(),
+            tx_density: TableDensity::Standard,
             dashboard: Remote::default(),
             subscriptions: Remote::default(),
             trip_plans: Remote::default(),
@@ -179,6 +240,10 @@ impl FinancePage {
             balance_fields: Vec::new(),
             search_query: String::new(),
             selected_category: None,
+            selected_account: None,
+            tx_period: TxPeriod::All,
+            tx_charts_open: true,
+            sub_status_filter: None,
             import_rows: Default::default(),
             import_rows_key: None,
             col_widths: Default::default(),
@@ -202,6 +267,8 @@ impl FinancePage {
             new_idea_stance: "watch",
             level_direction: "above",
             ideas_scroll: ScrollHandle::new(),
+            idea_detail_tab: IdeaDetailTab::default(),
+            new_idea_open: false,
             reviewing: false,
             reclass_highlight: 0,
         }
@@ -241,6 +308,31 @@ impl FinancePage {
     pub fn activate(&mut self, cx: &mut Context<Self>) {
         self.focus_next = true;
         self.load(cx);
+    }
+
+    pub fn badge_counts(&self) -> (Option<usize>, Option<usize>, Option<usize>, Option<usize>) {
+        let tx_count = self
+            .dashboard
+            .value
+            .as_ref()
+            .map(|p| p.transactions.len());
+        let subs_count = Some(self.subs_derived.active_count);
+        let import_count = Some(
+            self.import_derived.pending_indices.len() + self.import_derived.uncategorized.len(),
+        );
+        let ideas_count = self.ideas.value.as_ref().map(|ideas| {
+            ideas
+                .iter()
+                .filter(|idea| idea.current.status == "open")
+                .count()
+        });
+        (tx_count, subs_count, import_count, ideas_count)
+    }
+
+    pub fn open_csv_import(&mut self, cx: &mut Context<Self>) {
+        self.view = View::ImportReview;
+        self.csv_sheet_open = true;
+        cx.notify();
     }
 
     pub fn set_view(&mut self, view: View, cx: &mut Context<Self>) {
@@ -426,31 +518,50 @@ impl Render for FinancePage {
             .palette
             .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
 
-        let view_btn = |label: &'static str, target: View, cx: &mut Context<Self>| {
-            Button::new(SharedString::from(format!("fin-view-{label}")), label)
-                .size(ControlSize::Sm)
-                .when(self.view == target, |b| b.primary())
-                .when(self.view != target, |b| b.variant(ButtonVariant::Ghost))
-                .on_click(cx.listener(move |page, _, _, cx| page.set_view(target, cx)))
-        };
-
-        let header = div().flex().items_center().justify_between().gap_4().child(
+        self.sync_subs_derived();
+        self.sync_import_derived();
+        let show_inline_tabs = cfg!(test);
+        let inline_header = show_inline_tabs.then(|| {
+            let (tx_count, subs_count, import_count, ideas_count) = self.badge_counts();
+            let entity = cx.entity();
             div()
                 .flex()
                 .items_center()
-                .gap_1()
-                .child(view_btn("Overview", View::Overview, cx))
-                .child(view_btn("Transactions", View::Transactions, cx))
-                .child(view_btn("Subscriptions", View::Subscriptions, cx))
-                .child(view_btn("Import & Review", View::ImportReview, cx))
-                .child(view_btn("Ideas", View::Ideas, cx)),
-        );
+                .justify_between()
+                .gap_4()
+                .child(sub_tabs(
+                    "finance",
+                    vec![
+                        ("Overview", None, self.view == View::Overview),
+                        ("Transactions", tx_count, self.view == View::Transactions),
+                        ("Subscriptions", subs_count, self.view == View::Subscriptions),
+                        (
+                            "Import & Review",
+                            import_count,
+                            self.view == View::ImportReview,
+                        ),
+                        ("Ideas", ideas_count, self.view == View::Ideas),
+                    ],
+                    move |idx, _, cx| {
+                        entity.update(cx, |page, cx| {
+                            let target = match idx {
+                                0 => View::Overview,
+                                1 => View::Transactions,
+                                2 => View::Subscriptions,
+                                3 => View::ImportReview,
+                                _ => View::Ideas,
+                            };
+                            page.set_view(target, cx);
+                        });
+                    },
+                ))
+        });
 
         // Body per Tab
         let content = match self.view {
             View::Overview => self.render_overview(palette, cx),
             View::Transactions => self.render_transactions(window, cx),
-            View::Subscriptions => self.render_subscriptions(palette),
+            View::Subscriptions => self.render_subscriptions(palette, cx),
             View::ImportReview => self.render_import_review(palette, window, cx),
             View::Ideas => self.render_ideas(window, palette, cx),
         };
@@ -469,7 +580,7 @@ impl Render for FinancePage {
             .flex()
             .flex_col()
             .gap_3()
-            .child(header)
+            .children(inline_header)
             .child(
                 div()
                     .flex_1()
@@ -522,6 +633,42 @@ mod tests {
             assert_eq!(page.view, View::Transactions);
             page.set_view(View::Subscriptions, cx);
             assert_eq!(page.view, View::Subscriptions);
+        });
+    }
+
+    #[gpui::test]
+    fn finance_sub_tabs_switch_overview_and_import_sections(cx: &mut TestAppContext) {
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, cx| {
+            let mut page = FinancePage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.overview_section = OverviewSection::Holdings;
+            page
+        });
+        let overview_tabs = cx
+            .debug_bounds("finance-overview-section-tabs")
+            .expect("overview sub-tabs render");
+        cx.simulate_click(
+            overview_tabs.origin + gpui_kit::point(px(12.), px(10.)),
+            gpui_kit::Modifiers::none(),
+        );
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.overview_section, OverviewSection::CashFlow);
+        });
+        page.update(cx, |page, cx| {
+            page.import_tab = ImportSubTab::Categorize;
+            page.set_view(View::ImportReview, cx);
+        });
+        cx.run_until_parked();
+        let import_tabs = cx
+            .debug_bounds("finance-import-tabs")
+            .expect("import sub-tabs render");
+        cx.simulate_click(
+            import_tabs.origin + gpui_kit::point(px(12.), px(10.)),
+            gpui_kit::Modifiers::none(),
+        );
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.import_tab, ImportSubTab::Candidates);
         });
     }
 }

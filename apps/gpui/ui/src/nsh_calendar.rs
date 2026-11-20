@@ -428,30 +428,7 @@ impl Ui {
 }
 
 fn chip(label: impl Into<String>, on: bool, press: impl Fn() + 'static) -> impl IntoElement {
-    button()
-        .px_3()
-        .py_2()
-        .rounded_lg()
-        .bg(move || {
-            if on {
-                nsh_base::theme().primary
-            } else {
-                nsh_base::theme().muted
-            }
-        })
-        .on_press(press)
-        .child(
-            text(label.into())
-                .text_xs()
-                .number_of_lines(1u32)
-                .text_color(move || {
-                    if on {
-                        nsh_base::theme().primary_foreground
-                    } else {
-                        nsh_base::theme().foreground
-                    }
-                }),
-        )
+    crate::nsh_ui::pill_tab(label, on, press)
 }
 
 fn week_strip(ui: Ui) -> impl IntoElement {
@@ -992,6 +969,30 @@ pub fn CalendarScreen() -> impl IntoElement {
                 })),
         )
         .child(dynamic(move || week_strip(ui).into_element()))
+        .child(dynamic(move || {
+            let (event_count, all_day_count) = ui.snap.with(|s| {
+                let all_day = s.entries.iter().filter(|e| e.all_day).count();
+                (s.entries.len(), all_day)
+            });
+            view()
+                .flex_row()
+                .gap_2()
+                .child(crate::nsh_ui::metric_tile(
+                    "EVENTS",
+                    event_count.to_string(),
+                    if event_count == 0 {
+                        "Calendar clear"
+                    } else {
+                        "Scheduled"
+                    },
+                ))
+                .child(crate::nsh_ui::metric_tile(
+                    "ALL DAY",
+                    all_day_count.to_string(),
+                    "Blocks",
+                ))
+                .into_element()
+        }))
         .child(dynamic(move || {
             let error = ui.snap.with(|s| s.error.clone()).or_else(|| ui.note.get());
             error.map(|e| {

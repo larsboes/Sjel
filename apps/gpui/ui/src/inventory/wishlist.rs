@@ -1,10 +1,11 @@
 //! Wishlist items, budgeting, groups, and candidate comparisons.
 
+use std::rc::Rc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, Focusable, Subscription,
-    Window,
+    div, prelude::*, px, rems, rgb, rgba, AnyElement, App, Context, Entity, Focusable,
+    Subscription, Window,
 };
 use sjel_gpui_core::inventory::{
     budget_of, counted, format_cents, format_dimensions, months_to_pay, wishlist_view, Budget,
@@ -13,11 +14,16 @@ use sjel_gpui_core::inventory::{
 use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::ely::buttons::{Button as ElyButton, ButtonVariant, ToggleButton, ToggleItem};
+use crate::ely::charts::{Bullet, BulletChart};
+use crate::ely::data_display::Tone;
 use crate::ely::forms::{Form as ElyForm, FormError, FormField, Input, InputEvent, TextInput};
-use crate::ely::theme::ControlSize;
+use crate::ely::layout::Sheet;
+use crate::ely::primitives::Place;
+use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
+use crate::ely::theme::{ControlSize, Density};
 use crate::theme::{tint, Palette};
 
-use super::{nonempty, InventoryPage, InventoryTab};
+use super::{nonempty, InventoryPage, InventoryTab, WishlistViewMode};
 
 pub(crate) struct WishForm {
     pub(super) fields: Vec<(String, Entity<TextInput>)>,
@@ -457,11 +463,12 @@ impl InventoryPage {
 
     pub(super) fn render_wish_form(
         &self,
-        palette: Palette,
+        _palette: Palette,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let form = self.wish_form.as_ref()?;
         let page_entity = cx.entity();
+        let close_entity = cx.entity();
         let mut fields = div().flex().flex_col().gap_2().flex_none().w_full();
         for (key, input) in &form.fields {
             let (field, label) = key.split_once(" · ").unwrap_or((key, key));
@@ -478,25 +485,15 @@ impl InventoryPage {
         let kind = form.kind.clone();
         let state = form.state;
         let saving = self.wish_busy.as_deref() == Some("new");
+        let title = if self.tab == InventoryTab::Wishlist {
+            "New wishlist entry"
+        } else {
+            "New inventory entry"
+        };
         let mut card = div()
-            .p_4()
-            .rounded(px(12.))
-            .bg(rgba(tint(palette.raised, 0x30)))
-            .border_1()
-            .border_color(rgba(tint(palette.border, 0x25)))
             .flex()
             .flex_col()
             .gap_3()
-            .child(
-                div()
-                    .text_sm()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child(if self.tab == InventoryTab::Wishlist {
-                        "New wishlist entry"
-                    } else {
-                        "New inventory entry"
-                    }),
-            )
             .child(
                 div()
                     .flex()
@@ -568,37 +565,44 @@ impl InventoryPage {
         if let Some(error) = &form.error {
             card = card.child(FormError::new("wishlist-create-error", error.clone()));
         }
-        Some(
-            card.child(
-                div()
-                    .flex()
-                    .justify_end()
-                    .gap_2()
-                    .child(
-                        ElyButton::new("wishlist-create-cancel", "Cancel")
-                            .size(ControlSize::Sm)
-                            .variant(ButtonVariant::Ghost)
-                            .disabled(saving)
-                            .on_click(cx.listener(|page, _, _, cx| {
-                                page.wish_form = None;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        ElyButton::new(
-                            "wishlist-create-save",
-                            if saving {
-                                "Adding…"
-                            } else {
-                                "Add to wishlist"
-                            },
-                        )
+        let body = card.child(
+            div()
+                .flex()
+                .justify_end()
+                .gap_2()
+                .child(
+                    ElyButton::new("wishlist-create-cancel", "Cancel")
                         .size(ControlSize::Sm)
-                        .primary()
+                        .variant(ButtonVariant::Ghost)
                         .disabled(saving)
-                        .on_click(cx.listener(|page, _, _, cx| page.create_wish(cx))),
-                    ),
-            )
+                        .on_click(cx.listener(|page, _, _, cx| {
+                            page.wish_form = None;
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    ElyButton::new(
+                        "wishlist-create-save",
+                        if saving {
+                            "Adding…"
+                        } else {
+                            "Add to wishlist"
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .primary()
+                    .disabled(saving)
+                    .on_click(cx.listener(|page, _, _, cx| page.create_wish(cx))),
+                ),
+        );
+        Some(
+            Sheet::new("wishlist-create-sheet", Place::Right, title, move |_, cx| {
+                close_entity.update(cx, |page, cx| {
+                    page.wish_form = None;
+                    cx.notify();
+                });
+            })
+            .child(body)
             .into_any_element(),
         )
     }
@@ -689,6 +693,32 @@ impl InventoryPage {
                             .flex()
                             .items_center()
                             .gap_2()
+                            .child(
+                                ElyButton::new("wishlist-mode-table", "Table")
+                                    .size(ControlSize::Sm)
+                                    .variant(if self.wishlist_mode == WishlistViewMode::Table {
+                                        ButtonVariant::Primary
+                                    } else {
+                                        ButtonVariant::Ghost
+                                    })
+                                    .on_click(cx.listener(|page, _, _, cx| {
+                                        page.wishlist_mode = WishlistViewMode::Table;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                ElyButton::new("wishlist-mode-cards", "Cards")
+                                    .size(ControlSize::Sm)
+                                    .variant(if self.wishlist_mode == WishlistViewMode::Cards {
+                                        ButtonVariant::Primary
+                                    } else {
+                                        ButtonVariant::Ghost
+                                    })
+                                    .on_click(cx.listener(|page, _, _, cx| {
+                                        page.wishlist_mode = WishlistViewMode::Cards;
+                                        cx.notify();
+                                    })),
+                            )
                             .child(
                                 ElyButton::new(
                                     "wishlist-new-group",
@@ -788,6 +818,23 @@ impl InventoryPage {
             );
         if let Some(form) = self.render_group_form(palette, cx) {
             content = content.child(form);
+        }
+        if budget.high_cents > 0 {
+            let monthly_cents = monthly_balance.as_ref().map_or(0, |b| b.median_cents.max(0));
+            let ceiling = (budget.high_cents.max(monthly_cents).max(1)) as f64;
+            let mut chart = BulletChart::new("wishlist-budget-bullet")
+                .format(|cents| format_cents(Some(cents.round() as i64)));
+            chart = chart.bullet(
+                Bullet::new("Wishlist range", budget.low_cents as f64, budget.high_cents as f64)
+                    .bands([ceiling * 0.5, ceiling * 0.85, ceiling]),
+            );
+            if monthly_cents > 0 {
+                chart = chart.bullet(
+                    Bullet::new("Monthly net", monthly_cents as f64, budget.high_cents as f64)
+                        .bands([ceiling * 0.5, ceiling * 0.85, ceiling]),
+                );
+            }
+            content = content.child(chart.w_full());
         }
         if let Some(group) = &group {
             let mut row = div().flex().items_center().justify_between().gap_3().child(
@@ -958,6 +1005,8 @@ impl InventoryPage {
                         (None, false) => "No open wishlist items.".to_owned(),
                     })
                     .into_any_element()
+            } else if self.wishlist_mode == WishlistViewMode::Table {
+                self.render_wishlist_table(&shown, &groups, palette, cx)
             } else {
                 let mut cards = Vec::new();
                 for item in &shown {
@@ -975,11 +1024,12 @@ impl InventoryPage {
 
     pub(super) fn render_group_form(
         &self,
-        palette: Palette,
+        _palette: Palette,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let form = self.group_form.as_ref()?;
         let page_entity = cx.entity();
+        let close_entity = cx.entity();
         let mut fields = div().flex().flex_col().gap_2().flex_none().w_full();
         for (key, label, input) in &form.fields {
             fields = fields.child(
@@ -987,55 +1037,203 @@ impl InventoryPage {
                     .child(Input::new(input).size(ControlSize::Sm)),
             );
         }
+        if let Some(error) = &form.error {
+            fields = fields.child(FormError::new("wishlist-group-error", error.clone()));
+        }
         let fields = ElyForm::new("wishlist-group-form")
             .on_submit(move |window, cx| {
                 page_entity.update(cx, |page, cx| page.create_group(window, cx));
             })
             .child(fields);
+        let body = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(fields)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        ElyButton::new("group-create-save", "Create group")
+                            .size(ControlSize::Sm)
+                            .primary()
+                            .on_click(
+                                cx.listener(|page, _, window, cx| page.create_group(window, cx)),
+                            ),
+                    )
+                    .child(
+                        ElyButton::new("group-create-cancel", "Cancel")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
+                            .on_click(cx.listener(|page, _, _, cx| {
+                                page.group_form = None;
+                                cx.notify();
+                            })),
+                    ),
+            );
         Some(
-            div()
-                .p_4()
-                .rounded(px(12.))
-                .bg(rgba(tint(palette.raised, 0x30)))
-                .border_1()
-                .border_color(rgba(tint(palette.border, 0x25)))
-                .flex()
-                .flex_col()
-                .gap_3()
-                .child(
-                    div()
-                        .text_sm()
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .child("New wish group"),
-                )
-                .child(fields)
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(
-                            ElyButton::new("group-create-save", "Create group")
-                                .size(ControlSize::Sm)
-                                .primary()
-                                .on_click(
-                                    cx.listener(|page, _, window, cx| {
-                                        page.create_group(window, cx)
-                                    }),
-                                ),
-                        )
-                        .child(
-                            ElyButton::new("group-create-cancel", "Cancel")
-                                .size(ControlSize::Sm)
-                                .variant(ButtonVariant::Ghost)
-                                .on_click(cx.listener(|page, _, _, cx| {
-                                    page.group_form = None;
-                                    cx.notify();
-                                })),
-                        ),
-                )
-                .into_any_element(),
+            Sheet::new(
+                "wishlist-group-sheet",
+                Place::Right,
+                "New wish group",
+                move |_, cx| {
+                    close_entity.update(cx, |page, cx| {
+                        page.group_form = None;
+                        cx.notify();
+                    });
+                },
+            )
+            .child(body)
+            .into_any_element(),
         )
+    }
+
+    pub(super) fn render_wishlist_table(
+        &self,
+        shown: &[InventoryItem],
+        groups: &[WishGroup],
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let columns = [
+            Column::new("wish", "WISH"),
+            Column::new("priority", "PRIORITY").width(rems(8.)),
+            Column::new("dimensions", "DIMENSIONS").width(rems(9.)).muted(),
+            Column::new("price", "BUDGET").width(rems(8.)).end(),
+            Column::new("actions", "").width(rems(16.)).actions([
+                RowAction::new("group", "Group"),
+                RowAction::new("edit", "Edit"),
+                RowAction::new("bought", "Mark bought").primary(),
+                RowAction::new("remove", "Remove"),
+            ]),
+        ];
+        let rows: Vec<Row> = shown
+            .iter()
+            .map(|item| {
+                let (cost_text, sort_val) = if let Some(price) = item.price_cents {
+                    (format_cents(Some(price)), price as f64)
+                } else if item.cost_min_cents.is_some() || item.cost_max_cents.is_some() {
+                    (
+                        format!(
+                            "{} – {}",
+                            format_cents(item.cost_min_cents),
+                            format_cents(item.cost_max_cents)
+                        ),
+                        item.cost_min_cents.or(item.cost_max_cents).unwrap_or(0) as f64,
+                    )
+                } else {
+                    ("unpriced".to_string(), 0.0)
+                };
+                let dim = format_dimensions(item.width, item.depth, item.height);
+                let mut meta_parts = Vec::new();
+                if let Some(cat) = item.category.as_ref().filter(|s| !s.is_empty()) {
+                    meta_parts.push(cat.clone());
+                }
+                if !item.replaces.is_empty() {
+                    meta_parts.push(format!("Replaces: {}", item.replaces.join(", ")));
+                }
+                if let Some(note) = item.notes.as_ref().filter(|s| !s.is_empty()) {
+                    meta_parts.push(format!("Note: {note}"));
+                }
+                let meta = meta_parts.join(" · ");
+                let name_cell = if meta.is_empty() {
+                    Cell::Text(item.label.clone().into())
+                } else {
+                    Cell::Lines(item.label.clone().into(), meta.into())
+                };
+                let pri_cell = match item.priority.as_deref() {
+                    Some(pri) if !pri.is_empty() => {
+                        let tone = match pri {
+                            "required" | "decided" => Tone::Danger,
+                            "recommended" => Tone::Warning,
+                            _ => Tone::Accent,
+                        };
+                        Cell::Tag(pri.to_owned().into(), tone)
+                    }
+                    _ => Cell::Empty,
+                };
+                Row::new(
+                    item.id.clone(),
+                    [
+                        name_cell,
+                        pri_cell,
+                        Cell::Text(dim.into()),
+                        Cell::Figure(cost_text.into(), sort_val, Tone::Neutral),
+                        Cell::Empty,
+                    ],
+                )
+            })
+            .collect();
+
+        let page_entity = cx.entity();
+        let items_snapshot = shown.to_vec();
+        let table = DataTable::new("inventory-wishlist-table", columns)
+            .label("Wishlist items")
+            .rows(Rc::new(rows))
+            .density(Density::Comfortable)
+            .sorts([SortKey {
+                column: "price".into(),
+                rising: false,
+            }])
+            .on_action(move |key, action, window, cx| {
+                let items = items_snapshot.clone();
+                page_entity.update(cx, |page, cx| match action.as_ref() {
+                    "group" => {
+                        page.group_menu = if page.group_menu.as_deref() == Some(key.as_ref()) {
+                            None
+                        } else {
+                            Some(key.to_string())
+                        };
+                        cx.notify();
+                    }
+                    "edit" => {
+                        if let Some(item) = items.iter().find(|i| i.id == key.as_ref()) {
+                            page.open_item_edit(item.clone(), window, cx);
+                        }
+                    }
+                    "bought" => {
+                        page.set_wish_state(key.to_string(), InventoryState::Owned, cx);
+                    }
+                    "remove" => {
+                        page.set_wish_state(key.to_string(), InventoryState::Gone, cx);
+                    }
+                    _ => {}
+                });
+            });
+
+        let open_picker = self
+            .group_menu
+            .as_deref()
+            .and_then(|id| shown.iter().find(|item| item.id == id))
+            .map(|item| {
+                div()
+                    .p_3()
+                    .rounded(px(10.))
+                    .bg(rgba(tint(palette.raised, 0x25)))
+                    .border_1()
+                    .border_color(rgba(tint(palette.border, 0x25)))
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(rgb(palette.muted))
+                            .child(format!("GROUPS FOR {}", item.label)),
+                    )
+                    .child(self.render_group_picker(item, groups, palette, cx))
+            });
+
+        div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .children(open_picker)
+            .child(table)
+            .into_any_element()
     }
 
     pub(super) fn render_wish_item(

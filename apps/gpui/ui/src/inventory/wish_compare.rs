@@ -4,10 +4,15 @@
 //! The rules live in `sjel_gpui_core::inventory::compare`. This file draws. Each candidate keeps
 //! one colour across the scatter, the history and the table, so the table is the legend.
 
+use std::rc::Rc;
+
 use crate::ely::buttons::{Button, ButtonVariant};
-use crate::ely::theme::ControlSize;
+use crate::ely::charts::{Points, ScatterChart};
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
+use crate::ely::theme::{ControlSize, Density};
 use gpui_kit::{
-    canvas, div, point, prelude::*, px, rgb, rgba, AnyElement, Context, PathBuilder, Pixels,
+    canvas, div, point, prelude::*, px, rems, rgb, rgba, AnyElement, Context, PathBuilder, Pixels,
 };
 use sjel_gpui_core::inventory::compare::{
     day_number, format_per_unit, history_domains, scatter_domains, Fit, GroupComparison,
@@ -178,7 +183,20 @@ fn scatter(group: &GroupComparison, axis: &str, palette: Palette) -> Option<AnyE
     limits.dedup();
     let unit = group.unit_of(axis);
 
-    let draw = canvas(
+    let mut ely_scatter = ScatterChart::new("wishlist-compare-scatter")
+        .axes(format!("{axis} ({unit})"), "Price (€)")
+        .h(px(SCATTER_HEIGHT))
+        .w_full();
+    for c in &group.candidates {
+        if let (Some(spec_val), Some(latest)) = (c.spec(axis), c.latest()) {
+            ely_scatter = ely_scatter.points(Points::new(
+                c.label.clone(),
+                [(spec_val, latest.price_cents as f64 / 100.0)],
+            ));
+        }
+    }
+
+    let overlay = canvas(
         |bounds, _, _| bounds,
         move |bounds, _, window, _| {
             let w = f32::from(bounds.size.width) - INSET * 2.;
@@ -220,6 +238,8 @@ fn scatter(group: &GroupComparison, axis: &str, palette: Palette) -> Option<AnyE
             }
         },
     )
+    .absolute()
+    .inset_0()
     .size_full();
 
     let axis_note = |text: String| div().text_xs().text_color(rgb(palette.muted)).child(text);
@@ -229,17 +249,19 @@ fn scatter(group: &GroupComparison, axis: &str, palette: Palette) -> Option<AnyE
             .flex_col()
             .gap_1()
             .child(axis_note(format!(
-                "Price against {axis}. Amber: need{}. Red: price limit. Large square: at or below its limit.",
+                "Price against {axis}. Amber: need{}. Red: price limit. Hover points for interactive tooltip.",
                 need.map(|n| format!(" {n} {unit}")).unwrap_or_default()
             )))
             .child(
                 div()
+                    .relative()
                     .h(px(SCATTER_HEIGHT))
                     .w_full()
                     .rounded_md()
                     .overflow_hidden()
                     .bg(rgba(tint(palette.surface, 0x60)))
-                    .child(draw),
+                    .child(ely_scatter)
+                    .child(overlay),
             )
             .child(
                 div()
@@ -354,82 +376,107 @@ fn history(group: &GroupComparison, palette: Palette) -> Option<AnyElement> {
     )
 }
 
-/// One row per candidate: colour, label, latest price, limit, needs, and price per unit.
-fn table(group: &GroupComparison, palette: Palette) -> AnyElement {
-    let rows = group.candidates.iter().enumerate().map(|(i, c)| {
-        let latest = c
-            .latest()
-            .map(|o| {
-                format!(
-                    "{} · {} · {}",
-                    format_cents(Some(o.price_cents)),
-                    &o.observed_at[..10.min(o.observed_at.len())],
-                    short_source(&o.source)
+/// One row per candidate: label, latest price, limit, needs fit, and price per unit.
+fn table(group: &GroupComparison, _palette: Palette) -> AnyElement {
+    let columns = [
+        Column::new("candidate", "CANDIDATE"),
+        Column::new("price", "LATEST PRICE").width(rems(8.)).end(),
+        Column::new("limit", "LIMIT").width(rems(8.)),
+        Column::new("needs", "NEEDS FIT").width(rems(9.)),
+        Column::new("value", "PER UNIT"),
+    ];
+    let rows: Vec<Row> = group
+        .candidates
+        .iter()
+        .map(|c| {
+            let (price_cell, source_meta) = match c.latest() {
+                Some(o) => {
+                    let date = &o.observed_at[..10.min(o.observed_at.len())];
+                    let src = short_source(&o.source);
+                    let tone = match c.within_limit() {
+                        Some(true) => Tone::Success,
+                        Some(false) => Tone::Warning,
+                        None => Tone::Neutral,
+                    };
+                    (
+                        Cell::Figure(
+                            format_cents(Some(o.price_cents)).into(),
+                            o.price_cents as f64,
+                            tone,
+                        ),
+                        format!("{date} · {src}"),
+                    )
+                }
+                None => (Cell::Text("no price yet".into()), String::new()),
+            };
+            let limit_cell = match (c.cost_max_cents, c.within_limit()) {
+                (None, _) => Cell::Text("no limit".into()),
+                (Some(max), Some(true)) => Cell::Tag(
+                    format!("≤ {}", format_cents(Some(max))).into(),
+                    Tone::Success,
+                ),
+                (Some(max), _) => Cell::Tag(
+                    format!("limit {}", format_cents(Some(max))).into(),
+                    Tone::Neutral,
+                ),
+            };
+            let fits: Vec<String> = c
+                .fits(&group.needs)
+                .into_iter()
+                .map(|fit| match fit {
+                    Fit::Meets => "meets".to_owned(),
+                    Fit::Short { key, have, need } => format!("{key} {have} < {need}"),
+                    Fit::Unknown { key } => format!("{key} unknown"),
+                })
+                .collect();
+            let all_meet = !fits.is_empty() && fits.iter().all(|f| f == "meets");
+            let needs_cell = if fits.is_empty() {
+                Cell::Empty
+            } else {
+                Cell::Tag(
+                    fits.join(", ").into(),
+                    if all_meet {
+                        Tone::Success
+                    } else {
+                        Tone::Warning
+                    },
                 )
-            })
-            .unwrap_or_else(|| "no price yet".into());
-        let limit = match (c.cost_max_cents, c.within_limit()) {
-            (None, _) => "no limit".to_owned(),
-            (Some(max), Some(true)) => format!("at or below {}", format_cents(Some(max))),
-            (Some(max), _) => format!("limit {}", format_cents(Some(max))),
-        };
-        let fits: Vec<String> = c
-            .fits(&group.needs)
-            .into_iter()
-            .map(|fit| match fit {
-                Fit::Meets => "meets".to_owned(),
-                Fit::Short { key, have, need } => format!("{key} {have} < {need}"),
-                Fit::Unknown { key } => format!("{key} unknown"),
-            })
-            .collect();
-        let scores: Vec<String> = c.scores().iter().map(format_per_unit).collect();
-        let alerted = c.observations.iter().any(|o| o.alert);
-        div()
-            .flex()
-            .items_center()
-            .gap_3()
-            .py_1()
-            .border_t_1()
-            .border_color(rgba(tint(palette.border, 0x20)))
-            .child(
-                div()
-                    .size(px(10.))
-                    .rounded_sm()
-                    .bg(rgb(series_colour(&palette, i))),
+            };
+            let scores: Vec<String> = c.scores().iter().map(format_per_unit).collect();
+            let alerted = c.observations.iter().any(|o| o.alert);
+            let meta = match (source_meta.is_empty(), alerted) {
+                (false, true) => format!("{source_meta} · limit reached"),
+                (false, false) => source_meta,
+                (true, true) => "limit reached".to_owned(),
+                (true, false) => String::new(),
+            };
+            let name_cell = if meta.is_empty() {
+                Cell::Text(c.label.clone().into())
+            } else {
+                Cell::Lines(c.label.clone().into(), meta.into())
+            };
+            Row::new(
+                c.label.clone(),
+                [
+                    name_cell,
+                    price_cell,
+                    limit_cell,
+                    needs_cell,
+                    Cell::Text(scores.join(" · ").into()),
+                ],
             )
-            .child(div().w(px(180.)).text_sm().child(c.label.clone()))
-            .child(div().w(px(230.)).text_xs().child(latest))
-            .child(
-                div()
-                    .w(px(150.))
-                    .text_xs()
-                    .text_color(rgb(if c.within_limit() == Some(true) {
-                        palette.green
-                    } else {
-                        palette.muted
-                    }))
-                    .child(limit),
-            )
-            .child(
-                div()
-                    .w(px(140.))
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(if fits.is_empty() {
-                        String::new()
-                    } else {
-                        fits.join(", ")
-                    }),
-            )
-            .child(div().flex_1().text_xs().child(scores.join(" · ")))
-            .children(alerted.then(|| {
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.green))
-                    .child("limit reached")
-            }))
-    });
-    div().flex().flex_col().children(rows).into_any_element()
+        })
+        .collect();
+
+    DataTable::new("wishlist-comparison-table", columns)
+        .label("Candidate comparison")
+        .rows(Rc::new(rows))
+        .density(Density::Comfortable)
+        .sorts([SortKey {
+            column: "price".into(),
+            rising: true,
+        }])
+        .into_any_element()
 }
 
 /// A URL shows as its host; a manual label shows as itself.

@@ -36,6 +36,7 @@ use sjel_gpui_ui::calendar::page::CalendarPage;
 use sjel_gpui_ui::clipper::ClipperSettings;
 use sjel_gpui_ui::context::{ContextEvent, ContextPage};
 use sjel_gpui_ui::cv::CvPage;
+use sjel_gpui_ui::posts::PostsPage;
 use sjel_gpui_ui::docs::DocsPage;
 use sjel_gpui_ui::documents::Documents;
 use sjel_gpui_ui::feed::Feed;
@@ -50,6 +51,7 @@ use sjel_gpui_ui::people::page::PeoplePage;
 use sjel_gpui_ui::projects::Projects;
 use sjel_gpui_ui::record::RecordPage;
 use sjel_gpui_ui::research::ResearchPage;
+use sjel_gpui_ui::scratchpad::{ScratchpadEvent, ScratchpadSeat};
 use sjel_gpui_ui::self_view::SelfPage;
 use sjel_gpui_ui::setup::SetupPage;
 use sjel_gpui_ui::sidebar::{Seat, Sidebar};
@@ -111,6 +113,10 @@ actions!(
         UiZoomReset,
         /// Open Settings at the section it showed last.
         OpenSettings,
+        /// Toggle or focus the 24-hour quick Scratchpad in the right edge.
+        OpenScratchpad,
+        /// Trigger immediate sorting of the 24-hour Scratchpad into Sjel.
+        SortScratchpadNow,
         /// Open the terminal in the right edge.
         OpenTerminal,
         /// Open Settings at Appearance.
@@ -127,6 +133,10 @@ actions!(
         CheckForUpdates,
         /// Trigger background rebuild and install of Sjel Desktop.
         RebuildApp,
+        /// Step to the next sub-tab within the current page header.
+        NextSubTab,
+        /// Step to the previous sub-tab within the current page header.
+        PrevSubTab,
     ]
 );
 
@@ -184,6 +194,16 @@ fn finder_commands() -> Vec<Hit> {
             "music audio focus ambient lofi player ⌘0",
             || OpenSoundscape.boxed_clone(),
         ),
+        action(
+            "Scratchpad",
+            "quick daily notepad links tasks notes 24h auto-sort ⌘\\",
+            || OpenScratchpad.boxed_clone(),
+        ),
+        action(
+            "Sort Scratchpad into Sjel",
+            "sort daily scratchpad notes links tasks wishlist places",
+            || SortScratchpadNow.boxed_clone(),
+        ),
     ];
     // A terminal is a deep link as well as a result, so the same string opens it from either.
     let terminal = std::iter::once(Hit {
@@ -227,6 +247,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-f", FocusSearch, None),
         KeyBinding::new("cmd-r", Refresh, None),
         KeyBinding::new("cmd-,", OpenSettings, None),
+        KeyBinding::new("cmd-\\", OpenScratchpad, None),
+        KeyBinding::new("shift-cmd-j", OpenScratchpad, None),
         // Inside the terminal the same key starts a new one (`ui/src/terminal.rs`).
         KeyBinding::new("cmd-t", OpenTerminal, None),
         KeyBinding::new("cmd-[", ClearSelection, None),
@@ -238,6 +260,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-alt-left", PrevPage, None),
         KeyBinding::new("shift-cmd-[", PrevPage, None),
         KeyBinding::new("ctrl-shift-tab", PrevPage, None),
+        KeyBinding::new("alt-]", NextSubTab, None),
+        KeyBinding::new("alt-[", PrevSubTab, None),
         // Areas, in sidebar order
         KeyBinding::new("cmd-alt-down", NextArea, None),
         KeyBinding::new("cmd-alt-up", PrevArea, None),
@@ -301,6 +325,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("g k", GoTo(Page::Packs), Some(PAGE_KEYS)),
         KeyBinding::new("g l", GoTo(Page::SelfModel), Some(PAGE_KEYS)),
         KeyBinding::new("g y", GoTo(Page::Cv), Some(PAGE_KEYS)),
+        KeyBinding::new("g j", GoTo(Page::Posts), Some(PAGE_KEYS)),
         KeyBinding::new("g w", GoTo(Page::Media), Some(PAGE_KEYS)),
         KeyBinding::new("g z", GoTo(Page::Research), Some(PAGE_KEYS)),
         KeyBinding::new("g 0", GoTo(Page::Setup), Some(PAGE_KEYS)),
@@ -399,6 +424,7 @@ pub struct Workspace {
     pub packs: Option<Entity<PacksPage>>,
     pub self_page: Option<Entity<SelfPage>>,
     pub cv_page: Option<Entity<CvPage>>,
+    pub posts_page: Option<Entity<PostsPage>>,
     pub media_page: Option<Entity<MediaPage>>,
     pub research_page: Option<Entity<ResearchPage>>,
     pub setup_page: Option<Entity<SetupPage>>,
@@ -444,6 +470,9 @@ pub struct Workspace {
     pub terminal: Option<Entity<TerminalDeck>>,
     /// Why no terminal is showing, in the words the empty seat carries.
     pub terminal_note: Option<SharedString>,
+    /// The 24-hour quick scratchpad seat in the right edge.
+    pub scratchpad: Entity<ScratchpadSeat>,
+    _scratchpad: Subscription,
     /// One input for a search or a prompt (⌘K), drawn over the whole window.
     pub finder: Entity<Finder>,
     _finder: Subscription,
@@ -558,6 +587,11 @@ impl Workspace {
             },
         );
         let appearance_settings = AppearanceSettings::load();
+        let scratchpad = {
+            let repo = repo.clone();
+            cx.new(|cx| ScratchpadSeat::new(repo, cx))
+        };
+        let scratchpad_events = cx.subscribe_in(&scratchpad, window, Self::on_scratchpad);
         let finder = {
             let (repo, ask) = (repo.clone(), ask.clone());
             cx.new(|cx| Finder::new(repo, ask, finder_commands(), cx))
@@ -635,6 +669,8 @@ impl Workspace {
             resizing_edge: false,
             terminal: None,
             terminal_note: None,
+            scratchpad,
+            _scratchpad: scratchpad_events,
             finder,
             _finder: finder_events,
             backups: Remote::default(),
@@ -665,6 +701,7 @@ impl Workspace {
             packs: None,
             self_page: None,
             cv_page: None,
+            posts_page: None,
             media_page: None,
             research_page: None,
             setup_page: None,
@@ -697,10 +734,11 @@ impl Workspace {
         workspace.refresh(cx);
         workspace.check_updates(cx);
         workspace.follow(cx);
-        // The window opens on Today, which draws the day's timeline, so that read starts now.
+        // The window opens on Today, which draws the day's timeline, inbox summary, and project momentum.
         workspace
             .context_page
             .update(cx, |context, cx| context.activate(cx));
+        workspace.load_home_feeds(cx);
         if let (Some(frames), true) = (
             workspace.frames.clone(),
             std::env::var_os("SJEL_GPUI_BENCH_SCROLL").is_some(),
@@ -831,6 +869,8 @@ impl Workspace {
         {
             self.check_updates(cx);
         }
+        self.scratchpad
+            .update(cx, |seat, cx| seat.check_auto_sort(None, cx));
     }
 
     /// A failed read keeps the last list: comms restarting must not blank the Today page.
@@ -1195,6 +1235,7 @@ impl Workspace {
             Target::Ask(question) => self
                 .finder
                 .update(cx, |finder, cx| finder.ask(question, cx)),
+            Target::Scratchpad => self.open_scratchpad(window, cx),
             Target::Terminal => self.open_terminal(window, cx),
             Target::Unknown(path) => match route::first_page(&path) {
                 Some(page) => self.go(page, cx),
@@ -1206,7 +1247,7 @@ impl Workspace {
         }
     }
 
-    fn open_palette(&mut self, _: &OpenPalette, _: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn open_palette(&mut self, _: &OpenPalette, _: &mut Window, cx: &mut Context<Self>) {
         self.finder.update(cx, |finder, cx| finder.toggle(cx));
     }
 
@@ -1246,6 +1287,33 @@ impl Workspace {
                     });
                 }
             },
+        }
+    }
+
+    fn on_scratchpad(
+        &mut self,
+        _: &Entity<ScratchpadSeat>,
+        event: &ScratchpadEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            ScratchpadEvent::Navigate(target) => {
+                self.open_target(target.clone(), window, cx);
+            }
+            ScratchpadEvent::Sorted(_) => {
+                self.inbox.update(cx, |inbox, cx| inbox.load(cx));
+                self.projects
+                    .update(cx, |projects, cx| projects.load_projects(cx));
+                if let Some(feed) = &self.feed {
+                    feed.update(cx, |feed, cx| feed.refresh(cx));
+                }
+                if let Some(inv) = &self.inventory_page {
+                    inv.update(cx, |inv, cx| inv.refresh(cx));
+                }
+                self.refresh(cx);
+                cx.notify();
+            }
         }
     }
 
@@ -1311,6 +1379,21 @@ impl Workspace {
                 self.ensure_finance_page(cx)
                     .update(cx, |fin, cx| fin.open_date(date, window, cx));
             }
+            ContextEvent::OpenInbox => {
+                self.go(Page::Inbox, cx);
+            }
+        }
+    }
+
+    pub(crate) fn load_home_feeds(&mut self, cx: &mut Context<Self>) {
+        if self.inbox.read(cx).rows.value.is_none() && !self.inbox.read(cx).rows.loading {
+            self.inbox.update(cx, |inbox, cx| inbox.load(cx));
+        }
+        if self.projects.read(cx).projects.value.is_none()
+            && !self.projects.read(cx).projects.loading
+        {
+            self.projects
+                .update(cx, |projects, cx| projects.load_projects(cx));
         }
     }
 
@@ -1371,6 +1454,25 @@ impl Workspace {
 
     fn on_open_terminal(&mut self, _: &OpenTerminal, window: &mut Window, cx: &mut Context<Self>) {
         self.open_terminal(window, cx);
+    }
+
+    fn on_open_scratchpad(
+        &mut self,
+        _: &OpenScratchpad,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.toggle_scratchpad(window, cx);
+    }
+
+    fn on_sort_scratchpad_now(
+        &mut self,
+        _: &SortScratchpadNow,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.scratchpad
+            .update(cx, |seat, cx| seat.sort_now(Some(window), cx));
     }
 
     fn on_open_settings(&mut self, _: &OpenSettings, _: &mut Window, cx: &mut Context<Self>) {
@@ -1642,6 +1744,189 @@ impl Workspace {
         self.step_tab(-1, cx);
     }
 
+    fn step_sub_tab(&mut self, delta: isize, cx: &mut Context<Self>) {
+        let wrap = |ix: usize, len: usize| -> usize {
+            ((ix as isize + delta).rem_euclid(len as isize)) as usize
+        };
+        match self.page {
+            Page::Feed => {
+                use sjel_gpui_ui::feed::Tab as FeedTab;
+                const TABS: [FeedTab; 6] = [
+                    FeedTab::Reading,
+                    FeedTab::Mail,
+                    FeedTab::Discover,
+                    FeedTab::Clips,
+                    FeedTab::Review,
+                    FeedTab::Library,
+                ];
+                let feed = self.ensure_feed(cx);
+                let cur = feed.read(cx).tab;
+                let ix = TABS.iter().position(|&t| t == cur).unwrap_or(0);
+                let next = TABS[wrap(ix, TABS.len())];
+                feed.update(cx, |f, cx| f.set_tab(next, cx));
+            }
+            Page::Projects => {
+                use sjel_gpui_ui::projects::{ProjectSection, ProjectsTab};
+                if self.projects.read(cx).active_project_name().is_some() {
+                    const SECS: [ProjectSection; 5] = [
+                        ProjectSection::Note,
+                        ProjectSection::Tasks,
+                        ProjectSection::Notes,
+                        ProjectSection::MailReview,
+                        ProjectSection::InventoryLinks,
+                    ];
+                    let cur = self.projects.read(cx).project_section;
+                    let ix = SECS.iter().position(|&s| s == cur).unwrap_or(0);
+                    let next = SECS[wrap(ix, SECS.len())];
+                    self.projects.update(cx, |p, cx| p.set_project_section(next, cx));
+                } else {
+                    const TABS: [ProjectsTab; 3] = [
+                        ProjectsTab::Hubs,
+                        ProjectsTab::AllTasks,
+                        ProjectsTab::AllNotes,
+                    ];
+                    let cur = self.projects.read(cx).tab;
+                    let ix = TABS.iter().position(|&t| t == cur).unwrap_or(0);
+                    let next = TABS[wrap(ix, TABS.len())];
+                    self.projects.update(cx, |p, cx| {
+                        p.tab = next;
+                        cx.notify();
+                    });
+                }
+            }
+            Page::Finance => {
+                use sjel_gpui_ui::finance::View as FinanceView;
+                const VIEWS: [FinanceView; 5] = [
+                    FinanceView::Overview,
+                    FinanceView::Transactions,
+                    FinanceView::Subscriptions,
+                    FinanceView::ImportReview,
+                    FinanceView::Ideas,
+                ];
+                let fp = self.ensure_finance_page(cx);
+                let cur = fp.read(cx).view;
+                let ix = VIEWS.iter().position(|&v| v == cur).unwrap_or(0);
+                let next = VIEWS[wrap(ix, VIEWS.len())];
+                fp.update(cx, |p, cx| p.set_view(next, cx));
+            }
+            Page::Inventory => {
+                use sjel_gpui_ui::inventory::InventoryTab;
+                const TABS: [InventoryTab; 4] = [
+                    InventoryTab::Owned,
+                    InventoryTab::Wishlist,
+                    InventoryTab::Interior,
+                    InventoryTab::MailReview,
+                ];
+                let ip = self.ensure_inventory_page(cx);
+                let cur = ip.read(cx).tab;
+                let ix = TABS.iter().position(|&t| t == cur).unwrap_or(0);
+                let next = TABS[wrap(ix, TABS.len())];
+                ip.update(cx, |p, cx| p.set_tab(next, cx));
+            }
+            Page::People => {
+                let pp = self.ensure_people_page(cx);
+                let cur = pp.read(cx).active_tab_index();
+                let next = wrap(cur, 3);
+                pp.update(cx, |p, cx| p.set_tab_index(next, cx));
+            }
+            Page::Systems => {
+                use sjel_gpui_ui::systems::SystemsTab;
+                const TABS: [SystemsTab; 3] = [
+                    SystemsTab::Overview,
+                    SystemsTab::Storage,
+                    SystemsTab::Agent,
+                ];
+                let sp = self.ensure_systems(cx);
+                let cur = sp.read(cx).tab;
+                let ix = TABS.iter().position(|&t| t == cur).unwrap_or(0);
+                let next = TABS[wrap(ix, TABS.len())];
+                sp.update(cx, |p, cx| p.set_tab(next, cx));
+            }
+            Page::Backup => {
+                use sjel_gpui_ui::backup::BackupTab;
+                const TABS: [BackupTab; 3] = [
+                    BackupTab::Contracts,
+                    BackupTab::Targets,
+                    BackupTab::History,
+                ];
+                let bp = self.ensure_backup_page(cx);
+                let cur = bp.read(cx).tab;
+                let ix = TABS.iter().position(|&t| t == cur).unwrap_or(0);
+                let next = TABS[wrap(ix, TABS.len())];
+                bp.update(cx, |p, cx| p.set_tab(next, cx));
+            }
+            Page::Calendar => {
+                use sjel_gpui_ui::calendar::View as CalendarView;
+                const VIEWS: [CalendarView; 3] = [
+                    CalendarView::Day,
+                    CalendarView::Week,
+                    CalendarView::Month,
+                ];
+                let cp = self.ensure_calendar_page(cx);
+                let cur = cp.read(cx).view;
+                let ix = VIEWS.iter().position(|&v| v == cur).unwrap_or(2);
+                let next = VIEWS[wrap(ix, VIEWS.len())];
+                cp.update(cx, |p, cx| p.set_view(next, cx));
+            }
+            Page::Research => {
+                use sjel_gpui_ui::research::ResearchTab;
+                const TABS: [ResearchTab; 3] = [
+                    ResearchTab::Articles,
+                    ResearchTab::Projects,
+                    ResearchTab::Benchmarks,
+                ];
+                let rp = self.ensure_research_page(cx);
+                let cur = rp.read(cx).active_tab;
+                let ix = TABS.iter().position(|&t| t == cur).unwrap_or(0);
+                let next = TABS[wrap(ix, TABS.len())];
+                rp.update(cx, |p, cx| p.switch_tab(next, cx));
+            }
+            Page::Setup => {
+                use sjel_gpui_ui::setup::SetupTab;
+                const TABS: [SetupTab; 2] = [SetupTab::Machine, SetupTab::Devices];
+                let sp = self.ensure_setup_page(cx);
+                let cur = sp.read(cx).active_tab;
+                let ix = TABS.iter().position(|&t| t == cur).unwrap_or(0);
+                let next = TABS[wrap(ix, TABS.len())];
+                sp.update(cx, |p, cx| p.switch_tab(next, cx));
+            }
+            Page::Travel => {
+                use sjel_gpui_core::travel::{TravelRoute, TripSection};
+                if self.travel.read(cx).active_plan_title().is_some() {
+                    let cur = self.travel.read(cx).active_section();
+                    let ix = TripSection::ALL
+                        .iter()
+                        .position(|&s| s == cur)
+                        .unwrap_or(0);
+                    let next = TripSection::ALL[wrap(ix, TripSection::ALL.len())];
+                    self.travel.update(cx, |t, cx| t.set_section(next, cx));
+                } else {
+                    let cur = self.travel.read(cx).route().clone();
+                    let ix = match cur {
+                        TravelRoute::Map => 0,
+                        TravelRoute::Connections => 2,
+                        _ => 1,
+                    };
+                    let next = match wrap(ix, 3) {
+                        0 => TravelRoute::Map,
+                        2 => TravelRoute::Connections,
+                        _ => TravelRoute::Trips,
+                    };
+                    self.travel.update(cx, |t, cx| t.open_route(next, cx));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn on_next_sub_tab(&mut self, _: &NextSubTab, _: &mut Window, cx: &mut Context<Self>) {
+        self.step_sub_tab(1, cx);
+    }
+
+    fn on_prev_sub_tab(&mut self, _: &PrevSubTab, _: &mut Window, cx: &mut Context<Self>) {
+        self.step_sub_tab(-1, cx);
+    }
+
     /// Steps through the open area's tabs. Settings has no tabs, so it stays.
     fn step_tab(&mut self, step: isize, cx: &mut Context<Self>) {
         if let Some(area) = Area::of(self.page) {
@@ -1733,6 +2018,15 @@ impl Workspace {
         // listener runs, so this is where escape reaches an open finder.
         if self.finder.read(cx).is_open() {
             self.finder.update(cx, |finder, cx| finder.close(cx));
+            return;
+        }
+        // The player binds escape in its own context, but only while it holds focus.
+        if let Some(panel) = self
+            .soundscape_panel
+            .as_ref()
+            .filter(|panel| panel.read(cx).is_open())
+        {
+            panel.update(cx, |panel, cx| panel.set_open(false, cx));
             return;
         }
         self.selection.clear();
@@ -1893,6 +2187,8 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_focus_search))
             .on_action(cx.listener(Self::on_next_page))
             .on_action(cx.listener(Self::on_prev_page))
+            .on_action(cx.listener(Self::on_next_sub_tab))
+            .on_action(cx.listener(Self::on_prev_sub_tab))
             .on_action(cx.listener(Self::on_go_to))
             .on_action(cx.listener(Self::on_open_area))
             .on_action(cx.listener(Self::on_next_area))
@@ -1927,6 +2223,8 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_run_primary))
             .on_action(cx.listener(Self::on_run_secondary))
             .on_action(cx.listener(Self::on_open_settings))
+            .on_action(cx.listener(Self::on_open_scratchpad))
+            .on_action(cx.listener(Self::on_sort_scratchpad_now))
             .on_action(cx.listener(Self::on_open_terminal))
             .on_action(cx.listener(Self::on_open_appearance))
             .on_action(cx.listener(Self::on_open_soundscape))
@@ -2149,6 +2447,24 @@ mod tests {
     /// reach it through the workspace. This is the wiring test: opening builds it once, the
     /// keystroke toggles the same view, and a second open does not build a second player on the same
     /// session.
+    /// Escape closes the player when focus is still on the page, as after the sidebar opens it.
+    #[gpui::test]
+    fn escape_closes_the_soundscape_panel_without_its_focus(cx: &mut TestAppContext) {
+        std::env::set_var("SJEL_GPUI_NO_AUDIO", "1");
+        let (view, cx) = open(cx);
+        let panel = view.update_in(cx, |view, window, cx| {
+            view.open_soundscape(window, cx);
+            view.soundscape_panel.clone().expect("the panel was built")
+        });
+        cx.run_until_parked();
+        view.update_in(cx, |view, window, cx| window.focus(&view.focus, cx));
+        cx.simulate_keystrokes("escape");
+        assert!(
+            !cx.update(|_, cx| panel.read(cx).is_open()),
+            "escape did not close the panel"
+        );
+    }
+
     #[gpui::test]
     fn the_soundscape_panel_opens_once_and_toggles_from_the_keyboard(cx: &mut TestAppContext) {
         // Opening the panel starts the audio global, and a test must not take the machine's output
@@ -2593,7 +2909,7 @@ mod tests {
         cx.simulate_keystrokes("cmd-7");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::People));
         cx.simulate_keystrokes("cmd-alt-left");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Cv));
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Posts));
     }
 
     #[gpui::test]
@@ -2651,5 +2967,28 @@ mod tests {
         // On Inventory
         view.update(cx, |view, cx| view.go(Page::Inventory, cx));
         cx.simulate_keystrokes("/");
+    }
+
+    #[gpui::test]
+    fn scratchpad_seat_toggles_and_deep_link_opens_it(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        view.update_in(cx, |view, window, cx| {
+            view.open_target(Target::Scratchpad, window, cx);
+        });
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| {
+            assert!(view.right_panel.is_open(), "scratchpad link opens the edge");
+            assert_eq!(view.right_panel.seat(), Seat::Scratchpad);
+        });
+        view.update_in(cx, |view, window, cx| {
+            view.toggle_scratchpad(window, cx);
+        });
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| {
+            assert!(
+                !view.right_panel.is_open(),
+                "second toggle closes the scratchpad edge"
+            );
+        });
     }
 }

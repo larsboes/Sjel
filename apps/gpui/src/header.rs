@@ -5,13 +5,25 @@
 
 use std::time::Duration;
 
-use gpui_kit::component::button::{Button, ButtonGroup, ButtonVariants};
-use gpui_kit::component::{IconName, Selectable, Sizable};
+use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::{IconName, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, FontWeight, SharedString};
 use sjel_gpui_core::area::Area;
 
 use crate::route::Page;
 use crate::workspace::Workspace;
+use sjel_gpui_ui::backup::BackupTab;
+use sjel_gpui_ui::calendar::View as CalendarView;
+use sjel_gpui_ui::feed::Tab as FeedTab;
+use sjel_gpui_ui::finance::View as FinanceView;
+use sjel_gpui_ui::inventory::InventoryTab;
+use sjel_gpui_ui::primitives::sub_tabs;
+use sjel_gpui_ui::projects::{ProjectSection, ProjectsTab};
+use sjel_gpui_ui::research::ResearchTab;
+use sjel_gpui_ui::setup::SetupTab;
+use sjel_gpui_ui::sidebar::Seat;
+use sjel_gpui_ui::systems::SystemsTab;
+use sjel_gpui_core::travel::{TravelRoute, TripSection};
 use sjel_gpui_ui::theme::Palette;
 
 pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
@@ -20,9 +32,15 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
         .age()
         .map(|elapsed| format!("checked {} ago", ago(elapsed)));
     let area = Area::of(view.page);
-    let tabs = area
-        .filter(|area| area.has_tabs())
-        .map(|area| tab_strip(area, view.page, palette, cx));
+    let tabs = area.and_then(|area| tab_strip(area, view, palette, cx));
+    let scratch_open =
+        view.right_panel.is_open() && view.right_panel.seat() == Seat::Scratchpad;
+    let scratch_count = view.scratchpad.read(cx).state.parse_targets().len();
+    let scratch_label = if scratch_count > 0 {
+        format!("Scratchpad ({scratch_count})")
+    } else {
+        "Scratchpad".to_owned()
+    };
     // Settings › General says the same at length, so the pill stays out of Settings.
     let update_pill = view
         .update_info
@@ -76,6 +94,27 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                 owner.update(cx, |view, cx| {
                     view.projects
                         .update(cx, |project, cx| project.close_project(cx));
+                });
+            }
+        })
+        .into_any_element()
+    } else if let Some(trip_title) = (view.page == Page::Travel)
+        .then(|| view.travel.read(cx).active_plan_title())
+        .flatten()
+    {
+        let owner = cx.entity();
+        sjel_gpui_ui::ely::navigation::Breadcrumb::new(
+            "header-travel-breadcrumb",
+            [
+                sjel_gpui_ui::ely::navigation::Crumb::new("trips", "Trips"),
+                sjel_gpui_ui::ely::navigation::Crumb::new("current", trip_title),
+            ],
+        )
+        .on_select(move |level, _, _, cx| {
+            if level == 0 {
+                owner.update(cx, |view, cx| {
+                    view.travel
+                        .update(cx, |travel, cx| travel.open_route(TravelRoute::Trips, cx));
                 });
             }
         })
@@ -158,6 +197,17 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                             )
                         })
                         .child(
+                            Button::new("header-scratchpad-toggle")
+                                .small()
+                                .when(scratch_open, |b| b.primary())
+                                .when(!scratch_open, |b| b.ghost())
+                                .label(scratch_label)
+                                .tooltip("Toggle 24-hour quick Scratchpad (⌘\\)")
+                                .on_click(cx.listener(|view, _, window, cx| {
+                                    view.toggle_scratchpad(window, cx);
+                                })),
+                        )
+                        .child(
                             Button::new("refresh")
                                 .ghost()
                                 .small()
@@ -184,31 +234,685 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
         .children(tabs)
 }
 
-/// The area's tabs, one segment each, the open one selected. A click switches pages in memory:
-/// nothing in an area is read again to show that its neighbour exists.
+/// The area's tabs and unified view sub-menus, so page-internal switches sit in the header rather
+/// than stacking a second tab bar inside the page body.
 fn tab_strip(
     area: Area,
-    current: Page,
+    view: &Workspace,
     palette: Palette,
     cx: &mut Context<Workspace>,
-) -> AnyElement {
+) -> Option<AnyElement> {
+    let current = view.page;
     let pages = area.pages();
+
+    if area == Area::Projects {
+        let projects = view.projects.read(cx);
+        if projects.active_project_name().is_some() {
+            let section = projects.project_section;
+            let owner = cx.entity();
+            return Some(sub_tabs(
+                "header-project-sections",
+                vec![
+                    ("Overview", None, section == ProjectSection::Note),
+                    ("Tasks", None, section == ProjectSection::Tasks),
+                    ("Notes", None, section == ProjectSection::Notes),
+                    ("Mail review", None, section == ProjectSection::MailReview),
+                    (
+                        "Inventory links",
+                        None,
+                        section == ProjectSection::InventoryLinks,
+                    ),
+                ],
+                move |ix, _, cx| {
+                    owner.update(cx, |view, cx| {
+                        view.projects.update(cx, |projects, cx| {
+                            let target = match ix {
+                                0 => ProjectSection::Note,
+                                1 => ProjectSection::Tasks,
+                                2 => ProjectSection::Notes,
+                                3 => ProjectSection::MailReview,
+                                _ => ProjectSection::InventoryLinks,
+                            };
+                            projects.set_project_section(target, cx);
+                        });
+                    });
+                },
+            ));
+        }
+
+        let tab = projects.tab;
+        let projects_count = projects
+            .projects
+            .value
+            .as_ref()
+            .map(|list| list.iter().filter(|p| !p.archived).count())
+            .filter(|&c| c > 0);
+        let tasks_count = projects
+            .all_tasks
+            .value
+            .as_ref()
+            .map(Vec::len)
+            .filter(|&c| c > 0);
+        let notes_count = projects
+            .all_notes
+            .value
+            .as_ref()
+            .map(Vec::len)
+            .filter(|&c| c > 0);
+        let owner = cx.entity();
+        let owner_browse = cx.entity();
+        return Some(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .justify_between()
+                .gap_3()
+                .child(sub_tabs(
+                    "header-projects-tabs",
+                    vec![
+                        ("Projects", projects_count, tab == ProjectsTab::Hubs),
+                        ("All Tasks", tasks_count, tab == ProjectsTab::AllTasks),
+                        ("All Notes", notes_count, tab == ProjectsTab::AllNotes),
+                    ],
+                    move |ix, _, cx| {
+                        owner.update(cx, |view, cx| {
+                            view.projects.update(cx, |projects, cx| {
+                                projects.tab = match ix {
+                                    1 => ProjectsTab::AllTasks,
+                                    2 => ProjectsTab::AllNotes,
+                                    _ => ProjectsTab::Hubs,
+                                };
+                                cx.notify();
+                            });
+                        });
+                    },
+                ))
+                .child(
+                    Button::new("header-projects-registry")
+                        .small()
+                        .ghost()
+                        .label("Browse objects")
+                        .on_click(move |_, _, cx| {
+                            owner_browse.update(cx, |workspace, cx| {
+                                workspace.go(Page::Record, cx);
+                                workspace.ensure_record_page(cx).update(cx, |page, cx| {
+                                    page.open("registry:projects".into(), cx);
+                                });
+                            });
+                        }),
+                )
+                .into_any_element(),
+        );
+    }
+
+    if area == Area::Inbox {
+        let inbox_count = view
+            .inbox
+            .read(cx)
+            .rows
+            .value
+            .as_ref()
+            .map(|rows| rows.iter().filter(|c| c.status == "new").count())
+            .filter(|&c| c > 0);
+        let owner_area = cx.entity();
+        let area_strip = sub_tabs(
+            "inbox-area",
+            vec![
+                ("Inbox", inbox_count, current == Page::Inbox),
+                ("Feed", None, current == Page::Feed),
+            ],
+            move |ix, _, cx| {
+                let target = if ix == 0 { Page::Inbox } else { Page::Feed };
+                owner_area.update(cx, |view, cx| view.go(target, cx));
+            },
+        );
+        if current == Page::Feed {
+            let active_feed_tab = view
+                .feed
+                .as_ref()
+                .map(|f| f.read(cx).tab)
+                .unwrap_or(FeedTab::Reading);
+            let reading_new = view
+                .feed
+                .as_ref()
+                .map(|f| f.read(cx).count(sjel_gpui_ui::feed::Filter::New))
+                .filter(|&c| c > 0);
+            let owner_feed = cx.entity();
+            let owner_clip = cx.entity();
+            return Some(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .justify_between()
+                    .gap_3()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap_3()
+                            .child(area_strip)
+                            .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
+                            .child(sub_tabs(
+                                "feed-sub",
+                                vec![
+                                    ("Reading", reading_new, active_feed_tab == FeedTab::Reading),
+                                    ("Mail", None, active_feed_tab == FeedTab::Mail),
+                                    ("Discover", None, active_feed_tab == FeedTab::Discover),
+                                    ("Clips", None, active_feed_tab == FeedTab::Clips),
+                                    ("Review", None, active_feed_tab == FeedTab::Review),
+                                    ("Library", None, active_feed_tab == FeedTab::Library),
+                                ],
+                                move |ix, _, cx| {
+                                    let target = match ix {
+                                        0 => FeedTab::Reading,
+                                        1 => FeedTab::Mail,
+                                        2 => FeedTab::Discover,
+                                        3 => FeedTab::Clips,
+                                        4 => FeedTab::Review,
+                                        _ => FeedTab::Library,
+                                    };
+                                    owner_feed.update(cx, |view, cx| {
+                                        view.ensure_feed(cx)
+                                            .update(cx, |feed, cx| feed.set_tab(target, cx));
+                                    });
+                                },
+                            )),
+                    )
+                    .child(
+                        Button::new("header-feed-quick-clip")
+                            .small()
+                            .ghost()
+                            .label("+ Quick Clip")
+                            .on_click(move |_, window, cx| {
+                                owner_clip.update(cx, |view, cx| {
+                                    view.ensure_feed(cx).update(cx, |feed, cx| {
+                                        feed.open_quick_clip(window, cx);
+                                    });
+                                });
+                            }),
+                    )
+                    .into_any_element(),
+            );
+        }
+        return Some(area_strip);
+    }
+
+    if area == Area::Calendar {
+        let (active_view, proposals_n) = view
+            .calendar_page
+            .as_ref()
+            .map(|cp| {
+                let c = cp.read(cx);
+                (c.view, c.pending_proposals_count())
+            })
+            .unwrap_or((CalendarView::Month, 0));
+        let owner_cal = cx.entity();
+        let owner_prop = cx.entity();
+        return Some(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .justify_between()
+                .gap_3()
+                .child(sub_tabs(
+                    "header-calendar-views",
+                    vec![
+                        ("Day", None, active_view == CalendarView::Day),
+                        ("Week", None, active_view == CalendarView::Week),
+                        ("Month", None, active_view == CalendarView::Month),
+                    ],
+                    move |ix, _, cx| {
+                        let target = match ix {
+                            0 => CalendarView::Day,
+                            1 => CalendarView::Week,
+                            _ => CalendarView::Month,
+                        };
+                        owner_cal.update(cx, |view, cx| {
+                            view.ensure_calendar_page(cx)
+                                .update(cx, |page, cx| page.set_view(target, cx));
+                        });
+                    },
+                ))
+                .when(proposals_n > 0, |el| {
+                    el.child(
+                        Button::new("header-calendar-proposals")
+                            .small()
+                            .ghost()
+                            .label(format!("Proposals ({proposals_n})"))
+                            .on_click(move |_, _, cx| {
+                                owner_prop.update(cx, |view, cx| {
+                                    view.ensure_calendar_page(cx)
+                                        .update(cx, |page, cx| page.toggle_proposals(cx));
+                                });
+                            }),
+                    )
+                })
+                .into_any_element(),
+        );
+    }
+
+    if area == Area::Travel {
+        let travel = view.travel.read(cx);
+        let in_trip = travel.active_plan_title().is_some();
+        let owner_nav = cx.entity();
+        let owner_new = cx.entity();
+        let left = if in_trip {
+            let section = travel.active_section();
+            sub_tabs(
+                "header-travel-trip-sections",
+                TripSection::ALL
+                    .iter()
+                    .map(|&s| (s.label(), None, s == section))
+                    .collect(),
+                move |ix, _, cx| {
+                    if let Some(&target) = TripSection::ALL.get(ix) {
+                        owner_nav.update(cx, |view, cx| {
+                            view.travel
+                                .update(cx, |travel, cx| travel.set_section(target, cx));
+                        });
+                    }
+                },
+            )
+        } else {
+            let upcoming = travel.upcoming_count();
+            let route = travel.route().clone();
+            sub_tabs(
+                "header-travel-routes",
+                vec![
+                    ("Map & Places", None, matches!(route, TravelRoute::Map)),
+                    (
+                        "Trips",
+                        (upcoming > 0).then_some(upcoming),
+                        matches!(route, TravelRoute::Trips),
+                    ),
+                    (
+                        "Connections",
+                        None,
+                        matches!(route, TravelRoute::Connections),
+                    ),
+                ],
+                move |ix, _, cx| {
+                    let next = match ix {
+                        0 => TravelRoute::Map,
+                        2 => TravelRoute::Connections,
+                        _ => TravelRoute::Trips,
+                    };
+                    owner_nav.update(cx, |view, cx| {
+                        view.travel
+                            .update(cx, |travel, cx| travel.open_route(next, cx));
+                    });
+                },
+            )
+        };
+        return Some(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .justify_between()
+                .gap_3()
+                .child(left)
+                .child(
+                    Button::new("header-travel-new-trip")
+                        .small()
+                        .ghost()
+                        .label("+ New trip")
+                        .on_click(move |_, window, cx| {
+                            owner_new.update(cx, |view, cx| {
+                                view.travel
+                                    .update(cx, |travel, cx| travel.open_new_trip(window, cx));
+                            });
+                        }),
+                )
+                .into_any_element(),
+        );
+    }
+
+    if !area.has_tabs() {
+        return None;
+    }
+
+    if area == Area::Documents {
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum DocGroup {
+            Library,
+            Ingest,
+            Reference,
+        }
+        impl DocGroup {
+            fn label(self) -> &'static str {
+                match self {
+                    Self::Library => "Library",
+                    Self::Ingest => "Ingest",
+                    Self::Reference => "Reference",
+                }
+            }
+            fn pages(self) -> &'static [Page] {
+                match self {
+                    Self::Library => &[Page::Documents, Page::Media],
+                    Self::Ingest => &[Page::Import],
+                    Self::Reference => &[Page::Docs],
+                }
+            }
+            fn of(page: Page) -> Self {
+                match page {
+                    Page::Documents | Page::Media => Self::Library,
+                    Page::Import => Self::Ingest,
+                    Page::Docs => Self::Reference,
+                    _ => Self::Library,
+                }
+            }
+        }
+        let current_group = DocGroup::of(current);
+        let groups = [DocGroup::Library, DocGroup::Ingest, DocGroup::Reference];
+        let sub_pages = current_group.pages();
+        let owner_group = cx.entity();
+        let owner_sub = cx.entity();
+        return Some(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_3()
+                .child(sub_tabs(
+                    "docs-category",
+                    groups
+                        .into_iter()
+                        .map(|g| (g.label(), Some(g.pages().len()), g == current_group))
+                        .collect(),
+                    move |ix, _, cx| {
+                        let target_page = match ix {
+                            0 => Page::Documents,
+                            1 => Page::Import,
+                            _ => Page::Docs,
+                        };
+                        owner_group.update(cx, |view, cx| view.go(target_page, cx));
+                    },
+                ))
+                .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
+                .child(sub_tabs(
+                    "docs-sub",
+                    sub_pages
+                        .iter()
+                        .map(|page| (page.label(), None, *page == current))
+                        .collect(),
+                    move |ix, _, cx| {
+                        if let Some(page) = sub_pages.get(ix) {
+                            owner_sub.update(cx, |view, cx| view.go(*page, cx));
+                        }
+                    },
+                ))
+                .into_any_element(),
+        );
+    }
+
+    if area == Area::Life {
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum LifeGroup {
+            Household,
+            Personal,
+        }
+        impl LifeGroup {
+            fn label(self) -> &'static str {
+                match self {
+                    Self::Household => "Household & Money",
+                    Self::Personal => "People & Career",
+                }
+            }
+            fn pages(self) -> &'static [Page] {
+                match self {
+                    Self::Household => &[Page::Finance, Page::Inventory],
+                    Self::Personal => &[Page::People, Page::Cv, Page::Posts],
+                }
+            }
+            fn of(page: Page) -> Self {
+                match page {
+                    Page::Finance | Page::Inventory => Self::Household,
+                    _ => Self::Personal,
+                }
+            }
+        }
+        let current_group = LifeGroup::of(current);
+        let groups = [LifeGroup::Personal, LifeGroup::Household];
+        let sub_pages = current_group.pages();
+        let owner_group = cx.entity();
+        let owner_sub = cx.entity();
+        let mut strip = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_3()
+            .child(sub_tabs(
+                "life-category",
+                groups
+                    .into_iter()
+                    .map(|g| (g.label(), Some(g.pages().len()), g == current_group))
+                    .collect(),
+                move |ix, _, cx| {
+                    let target_page = match ix {
+                        0 => Page::People,
+                        _ => Page::Finance,
+                    };
+                    owner_group.update(cx, |view, cx| view.go(target_page, cx));
+                },
+            ))
+            .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
+            .child(sub_tabs(
+                "life-sub",
+                sub_pages
+                    .iter()
+                    .map(|page| (page.label(), None, *page == current))
+                    .collect(),
+                move |ix, _, cx| {
+                    if let Some(page) = sub_pages.get(ix) {
+                        owner_sub.update(cx, |view, cx| view.go(*page, cx));
+                    }
+                },
+            ));
+
+        if current == Page::Finance {
+            let (active_view, tx_count, subs_count, import_count, ideas_count) = view
+                .finance_page
+                .as_ref()
+                .map(|fp| {
+                    let f = fp.read(cx);
+                    let (tx, subs, imp, ideas) = f.badge_counts();
+                    (f.view, tx, subs, imp, ideas)
+                })
+                .unwrap_or((FinanceView::Overview, None, None, None, None));
+            let owner_fin = cx.entity();
+            let owner_csv = cx.entity();
+            strip = div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .justify_between()
+                .gap_3()
+                .child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .gap_3()
+                        .child(strip)
+                        .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
+                        .child(sub_tabs(
+                            "finance-header-sub",
+                            vec![
+                                ("Overview", None, active_view == FinanceView::Overview),
+                                (
+                                    "Transactions",
+                                    tx_count,
+                                    active_view == FinanceView::Transactions,
+                                ),
+                                (
+                                    "Subscriptions",
+                                    subs_count,
+                                    active_view == FinanceView::Subscriptions,
+                                ),
+                                (
+                                    "Import & Review",
+                                    import_count.filter(|&c| c > 0),
+                                    active_view == FinanceView::ImportReview,
+                                ),
+                                (
+                                    "Ideas",
+                                    ideas_count.filter(|&c| c > 0),
+                                    active_view == FinanceView::Ideas,
+                                ),
+                            ],
+                            move |ix, _, cx| {
+                                let target = match ix {
+                                    0 => FinanceView::Overview,
+                                    1 => FinanceView::Transactions,
+                                    2 => FinanceView::Subscriptions,
+                                    3 => FinanceView::ImportReview,
+                                    _ => FinanceView::Ideas,
+                                };
+                                owner_fin.update(cx, |view, cx| {
+                                    view.ensure_finance_page(cx)
+                                        .update(cx, |page, cx| page.set_view(target, cx));
+                                });
+                            },
+                        )),
+                )
+                .child(
+                    Button::new("header-finance-csv-import")
+                        .small()
+                        .ghost()
+                        .label("CSV Import…")
+                        .on_click(move |_, _, cx| {
+                            owner_csv.update(cx, |view, cx| {
+                                view.ensure_finance_page(cx)
+                                    .update(cx, |page, cx| page.open_csv_import(cx));
+                            });
+                        }),
+                );
+        } else if current == Page::Inventory {
+            let (active_tab, owned_n, wish_n, layouts_n, mail_n) = view
+                .inventory_page
+                .as_ref()
+                .map(|ip| {
+                    let inv = ip.read(cx);
+                    let owned = inv.rows.value.as_ref().map(|r| r.len()).unwrap_or(0);
+                    let wish = inv
+                        .wishlist
+                        .value
+                        .as_ref()
+                        .map(|w| w.items.len())
+                        .unwrap_or(0);
+                    let layouts = inv.layouts.value.as_ref().map(|l| l.len()).unwrap_or(0);
+                    let mail = inv.mail_review_pending_count();
+                    (inv.tab, owned, wish, layouts, mail)
+                })
+                .unwrap_or((InventoryTab::Owned, 0, 0, 0, 0));
+            let owner_inv = cx.entity();
+            strip = div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_3()
+                .child(strip)
+                .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
+                .child(sub_tabs(
+                    "inventory-header-sub",
+                    vec![
+                        (
+                            "Owned Items",
+                            (owned_n > 0).then_some(owned_n),
+                            active_tab == InventoryTab::Owned,
+                        ),
+                        (
+                            "Wishlist",
+                            (wish_n > 0).then_some(wish_n),
+                            active_tab == InventoryTab::Wishlist,
+                        ),
+                        (
+                            "Interior Layouts",
+                            (layouts_n > 0).then_some(layouts_n),
+                            active_tab == InventoryTab::Interior,
+                        ),
+                        (
+                            "Mail review",
+                            (mail_n > 0).then_some(mail_n),
+                            active_tab == InventoryTab::MailReview,
+                        ),
+                    ],
+                    move |ix, _, cx| {
+                        let next = match ix {
+                            0 => InventoryTab::Owned,
+                            1 => InventoryTab::Wishlist,
+                            2 => InventoryTab::Interior,
+                            _ => InventoryTab::MailReview,
+                        };
+                        owner_inv.update(cx, |view, cx| {
+                            view.ensure_inventory_page(cx)
+                                .update(cx, |page, cx| page.set_tab(next, cx));
+                        });
+                    },
+                ));
+        } else if current == Page::People {
+            let (active_ix, total_contacts, dup_count) = view
+                .people_page
+                .as_ref()
+                .map(|pp| {
+                    let p = pp.read(cx);
+                    let (tot, dup) = p.badge_counts();
+                    (p.active_tab_index(), tot, dup)
+                })
+                .unwrap_or((0, 0, None));
+            let owner_ppl = cx.entity();
+            strip = div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_3()
+                .child(strip)
+                .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
+                .child(sub_tabs(
+                    "people-header-sub",
+                    vec![
+                        (
+                            "Directory",
+                            (total_contacts > 0).then_some(total_contacts),
+                            active_ix == 0,
+                        ),
+                        ("Duplicates", dup_count.filter(|&c| c > 0), active_ix == 1),
+                        ("Network", None, active_ix == 2),
+                    ],
+                    move |ix, _, cx| {
+                        owner_ppl.update(cx, |view, cx| {
+                            view.ensure_people_page(cx)
+                                .update(cx, |page, cx| page.set_tab_index(ix, cx));
+                        });
+                    },
+                ));
+        }
+
+        return Some(strip.into_any_element());
+    }
+
     if area == Area::Sjel {
-        // Area::Sjel has 9 tabs: group them into 3 intuitive sub-menus to keep the header clean.
+        // Area::Sjel has 8 tabs: group them into 3 intuitive sub-menus to keep the header clean.
+        #[derive(Clone, Copy, PartialEq, Eq)]
         enum SjelGroup {
             Runtime,
             Architecture,
             Catalog,
         }
         impl SjelGroup {
-            fn label(&self) -> &'static str {
+            fn label(self) -> &'static str {
                 match self {
                     Self::Runtime => "Runtime",
                     Self::Architecture => "Architecture",
                     Self::Catalog => "Catalog",
                 }
             }
-            fn pages(&self) -> &'static [Page] {
+            fn pages(self) -> &'static [Page] {
                 match self {
                     Self::Runtime => {
                         &[Page::Capabilities, Page::Systems, Page::Backup, Page::Setup]
@@ -236,65 +940,204 @@ fn tab_strip(
             SjelGroup::Catalog,
         ];
         let sub_pages = current_group.pages();
+        let owner_group = cx.entity();
+        let owner_sub = cx.entity();
 
-        return div()
+        let mut strip = div()
             .flex()
+            .flex_wrap()
             .items_center()
             .gap_3()
-            .child(
-                ButtonGroup::new("sjel-category-tabs")
-                    .outline()
-                    .small()
-                    .children(groups.iter().enumerate().map(|(ix, group)| {
-                        Button::new(("sjel-group-tab", ix))
-                            .label(group.label())
-                            .selected(group.label() == current_group.label())
-                    }))
-                    .on_click(cx.listener(move |view, picked: &Vec<usize>, _, cx| {
-                        if let Some(ix) = picked.first() {
-                            let target_page = match ix {
-                                0 => Page::Capabilities,
-                                1 => Page::SelfModel,
-                                2 => Page::Software,
-                                _ => Page::Capabilities,
-                            };
-                            view.go(target_page, cx);
-                        }
-                    })),
-            )
+            .child(sub_tabs(
+                "sjel-category",
+                groups
+                    .into_iter()
+                    .map(|g| (g.label(), Some(g.pages().len()), g == current_group))
+                    .collect(),
+                move |ix, _, cx| {
+                    let target_page = match ix {
+                        0 => Page::Capabilities,
+                        1 => Page::SelfModel,
+                        2 => Page::Software,
+                        _ => Page::Capabilities,
+                    };
+                    owner_group.update(cx, |view, cx| view.go(target_page, cx));
+                },
+            ))
             .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
-            .child(
-                ButtonGroup::new("sjel-sub-tabs")
-                    .outline()
-                    .small()
-                    .children(sub_pages.iter().enumerate().map(|(ix, page)| {
-                        Button::new(("sjel-sub-tab", ix))
-                            .label(page.label())
-                            .selected(*page == current)
-                    }))
-                    .on_click(cx.listener(move |view, picked: &Vec<usize>, _, cx| {
-                        if let Some(page) = picked.first().and_then(|ix| sub_pages.get(*ix)) {
-                            view.go(*page, cx);
-                        }
-                    })),
-            )
-            .into_any_element();
+            .child(sub_tabs(
+                "sjel-sub",
+                sub_pages
+                    .iter()
+                    .map(|page| (page.label(), None, *page == current))
+                    .collect(),
+                move |ix, _, cx| {
+                    if let Some(page) = sub_pages.get(ix) {
+                        owner_sub.update(cx, |view, cx| view.go(*page, cx));
+                    }
+                },
+            ));
+
+        if current == Page::Systems {
+            let (active_tab, findings, stale, pending) = view
+                .systems
+                .as_ref()
+                .map(|sp| {
+                    let s = sp.read(cx);
+                    let (f, st, p) = s.badge_counts();
+                    (s.tab, f, st, p)
+                })
+                .unwrap_or((SystemsTab::Overview, 0, 0, 0));
+            let owner_sys = cx.entity();
+            strip = strip
+                .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
+                .child(sub_tabs(
+                    "systems-header-sub",
+                    vec![
+                        (
+                            "Overview",
+                            (findings > 0).then_some(findings),
+                            active_tab == SystemsTab::Overview,
+                        ),
+                        (
+                            "Storage & Updates",
+                            (stale > 0).then_some(stale),
+                            active_tab == SystemsTab::Storage,
+                        ),
+                        (
+                            "Agent Gate",
+                            (pending > 0).then_some(pending),
+                            active_tab == SystemsTab::Agent,
+                        ),
+                    ],
+                    move |ix, _, cx| {
+                        let tab = match ix {
+                            0 => SystemsTab::Overview,
+                            1 => SystemsTab::Storage,
+                            _ => SystemsTab::Agent,
+                        };
+                        owner_sys.update(cx, |view, cx| {
+                            view.ensure_systems(cx)
+                                .update(cx, |page, cx| page.set_tab(tab, cx));
+                        });
+                    },
+                ));
+        } else if current == Page::Backup {
+            let (active_tab, backups_n, targets_n, runs_n) = view
+                .backup_page
+                .as_ref()
+                .map(|bp| {
+                    let b = bp.read(cx);
+                    let (bc, tc, rc) = b.badge_counts();
+                    (b.tab, bc, tc, rc)
+                })
+                .unwrap_or((BackupTab::Contracts, 0, 0, 0));
+            let owner_bak = cx.entity();
+            strip = strip
+                .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
+                .child(sub_tabs(
+                    "backup-header-sub",
+                    vec![
+                        (
+                            "Capability Contracts",
+                            (backups_n > 0).then_some(backups_n),
+                            active_tab == BackupTab::Contracts,
+                        ),
+                        (
+                            "Targets & Cadence",
+                            (targets_n > 0).then_some(targets_n),
+                            active_tab == BackupTab::Targets,
+                        ),
+                        (
+                            "Attempt Ledger",
+                            (runs_n > 0).then_some(runs_n),
+                            active_tab == BackupTab::History,
+                        ),
+                    ],
+                    move |ix, _, cx| {
+                        let next = match ix {
+                            0 => BackupTab::Contracts,
+                            1 => BackupTab::Targets,
+                            _ => BackupTab::History,
+                        };
+                        owner_bak.update(cx, |view, cx| {
+                            view.ensure_backup_page(cx)
+                                .update(cx, |page, cx| page.set_tab(next, cx));
+                        });
+                    },
+                ));
+        } else if current == Page::Research {
+            let active_tab = view
+                .research_page
+                .as_ref()
+                .map(|rp| rp.read(cx).active_tab)
+                .unwrap_or(ResearchTab::Articles);
+            let owner_res = cx.entity();
+            strip = strip
+                .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
+                .child(sub_tabs(
+                    "research-header-sub",
+                    vec![
+                        ("Articles", None, active_tab == ResearchTab::Articles),
+                        ("Projects", None, active_tab == ResearchTab::Projects),
+                        ("Benchmarks", None, active_tab == ResearchTab::Benchmarks),
+                    ],
+                    move |ix, _, cx| {
+                        let next = match ix {
+                            0 => ResearchTab::Articles,
+                            1 => ResearchTab::Projects,
+                            _ => ResearchTab::Benchmarks,
+                        };
+                        owner_res.update(cx, |view, cx| {
+                            view.ensure_research_page(cx)
+                                .update(cx, |page, cx| page.switch_tab(next, cx));
+                        });
+                    },
+                ));
+        } else if current == Page::Setup {
+            let active_tab = view
+                .setup_page
+                .as_ref()
+                .map(|sp| sp.read(cx).active_tab)
+                .unwrap_or(SetupTab::Machine);
+            let owner_setup = cx.entity();
+            strip = strip
+                .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
+                .child(sub_tabs(
+                    "setup-header-sub",
+                    vec![
+                        ("Machine Setup", None, active_tab == SetupTab::Machine),
+                        ("Paired Devices", None, active_tab == SetupTab::Devices),
+                    ],
+                    move |ix, _, cx| {
+                        let next = match ix {
+                            0 => SetupTab::Machine,
+                            _ => SetupTab::Devices,
+                        };
+                        owner_setup.update(cx, |view, cx| {
+                            view.ensure_setup_page(cx)
+                                .update(cx, |page, cx| page.switch_tab(next, cx));
+                        });
+                    },
+                ));
+        }
+
+        return Some(strip.into_any_element());
     }
 
-    ButtonGroup::new("area-tabs")
-        .outline()
-        .small()
-        .children(pages.iter().enumerate().map(|(ix, page)| {
-            Button::new(("area-tab", ix))
-                .label(page.label())
-                .selected(*page == current)
-        }))
-        .on_click(cx.listener(move |view, picked: &Vec<usize>, _, cx| {
-            if let Some(page) = picked.first().and_then(|ix| pages.get(*ix)) {
-                view.go(*page, cx);
+    let owner = cx.entity();
+    Some(sub_tabs(
+        "area",
+        pages
+            .iter()
+            .map(|page| (page.label(), None, *page == current))
+            .collect(),
+        move |ix, _, cx| {
+            if let Some(page) = pages.get(ix) {
+                owner.update(cx, |view, cx| view.go(*page, cx));
             }
-        }))
-        .into_any_element()
+        },
+    ))
 }
 
 /// The one line under the title: what this page is for, or what it is looking at.
@@ -335,6 +1178,7 @@ fn subtitle(view: &Workspace, cx: &Context<Workspace>) -> SharedString {
             "Sjel about Sjel: units, compile-time couplings, and live topology".into()
         }
         Page::Cv => "CV builder, profile variations, applications ledger, and LinkedIn".into(),
+        Page::Posts => "Post drafts, ordered Photos media, collages and upload exports".into(),
         Page::Media => "Exact-byte ingest gate, volume integrity ledger, and run inspection".into(),
         Page::Research => "Why Sjel exists, evidence behind it, and questions still open".into(),
         Page::Setup => {

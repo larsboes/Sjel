@@ -10,9 +10,14 @@ pub mod slideover;
 
 use std::sync::Arc;
 
-use gpui::{div, prelude::*, px, rgb, rgba, Context, FontWeight, Render, SharedString, Window};
+use gpui::{
+    div, prelude::*, px, rgb, rgba, Context, Entity, FontWeight, Render, SharedString,
+    Subscription, Window,
+};
+use gpui_kit::component::slider::{Slider, SliderEvent, SliderState};
 use sjel_gpui_core::soundscape::{Control, LayerName, Playback, Preset, Visual};
 
+use crate::primitives::{mono_num, surface_card};
 use crate::theme::{SoundscapePrefs, ThemeContext};
 use crate::Palette;
 
@@ -38,6 +43,9 @@ pub struct Soundscape {
     pub(crate) palette_override: Option<Palette>,
     /// Counts renders between two frames asked for, so the meter redraws at a fifth of the rate.
     pub(crate) tick: usize,
+    pub(crate) volume_slider: Option<Entity<SliderState>>,
+    pub(crate) layer_sliders: Vec<(LayerName, Entity<SliderState>)>,
+    pub(crate) _slider_subs: Vec<Subscription>,
 }
 
 impl Soundscape {
@@ -57,6 +65,9 @@ impl Soundscape {
             palette: Palette::dark(),
             palette_override: None,
             tick: 0,
+            volume_slider: None,
+            layer_sliders: Vec::new(),
+            _slider_subs: Vec::new(),
         }
     }
 
@@ -128,6 +139,52 @@ impl Soundscape {
         cx.notify();
     }
 
+    pub(crate) fn ensure_sliders(&mut self, cx: &mut Context<Self>) {
+        if self.volume_slider.is_none() {
+            let initial = self.prefs.volume.clamp(0., 1.);
+            let state = cx.new(|_| {
+                SliderState::new()
+                    .min(0.0)
+                    .max(1.0)
+                    .step(0.01)
+                    .default_value(initial)
+            });
+            let sub = cx.subscribe(&state, |view, _, event: &SliderEvent, cx| match event {
+                SliderEvent::Change(val) => {
+                    let v = val.start().clamp(0., 1.);
+                    view.control.set_volume(v);
+                    view.prefs.volume = v;
+                    cx.notify();
+                }
+                SliderEvent::Release(val) => {
+                    view.set_volume(val.start(), cx);
+                }
+            });
+            self.volume_slider = Some(state);
+            self._slider_subs.push(sub);
+        }
+        if self.layer_sliders.is_empty() {
+            for layer in LayerName::ALL {
+                let initial = self.control.layer(layer).clamp(0., 1.);
+                let state = cx.new(|_| {
+                    SliderState::new()
+                        .min(0.0)
+                        .max(1.0)
+                        .step(0.01)
+                        .default_value(initial)
+                });
+                let sub = cx.subscribe(&state, move |view, _, event: &SliderEvent, cx| match event
+                {
+                    SliderEvent::Change(val) | SliderEvent::Release(val) => {
+                        view.set_layer(layer, val.start(), cx);
+                    }
+                });
+                self.layer_sliders.push((layer, state));
+                self._slider_subs.push(sub);
+            }
+        }
+    }
+
     pub(crate) fn set_mixer(&mut self, mixer: bool, cx: &mut Context<Self>) {
         self.prefs.mixer = mixer;
         let _ = self.prefs.save();
@@ -141,6 +198,7 @@ impl Render for Soundscape {
             .palette_override
             .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
         self.palette = palette;
+        self.ensure_sliders(cx);
         let playing = self.control.playing();
         // The meter is the only thing here that moves, and it moves because the audio thread wrote a
         // new report. A frame is asked for while something sounds and not one otherwise, and not on
@@ -168,10 +226,11 @@ impl Render for Soundscape {
             .child(self.transport(palette, cx))
             .child(self.presets(palette, cx))
             .child(
-                div()
+                surface_card(palette)
+                    .p_3()
                     .flex()
                     .flex_col()
-                    .gap_1()
+                    .gap_2()
                     .child(
                         div()
                             .flex()
@@ -187,18 +246,12 @@ impl Render for Soundscape {
                             .child(
                                 div()
                                     .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(format!("{:.0}", volume * 100.)),
+                                    .child(mono_num(format!("{:.0}%", volume * 100.), palette.muted)),
                             ),
                     )
-                    .child(self.level_bar(
-                        SharedString::from("volume"),
-                        volume,
-                        palette.accent,
-                        palette,
-                        cx,
-                        |view, value, cx| view.set_volume(value, cx),
-                    )),
+                    .when_some(self.volume_slider.as_ref(), |el, slider| {
+                        el.child(Slider::new(slider).accessibility_label("Volume"))
+                    }),
             )
             .child(self.mixer(palette, cx))
     }

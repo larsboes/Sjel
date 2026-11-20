@@ -1,12 +1,13 @@
 //! Index metrics, volume integrity summary, and mounted volumes table.
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::charts::{BarChart, Series};
 use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 use sjel_gpui_core::media::{format_bytes, total_volume_bytes, MediaStatus, MediaVolume};
 
 use super::MediaPage;
-use crate::primitives::{card, dot, mono_num, stat_card, stat_strip};
+use crate::primitives::{card, chart_card, dot, mono_num, stat_card, stat_strip};
 use crate::theme::Palette;
 
 pub fn render_index_summary(
@@ -159,5 +160,31 @@ pub fn render_volumes_table(volumes: &[MediaVolume], palette: Palette) -> AnyEle
         )
         .child(volume_rows);
 
-    card(content.into_any_element(), palette)
+    let table_card = card(content.into_any_element(), palette);
+    if volumes.is_empty() {
+        return table_card;
+    }
+
+    let chart = BarChart::new(
+        "media-volumes-chart",
+        volumes.iter().map(|vol| vol.label.clone()),
+    )
+    .series(Series::new(
+        "Indexed bytes",
+        volumes.iter().map(|vol| vol.bytes as f64),
+    ))
+    .format(|bytes| format_bytes(bytes.round() as i64));
+
+    div()
+        .flex()
+        .flex_col()
+        .gap_3()
+        .child(chart_card(
+            "VOLUME CAPACITY",
+            Some("Indexed bytes per mounted volume".into()),
+            chart.into_any_element(),
+            palette,
+        ))
+        .child(table_card)
+        .into_any_element()
 }

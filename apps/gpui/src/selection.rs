@@ -58,6 +58,7 @@ impl Workspace {
             | Page::Packs
             | Page::SelfModel
             | Page::Cv
+            | Page::Posts
             | Page::Media
             | Page::Research
             | Page::Setup

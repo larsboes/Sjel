@@ -210,6 +210,35 @@ impl Shell {
             .await
     }
 
+    /// Every post with its state from `GET /api/sjel-status/posts`.
+    pub async fn posts(&self) -> ShellResult<crate::posts::PostsView> {
+        self.json(Method::GET, status_api::ROUTE_STATUS_POSTS, None, 20)
+            .await
+    }
+
+    /// One post's text, ordered media and export files from `GET /api/sjel-status/posts/detail`.
+    /// The slug is lowercase letters, digits and dashes, so it needs no encoding.
+    pub async fn post_detail(&self, slug: &str) -> ShellResult<crate::posts::PostDetail> {
+        let path = format!("{}?slug={slug}", status_api::ROUTE_STATUS_POSTS_DETAIL);
+        self.json(Method::GET, &path, None, 20).await
+    }
+
+    /// Run one posts verb via `POST /api/sjel-status/posts`. Export runs Photos and ImageMagick,
+    /// so it gets a long timeout.
+    pub async fn write_posts(
+        &self,
+        req: &crate::posts::PostsWriteRequest,
+    ) -> ShellResult<crate::posts::PostsWriteResult> {
+        let body = serde_json::to_value(req).map_err(|_| ShellError::Unreadable)?;
+        self.json(
+            Method::POST,
+            status_api::ROUTE_STATUS_POSTS,
+            Some(body),
+            600,
+        )
+        .await
+    }
+
     /// Read index status totals and indexed volumes via `GET /media/api/status`.
     pub async fn media_status(&self) -> ShellResult<crate::media::MediaStatus> {
         self.json(

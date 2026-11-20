@@ -944,3 +944,103 @@ impl Shell {
 fn valid_idea_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
+
+impl crate::device::Source {
+    /// Reads the finance dashboard projection and transactions from the Mac or shell.
+    pub async fn finance_dashboard(&self) -> Result<FinanceDashboardProjection, String> {
+        let path = proxied(finance_api::PROXY_PREFIX, finance_api::ROUTE_DASHBOARD);
+        match self {
+            Self::Shell(shell) => shell
+                .finance_dashboard(None, None)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => client.get(&path).await,
+        }
+    }
+
+    /// Reads recurring subscriptions from the Mac or shell.
+    pub async fn finance_subscriptions(&self) -> Result<Vec<SubscriptionRecord>, String> {
+        let path = proxied(finance_api::PROXY_PREFIX, finance_api::ROUTE_SUBSCRIPTIONS);
+        match self {
+            Self::Shell(shell) => shell.subscriptions().await.map_err(|e| e.to_string()),
+            Self::Device(client) => client.get(&path).await,
+        }
+    }
+
+    /// Reads finance import candidates from the Mac or shell.
+    pub async fn finance_candidates(&self) -> Result<Vec<FinanceCandidate>, String> {
+        let path = proxied(
+            finance_api::PROXY_PREFIX,
+            finance_api::ROUTE_IMPORT_CANDIDATES,
+        );
+        match self {
+            Self::Shell(shell) => shell.finance_candidates().await.map_err(|e| e.to_string()),
+            Self::Device(client) => client.get(&path).await,
+        }
+    }
+
+    /// Confirms or rejects a pending finance import candidate.
+    pub async fn finance_review_candidate(&self, id: &str, decision: &str) -> Result<(), String> {
+        if !valid_typed_id(id) || !matches!(decision, "confirm" | "reject") {
+            return Err("Invalid finance review request.".into());
+        }
+        match self {
+            Self::Shell(shell) => shell
+                .finance_review_candidate(id, decision, None, None)
+                .await
+                .map(drop)
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                let path = proxied_id(
+                    finance_api::PROXY_PREFIX,
+                    finance_api::ROUTE_IMPORT_CANDIDATE_REVIEW,
+                    &id.replace(':', "%3A"),
+                );
+                let payload = serde_json::to_vec(&finance_api::ReviewCandidateRequest {
+                    decision: decision.to_owned(),
+                    account: None,
+                    source_account: None,
+                })
+                .map_err(|e| e.to_string())?;
+                let _: serde_json::Value = client.post(&path, &payload).await?;
+                Ok(())
+            }
+        }
+    }
+
+    /// Reads owned and tracked inventory rows from the Mac or shell.
+    pub async fn inventory_rows(&self) -> Result<Vec<crate::inventory::InventoryRow>, String> {
+        let path = proxied(inventory_api::PROXY_PREFIX, inventory_api::ROUTE_INVENTORY);
+        match self {
+            Self::Shell(shell) => shell.inventory_rows().await.map_err(|e| e.to_string()),
+            Self::Device(client) => client.get(&path).await,
+        }
+    }
+
+    /// Reads the open wishlist and monthly surplus balance from the Mac or shell.
+    pub async fn inventory_wishlist(&self) -> Result<crate::inventory::InventoryWishlist, String> {
+        let path = proxied(inventory_api::PROXY_PREFIX, inventory_api::ROUTE_WISHLIST);
+        match self {
+            Self::Shell(shell) => shell.inventory_wishlist().await.map_err(|e| e.to_string()),
+            Self::Device(client) => client.get(&path).await,
+        }
+    }
+
+    /// Reads wishlist groups from the Mac or shell.
+    pub async fn inventory_wish_groups(&self) -> Result<Vec<crate::inventory::WishGroup>, String> {
+        let path = proxied(
+            inventory_api::PROXY_PREFIX,
+            inventory_api::ROUTE_WISH_GROUPS,
+        );
+        match self {
+            Self::Shell(shell) => shell
+                .inventory_wish_groups()
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                let envelope: crate::inventory::WishGroups = client.get(&path).await?;
+                Ok(envelope.wish_groups)
+            }
+        }
+    }
+}

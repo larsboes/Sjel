@@ -116,6 +116,18 @@ impl AppState {
             }
             Event::RoomplanArchive(records) => sjel_gpui_ui::nsh_interior::set_local(records),
             Event::RoomplanLive(live) => sjel_gpui_ui::nsh_interior::set_live(live),
+            Event::HealthUpload(body) => {
+                let Some(client) = self.client.clone() else {
+                    return;
+                };
+                let through = crate::health::through(&body);
+                shell::spawn(async move {
+                    let stored = client
+                        .post::<crate::health::Ack>(&crate::health::route(), body.as_bytes())
+                        .await;
+                    crate::health::finished(stored.map(|_| through));
+                });
+            }
             Event::RoomplanUpload(body) => {
                 let Some(client) = self.client.clone() else {
                     self.roomplan_status = "Pair with your Mac before sending a scan.".into();
@@ -167,6 +179,12 @@ impl AppState {
                         sjel_gpui_ui::nsh_mail::connect(sjel_gpui_core::device::Source::Device(
                             client.clone(),
                         ));
+                        sjel_gpui_ui::nsh_finance::connect(
+                            sjel_gpui_core::device::Source::Device(client.clone()),
+                        );
+                        sjel_gpui_ui::nsh_inventory::connect(
+                            sjel_gpui_core::device::Source::Device(client.clone()),
+                        );
                         self.client = Some(client);
                     }
                     Err(error) => self.synced = Some(format!("Cannot sync: {error}")),
@@ -175,6 +193,8 @@ impl AppState {
                 self.refresh_copy();
                 if self.client.is_some() {
                     load_roomplan_upload();
+                    // At launch the foreground event fires before the pairing is restored.
+                    crate::health::collect();
                 }
                 nsh_today::set_travel(
                     self.board.as_ref().map_or(0, Board::pending),
@@ -242,6 +262,7 @@ impl AppState {
                 self.rebuild_reminders();
                 if self.client.is_some() {
                     load_roomplan_upload();
+                    crate::health::collect();
                 }
                 notify::report();
             }

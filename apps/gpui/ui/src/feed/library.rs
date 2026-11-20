@@ -89,7 +89,6 @@ impl Feed {
             .gap_3()
             .flex_1()
             .min_h_0()
-            .child(self.title_row(cx))
             .child(toolbar)
             .child(kind_row);
         let today = chrono::Local::now().date_naive();

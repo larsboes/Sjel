@@ -244,13 +244,19 @@ fn a_list_read_without_content_still_parses() {
 
 #[test]
 fn a_task_reply_carries_the_path_as_its_id() {
-    let task: GlobalTask = serde_json::from_str(
-        r#"{"id":"P/t.md","kind":"task","title":"T","done":true,
-                "due":"2026-10-24","priority":1,"project":"P"}"#,
-    )
-    .unwrap();
-    assert_eq!(task.id, "P/t.md");
-    assert!(task.done);
+    use projects_api::reads::{TaskListResponse, TaskResponse};
+
+    let task = serde_json::json!({
+        "id": "P/t.md", "kind": "task", "title": "T", "done": true,
+        "due": "2026-10-24", "priority": 1, "project": "P",
+    });
+    let reply: TaskResponse<GlobalTask> =
+        serde_json::from_value(serde_json::json!({"task": task})).unwrap();
+    let list: TaskListResponse<GlobalTask> =
+        serde_json::from_value(serde_json::json!({"tasks": [task]})).unwrap();
+    assert_eq!(reply.task.id, "P/t.md");
+    assert!(reply.task.done);
+    assert_eq!(list.tasks, vec![reply.task]);
 }
 
 #[test]

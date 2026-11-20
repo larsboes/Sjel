@@ -1,8 +1,13 @@
 //! Saved items, activities, bookings, and stay candidates board.
+use std::rc::Rc;
+
 use super::forms::{FormKind, Remove};
 use super::{urlencode, Travel};
 use crate::ely::buttons::ButtonVariant;
-use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context};
+use crate::ely::data_display::Tone;
+use crate::ely::tables::{Cell, Column, DataTable, Row};
+use crate::ely::theme::Density as ElyDensity;
+use gpui::{div, prelude::*, px, rems, rgb, rgba, AnyElement, ClipboardItem, Context};
 use sjel_gpui_core::travel::Item;
 
 impl Travel {
@@ -47,6 +52,49 @@ impl Travel {
             .collect();
         sjel_gpui_core::travel::sort_stay_candidates(&mut stays);
         if !stays.is_empty() {
+            let stay_columns = vec![
+                Column::new("rank", "RANK").width(rems(6.)),
+                Column::new("title", "STAY CANDIDATE").min_width(rems(14.)),
+                Column::new("price", "PRICE").width(rems(7.)),
+                Column::new("status", "STATUS").width(rems(7.)),
+            ];
+            let stay_rows: Rc<Vec<Row>> = Rc::new(
+                stays
+                    .iter()
+                    .map(|item| {
+                        let rank_label = item
+                            .stay_rank()
+                            .map_or_else(|| "Unranked".to_owned(), |r| format!("#{r}"));
+                        let rank_tone = if item.stay_rank() == Some(1) {
+                            Tone::Success
+                        } else if item.stay_rank().is_some() {
+                            Tone::Accent
+                        } else {
+                            Tone::Neutral
+                        };
+                        let status_cell = if item.is_stay_booked() {
+                            Cell::Tag("Booked".into(), Tone::Success)
+                        } else {
+                            Cell::Tag("Candidate".into(), Tone::Neutral)
+                        };
+                        let price_label = item.price_label().unwrap_or_else(|| "—".to_owned());
+                        Row::new(
+                            item.id.clone(),
+                            [
+                                Cell::Tag(rank_label.into(), rank_tone),
+                                Cell::Text(item.title.clone().into()),
+                                Cell::Text(price_label.into()),
+                                status_cell,
+                            ],
+                        )
+                    })
+                    .collect(),
+            );
+            let stay_table = DataTable::new("travel-stay-ranking-table", stay_columns)
+                .label("Stay ranking board")
+                .rows(stay_rows)
+                .density(ElyDensity::Compact);
+
             let mut board = div()
                 .flex()
                 .flex_col()
@@ -73,7 +121,8 @@ impl Travel {
                                 .text_color(rgb(self.palette.muted))
                                 .child(format!("{} candidate(s)", stays.len())),
                         ),
-                );
+                )
+                .child(stay_table);
             for item in &stays {
                 board = board.child(self.item_row(item, cx));
             }

@@ -296,7 +296,8 @@ pub fn filter_transactions<'a>(
             if q.is_empty() {
                 return true;
             }
-            tx.description.to_ascii_lowercase().contains(&q)
+            tx.date.to_ascii_lowercase().contains(&q)
+                || tx.description.to_ascii_lowercase().contains(&q)
                 || tx.category.to_ascii_lowercase().contains(&q)
                 || tx.account.to_ascii_lowercase().contains(&q)
         })

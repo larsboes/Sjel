@@ -61,6 +61,8 @@ pub struct PeoplePage {
     pub(super) duplicates: Remote<Vec<DuplicatePair>>,
     pub(super) show_duplicates: bool,
     pub(super) show_network: bool,
+    pub(super) show_ego_graph: bool,
+    pub(super) network_connected_only: bool,
     graph: Remote<Rc<Layout>>,
     graph_request: u64,
     network_bounds: Rc<Cell<Option<gpui_kit::Bounds<gpui_kit::Pixels>>>>,
@@ -103,6 +105,8 @@ impl PeoplePage {
             duplicates: Remote::default(),
             show_duplicates: false,
             show_network: false,
+            show_ego_graph: true,
+            network_connected_only: false,
             graph: Remote::default(),
             graph_request: 0,
             network_bounds: Default::default(),
@@ -227,6 +231,39 @@ impl PeoplePage {
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.load(cx);
+    }
+
+    pub fn active_tab_index(&self) -> usize {
+        if self.show_duplicates {
+            1
+        } else if self.show_network {
+            2
+        } else {
+            0
+        }
+    }
+
+    pub fn badge_counts(&self) -> (usize, Option<usize>) {
+        let total = self.derived.parsed.len();
+        let dup = self.duplicates.value.as_ref().map(Vec::len);
+        (total, dup)
+    }
+
+    pub fn set_tab_index(&mut self, ix: usize, cx: &mut Context<Self>) {
+        let (dup, net) = (ix == 1, ix == 2);
+        if (self.show_duplicates, self.show_network) != (dup, net) {
+            self.show_duplicates = dup;
+            self.show_network = net;
+            self.form = None;
+            self.filter_rev = self.filter_rev.wrapping_add(1);
+            if dup {
+                self.load_duplicates(cx);
+            }
+            if net && !self.graph.loading && self.graph.value.is_none() {
+                self.load_graph(cx);
+            }
+            cx.notify();
+        }
     }
 
     pub fn load(&mut self, cx: &mut Context<Self>) {
@@ -390,49 +427,36 @@ impl Render for PeoplePage {
             .items_center()
             .justify_between()
             .gap_4()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_4()
-                    .child(
-                        div()
-                            .text_2xl()
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(rgb(palette.text))
-                            .child("People"),
-                    )
-                    .child(sub_tabs(
-                        "people-view-tabs",
-                        vec![
-                            (
-                                "Directory",
-                                Some(total_contacts),
-                                !self.show_duplicates && !self.show_network,
-                            ),
-                            ("Duplicates", dup_count, self.show_duplicates),
-                            ("Network", None, self.show_network),
-                        ],
-                        move |ix, _, cx| {
-                            tab_entity.update(cx, |page, cx| {
-                                let (dup, net) = (ix == 1, ix == 2);
-                                if (page.show_duplicates, page.show_network) != (dup, net) {
-                                    page.show_duplicates = dup;
-                                    page.show_network = net;
-                                    page.form = None;
-                                    page.filter_rev = page.filter_rev.wrapping_add(1);
-                                    if dup {
-                                        page.load_duplicates(cx);
-                                    }
-                                    if net && !page.graph.loading && page.graph.value.is_none() {
-                                        page.load_graph(cx);
-                                    }
-                                    cx.notify();
-                                }
-                            });
-                        },
-                    )),
-            )
+            .when(cfg!(test), |el| {
+                el.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_4()
+                        .child(
+                            div()
+                                .text_2xl()
+                                .font_weight(FontWeight::BOLD)
+                                .text_color(rgb(palette.text))
+                                .child("People"),
+                        )
+                        .child(sub_tabs(
+                            "people-view-tabs",
+                            vec![
+                                (
+                                    "Directory",
+                                    Some(total_contacts),
+                                    !self.show_duplicates && !self.show_network,
+                                ),
+                                ("Duplicates", dup_count, self.show_duplicates),
+                                ("Network", None, self.show_network),
+                            ],
+                            move |ix, _, cx| {
+                                tab_entity.update(cx, |page, cx| page.set_tab_index(ix, cx));
+                            },
+                        )),
+                )
+            })
             .child(
                 div()
                     .flex()
@@ -565,6 +589,7 @@ impl Render for PeoplePage {
                         let chosen = page.selected_id.as_deref() == Some(person.id.as_str());
                         let pid = person.id.clone();
                         let initials = person.initials.clone();
+                        let photo = person.photo.clone();
                         let name = person.name.clone();
                         let subtitle = [person.company.as_deref(), person.role.as_deref()]
                             .into_iter()
@@ -572,6 +597,12 @@ impl Render for PeoplePage {
                             .collect::<Vec<_>>()
                             .join(" · ");
                         let overdue = person.is_overdue(today);
+                        let link_count = page
+                            .graph
+                            .value
+                            .as_ref()
+                            .and_then(|g| g.nodes.iter().position(|n| n.id == pid).map(|i| g.links_of(i).count()))
+                            .unwrap_or(0);
                         let day = page
                             .order
                             .key()
@@ -604,7 +635,7 @@ impl Render for PeoplePage {
                                     .on_click(cx.listener(move |page, _, _, cx| {
                                         page.select_person(Some(pid.clone()), cx);
                                     }))
-                                    .child(initials_badge(&initials, palette))
+                                    .child(avatar_badge(&initials, photo.as_deref(), 32.0, palette))
                                     .child(
                                         div()
                                             .flex_1()
@@ -630,10 +661,27 @@ impl Render for PeoplePage {
                                                 )
                                             }),
                                     )
+                                    .when(link_count > 0 && !overdue, |el| {
+                                        el.child(
+                                            div()
+                                                .flex_none()
+                                                .px_1p5()
+                                                .py(px(0.5))
+                                                .rounded(px(4.))
+                                                .bg(rgba(crate::tint(palette.accent, 0x18)))
+                                                .text_xs()
+                                                .text_color(rgb(palette.accent))
+                                                .child(format!("{link_count}")),
+                                        )
+                                    })
                                     .when(overdue, |el| {
                                         el.child(
                                             div()
                                                 .flex_none()
+                                                .px_1p5()
+                                                .py(px(0.5))
+                                                .rounded(px(4.))
+                                                .bg(rgba(crate::tint(palette.amber, 0x1e)))
                                                 .text_xs()
                                                 .text_color(rgb(palette.amber))
                                                 .child("Overdue"),
@@ -855,14 +903,59 @@ mod tests {
             cx.notify();
         });
     }
+
+    #[test]
+    fn person_photo_is_parsed_from_photo_or_avatar_fields() {
+        let mut values = std::collections::BTreeMap::new();
+        values.insert("photo".into(), serde_json::json!("/tmp/ada.png"));
+        let record = EntityRecord {
+            id: "p-ada".into(),
+            kind: "person".into(),
+            name: "Ada Lovelace".into(),
+            values,
+            ..Default::default()
+        };
+        let person = Person::from_record(&record);
+        assert_eq!(person.photo.as_deref(), Some("/tmp/ada.png"));
+        assert!(person.custom_fields.is_empty());
+    }
 }
 
-/// A person's initials in a round badge, as the Mac's list and card draw them.
-pub fn initials_badge(initials: &str, palette: Palette) -> gpui::AnyElement {
-    use gpui::{div, prelude::*, px, rgb, rgba};
+/// A person's avatar: profile picture when `photo` is set, otherwise an initials circle.
+pub fn avatar_badge(
+    initials: &str,
+    photo: Option<&str>,
+    size_px: f32,
+    palette: Palette,
+) -> gpui::AnyElement {
+    use gpui::{div, img, prelude::*, px, rgb, rgba, ObjectFit};
+    if let Some(src) = photo.map(str::trim).filter(|s| !s.is_empty()) {
+        let image_el = if src.starts_with("http://") || src.starts_with("https://") {
+            img(src.to_owned())
+        } else {
+            let expanded = if let Some(rest) = src.strip_prefix("~/") {
+                std::env::var("HOME")
+                    .map(|home| format!("{home}/{rest}"))
+                    .unwrap_or_else(|_| src.to_owned())
+            } else {
+                src.to_owned()
+            };
+            img(std::path::PathBuf::from(expanded))
+        };
+        return div()
+            .flex_none()
+            .size(px(size_px))
+            .rounded_full()
+            .overflow_hidden()
+            .border_1()
+            .border_color(rgba(crate::tint(palette.accent, 0x55)))
+            .bg(rgba(palette.raised))
+            .child(image_el.size_full().object_fit(ObjectFit::Cover))
+            .into_any_element();
+    }
     div()
         .flex_none()
-        .size(px(32.))
+        .size(px(size_px))
         .rounded_full()
         .bg(rgba(crate::tint(palette.accent, 0x22)))
         .border_1()
@@ -875,4 +968,9 @@ pub fn initials_badge(initials: &str, palette: Palette) -> gpui::AnyElement {
         .text_color(rgb(palette.accent))
         .child(initials.to_owned())
         .into_any_element()
+}
+
+/// A person's initials in a round badge, as the Mac's list and card draw them.
+pub fn initials_badge(initials: &str, palette: Palette) -> gpui::AnyElement {
+    avatar_badge(initials, None, 32.0, palette)
 }

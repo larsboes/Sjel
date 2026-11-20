@@ -158,6 +158,18 @@ pub fn EdgeScreen() -> impl IntoElement {
         )
         .child(view().flex_1().child(dynamic(move || {
             match seat.get() {
+                Seat::Scratchpad => scroll()
+                    .flex_1()
+                    .px_4()
+                    .child(
+                        view()
+                            .gap_2()
+                            .child(heading("Daily Scratchpad"))
+                            .child(caption(
+                                "Quick thoughts, links and tasks live here for 24h before sorting into Sjel.",
+                            )),
+                    )
+                    .into_element(),
                 Seat::Agent => crate::nsh_agent::agent_screen().into_element(),
                 Seat::Terminal => crate::nsh_terminal::terminal_screen().into_element(),
                 Seat::Soundscape => crate::nsh_soundscape::soundscape_screen().into_element(),

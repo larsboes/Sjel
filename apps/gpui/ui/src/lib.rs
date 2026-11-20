@@ -31,6 +31,8 @@ pub mod context;
 #[cfg(feature = "gpui")]
 pub mod cv;
 #[cfg(feature = "gpui")]
+pub mod posts;
+#[cfg(feature = "gpui")]
 pub mod data;
 #[cfg(feature = "gpui")]
 pub mod doc_view;
@@ -73,7 +75,11 @@ pub mod nsh_documents;
 #[cfg(feature = "nsh")]
 pub mod nsh_edge;
 #[cfg(feature = "nsh")]
+pub mod nsh_finance;
+#[cfg(feature = "nsh")]
 pub mod nsh_interior;
+#[cfg(feature = "nsh")]
+pub mod nsh_inventory;
 #[cfg(feature = "nsh")]
 pub mod nsh_mail;
 #[cfg(feature = "nsh")]
@@ -113,6 +119,8 @@ pub mod research;
 #[cfg(feature = "gpui")]
 pub mod scout;
 #[cfg(feature = "gpui")]
+pub mod scratchpad;
+#[cfg(feature = "gpui")]
 pub mod selection;
 #[cfg(feature = "gpui")]
 pub mod self_view;
@@ -148,11 +156,12 @@ pub use docs::MermaidPlugin;
 pub use nav::{mobile_tab_bar, nav_header, NavItem};
 #[cfg(feature = "gpui")]
 pub use primitives::{
-    back_button, card, column_width, cycle_column_width, dot, due_badge, due_status, filter_pill,
-    key_bar, list, mono_num, note, placeholder, priority_pill, progress_bar, row, row_for_density,
-    section, shortcut_hint, stat_card, stat_card_interactive, stat_strip, sub_tabs,
-    sync_status_badge, tabular_cell, tone_chip, virtual_list, DueStatus, SortOrder, RADIUS_LG,
-    RADIUS_MD, RADIUS_SM,
+    back_button, card, chart_card, column_width, cycle_column_width, dashboard_metric_tile, dot,
+    due_badge, due_status, filter_pill, interactive_pill, key_bar, list, mono_num, note,
+    pill_tab, pill_tab_bar, placeholder, priority_pill, progress_bar, quick_action_button, row,
+    row_for_density, section, shortcut_hint, stat_card, stat_card_interactive, stat_strip,
+    status_pill, sub_tabs, surface_card, sync_status_badge, tabular_cell, tone_chip, virtual_list,
+    DueStatus, QuickAction, SortOrder, RADIUS_LG, RADIUS_MD, RADIUS_SM,
 };
 #[cfg(feature = "gpui")]
 pub use sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};

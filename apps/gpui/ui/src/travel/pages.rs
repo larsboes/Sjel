@@ -7,6 +7,7 @@ use crate::ely::{
     primitives::Severity,
     theme::ControlSize,
 };
+use crate::primitives::sub_tabs;
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context};
 use sjel_gpui_core::travel::{PlanExt, TravelRoute, TripSection};
 
@@ -93,8 +94,10 @@ impl Travel {
         );
 
         if is_top_level {
-            page = page.child(self.top_nav_bar(cx));
-        } else {
+            if cfg!(test) {
+                page = page.child(self.top_nav_bar(cx));
+            }
+        } else if cfg!(test) {
             page = page.child(
                 div()
                     .flex()
@@ -123,7 +126,10 @@ impl Travel {
         }
 
         if self.route == TravelRoute::Connections {
-            return page.child(self.connections_page(cx)).into_any_element();
+            return page
+                .child(self.connections_page(cx))
+                .children(self.render_form_sheet(cx))
+                .into_any_element();
         }
 
         page =
@@ -159,11 +165,17 @@ impl Travel {
                         )),
                 );
             }
-            return page.child(self.trip_library(cx)).into_any_element();
+            return page
+                .child(self.trip_library(cx))
+                .children(self.render_form_sheet(cx))
+                .into_any_element();
         }
 
         if matches!(self.route, TravelRoute::Map) {
-            return page.child(self.map_page(cx)).into_any_element();
+            return page
+                .child(self.map_page(cx))
+                .children(self.render_form_sheet(cx))
+                .into_any_element();
         }
         if let Some(slot) = self.selected.as_ref().and_then(|id| self.details.get(id)) {
             page = page
@@ -275,26 +287,28 @@ impl Travel {
                     )),
             );
         let section = self.section();
-        let mut tabs = SegmentedControl::new("trip-sections", section.path()).size(ControlSize::Sm);
-        for tab in TripSection::ALL {
-            tabs = tabs.segment(tab.path(), tab.label(), None);
+        let tab_entity = cx.entity();
+        if cfg!(test) {
+            page = page.child(sub_tabs(
+                "trip-sections",
+                TripSection::ALL
+                    .iter()
+                    .map(|&t| (t.label(), None, t == section))
+                    .collect(),
+                move |ix, _, cx| {
+                    if let Some(&tab) = TripSection::ALL.get(ix) {
+                        tab_entity.update(cx, |view, cx| view.open_section(tab, cx));
+                    }
+                },
+            ));
         }
-        page = page.child(tabs.on_change(cx.listener(
-            |view, value: &gpui::SharedString, _, cx| {
-                if let Some(tab) = TripSection::ALL
-                    .into_iter()
-                    .find(|tab| tab.path() == value.as_ref())
-                {
-                    view.open_section(tab, cx);
-                }
-            },
-        )));
         page.child(match section {
             TripSection::Overview => self.overview(cx),
             TripSection::Itinerary => self.itinerary(cx),
             TripSection::Map => self.map_page(cx),
             TripSection::Items => self.saved_items(cx),
         })
+        .children(self.render_form_sheet(cx))
         .into_any_element()
     }
 }

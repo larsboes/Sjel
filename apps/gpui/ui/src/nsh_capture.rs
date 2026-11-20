@@ -263,34 +263,20 @@ pub fn CaptureScreen() -> impl IntoElement {
     load();
     let submit = move || keep(draft.get(), tag.get());
 
-    let mut chips = view().flex_row().gap_2();
-    for name in TAGS {
-        chips = chips.child(
-            button()
-                .px_3()
-                .py_2()
-                .rounded_lg()
-                .border(px(1.0))
-                .border_color(move || nsh_base::theme().border)
-                .bg(move || {
-                    if tag.get() == Some(name) {
-                        nsh_base::theme().primary
-                    } else {
-                        nsh_base::theme().background
-                    }
-                })
-                .on_press(move || {
-                    tag.update(|t| *t = if *t == Some(name) { None } else { Some(name) })
-                })
-                .child(text(format!("#{name}")).text_xs().text_color(move || {
-                    if tag.get() == Some(name) {
-                        nsh_base::theme().primary_foreground
-                    } else {
-                        nsh_base::theme().foreground
-                    }
-                })),
-        );
-    }
+    let chips = dynamic(move || {
+        let active_tag = tag.get();
+        let mut row = view().flex_row().flex_wrap().gap_1p5();
+        for name in TAGS {
+            row = row.child(crate::nsh_ui::pill_tab(
+                format!("#{name}"),
+                active_tag == Some(name),
+                move || {
+                    tag.update(|t| *t = if *t == Some(name) { None } else { Some(name) });
+                },
+            ));
+        }
+        row.into_element()
+    });
 
     view()
         .flex_1()

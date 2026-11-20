@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::shell::{EntityFact, EntityRecord};
 
+pub use entities_api::FOLLOW_UP_WEEKS;
+
 pub mod edit;
 pub mod graph;
 
@@ -72,6 +74,7 @@ pub struct Person {
     pub company: Option<String>,
     pub role: Option<String>,
     pub location: Option<String>,
+    pub photo: Option<String>,
     pub tags: Vec<String>,
     pub custom_fields: Vec<(String, String)>,
     /// Every value the registry holds, flattened for the editor, keyed as the registry keys it.
@@ -92,6 +95,7 @@ impl Person {
         let mut company = None;
         let mut role = None;
         let mut location = None;
+        let mut photo = None;
         let mut tags = Vec::new();
         let mut custom_fields = Vec::new();
         let mut values = BTreeMap::new();
@@ -126,6 +130,7 @@ impl Person {
                 "company" | "org" | "organization" => company = Some(str_val),
                 "role" | "title" | "position" => role = Some(str_val),
                 "location" | "city" | "place" => location = Some(str_val),
+                "photo" | "avatar" | "picture" | "image" | "photo_url" => photo = Some(str_val),
                 "tags" => {}
                 key if NETWORK_ROWS.iter().any(|(k, _)| *k == key) => {}
                 _ => custom_fields.push((key.clone(), str_val)),
@@ -143,6 +148,7 @@ impl Person {
             company,
             role,
             location,
+            photo,
             tags,
             custom_fields,
             values,

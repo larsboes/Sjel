@@ -148,6 +148,11 @@ pub struct Travel {
     map_expanded: bool,
     selected_day_filter: Option<String>,
     pub(super) selected_category_filter: Option<PlaceCategory>,
+    pub(super) place_query: String,
+    pub(super) place_search_input: Option<(
+        gpui::Entity<crate::ely::forms::TextInput>,
+        gpui::Subscription,
+    )>,
     pub(super) offline_downloading: std::collections::HashSet<String>,
     pub(super) offline_progress: HashMap<String, (usize, usize)>,
     #[cfg(all(feature = "native-maps", target_os = "macos"))]
@@ -223,6 +228,8 @@ impl Travel {
             map_expanded: false,
             selected_day_filter: None,
             selected_category_filter: None,
+            place_query: String::new(),
+            place_search_input: None,
             offline_downloading: std::collections::HashSet::new(),
             offline_progress: HashMap::new(),
             #[cfg(all(feature = "native-maps", target_os = "macos"))]
@@ -246,6 +253,34 @@ impl Travel {
 
     pub fn route(&self) -> &TravelRoute {
         &self.route
+    }
+
+    pub fn upcoming_count(&self) -> usize {
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        self.plans
+            .iter()
+            .filter(|p| p.date_end >= today && p.status != "cancelled")
+            .count()
+    }
+
+    pub fn active_plan_title(&self) -> Option<String> {
+        if matches!(self.route, TravelRoute::Trip { .. }) {
+            self.current().map(|p| p.title.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn active_section(&self) -> TripSection {
+        self.section()
+    }
+
+    pub fn set_section(&mut self, section: TripSection, cx: &mut Context<Self>) {
+        self.open_section(section, cx);
+    }
+
+    pub fn open_new_trip(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_form(forms::FormKind::Trip(None), window, cx);
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
@@ -1186,12 +1221,30 @@ impl Travel {
         .detach();
         cx.notify();
     }
+    fn ensure_place_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.place_search_input.is_some() {
+            return;
+        }
+        let input = cx.new(|cx| {
+            crate::ely::forms::TextInput::new(window, cx).placeholder("Filter stops or places…")
+        });
+        let sub = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
+            if matches!(event, crate::ely::forms::InputEvent::Changed) {
+                view.place_query = input.read(cx).text().trim().to_lowercase();
+                cx.notify();
+            }
+        });
+        self.place_search_input = Some((input, sub));
+    }
 }
 
 impl Render for Travel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.route == TravelRoute::Connections {
             self.ensure_connections(window, cx);
+        }
+        if matches!(self.route, TravelRoute::Map) || self.section() == TripSection::Map {
+            self.ensure_place_search(window, cx);
         }
         self.ensure_located(cx);
         self.render_page(cx)

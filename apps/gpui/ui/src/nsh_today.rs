@@ -44,6 +44,10 @@ pub enum TodayEvent {
     Projects,
     /// Opens the phone's scan archive and room review.
     Interior,
+    /// Opens the phone's Finance overview, transactions, and candidate review.
+    Finance,
+    /// Opens the phone's Inventory & Wishlist lookup and comparison view.
+    Inventory,
 }
 
 /// Everything the screen draws, rebuilt whenever a source moves.
@@ -324,11 +328,7 @@ fn heading(label: &'static str) -> impl IntoElement {
 }
 
 fn card() -> View {
-    view()
-        .rounded_lg()
-        .border(px(1.0))
-        .border_color(move || nsh_base::theme().border)
-        .bg(move || nsh_base::theme().card)
+    crate::nsh_ui::surface_card()
 }
 
 fn pill(label: &'static str, event: TodayEvent) -> impl IntoElement {
@@ -449,11 +449,35 @@ fn section<T: IntoElement>(
         .child(extra.map(|line| text(line).text_xs().text_color(move || muted())))
 }
 
-fn body(snap: Snapshot) -> impl IntoElement {
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum NshTodayTab {
+    #[default]
+    Overview,
+    Day,
+    Tasks,
+    Projects,
+}
+
+fn metric_tile(label: &'static str, value: usize, caption: &'static str) -> impl IntoElement {
+    crate::nsh_ui::metric_tile(label, value.to_string(), caption)
+}
+
+fn tab_pill(
+    label: &'static str,
+    tab: NshTodayTab,
+    active_tab: Signal<NshTodayTab>,
+) -> impl IntoElement {
+    let is_active = active_tab.get() == tab;
+    crate::nsh_ui::pill_tab(label, is_active, move || active_tab.set(tab))
+}
+
+fn body(snap: Snapshot, active_tab: Signal<NshTodayTab>) -> impl IntoElement {
     let Some(view_model) = snap.view.clone() else {
         return view().child(text("Reading today…").text_sm());
     };
     let day = view_model.day;
+    let event_count = view_model.entries.len();
+    let task_count = view_model.focus.len();
     let entries: Vec<_> = view_model
         .entries
         .iter()
@@ -472,15 +496,56 @@ fn body(snap: Snapshot) -> impl IntoElement {
         .cloned()
         .map(project_row)
         .collect();
-    view()
-        .gap_5()
-        .child(section(
-            "THE DAY",
-            "Nothing on the calendar today.",
-            entries,
-            None,
+
+    let tab = active_tab.get();
+    let show_day = matches!(tab, NshTodayTab::Overview | NshTodayTab::Day);
+    let show_tasks = matches!(tab, NshTodayTab::Overview | NshTodayTab::Tasks);
+    let show_projects = matches!(tab, NshTodayTab::Overview | NshTodayTab::Projects);
+
+    let tiles = view()
+        .flex_row()
+        .gap_3()
+        .child(metric_tile(
+            "EVENTS",
+            event_count,
+            if event_count == 0 {
+                "Calendar clear"
+            } else {
+                "Scheduled today"
+            },
         ))
-        .child(
+        .child(metric_tile(
+            "TASKS",
+            task_count,
+            if task_count == 0 {
+                "Nothing left"
+            } else {
+                "Up next"
+            },
+        ));
+
+    let tabs = view()
+        .flex_row()
+        .flex_wrap()
+        .gap_2()
+        .child(tab_pill("Overview", NshTodayTab::Overview, active_tab))
+        .child(tab_pill("The Day", NshTodayTab::Day, active_tab))
+        .child(tab_pill("Up Next", NshTodayTab::Tasks, active_tab))
+        .child(tab_pill("Projects", NshTodayTab::Projects, active_tab));
+
+    view()
+        .gap_4()
+        .child(tiles)
+        .child(tabs)
+        .child(show_day.then(|| {
+            section(
+                "THE DAY",
+                "Nothing on the calendar today.",
+                entries,
+                None,
+            )
+        }))
+        .child(show_tasks.then(|| {
             view()
                 .gap_2()
                 .child(
@@ -502,9 +567,9 @@ fn body(snap: Snapshot) -> impl IntoElement {
                     "Nothing left to do.",
                     tasks,
                     rest_line(view_model.rest),
-                )),
-        )
-        .child(section("PROJECTS", "No projects yet.", projects, None))
+                ))
+        }))
+        .child(show_projects.then(|| section("PROJECTS", "No projects yet.", projects, None)))
 }
 
 fn header(snap: Signal<Snapshot>) -> impl IntoElement {
@@ -553,28 +618,67 @@ fn header(snap: Signal<Snapshot>) -> impl IntoElement {
                 ),
         )
         .child(
-            text(move || snap.with(|s| s.source.clone()))
-                .text_xs()
-                .text_color(move || muted()),
-        )
-        .child(dynamic(move || {
-            snap.with(|s| s.note.clone())
-                .map(|note| text(note).text_xs().into_element())
-        }))
-        .child(dynamic(move || {
-            snap.with(|s| s.travel.clone()).map(|(line, waiting)| {
-                text(line)
-                    .text_xs()
-                    .text_color(move || {
-                        if waiting {
-                            nsh_base::theme().destructive
-                        } else {
-                            muted()
-                        }
+            crate::nsh_ui::surface_card()
+                .px_3()
+                .py_2()
+                .gap_1()
+                .child(
+                    view()
+                        .flex_row()
+                        .items_center()
+                        .justify_between()
+                        .gap_2()
+                        .child(
+                            text(move || snap.with(|s| s.source.clone()))
+                                .text_xs()
+                                .text_color(move || muted())
+                                .flex_1(),
+                        )
+                        .child(
+                            button()
+                                .px_2()
+                                .py_0p5()
+                                .rounded_full()
+                                .border(px(1.0))
+                                .border_color(move || nsh_base::theme().border)
+                                .on_press(|| emit(TodayEvent::Activity))
+                                .child(
+                                    text(move || {
+                                        snap.with(|s| {
+                                            if s.travel.as_ref().is_some_and(|(_, waiting)| *waiting)
+                                            {
+                                                "Queued · Sync"
+                                            } else if s.show_pair {
+                                                "Offline"
+                                            } else {
+                                                "Sync status"
+                                            }
+                                        })
+                                    })
+                                    .text_xs()
+                                    .font_weight(FontWeight::MEDIUM),
+                                ),
+                        ),
+                )
+                .child(dynamic(move || {
+                    snap.with(|s| s.note.clone())
+                        .map(|note| text(note).text_xs().into_element())
+                }))
+                .child(dynamic(move || {
+                    snap.with(|s| s.travel.clone()).map(|(line, waiting)| {
+                        text(line)
+                            .text_xs()
+                            .text_color(move || {
+                                if waiting {
+                                    nsh_base::theme().destructive
+                                } else {
+                                    muted()
+                                }
+                            })
+                            .into_element()
                     })
-                    .into_element()
-            })
-        }))
+                })),
+        )
         .child(dynamic(move || {
             snap.with(|s| s.show_pair).then(|| {
                 button()
@@ -595,19 +699,8 @@ fn header(snap: Signal<Snapshot>) -> impl IntoElement {
 }
 
 fn capture_bar() -> impl IntoElement {
-    let shortcut = |label: &'static str, event: TodayEvent| {
-        button()
-            .flex_1()
-            .py_3()
-            .items_center()
-            .rounded_lg()
-            .border(px(1.0))
-            .border_color(move || nsh_base::theme().border)
-            .on_press(move || emit(event.clone()))
-            .child(text(label).text_sm().font_weight(FontWeight::MEDIUM))
-    };
     view()
-        .gap_2()
+        .gap_3()
         .child(
             button()
                 .flex_row()
@@ -615,26 +708,58 @@ fn capture_bar() -> impl IntoElement {
                 .items_center()
                 .px_4()
                 .py_3()
-                .rounded_lg()
+                .rounded_xl()
                 .border(px(1.0))
                 .border_color(move || nsh_base::theme().border)
+                .bg(move || nsh_base::theme().card)
                 .on_press(|| emit(TodayEvent::Capture))
                 .child(
-                    text("✎ Capture note, link or task…")
+                    text("Capture note, link or task…")
                         .text_sm()
                         .text_color(move || muted()),
                 )
-                .child(text("+ New").text_xs().font_weight(FontWeight::MEDIUM)),
+                .child(text("+ New").text_xs().font_weight(FontWeight::SEMIBOLD)),
         )
         .child(
             view()
                 .flex_row()
                 .gap_2()
-                .flex_wrap()
-                .child(shortcut("People & Places", TodayEvent::People))
-                .child(shortcut("Documents", TodayEvent::Documents))
-                .child(shortcut("Projects", TodayEvent::Projects))
-                .child(shortcut("Interior", TodayEvent::Interior)),
+                .child(crate::nsh_ui::action_circle(
+                    "@",
+                    "People & Places",
+                    false,
+                    || emit(TodayEvent::People),
+                ))
+                .child(crate::nsh_ui::action_circle(
+                    "D",
+                    "Documents",
+                    false,
+                    || emit(TodayEvent::Documents),
+                ))
+                .child(crate::nsh_ui::action_circle(
+                    "P",
+                    "Projects",
+                    false,
+                    || emit(TodayEvent::Projects),
+                ))
+                .child(crate::nsh_ui::action_circle(
+                    "I",
+                    "Interior",
+                    false,
+                    || emit(TodayEvent::Interior),
+                ))
+                .child(crate::nsh_ui::action_circle(
+                    "€",
+                    "Finance",
+                    false,
+                    || emit(TodayEvent::Finance),
+                ))
+                .child(crate::nsh_ui::action_circle(
+                    "W",
+                    "Wishlist",
+                    false,
+                    || emit(TodayEvent::Inventory),
+                )),
         )
 }
 
@@ -647,6 +772,7 @@ pub fn TodayScreen() -> impl IntoElement {
         snap
     };
     let snap = signal(initial);
+    let active_tab = signal(NshTodayTab::Overview);
     let (tx, mut rx) = unbounded_channel();
     *feed().tx.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
     spawn(async move {
@@ -666,7 +792,7 @@ pub fn TodayScreen() -> impl IntoElement {
                 snap.with(|s| s.busy.clone())
                     .map(|_| text("Saving…").text_xs().into_element())
             }))
-            .child(dynamic(move || body(snap.get()).into_element())),
+            .child(dynamic(move || body(snap.get(), active_tab).into_element())),
     )
 }
 

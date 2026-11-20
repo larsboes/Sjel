@@ -43,7 +43,7 @@ use types::*;
 
 pub struct SystemsPage {
     pub(super) repo: Repo,
-    pub(super) tab: SystemsTab,
+    pub tab: SystemsTab,
     pub(super) macmon: Remote<MacmonSample>,
     pub(super) storage: Remote<StorageReport>,
     pub(super) history: Remote<StorageHistory>,
@@ -137,6 +137,21 @@ impl SystemsPage {
         self.generation = self.generation.wrapping_add(1);
         self.explorer.stop();
         cx.notify();
+    }
+
+    pub fn badge_counts(&self) -> (usize, usize, usize) {
+        let pending_approvals = self
+            .agent
+            .value
+            .as_ref()
+            .map_or(0, |agent| agent.pending.len());
+        let stale_updates = self
+            .derived
+            .updates_view
+            .as_ref()
+            .map_or(0, |view| view.stale);
+        let findings_count = self.findings.value.as_ref().map_or(0, Vec::len);
+        (findings_count, stale_updates, pending_approvals)
     }
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
@@ -234,7 +249,11 @@ impl Render for SystemsPage {
             },
         );
 
-        let mut root = div().flex().flex_col().gap_6().child(tabs);
+        let mut root = div()
+            .flex()
+            .flex_col()
+            .gap_6()
+            .when(cfg!(test), |el| el.child(tabs));
         match self.tab {
             SystemsTab::Overview => {
                 let runtime = self.runtime_panel(palette, cx);

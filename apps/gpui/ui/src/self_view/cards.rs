@@ -4,8 +4,8 @@ use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString
 use sjel_gpui_core::self_model::{unit_degree, unit_liveness, SelfModelResponse, SelfUnit};
 
 use super::SelfPage;
-use crate::primitives::{dot, stat_card, stat_strip};
-use crate::theme::Palette;
+use crate::primitives::{chart_card, dot, stat_card, stat_strip};
+use crate::theme::{Density, Palette};
 
 pub fn stats_summary(res: &SelfModelResponse, palette: Palette) -> AnyElement {
     let model = &res.model;
@@ -36,6 +36,38 @@ pub fn stats_summary(res: &SelfModelResponse, palette: Palette) -> AnyElement {
             palette,
         ),
     ])
+}
+
+/// Live Mermaid dependency diagram of the top unit couplings in the self-model.
+pub fn architecture_diagram(res: &SelfModelResponse, palette: Palette) -> Option<AnyElement> {
+    if res.model.coupling.is_empty() {
+        return None;
+    }
+    let mut lines = vec!["```mermaid".to_string(), "flowchart LR".to_string()];
+    for edge in res.model.coupling.iter().take(8) {
+        let from_id: String = edge
+            .from
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect();
+        let to_id: String = edge
+            .to
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect();
+        lines.push(format!(
+            "  {from_id}[\"{}\"] --> {to_id}[\"{}\"]",
+            edge.from, edge.to
+        ));
+    }
+    lines.push("```".to_string());
+    let md = lines.join("\n");
+    Some(chart_card(
+        "DEPENDENCY TOPOLOGY",
+        Some(format!("Showing up to 8 of {} couplings", res.model.coupling.len()).into()),
+        crate::doc_view::render_markdown(&md, palette, Density::Desktop),
+        palette,
+    ))
 }
 
 pub fn unit_card(

@@ -44,7 +44,10 @@ pub struct HomePreferences {
     pub show_prompts: bool,
     pub show_travel: bool,
     pub show_spending: bool,
+    pub show_inbox: bool,
+    pub show_projects: bool,
     pub large_map: bool,
+    pub rail_tab: usize,
 }
 
 impl Default for HomePreferences {
@@ -55,8 +58,11 @@ impl Default for HomePreferences {
             show_tasks: true,
             show_prompts: true,
             show_travel: true,
-            show_spending: false,
+            show_spending: true,
+            show_inbox: true,
+            show_projects: true,
             large_map: false,
+            rail_tab: 0,
         }
     }
 }
@@ -103,6 +109,14 @@ impl HomePreferences {
         self.show_travel && self.mode != HomeMode::Focus
     }
 
+    pub fn effective_show_inbox(&self) -> bool {
+        self.show_inbox && self.mode != HomeMode::Focus
+    }
+
+    pub fn effective_show_projects(&self) -> bool {
+        self.show_projects && self.mode != HomeMode::Focus
+    }
+
     pub fn force_expanded_map(&self) -> bool {
         self.mode == HomeMode::Travel
     }
@@ -116,16 +130,20 @@ mod tests {
     fn defaults_and_focus_mode_rules() {
         let mut prefs = HomePreferences::default();
         assert_eq!(prefs.mode, HomeMode::Auto);
-        assert!(!prefs.effective_show_spending());
+        assert!(prefs.effective_show_spending());
         assert!(prefs.effective_show_travel());
+        assert!(prefs.effective_show_inbox());
+        assert!(prefs.effective_show_projects());
         assert!(!prefs.force_expanded_map());
 
-        prefs.show_spending = true;
-        assert!(prefs.effective_show_spending());
+        prefs.show_spending = false;
+        assert!(!prefs.effective_show_spending());
 
         prefs.mode = HomeMode::Focus;
         assert!(!prefs.effective_show_spending());
         assert!(!prefs.effective_show_travel());
+        assert!(!prefs.effective_show_inbox());
+        assert!(!prefs.effective_show_projects());
 
         prefs.mode = HomeMode::Travel;
         assert!(prefs.force_expanded_map());
@@ -141,7 +159,10 @@ mod tests {
             show_prompts: false,
             show_travel: true,
             show_spending: false,
+            show_inbox: true,
+            show_projects: false,
             large_map: true,
+            rail_tab: 0,
         };
         let raw = serde_json::to_string(&prefs).expect("serialize");
         let parsed: HomePreferences = serde_json::from_str(&raw).expect("deserialize");

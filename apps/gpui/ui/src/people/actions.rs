@@ -80,6 +80,61 @@ impl PeoplePage {
         self.write(shell, Work::RemoveFact(id, fact.to_owned()), window, cx);
     }
 
+    /// Sets `last_contact` to today's date (`YYYY-MM-DD`) in one click.
+    pub(super) fn mark_contacted_today(
+        &mut self,
+        id: &str,
+        revision: u32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(shell) = self.writer() else {
+            return;
+        };
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let body = serde_json::json!({
+            "values": { "last_contact": today },
+            "expected_revision": revision,
+        });
+        self.write(shell, Work::Update(id.to_owned(), body), window, cx);
+    }
+
+    /// Opens a file picker to attach a local profile picture to `id`.
+    pub(super) fn pick_photo(
+        &mut self,
+        id: String,
+        revision: u32,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(shell) = self.writer() else {
+            return;
+        };
+        let picked = cx.prompt_for_paths(gpui_kit::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Choose a profile picture".into()),
+        });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = picked.await else {
+                return;
+            };
+            let Some(path) = paths.into_iter().next() else {
+                return;
+            };
+            let path_str = path.to_string_lossy().into_owned();
+            let body = serde_json::json!({
+                "values": { "photo": path_str },
+                "expected_revision": revision,
+            });
+            let _ = shell.entity_update(&id, body).await;
+            let _ = this.update(cx, |page, cx| {
+                page.load(cx);
+            });
+        })
+        .detach();
+    }
+
     pub(super) fn write(
         &mut self,
         shell: Arc<Shell>,

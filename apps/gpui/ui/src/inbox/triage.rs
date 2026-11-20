@@ -8,7 +8,7 @@ use crate::ely::theme::ControlSize;
 use gpui::Focusable;
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, EventEmitter,
-    FocusHandle, FontWeight, KeyBinding, SharedString, Subscription, Window,
+    FocusHandle, KeyBinding, SharedString, Subscription, Window,
 };
 use sjel_gpui_core::capture::{self, Capture, TAGS};
 use sjel_gpui_core::shell::{self, ShellError};
@@ -459,50 +459,53 @@ impl Render for Inbox {
         let routable = self.routable().len();
         let count = |filter| in_view(self.rows.value.iter().flatten(), filter).len();
 
-        let header = div()
+        let toolbar = div()
             .flex()
             .items_center()
+            .justify_between()
             .gap_3()
             .child(
                 div()
-                    .text_xl()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Inbox"),
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(filter_pill(
+                        "New",
+                        count(Filter::New),
+                        self.filter == Filter::New,
+                        cx.listener(|view, _, _, cx| view.set_filter(Filter::New, cx)),
+                    ))
+                    .child(filter_pill(
+                        "Done",
+                        count(Filter::Done),
+                        self.filter == Filter::Done,
+                        cx.listener(|view, _, _, cx| view.set_filter(Filter::Done, cx)),
+                    ))
+                    .child(filter_pill(
+                        "Dismissed",
+                        count(Filter::Dismissed),
+                        self.filter == Filter::Dismissed,
+                        cx.listener(|view, _, _, cx| view.set_filter(Filter::Dismissed, cx)),
+                    )),
             )
-            .child(muted(
-                "j/k move · r send on · e done · d dismiss · t tag · ↩ edit · u restore · o link · y music · n new",
-                palette,
-            ))
-            .child(div().flex_1())
-            .when(routable > 0, |el| {
-                el.child(
-                    Button::new("inbox-apply-all", format!("Apply {routable} suggestions"))
-                        .size(ControlSize::Sm)
-                        .on_click(cx.listener(|view, _, _, cx| view.apply_all(cx))),
-                )
-            });
-
-        let pills = div()
-            .flex()
-            .gap_2()
-            .child(filter_pill(
-                "New",
-                count(Filter::New),
-                self.filter == Filter::New,
-                cx.listener(|view, _, _, cx| view.set_filter(Filter::New, cx)),
-            ))
-            .child(filter_pill(
-                "Done",
-                count(Filter::Done),
-                self.filter == Filter::Done,
-                cx.listener(|view, _, _, cx| view.set_filter(Filter::Done, cx)),
-            ))
-            .child(filter_pill(
-                "Dismissed",
-                count(Filter::Dismissed),
-                self.filter == Filter::Dismissed,
-                cx.listener(|view, _, _, cx| view.set_filter(Filter::Dismissed, cx)),
-            ));
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(muted(
+                        "j/k move · r sort · e done · d dismiss · t tag · ↩ edit",
+                        palette,
+                    ))
+                    .when(routable > 0, |el| {
+                        el.child(
+                            Button::new("inbox-apply-all", format!("Sort {routable} ready"))
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Primary)
+                                .on_click(cx.listener(|view, _, _, cx| view.apply_all(cx))),
+                        )
+                    }),
+            );
 
         // While a capture's text is open, the list drops its context, so the letters it binds
         // type into the field.
@@ -546,8 +549,7 @@ impl Render for Inbox {
             .size_full()
             .flex()
             .flex_col()
-            .gap_4()
-            .child(header)
+            .gap_3()
             .child(Input::new(&field))
             .when_some(self.write_error.as_ref(), |el, error| {
                 el.child(
@@ -557,7 +559,7 @@ impl Render for Inbox {
                         .child(format!("Not saved: {error}")),
                 )
             })
-            .child(pills)
+            .child(toolbar)
             .child(list)
     }
 }
@@ -591,33 +593,48 @@ impl Inbox {
         .collect::<Vec<_>>()
         .join(" · ");
 
-        let mut actions = div().flex().items_center().gap_1();
+        let mut primary_action = div().flex().items_center().gap_1();
         if is_new {
-            if capture.url.as_deref().is_some_and(is_youtube_url) {
-                let url = capture.url.clone().unwrap_or_default();
-                actions = actions.child(
-                    Button::new(SharedString::from(format!("inbox-music-{i}")), "Open music")
-                        .size(ControlSize::Sm)
-                        .disabled(busy)
-                        .on_click(cx.listener(move |_, _, _, cx| {
-                            cx.emit(InboxEvent::OpenMusic(url.clone()))
-                        })),
-                );
-            }
             if let Some(to) = route {
                 let capture = capture.clone();
-                actions = actions.child(
+                primary_action = primary_action.child(
                     Button::new(SharedString::from(format!("inbox-route-{i}")), to.label())
                         .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Primary)
                         .disabled(busy)
                         .on_click(
                             cx.listener(move |view, _, _, cx| view.apply(capture.clone(), cx)),
                         ),
                 );
             }
+        }
+
+        let group_name = SharedString::from(format!("capture-row-group-{i}"));
+        let group_hover_name = group_name.clone();
+        let mut secondary_actions = div()
+            .flex()
+            .items_center()
+            .gap_1()
+            .when(!chosen, |el| {
+                el.opacity(0.)
+                    .group_hover(group_hover_name, |s| s.opacity(1.))
+            });
+        if is_new {
+            if capture.url.as_deref().is_some_and(is_youtube_url) {
+                let url = capture.url.clone().unwrap_or_default();
+                secondary_actions = secondary_actions.child(
+                    Button::new(SharedString::from(format!("inbox-music-{i}")), "Music")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .disabled(busy)
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            cx.emit(InboxEvent::OpenMusic(url.clone()))
+                        })),
+                );
+            }
             let done = id.clone();
             let dismiss = id.clone();
-            actions = actions
+            secondary_actions = secondary_actions
                 .child(
                     Button::new(SharedString::from(format!("inbox-done-{i}")), "Done")
                         .size(ControlSize::Sm)
@@ -638,7 +655,7 @@ impl Inbox {
                 );
         } else {
             let restore = id.clone();
-            actions = actions.child(
+            secondary_actions = secondary_actions.child(
                 Button::new(SharedString::from(format!("inbox-restore-{i}")), "Restore")
                     .size(ControlSize::Sm)
                     .variant(ButtonVariant::Ghost)
@@ -650,17 +667,22 @@ impl Inbox {
         }
         if chosen {
             let capture = capture.clone();
-            actions =
-                actions.child(
-                    Button::new(SharedString::from(format!("inbox-edit-{i}")), "Edit")
-                        .size(ControlSize::Sm)
-                        .variant(ButtonVariant::Ghost)
-                        .disabled(busy)
-                        .on_click(cx.listener(move |view, _, window, cx| {
-                            view.edit_text(&capture, window, cx)
-                        })),
-                );
+            secondary_actions = secondary_actions.child(
+                Button::new(SharedString::from(format!("inbox-edit-{i}")), "Edit")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
+                    .disabled(busy)
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        view.edit_text(&capture, window, cx)
+                    })),
+            );
         }
+        let actions = div()
+            .flex()
+            .items_center()
+            .gap_1()
+            .child(secondary_actions)
+            .child(primary_action);
         let editor = self
             .editing
             .as_ref()
@@ -668,29 +690,48 @@ impl Inbox {
             .map(|(_, input, _)| input.clone());
 
         let tags = chosen.then(|| {
-            div().flex().gap_1().children(TAGS.iter().map(|tag| {
-                let id = id.clone();
-                let on = capture.tag.as_deref() == Some(*tag);
-                Button::new(
-                    SharedString::from(format!("inbox-tag-{i}-{tag}")),
-                    format!("#{tag}"),
+            let route_options: [(&str, &str); 4] = [
+                ("buy", "→ Wishlist (#buy)"),
+                ("look", "→ Feed (#look)"),
+                ("go", "→ Places (#go)"),
+                ("learn", "→ Learn (#learn)"),
+            ];
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_1p5()
+                .pt_1()
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child("Destination:"),
                 )
-                .size(ControlSize::Sm)
-                .variant(if on {
-                    ButtonVariant::Primary
-                } else {
-                    ButtonVariant::Ghost
-                })
-                .disabled(busy)
-                .on_click(cx.listener(move |view, _, _, cx| {
-                    view.set_tag(id.clone(), (!on).then_some(*tag), cx)
+                .children(route_options.into_iter().map(|(tag_key, label)| {
+                    let id = id.clone();
+                    let on = capture.tag.as_deref() == Some(tag_key);
+                    Button::new(
+                        SharedString::from(format!("inbox-tag-{i}-{tag_key}")),
+                        label,
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(if on {
+                        ButtonVariant::Primary
+                    } else {
+                        ButtonVariant::Ghost
+                    })
+                    .disabled(busy)
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.set_tag(id.clone(), (!on).then_some(tag_key), cx)
+                    }))
                 }))
-            }))
         });
 
         let select = id.clone();
         div()
             .id(("capture-row", i))
+            .group(group_name)
             .flex()
             .flex_col()
             .gap_1()

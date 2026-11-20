@@ -1,15 +1,17 @@
 //! Card frames, lists, density rows, progress bars, and metrics.
 
 use gpui_kit::component::scroll::ScrollableElement;
+use gpui_kit::component::IconName;
 use gpui_kit::{
     div, list as gpui_list, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, ElementId,
     FontWeight, ListState, SharedString, Window,
 };
 
-use super::tokens::RADIUS_MD;
+use super::tokens::FONT_MONO_TABULAR;
 use crate::ely::{
     buttons::{Button, ButtonVariant},
     layout::Section,
+    primitives::Tooltip,
     theme::ControlSize,
 };
 use crate::theme::{tint, Density, Palette};
@@ -70,13 +72,50 @@ pub fn row_for_density(density: Density) -> gpui_kit::Div {
         .min_h(density.row_height())
 }
 
-pub fn card(body: AnyElement, palette: Palette) -> AnyElement {
+/// Elevated surface card frame (`16px` radius, surface fill, subtle border).
+pub fn surface_card(palette: Palette) -> gpui_kit::Div {
     div()
         .rounded(px(16.))
         .bg(rgba(palette.surface))
         .border_1()
-        .border_color(rgba(palette.border))
+        .border_color(rgba(tint(palette.border, 0x77)))
+}
+
+pub fn card(body: AnyElement, palette: Palette) -> AnyElement {
+    surface_card(palette)
         .p_4()
+        .child(body)
+        .into_any_element()
+}
+
+/// Framed chart card with uppercase title, optional subtitle, and elevated surface.
+pub fn chart_card(
+    title: impl Into<SharedString>,
+    subtitle: Option<SharedString>,
+    body: AnyElement,
+    palette: Palette,
+) -> AnyElement {
+    surface_card(palette)
+        .p_4()
+        .flex()
+        .flex_col()
+        .gap_3()
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_0p5()
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(rgb(palette.muted))
+                        .child(title.into()),
+                )
+                .when_some(subtitle, |el, sub| {
+                    el.child(div().text_xs().text_color(rgb(palette.muted)).child(sub))
+                }),
+        )
         .child(body)
         .into_any_element()
 }
@@ -122,30 +161,32 @@ pub fn stat_card(
     div()
         .flex_1()
         .min_w(px(120.))
-        .p_3()
-        .rounded(RADIUS_MD)
+        .px_4()
+        .py_3p5()
+        .rounded(px(14.))
         .bg(rgba(palette.surface))
         .border_1()
-        .border_color(rgba(palette.border))
+        .border_color(rgba(tint(palette.border, 0x77)))
         .flex()
         .flex_col()
-        .gap_1()
+        .gap_1p5()
         .child(
             div()
                 .text_xs()
-                .font_weight(FontWeight::MEDIUM)
+                .font_weight(FontWeight::SEMIBOLD)
                 .text_color(rgb(palette.muted))
                 .child(label.into()),
         )
         .child(
             div()
-                .text_lg()
-                .font_weight(FontWeight::SEMIBOLD)
+                .text_2xl()
+                .font_weight(FontWeight::BOLD)
+                .font_family(FONT_MONO_TABULAR)
                 .text_color(rgb(tone))
                 .child(value.into()),
         )
         .when_some(detail, |el, det| {
-            el.child(div().text_xs().text_color(rgb(palette.muted)).child(det))
+            el.child(div().truncate().text_xs().text_color(rgb(palette.muted)).child(det))
         })
         .into_any_element()
 }
@@ -265,5 +306,251 @@ pub fn stat_strip(cards: Vec<AnyElement>) -> AnyElement {
         .items_stretch()
         .gap_3()
         .children(cards)
+        .into_any_element()
+}
+
+/// Tactile dashboard metric tile with large tabular value and quiet caption.
+pub fn dashboard_metric_tile(
+    card: InteractiveStatCard,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> AnyElement {
+    let InteractiveStatCard {
+        id,
+        label,
+        value,
+        detail,
+        tone,
+        active,
+        palette,
+    } = card;
+    div()
+        .id(id)
+        .flex_1()
+        .min_w(px(136.))
+        .px_4()
+        .py_3p5()
+        .rounded(px(14.))
+        .bg(rgba(if active {
+            tint(palette.accent, 0x1a)
+        } else {
+            palette.surface
+        }))
+        .border_1()
+        .border_color(if active {
+            rgb(palette.accent)
+        } else {
+            rgba(tint(palette.border, 0x77))
+        })
+        .cursor_pointer()
+        .hover(move |s| {
+            s.bg(rgba(if active {
+                tint(palette.accent, 0x24)
+            } else {
+                palette.raised
+            }))
+            .border_color(if active {
+                rgb(palette.accent)
+            } else {
+                rgba(tint(palette.accent, 0x55))
+            })
+        })
+        .on_click(on_click)
+        .flex()
+        .flex_col()
+        .gap_1p5()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(rgb(if active {
+                            palette.accent
+                        } else {
+                            palette.muted
+                        }))
+                        .child(label),
+                )
+                .when(active, |el| {
+                    el.child(
+                        div()
+                            .px_1p5()
+                            .py(px(1.))
+                            .rounded_full()
+                            .bg(rgba(tint(palette.accent, 0x26)))
+                            .text_xs()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(palette.accent))
+                            .child("Active"),
+                    )
+                }),
+        )
+        .child(
+            div()
+                .text_2xl()
+                .font_weight(FontWeight::BOLD)
+                .font_family(FONT_MONO_TABULAR)
+                .text_color(rgb(tone))
+                .child(value),
+        )
+        .when_some(detail, |el, det| {
+            el.child(
+                div()
+                    .truncate()
+                    .text_xs()
+                    .text_color(rgb(if active { palette.text } else { palette.muted }))
+                    .child(det),
+            )
+        })
+        .into_any_element()
+}
+
+/// Circular icon-first quick action with caption underneath.
+pub struct QuickAction {
+    pub id: ElementId,
+    pub icon: IconName,
+    pub label: SharedString,
+    pub tooltip: SharedString,
+    pub active: bool,
+    pub tone: Option<u32>,
+    pub palette: Palette,
+}
+
+pub fn quick_action_button(
+    action: QuickAction,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> AnyElement {
+    let QuickAction {
+        id,
+        icon,
+        label,
+        tooltip,
+        active,
+        tone,
+        palette,
+    } = action;
+    let accent = tone.unwrap_or(palette.accent);
+    div()
+        .id(id)
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap_1p5()
+        .min_w(px(64.))
+        .cursor_pointer()
+        .tooltip(Tooltip::text(tooltip))
+        .on_click(on_click)
+        .child(
+            div()
+                .size(px(42.))
+                .rounded_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(rgba(if active {
+                    tint(accent, 0x28)
+                } else {
+                    palette.raised
+                }))
+                .border_1()
+                .border_color(if active {
+                    rgb(accent)
+                } else {
+                    rgba(tint(palette.border, 0x88))
+                })
+                .text_color(rgb(if active { accent } else { palette.text }))
+                .hover(move |s| {
+                    s.bg(rgba(if active {
+                        tint(accent, 0x36)
+                    } else {
+                        tint(palette.accent, 0x18)
+                    }))
+                    .border_color(rgb(accent))
+                })
+                .child(div().text_base().child(icon)),
+        )
+        .child(
+            div()
+                .text_xs()
+                .font_weight(if active {
+                    FontWeight::SEMIBOLD
+                } else {
+                    FontWeight::MEDIUM
+                })
+                .text_color(rgb(if active { accent } else { palette.muted }))
+                .child(label),
+        )
+        .into_any_element()
+}
+
+/// Horizontal wrapping row of [`pill_tab`] controls.
+pub fn pill_tab_bar(tabs: Vec<AnyElement>) -> AnyElement {
+    div()
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .gap_1p5()
+        .children(tabs)
+        .into_any_element()
+}
+
+/// High-contrast pill segment tab for view and timeline filtering.
+pub fn pill_tab(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    count: Option<usize>,
+    active: bool,
+    palette: Palette,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> AnyElement {
+    let active_fg = palette.surface >> 8;
+    div()
+        .id(id.into())
+        .flex()
+        .items_center()
+        .gap_1p5()
+        .px_3()
+        .py(px(5.))
+        .rounded_full()
+        .cursor_pointer()
+        .bg(if active {
+            rgb(palette.text)
+        } else {
+            rgba(palette.surface)
+        })
+        .border_1()
+        .border_color(if active {
+            rgb(palette.text)
+        } else {
+            rgba(tint(palette.border, 0x66))
+        })
+        .hover(move |s| {
+            if active {
+                s
+            } else {
+                s.bg(rgba(palette.raised))
+            }
+        })
+        .on_click(on_click)
+        .child(
+            div()
+                .text_xs()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(rgb(if active { active_fg } else { palette.muted }))
+                .child(label.into()),
+        )
+        .when_some(count, |el, n| {
+            el.child(
+                div()
+                    .text_xs()
+                    .font_family(FONT_MONO_TABULAR)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(rgb(if active { active_fg } else { palette.muted }))
+                    .child(n.to_string()),
+            )
+        })
         .into_any_element()
 }

@@ -1,19 +1,23 @@
 //! The Projects page: pick a project, view tasks and notes, edit them in place.
 
+use std::rc::Rc;
+
+use crate::ely::data_display::Tone;
 use crate::ely::feedback::Toast;
 use crate::ely::primitives::Severity;
+use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction};
 use crate::feedback::WindowToastExt;
 use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Div, Entity, FocusHandle, Focusable,
+    div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, Div, Entity, FocusHandle, Focusable,
     FontWeight, MouseButton, ScrollHandle, SharedString, Subscription, Window,
 };
 
 use crate::data::{self, Remote, Repo};
 use crate::editor::{self, EditorEvent, NoteEditor};
-use crate::primitives::{back_button, list, note, placeholder, row_for_density, section};
+use crate::primitives::{back_button, note, placeholder, section, sub_tabs};
 use crate::tasks::{self, NoteSort, StatusFilter, TaskFilter, TaskSort};
 use crate::theme::{tint, Density, Palette, ThemeContext};
 use sjel_gpui_core::data::Blocked;
@@ -321,6 +325,17 @@ impl Projects {
 
     pub fn active_project_name(&self) -> Option<String> {
         self.project.as_ref().map(|(name, _)| name.clone())
+    }
+
+    pub fn set_project_section(&mut self, section: ProjectSection, cx: &mut Context<Self>) {
+        if self.project_section != section {
+            self.put_away_editor(cx);
+            self.project_section = section;
+            if section == ProjectSection::MailReview {
+                self.load_project_mail(false, cx);
+            }
+            cx.notify();
+        }
     }
 
     pub fn close_project(&mut self, cx: &mut Context<Self>) {
@@ -1154,6 +1169,9 @@ impl Projects {
         };
         let (path, title) = {
             let editor = editor.read(cx);
+            if editor.renaming() {
+                return;
+            }
             (editor.path().to_owned(), editor.title.to_string())
         };
         if self
@@ -1205,7 +1223,6 @@ impl Projects {
             return;
         };
         let path = editor.read(cx).path().to_owned();
-        let was = path.clone();
         let repo = self.repo.clone();
         let work = shell::run(async move { repo.rename_record(&path, &title).await });
         cx.spawn_in(window, async move |this, cx| {
@@ -1219,11 +1236,7 @@ impl Projects {
                         view.load_all_notes(cx);
                         // Only follow the note that was renamed: whatever is on screen now, if it
                         // moved meanwhile, is not this one.
-                        let still_open = view
-                            .editor
-                            .as_ref()
-                            .is_some_and(|editor| editor.read(cx).path() == was);
-                        if still_open {
+                        if view.editor.as_ref() == Some(&editor) {
                             view.open_note(renamed.path, true, window, cx);
                         }
                         let mut done = format!("Renamed to {}", renamed.title);
@@ -1235,8 +1248,13 @@ impl Projects {
                         }
                         window.push_toast(Toast::new(done).severity(Severity::Success), cx);
                     }
-                    Err(error) => window
-                        .push_toast(Toast::new(error.to_string()).severity(Severity::Danger), cx),
+                    Err(error) => {
+                        editor.update(cx, |editor, cx| editor.rename_failed(cx));
+                        window.push_toast(
+                            Toast::new(error.to_string()).severity(Severity::Danger),
+                            cx,
+                        );
+                    }
                 }
                 cx.notify();
             });
@@ -1307,16 +1325,17 @@ impl Projects {
     ) {
         let saver = editor::repo_saver(self.repo.clone());
         let editor = cx.new(|cx| NoteEditor::new(record, saver, window, cx));
-        cx.subscribe_in(
-            &editor,
-            window,
-            |projects, _, event, window, cx| match event {
+        cx.subscribe_in(&editor, window, |projects, source, event, window, cx| {
+            if projects.editor.as_ref() != Some(source) {
+                return;
+            }
+            match event {
                 EditorEvent::Close => projects.close_note(cx),
                 EditorEvent::Rename(title) => {
                     projects.rename_open_note(title.to_string(), window, cx)
                 }
-            },
-        )
+            }
+        })
         .detach();
         if !save {
             editor.update(cx, |editor, _| editor.editable_saves = false);
@@ -2111,69 +2130,7 @@ impl Projects {
                 })
                 .unwrap_or((0, 0));
 
-            let sec_tab = |id: &'static str,
-                           label: &'static str,
-                           count: Option<usize>,
-                           kbd: &'static str,
-                           target_sec: ProjectSection,
-                           cx: &mut Context<Self>| {
-                let active = self.project_section == target_sec;
-                div()
-                    .id(id)
-                    .flex()
-                    .items_center()
-                    .gap_1p5()
-                    .px_3()
-                    .py(px(4.))
-                    .rounded(px(6.))
-                    .text_xs()
-                    .cursor_pointer()
-                    .when(active, |el| {
-                        el.bg(rgba(palette.surface))
-                            .text_color(rgb(palette.text))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .shadow_sm()
-                    })
-                    .when(!active, |el| {
-                        el.text_color(rgb(palette.muted)).hover(|s| {
-                            s.text_color(rgb(palette.text))
-                                .bg(rgba(tint(palette.surface, 0x44)))
-                        })
-                    })
-                    .on_click(cx.listener(move |view: &mut Self, _, _, cx| {
-                        if view.project_section != target_sec {
-                            view.put_away_editor(cx);
-                            view.project_section = target_sec;
-                            if target_sec == ProjectSection::MailReview {
-                                view.load_project_mail(false, cx);
-                            }
-                            cx.notify();
-                        }
-                    }))
-                    .child(label)
-                    .children(count.map(|c| {
-                        div()
-                            .text_size(px(10.))
-                            .font_weight(FontWeight::NORMAL)
-                            .text_color(rgb(if active { palette.text } else { palette.muted }))
-                            .child(format!("({c})"))
-                    }))
-                    .child(
-                        div()
-                            .px_1()
-                            .py(px(0.5))
-                            .rounded(px(3.))
-                            .bg(rgba(if active {
-                                palette.raised
-                            } else {
-                                tint(palette.border, 0x55)
-                            }))
-                            .text_size(px(9.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(rgb(palette.muted))
-                            .child(kbd),
-                    )
-            };
+            let sec_entity = cx.entity();
 
             // Project header bar with breadcrumb and section tabs
             let project_header = div()
@@ -2207,56 +2164,55 @@ impl Projects {
                             })
                         }),
                 )
-                .child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .items_center()
-                        .gap_1()
-                        .p(px(2.))
-                        .rounded(px(8.))
-                        .bg(rgba(palette.raised))
-                        .child(sec_tab(
-                            "sec-project-note",
+                .child(sub_tabs(
+                    "project-section-tabs",
+                    vec![
+                        (
                             "Project Note",
                             None,
-                            "1",
-                            ProjectSection::Note,
-                            cx,
-                        ))
-                        .child(sec_tab(
-                            "sec-tasks",
+                            self.project_section == ProjectSection::Note,
+                        ),
+                        (
                             "Tasks",
                             Some(open_tasks),
-                            "2",
-                            ProjectSection::Tasks,
-                            cx,
-                        ))
-                        .child(sec_tab(
-                            "sec-notes",
+                            self.project_section == ProjectSection::Tasks,
+                        ),
+                        (
                             "Notes",
                             Some(supporting_notes_count),
-                            "3",
-                            ProjectSection::Notes,
-                            cx,
-                        ))
-                        .child(sec_tab(
-                            "sec-mail-review",
+                            self.project_section == ProjectSection::Notes,
+                        ),
+                        (
                             "Mail review",
                             None,
-                            "4",
-                            ProjectSection::MailReview,
-                            cx,
-                        ))
-                        .child(sec_tab(
-                            "sec-inventory-links",
+                            self.project_section == ProjectSection::MailReview,
+                        ),
+                        (
                             "Inventory links",
                             None,
-                            "5",
-                            ProjectSection::InventoryLinks,
-                            cx,
-                        )),
-                );
+                            self.project_section == ProjectSection::InventoryLinks,
+                        ),
+                    ],
+                    move |ix, _, cx| {
+                        sec_entity.update(cx, |view, cx| {
+                            let target_sec = match ix {
+                                1 => ProjectSection::Tasks,
+                                2 => ProjectSection::Notes,
+                                3 => ProjectSection::MailReview,
+                                4 => ProjectSection::InventoryLinks,
+                                _ => ProjectSection::Note,
+                            };
+                            if view.project_section != target_sec {
+                                view.put_away_editor(cx);
+                                view.project_section = target_sec;
+                                if target_sec == ProjectSection::MailReview {
+                                    view.load_project_mail(false, cx);
+                                }
+                                cx.notify();
+                            }
+                        });
+                    },
+                ));
 
             let content: AnyElement = match self.project_section {
                 ProjectSection::Note => {
@@ -2444,122 +2400,58 @@ impl Projects {
                                     })
                                     .collect();
 
-                                let notes_content = if note_records.is_empty() {
-                                    div()
-                                        .text_xs()
-                                        .text_color(rgb(palette.muted))
-                                        .py_2()
-                                        .child("No supporting notes yet in this project.")
-                                        .into_any_element()
-                                } else {
-                                    let rows = note_records
-                                        .into_iter()
-                                        .enumerate()
-                                        .map(|(index, record)| {
-                                            let open = record.clone();
-                                            let del = record.clone();
-                                            let snippet = extract_note_snippet(&record.content);
-                                            row_for_density(cols.density)
-                                                .id(("record", index))
-                                                .group("record-row")
-                                                .min_h(px(40.))
-                                                .py_1()
-                                                .cursor_pointer()
-                                                .hover(move |style| {
-                                                    style.bg(rgba(tint(palette.raised, 0x55)))
-                                                })
-                                                .on_click(cx.listener(
-                                                    move |view, _, window, cx| {
-                                                        view.open_note(
-                                                            open.path.clone(),
-                                                            true,
-                                                            window,
-                                                            cx,
-                                                        )
-                                                    },
-                                                ))
-                                                .child(
-                                                    div().w(px(24.)).flex().items_center().child(
-                                                        div()
-                                                            .size(px(20.))
-                                                            .rounded(px(4.))
-                                                            .bg(rgba(palette.raised))
-                                                            .flex()
-                                                            .items_center()
-                                                            .justify_center()
-                                                            .text_xs()
-                                                            .text_color(rgb(palette.muted))
-                                                            .child("≡"),
+                                let columns = vec![
+                                    Column::new("title", "NOTE").min_width(rems(14.)),
+                                    Column::new("preview", "PREVIEW").min_width(rems(16.)),
+                                    Column::new("kind", "TYPE").width(rems(6.)),
+                                    Column::new("actions", "")
+                                        .width(rems(6.))
+                                        .actions([RowAction::new("delete", "Delete")]),
+                                ];
+                                let rows: Rc<Vec<Row>> = Rc::new(
+                                    note_records
+                                        .iter()
+                                        .map(|record| {
+                                            let snippet = extract_note_snippet(&record.content)
+                                                .unwrap_or_else(|| "—".into());
+                                            Row::new(
+                                                record.path.clone(),
+                                                [
+                                                    Cell::Text(record.title.clone().into()),
+                                                    Cell::Text(snippet.into()),
+                                                    Cell::Tag(
+                                                        record.kind.clone().into(),
+                                                        Tone::Neutral,
                                                     ),
-                                                )
-                                                .child(
-                                                    div()
-                                                        .flex_1()
-                                                        .min_w_0()
-                                                        .flex()
-                                                        .flex_col()
-                                                        .gap(px(1.))
-                                                        .child(
-                                                            div()
-                                                                .truncate()
-                                                                .text_sm()
-                                                                .hover(move |s| {
-                                                                    s.text_color(
-                                                                        rgb(palette.accent),
-                                                                    )
-                                                                })
-                                                                .child(record.title.clone()),
-                                                        )
-                                                        .children(snippet.map(|snip| {
-                                                            div()
-                                                                .truncate()
-                                                                .text_xs()
-                                                                .text_color(rgb(palette.muted))
-                                                                .child(snip)
-                                                        })),
-                                                )
-                                                .child(
-                                                    div()
-                                                        .px_2()
-                                                        .py(px(1.5))
-                                                        .rounded(px(4.))
-                                                        .bg(rgba(palette.raised))
-                                                        .border_1()
-                                                        .border_color(rgba(palette.border))
-                                                        .text_xs()
-                                                        .text_color(rgb(palette.muted))
-                                                        .child(record.kind.clone()),
-                                                )
-                                                .child(
-                                                    div().w(px(28.)).flex().justify_center().child(
-                                                        div()
-                                                            .id(("del-note", index))
-                                                            .cursor_pointer()
-                                                            .text_color(rgb(palette.muted))
-                                                            .opacity(0.)
-                                                            .group_hover("record-row", |s| {
-                                                                s.opacity(1.)
-                                                            })
-                                                            .hover(move |s| {
-                                                                s.text_color(rgb(palette.red))
-                                                            })
-                                                            .on_click(cx.listener(
-                                                                move |view, _, window, cx| {
-                                                                    view.remove_record(
-                                                                        del.path.clone(),
-                                                                        window,
-                                                                        cx,
-                                                                    )
-                                                                },
-                                                            ))
-                                                            .child("×"),
-                                                    ),
-                                                )
-                                                .into_any_element()
+                                                    Cell::Actions(vec!["delete".into()]),
+                                                ],
+                                            )
                                         })
-                                        .collect();
-                                    list(rows, palette)
-                                };
+                                        .collect(),
+                                );
+                                let (on_open, on_act) = (cx.entity(), cx.entity());
+                                let notes_content = DataTable::new(
+                                    "project-supporting-notes-table",
+                                    columns,
+                                )
+                                .label("Supporting notes")
+                                .rows(rows)
+                                .on_open(move |key, window, cx| {
+                                    let path = key.to_string();
+                                    on_open.update(cx, |view, cx| {
+                                        view.open_note(path, true, window, cx);
+                                    });
+                                })
+                                .on_action(move |key, action, window, cx| {
+                                    if action.as_ref() == "delete" {
+                                        let path = key.to_string();
+                                        on_act.update(cx, |view, cx| {
+                                            view.remove_record(path, window, cx);
+                                        });
+                                    }
+                                })
+                                .empty("No supporting notes yet in this project.")
+                                .into_any_element();
 
                                 div()
                                     .flex()
@@ -2628,142 +2520,43 @@ impl Projects {
                 .into_any_element();
         }
 
-        // Top navigation tabs: Projects | All Tasks | All Notes
-        let tab_bar = div().flex().items_center().justify_between().mb_3().child(
+        // Top navigation tabs: rendered inside the page only when mounted standalone or on mobile
+        // (on Desktop, `header.rs` renders the unified tab strip in the window header).
+        let show_inline_tabs = self.density == Density::Mobile || cfg!(test);
+        let projects_count = self
+            .projects
+            .value
+            .as_ref()
+            .map(|list| list.iter().filter(|p| !p.archived).count())
+            .filter(|&c| c > 0);
+        let tasks_count = self.all_tasks.value.as_ref().map(Vec::len).filter(|&c| c > 0);
+        let notes_count = self.all_notes.value.as_ref().map(Vec::len).filter(|&c| c > 0);
+        let tab_entity = cx.entity();
+        let tab_bar = show_inline_tabs.then(|| {
             div()
                 .flex()
                 .items_center()
-                .gap_1()
-                .p(px(2.))
-                .rounded(px(8.))
-                .bg(rgba(palette.raised))
-                .child(
-                    div()
-                        .id("tab-hubs")
-                        .flex()
-                        .items_center()
-                        .gap_1p5()
-                        .px_3()
-                        .py(px(4.))
-                        .rounded(px(6.))
-                        .text_xs()
-                        .cursor_pointer()
-                        .when(self.tab == ProjectsTab::Hubs, |el| {
-                            el.bg(rgba(palette.surface))
-                                .text_color(rgb(palette.text))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .shadow_sm()
-                        })
-                        .when(self.tab != ProjectsTab::Hubs, |el| {
-                            el.text_color(rgb(palette.muted))
-                                .hover(|s| s.text_color(rgb(palette.text)))
-                        })
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.tab = ProjectsTab::Hubs;
+                .justify_between()
+                .mb_3()
+                .child(sub_tabs(
+                    "projects-main-tabs",
+                    vec![
+                        ("Projects", projects_count, self.tab == ProjectsTab::Hubs),
+                        ("All Tasks", tasks_count, self.tab == ProjectsTab::AllTasks),
+                        ("All Notes", notes_count, self.tab == ProjectsTab::AllNotes),
+                    ],
+                    move |ix, _, cx| {
+                        tab_entity.update(cx, |view, cx| {
+                            view.tab = match ix {
+                                1 => ProjectsTab::AllTasks,
+                                2 => ProjectsTab::AllNotes,
+                                _ => ProjectsTab::Hubs,
+                            };
                             cx.notify();
-                        }))
-                        .child("Projects")
-                        .child(
-                            div()
-                                .px_1()
-                                .py(px(0.5))
-                                .rounded(px(3.))
-                                .bg(rgba(if self.tab == ProjectsTab::Hubs {
-                                    palette.raised
-                                } else {
-                                    tint(palette.border, 0x55)
-                                }))
-                                .text_size(px(9.))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(rgb(palette.muted))
-                                .child("1"),
-                        ),
-                )
-                .child(
-                    div()
-                        .id("tab-all-tasks")
-                        .flex()
-                        .items_center()
-                        .gap_1p5()
-                        .px_3()
-                        .py(px(4.))
-                        .rounded(px(6.))
-                        .text_xs()
-                        .cursor_pointer()
-                        .when(self.tab == ProjectsTab::AllTasks, |el| {
-                            el.bg(rgba(palette.surface))
-                                .text_color(rgb(palette.text))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .shadow_sm()
-                        })
-                        .when(self.tab != ProjectsTab::AllTasks, |el| {
-                            el.text_color(rgb(palette.muted))
-                                .hover(|s| s.text_color(rgb(palette.text)))
-                        })
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.tab = ProjectsTab::AllTasks;
-                            cx.notify();
-                        }))
-                        .child("All Tasks")
-                        .child(
-                            div()
-                                .px_1()
-                                .py(px(0.5))
-                                .rounded(px(3.))
-                                .bg(rgba(if self.tab == ProjectsTab::AllTasks {
-                                    palette.raised
-                                } else {
-                                    tint(palette.border, 0x55)
-                                }))
-                                .text_size(px(9.))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(rgb(palette.muted))
-                                .child("2"),
-                        ),
-                )
-                .child(
-                    div()
-                        .id("tab-all-notes")
-                        .flex()
-                        .items_center()
-                        .gap_1p5()
-                        .px_3()
-                        .py(px(4.))
-                        .rounded(px(6.))
-                        .text_xs()
-                        .cursor_pointer()
-                        .when(self.tab == ProjectsTab::AllNotes, |el| {
-                            el.bg(rgba(palette.surface))
-                                .text_color(rgb(palette.text))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .shadow_sm()
-                        })
-                        .when(self.tab != ProjectsTab::AllNotes, |el| {
-                            el.text_color(rgb(palette.muted))
-                                .hover(|s| s.text_color(rgb(palette.text)))
-                        })
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.tab = ProjectsTab::AllNotes;
-                            cx.notify();
-                        }))
-                        .child("All Notes")
-                        .child(
-                            div()
-                                .px_1()
-                                .py(px(0.5))
-                                .rounded(px(3.))
-                                .bg(rgba(if self.tab == ProjectsTab::AllNotes {
-                                    palette.raised
-                                } else {
-                                    tint(palette.border, 0x55)
-                                }))
-                                .text_size(px(9.))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(rgb(palette.muted))
-                                .child("3"),
-                        ),
-                ),
-        );
+                        });
+                    },
+                ))
+        });
 
         if self.tab == ProjectsTab::AllNotes {
             let search_input = self.notes_search_input_field(window, cx);
@@ -2778,7 +2571,7 @@ impl Projects {
                 .track_scroll(&self.scroll)
                 .overflow_y_scroll()
                 .vertical_scrollbar(&self.scroll)
-                .child(tab_bar)
+                .children(tab_bar)
                 .child(section("Cross-Project Notes", body, palette))
                 .into_any_element();
         }
@@ -2818,7 +2611,7 @@ impl Projects {
                 .track_scroll(&self.scroll)
                 .overflow_y_scroll()
                 .vertical_scrollbar(&self.scroll)
-                .child(tab_bar)
+                .children(tab_bar)
                 .child(section("Cross-Project Tasks", body, palette))
                 .into_any_element();
         }
@@ -2908,7 +2701,7 @@ impl Projects {
             .track_scroll(&self.scroll)
             .overflow_y_scroll()
             .vertical_scrollbar(&self.scroll)
-            .child(tab_bar)
+            .children(tab_bar)
             .child(toolbar)
             .when(self.adding_project, |p| {
                 p.child(

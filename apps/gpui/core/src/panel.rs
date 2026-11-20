@@ -4,6 +4,8 @@
 /// unknown key falls back to [`Seat::Soundscape`], which is the seat the edge was built for.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Seat {
+    /// The 24-hour quick scratchpad for notes, links, and tasks that auto-sorts into Sjel.
+    Scratchpad,
     /// The soundscape drawer's content: transport, presets, volume, mixer.
     #[default]
     Soundscape,
@@ -16,7 +18,8 @@ pub enum Seat {
 }
 
 impl Seat {
-    pub const ALL: [Seat; 4] = [
+    pub const ALL: [Seat; 5] = [
+        Seat::Scratchpad,
         Seat::Soundscape,
         Seat::Activity,
         Seat::Agent,
@@ -25,6 +28,7 @@ impl Seat {
 
     pub fn key(self) -> &'static str {
         match self {
+            Self::Scratchpad => "scratchpad",
             Self::Soundscape => "soundscape",
             Self::Activity => "activity",
             Self::Agent => "agent",
@@ -39,6 +43,7 @@ impl Seat {
     /// The chip's word, in the case a chip takes.
     pub fn label(self) -> &'static str {
         match self {
+            Self::Scratchpad => "Scratch",
             Self::Soundscape => "Sound",
             Self::Activity => "Activity",
             Self::Agent => "Agent",
@@ -49,6 +54,7 @@ impl Seat {
     /// The panel's own title, which is the seat and not the app: "SOUNDSCAPE", "ACTIVITY".
     pub fn title(self) -> &'static str {
         match self {
+            Self::Scratchpad => "DAILY SCRATCHPAD",
             Self::Soundscape => "SOUNDSCAPE",
             Self::Activity => "ACTIVITY",
             Self::Agent => "AGENT",

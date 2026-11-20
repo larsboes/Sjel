@@ -7,6 +7,7 @@ use sjel_gpui_ui::backup::BackupPage;
 use sjel_gpui_ui::calendar::page::CalendarPage;
 use sjel_gpui_ui::capabilities;
 use sjel_gpui_ui::cv::CvPage;
+use sjel_gpui_ui::posts::PostsPage;
 use sjel_gpui_ui::docs::DocsPage;
 use sjel_gpui_ui::documents::Documents;
 use sjel_gpui_ui::feed::Feed;
@@ -37,42 +38,42 @@ impl Workspace {
             .clone()
     }
 
-    pub(super) fn ensure_feed(&mut self, cx: &mut Context<Self>) -> Entity<Feed> {
+    pub(crate) fn ensure_feed(&mut self, cx: &mut Context<Self>) -> Entity<Feed> {
         let repo = self.repo.clone();
         self.feed
             .get_or_insert_with(|| cx.new(|cx| Feed::new(repo, cx)))
             .clone()
     }
 
-    pub(super) fn ensure_calendar_page(&mut self, cx: &mut Context<Self>) -> Entity<CalendarPage> {
+    pub(crate) fn ensure_calendar_page(&mut self, cx: &mut Context<Self>) -> Entity<CalendarPage> {
         let repo = self.repo.clone();
         self.calendar_page
             .get_or_insert_with(|| cx.new(|cx| CalendarPage::new(repo, cx)))
             .clone()
     }
 
-    pub(super) fn ensure_finance_page(&mut self, cx: &mut Context<Self>) -> Entity<FinancePage> {
+    pub(crate) fn ensure_finance_page(&mut self, cx: &mut Context<Self>) -> Entity<FinancePage> {
         let repo = self.repo.clone();
         self.finance_page
             .get_or_insert_with(|| cx.new(|cx| FinancePage::new(repo, cx)))
             .clone()
     }
 
-    pub(super) fn ensure_people_page(&mut self, cx: &mut Context<Self>) -> Entity<PeoplePage> {
+    pub(crate) fn ensure_people_page(&mut self, cx: &mut Context<Self>) -> Entity<PeoplePage> {
         let repo = self.repo.clone();
         self.people_page
             .get_or_insert_with(|| cx.new(|cx| PeoplePage::new(repo, cx)))
             .clone()
     }
 
-    pub(super) fn ensure_backup_page(&mut self, cx: &mut Context<Self>) -> Entity<BackupPage> {
+    pub(crate) fn ensure_backup_page(&mut self, cx: &mut Context<Self>) -> Entity<BackupPage> {
         let repo = self.repo.clone();
         self.backup_page
             .get_or_insert_with(|| cx.new(|cx| BackupPage::new(repo, cx)))
             .clone()
     }
 
-    pub(super) fn ensure_inventory_page(
+    pub(crate) fn ensure_inventory_page(
         &mut self,
         cx: &mut Context<Self>,
     ) -> Entity<InventoryPage> {
@@ -103,7 +104,7 @@ impl Workspace {
             .clone()
     }
 
-    pub(super) fn ensure_record_page(&mut self, cx: &mut Context<Self>) -> Entity<RecordPage> {
+    pub(crate) fn ensure_record_page(&mut self, cx: &mut Context<Self>) -> Entity<RecordPage> {
         let repo = self.repo.clone();
         self.record_page
             .get_or_insert_with(|| cx.new(|_| RecordPage::new(repo)))
@@ -117,7 +118,7 @@ impl Workspace {
             .clone()
     }
 
-    pub(super) fn ensure_systems(&mut self, cx: &mut Context<Self>) -> Entity<SystemsPage> {
+    pub(crate) fn ensure_systems(&mut self, cx: &mut Context<Self>) -> Entity<SystemsPage> {
         let repo = self.repo.clone();
         self.systems
             .get_or_insert_with(|| cx.new(|_| SystemsPage::new(repo)))
@@ -145,6 +146,13 @@ impl Workspace {
             .clone()
     }
 
+    pub(super) fn ensure_posts_page(&mut self, cx: &mut Context<Self>) -> Entity<PostsPage> {
+        let repo = self.repo.clone();
+        self.posts_page
+            .get_or_insert_with(|| cx.new(|_| PostsPage::new(repo)))
+            .clone()
+    }
+
     pub(super) fn ensure_media_page(&mut self, cx: &mut Context<Self>) -> Entity<MediaPage> {
         let repo = self.repo.clone();
         self.media_page
@@ -152,14 +160,14 @@ impl Workspace {
             .clone()
     }
 
-    pub(super) fn ensure_research_page(&mut self, cx: &mut Context<Self>) -> Entity<ResearchPage> {
+    pub(crate) fn ensure_research_page(&mut self, cx: &mut Context<Self>) -> Entity<ResearchPage> {
         let repo = self.repo.clone();
         self.research_page
             .get_or_insert_with(|| cx.new(|_| ResearchPage::new(repo)))
             .clone()
     }
 
-    pub(super) fn ensure_setup_page(&mut self, cx: &mut Context<Self>) -> Entity<SetupPage> {
+    pub(crate) fn ensure_setup_page(&mut self, cx: &mut Context<Self>) -> Entity<SetupPage> {
         let repo = self.repo.clone();
         self.setup_page
             .get_or_insert_with(|| cx.new(|_| SetupPage::new(repo)))
@@ -212,6 +220,8 @@ impl Workspace {
                 self.ensure_self_page(cx).update(cx, |s, cx| s.load(cx));
             } else if page == Page::Cv {
                 self.ensure_cv_page(cx).update(cx, |cv, cx| cv.load(cx));
+            } else if page == Page::Posts {
+                self.ensure_posts_page(cx).update(cx, |p, cx| p.load(cx));
             } else if page == Page::Media {
                 self.ensure_media_page(cx).update(cx, |m, cx| m.load(cx));
             } else if page == Page::Research {
@@ -232,6 +242,7 @@ impl Workspace {
             } else if page == Page::Home {
                 self.context_page
                     .update(cx, |context, cx| context.activate(cx));
+                self.load_home_feeds(cx);
             } else if page == Page::Finance {
                 self.ensure_finance_page(cx)
                     .update(cx, |finance, cx| finance.activate(cx));
@@ -296,6 +307,8 @@ impl Workspace {
             self.ensure_self_page(cx).update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Cv {
             self.ensure_cv_page(cx).update(cx, |p, cx| p.refresh(cx));
+        } else if self.page == Page::Posts {
+            self.ensure_posts_page(cx).update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Media {
             self.ensure_media_page(cx).update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Research {
@@ -362,6 +375,7 @@ impl Workspace {
             Page::Packs => self.ensure_packs(cx).into_any_element(),
             Page::SelfModel => self.ensure_self_page(cx).into_any_element(),
             Page::Cv => self.ensure_cv_page(cx).into_any_element(),
+            Page::Posts => self.ensure_posts_page(cx).into_any_element(),
             Page::Media => self.ensure_media_page(cx).into_any_element(),
             Page::Research => self.ensure_research_page(cx).into_any_element(),
             Page::Setup => self.ensure_setup_page(cx).into_any_element(),
@@ -409,30 +423,7 @@ impl Workspace {
             Page::Projects => {
                 self.projects
                     .update(cx, |projects, cx| projects.set_palette(palette, cx));
-                gpui_kit::div()
-                    .size_full()
-                    .flex()
-                    .flex_col()
-                    .child(
-                        sjel_gpui_ui::ely::buttons::Button::new(
-                            "projects-registry",
-                            "Browse objects",
-                        )
-                        .variant(sjel_gpui_ui::ely::buttons::ButtonVariant::Ghost)
-                        .on_click(cx.listener(|workspace, _, _, cx| {
-                            workspace.go(Page::Record, cx);
-                            workspace.ensure_record_page(cx).update(cx, |page, cx| {
-                                page.open("registry:projects".into(), cx);
-                            });
-                        })),
-                    )
-                    .child(
-                        gpui_kit::div()
-                            .flex_1()
-                            .min_h_0()
-                            .child(self.projects.clone()),
-                    )
-                    .into_any_element()
+                self.projects.clone().into_any_element()
             }
             Page::Travel => {
                 self.travel.update(cx, |travel, cx| {

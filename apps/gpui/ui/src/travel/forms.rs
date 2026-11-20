@@ -26,6 +26,8 @@ use crate::ely::{
         DatePicker, Form as ElyForm, FormError, FormField as ElyFormField, Input, InputEvent,
         TextInput,
     },
+    layout::Sheet,
+    primitives::Place,
     theme::ControlSize,
 };
 
@@ -607,9 +609,18 @@ impl Travel {
         cx.notify();
     }
 
-    /// The open form, when `kind` is the one open. Drawn where its button is.
-    pub(super) fn form_card(&self, kind: &FormKind, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let form = self.form.as_ref().filter(|form| &form.kind == kind)?;
+    /// The open form lives in [`Self::render_form_sheet`]; inline placeholders stay empty.
+    pub(super) fn form_card(
+        &self,
+        _kind: &FormKind,
+        _cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        None
+    }
+
+    /// Slide-over Ely [`Sheet`] for creating or editing a trip, booking, stay candidate, or stage.
+    pub(super) fn render_form_sheet(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let form = self.form.as_ref()?;
         let palette = self.palette;
         let title = match &form.kind {
             FormKind::Trip(Some(destination)) => format!("Plan a trip to {destination}"),
@@ -624,18 +635,12 @@ impl Travel {
         let mut card = div()
             .flex()
             .flex_col()
-            .gap_2()
+            .gap_3()
             .p_3()
             .rounded(px(10.))
             .border_1()
             .border_color(rgba(palette.border))
-            .bg(rgba(palette.surface))
-            .child(
-                div()
-                    .text_sm()
-                    .font_weight(gpui::FontWeight::MEDIUM)
-                    .child(title),
-            );
+            .bg(rgba(palette.surface));
         for (index, (label, field)) in form.fields.iter().enumerate() {
             let control = match field {
                 FormField::Text(input) => {
@@ -686,35 +691,40 @@ impl Travel {
                     .child("One stage is made per destination, in the order typed. Dates and modes are set per stage afterwards."),
             );
         }
-        Some(
-            ElyForm::new("travel-form")
+        let body = ElyForm::new("travel-form")
+            .child(
+                card.when_some(form.error.clone(), |card, why| {
+                    card.child(FormError::new("travel-form-error", why))
+                })
                 .child(
-                    card.when_some(form.error.clone(), |card, why| {
-                        card.child(FormError::new("travel-form-error", why))
-                    })
-                    .child(
-                        div()
-                            .flex()
-                            .gap_2()
-                            .child(
-                                Button::new(
-                                    "travel-form-save",
-                                    if form.saving { "Saving…" } else { "Save" },
-                                )
-                                .primary()
-                                .disabled(form.saving)
-                                .on_click(
-                                    cx.listener(|view, _, window, cx| view.save_form(window, cx)),
-                                ),
+                    div()
+                        .flex()
+                        .gap_2()
+                        .child(
+                            Button::new(
+                                "travel-form-save",
+                                if form.saving { "Saving…" } else { "Save" },
                             )
-                            .child(
-                                Button::new("travel-form-cancel", "Cancel")
-                                    .variant(ButtonVariant::Ghost)
-                                    .on_click(cx.listener(|view, _, _, cx| view.close_form(cx))),
+                            .primary()
+                            .disabled(form.saving)
+                            .on_click(
+                                cx.listener(|view, _, window, cx| view.save_form(window, cx)),
                             ),
-                    ),
-                )
-                .into_any_element(),
+                        )
+                        .child(
+                            Button::new("travel-form-cancel", "Cancel")
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(|view, _, _, cx| view.close_form(cx))),
+                        ),
+                ),
+            );
+        let close_entity = cx.entity();
+        Some(
+            Sheet::new("travel-form-sheet", Place::Right, title, move |_, cx| {
+                close_entity.update(cx, |view, cx| view.close_form(cx));
+            })
+            .child(body)
+            .into_any_element(),
         )
     }
 

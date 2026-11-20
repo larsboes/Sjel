@@ -327,13 +327,17 @@ impl SystemsPage {
                         Treemap::new("systems-directory-allocation"),
                         |chart, entry| chart.tile(entry.path.clone(), entry.bytes as f64),
                     );
-                body = body.child(
+                body = body.child(crate::primitives::chart_card(
+                    "DIRECTORY ALLOCATION",
+                    Some("Top directories and unlisted space".into()),
                     chart
                         .tile("Unlisted", snapshot.unlisted_bytes as f64)
                         .format(|bytes| storage_bytes(bytes.round() as u64))
                         .w_full()
-                        .h(px(220.)),
-                );
+                        .h(px(220.))
+                        .into_any_element(),
+                    palette,
+                ));
             }
             let rows = snapshot
                 .directories

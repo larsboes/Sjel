@@ -479,12 +479,34 @@ fn search(query: Query) {
 }
 
 fn item(item: &travel::Item) -> impl IntoElement {
-    let mut row = view().gap_1().py_3().child(heading(item.title.clone()));
-    row = row.child(caption(format!(
-        "{} · {}",
-        item.item_type,
-        item.day.as_deref().unwrap_or("Undated")
-    )));
+    let badge = if item.item_type == "packing" {
+        if item.is_packed() {
+            "Packed"
+        } else {
+            "Still to pack"
+        }
+    } else {
+        item.item_type.as_str()
+    };
+    let highlight = item.item_type == "packing" && item.is_packed();
+    let mut row = crate::nsh_ui::surface_card()
+        .px_3()
+        .py_2p5()
+        .gap_1()
+        .child(
+            view()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .gap_2()
+                .child(heading(item.title.clone()))
+                .child(crate::nsh_ui::status_chip(badge, highlight)),
+        )
+        .child(caption(format!(
+            "{} · {}",
+            item.item_type,
+            item.day.as_deref().unwrap_or("Undated")
+        )));
     for (key, value) in item.fields() {
         row = row.child(text(format!("{key}: {value}")).text_sm());
     }
@@ -499,13 +521,6 @@ fn item(item: &travel::Item) -> impl IntoElement {
             drop(open_url(url.to_string()))
         }));
     }
-    if item.item_type == "packing" {
-        row = row.child(caption(if item.is_packed() {
-            "Packed"
-        } else {
-            "Still to pack"
-        }));
-    }
     row
 }
 
@@ -517,20 +532,34 @@ fn trip_view(
 ) -> impl IntoElement {
     let mut out = view()
         .gap_3()
-        .child(heading(plan.title.clone()))
+        .child(
+            view()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .gap_2()
+                .child(heading(plan.title.clone()))
+                .child(crate::nsh_ui::pill_tab("‹ All trips", false, || {
+                    open(TravelRoute::Trips)
+                })),
+        )
         .child(caption(format!(
             "{}–{} · {}",
             plan.date_start, plan.date_end, plan.status
         )));
-    let mut tabs = view().flex_row().flex_wrap();
+    let mut tabs = view().flex_row().flex_wrap().gap_1p5();
     for tab in TripSection::ALL {
         let id = plan.id.clone();
-        tabs = tabs.child(action(tab.label(), move || {
-            open(TravelRoute::Trip {
-                id: id.clone(),
-                section: tab,
-            })
-        }));
+        tabs = tabs.child(crate::nsh_ui::pill_tab(
+            tab.label(),
+            section == tab,
+            move || {
+                open(TravelRoute::Trip {
+                    id: id.clone(),
+                    section: tab,
+                })
+            },
+        ));
     }
     out = out.child(tabs);
     let readiness = plan.check_offline_readiness();
@@ -688,10 +717,18 @@ fn itinerary(
     let mut filter = view()
         .flex_row()
         .flex_wrap()
-        .child(action("All days", move || day.set(None)));
+        .gap_1p5()
+        .child(crate::nsh_ui::pill_tab(
+            "All days",
+            day.get().is_none(),
+            move || day.set(None),
+        ));
     for date in &days {
         let value = date.clone();
-        filter = filter.child(action(date.clone(), move || day.set(Some(value.clone()))));
+        let active = day.with(|d| d.as_deref() == Some(date.as_str()));
+        filter = filter.child(crate::nsh_ui::pill_tab(date.clone(), active, move || {
+            day.set(Some(value.clone()))
+        }));
     }
     let mut out = view().gap_3().child(filter);
     for date in days {
@@ -721,10 +758,9 @@ fn itinerary(
                 .unwrap_or("")
                 .cmp(b.payload.get("time").and_then(|v| v.as_str()).unwrap_or(""))
         });
-        let mut card = view()
+        let mut card = crate::nsh_ui::surface_card()
             .gap_2()
             .p_3()
-            .bg(|| nsh_base::theme().card)
             .child(heading(
                 travel_day(&date)
                     .map(|d| d.format("%A, %-d %B").to_string())
@@ -974,7 +1010,10 @@ fn ConnectionsScreen() -> impl IntoElement {
                 }
             } else {
                 for journey in connections::ordered(&current.journeys, sort.get()) {
-                    out = out
+                    let mut card = crate::nsh_ui::surface_card()
+                        .px_3()
+                        .py_2p5()
+                        .gap_1()
                         .child(heading(format!(
                             "{}–{} · {}",
                             journey.departs(),
@@ -987,7 +1026,7 @@ fn ConnectionsScreen() -> impl IntoElement {
                             journey.changes()
                         )));
                     for leg in &journey.legs {
-                        out = out.child(
+                        card = card.child(
                             text(format!(
                                 "{} {} → {} {} · {}",
                                 connections::clock(&leg.departure_time),
@@ -1001,12 +1040,13 @@ fn ConnectionsScreen() -> impl IntoElement {
                     }
                     if let Some(rank) = &journey.ranking {
                         for factor in &rank.factors {
-                            out = out.child(caption(factor.label.clone()));
+                            card = card.child(caption(factor.label.clone()));
                         }
                     }
                     if let Some(late) = connections::late(journey.delay_risk_score) {
-                        out = out.child(caption(late));
+                        card = card.child(caption(late));
                     }
+                    out = out.child(card);
                 }
             }
             out
@@ -1062,17 +1102,33 @@ fn TravelContent() -> impl IntoElement {
                         .filter(|p| past.get() || travel::upcoming(p, &today))
                     {
                         let id = plan.id.clone();
-                        out = out
-                            .child(action(plan.title.clone(), move || {
-                                open(TravelRoute::Trip {
-                                    id: id.clone(),
-                                    section: TripSection::Overview,
-                                })
-                            }))
-                            .child(caption(format!(
-                                "{}–{} · {}",
-                                plan.date_start, plan.date_end, plan.status
-                            )));
+                        out = out.child(
+                            crate::nsh_ui::surface_card()
+                                .px_4()
+                                .py_3()
+                                .gap_1()
+                                .child(
+                                    view()
+                                        .flex_row()
+                                        .justify_between()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(action(plan.title.clone(), move || {
+                                            open(TravelRoute::Trip {
+                                                id: id.clone(),
+                                                section: TripSection::Overview,
+                                            })
+                                        }))
+                                        .child(crate::nsh_ui::status_chip(
+                                            plan.status.clone(),
+                                            plan.status.eq_ignore_ascii_case("active"),
+                                        )),
+                                )
+                                .child(caption(format!(
+                                    "{}–{}",
+                                    plan.date_start, plan.date_end
+                                ))),
+                        );
                     }
                     if current.plans.is_empty() && !current.loading {
                         out = out.child(caption(
@@ -1092,15 +1148,38 @@ pub fn TravelScreen() -> impl IntoElement {
     let connections = computed(move || snap.with(|s| s.route == TravelRoute::Connections));
     view()
         .flex_1()
-        .child(
+        .gap_2()
+        .child(dynamic(move || {
+            let route = snap.with(|s| s.route.clone());
+            let is_trips = matches!(route, TravelRoute::Trips | TravelRoute::Trip { .. });
+            let is_map = route == TravelRoute::Map;
+            let is_conn = route == TravelRoute::Connections;
             view()
                 .flex_row()
                 .flex_wrap()
-                .child(action("Trips", || open(TravelRoute::Trips)))
-                .child(action("Map & Places", || open(TravelRoute::Map)))
-                .child(action("Connections", || open(TravelRoute::Connections)))
-                .child(action("Refresh", load)),
-        )
+                .items_center()
+                .justify_between()
+                .gap_2()
+                .px_4()
+                .pt_2()
+                .child(
+                    view()
+                        .flex_row()
+                        .flex_wrap()
+                        .gap_1p5()
+                        .child(crate::nsh_ui::pill_tab("Trips", is_trips, || {
+                            open(TravelRoute::Trips)
+                        }))
+                        .child(crate::nsh_ui::pill_tab("Map & Places", is_map, || {
+                            open(TravelRoute::Map)
+                        }))
+                        .child(crate::nsh_ui::pill_tab("Connections", is_conn, || {
+                            open(TravelRoute::Connections)
+                        })),
+                )
+                .child(action("Refresh", load))
+                .into_element()
+        }))
         .child(view().flex_1().child(dynamic(move || {
             if connections.get() {
                 scroll()

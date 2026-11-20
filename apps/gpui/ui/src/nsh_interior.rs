@@ -474,19 +474,53 @@ fn RevisionDetail() -> impl IntoElement {
     let Some(draft) = draft else {
         return view().child(caption("This scan is no longer in the archive."));
     };
+    let detail_tab = signal(0u8);
     let local = state().snap.local.iter().any(|r| r.draft.draft_id == id);
     let mut out = view()
+        .gap_3()
+        .child(
+            view()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .gap_2()
+                .child(heading(id.clone()))
+                .child(action("Back to scans", || {
+                    let mut s = state();
+                    s.snap.selected = None;
+                    publish(&s);
+                })),
+        )
+        .child(caption(draft.created_at.clone()))
+        .child(dynamic(move || {
+            let t = detail_tab.get();
+            view()
+                .flex_row()
+                .flex_wrap()
+                .gap_1p5()
+                .child(crate::nsh_ui::pill_tab("All sections", t == 0, move || {
+                    detail_tab.set(0)
+                }))
+                .child(crate::nsh_ui::pill_tab("Scan & Review", t == 1, move || {
+                    detail_tab.set(1)
+                }))
+                .child(crate::nsh_ui::pill_tab("Room & Compare", t == 2, move || {
+                    detail_tab.set(2)
+                }))
+                .child(crate::nsh_ui::pill_tab("Placement", t == 3, move || {
+                    detail_tab.set(3)
+                }))
+                .into_element()
+        }));
+
+    let mut review_card = crate::nsh_ui::surface_card()
+        .px_3()
+        .py_2p5()
         .gap_2()
-        .child(action("Back to scans", || {
-            let mut s = state();
-            s.snap.selected = None;
-            publish(&s);
-        }))
-        .child(heading(id.clone()))
-        .child(caption(draft.created_at.clone()));
+        .child(crate::nsh_ui::section_heading("SCAN & REVIEW"));
     if local {
         let id = id.clone();
-        out = out.child(action("Preview local model", move || {
+        review_card = review_card.child(action("Preview local model", move || {
             emit(InteriorEvent::Preview(id.clone()))
         }));
     }
@@ -501,13 +535,14 @@ fn RevisionDetail() -> impl IntoElement {
         let accept = id.clone();
         let reject = id.clone();
         let new_space = id.clone();
-        out = out
+        review_card = review_card
             .child(action("Preview model from Mac", move || {
                 perform(Action::Preview(Box::new(preview.clone())))
             }))
             .child(
                 view()
                     .flex_row()
+                    .gap_2()
                     .child(action("Accept", move || {
                         perform(Action::Review(accept.clone(), RoomPlanDecision::Accept))
                     }))
@@ -520,7 +555,7 @@ fn RevisionDetail() -> impl IntoElement {
             }));
     }
     let review_id = id.clone();
-    out = out.child(dynamic(move || {
+    review_card = review_card.child(dynamic(move || {
         snap.with(|s| {
             s.revisions
                 .revisions
@@ -530,6 +565,15 @@ fn RevisionDetail() -> impl IntoElement {
                 .map(|r| caption(format!("Review: {}", r.decision)))
         })
     }));
+    out = out.child(dynamic(move || {
+        (detail_tab.get() == 0 || detail_tab.get() == 1).then(|| review_card.clone().into_element())
+    }));
+
+    let mut room_card = crate::nsh_ui::surface_card()
+        .px_3()
+        .py_2p5()
+        .gap_2()
+        .child(crate::nsh_ui::section_heading("OBSERVATIONS & ROOM HISTORY"));
     for element in draft
         .room
         .surfaces
@@ -538,12 +582,12 @@ fn RevisionDetail() -> impl IntoElement {
         .chain(&draft.room.objects)
     {
         let chosen = element.id.clone();
-        out = out.child(action(
+        room_card = room_card.child(action(
             format!("{} · {}", element.category, element.id),
             move || observation.set(chosen.clone()),
         ));
         if let Some(dimensions) = element.extra.get("dimensions_m").and_then(|v| v.as_array()) {
-            out = out.child(caption(format!(
+            room_card = room_card.child(caption(format!(
                 "{} m",
                 dimensions
                     .iter()
@@ -554,50 +598,62 @@ fn RevisionDetail() -> impl IntoElement {
         }
     }
     let revision = id.clone();
-    out = out
-        .child(dynamic(move || {
-            let current = snap.get();
-            let mut choices = view().gap_1();
-            for entry in current.spaces.spaces {
-                let room = entry.space.space_id.clone();
-                let chosen = room.clone();
-                let revision = revision.clone();
-                choices = choices
-                    .child(action(
-                        format!("Use room · {}", entry.space.label),
-                        move || space.set(chosen.clone()),
-                    ))
-                    .child(action(
-                        format!("Add scan to {}", entry.space.label),
-                        move || perform(Action::AddSpace(room.clone(), revision.clone())),
-                    ));
-            }
-            for previous in current
-                .revisions
-                .revisions
-                .iter()
-                .filter(|d| d.draft_id != revision)
-            {
-                let before = previous.draft_id.clone();
-                let after = revision.clone();
-                choices = choices.child(action(
-                    format!("Compare with {}", previous.created_at),
-                    move || perform(Action::Compare(before.clone(), after.clone())),
+    room_card = room_card.child(dynamic(move || {
+        let current = snap.get();
+        let mut choices = view().gap_1();
+        for entry in current.spaces.spaces {
+            let room = entry.space.space_id.clone();
+            let chosen = room.clone();
+            let revision = revision.clone();
+            choices = choices
+                .child(action(
+                    format!("Use room · {}", entry.space.label),
+                    move || space.set(chosen.clone()),
+                ))
+                .child(action(
+                    format!("Add scan to {}", entry.space.label),
+                    move || perform(Action::AddSpace(room.clone(), revision.clone())),
                 ));
+        }
+        for previous in current
+            .revisions
+            .revisions
+            .iter()
+            .filter(|d| d.draft_id != revision)
+        {
+            let before = previous.draft_id.clone();
+            let after = revision.clone();
+            choices = choices.child(action(
+                format!("Compare with {}", previous.created_at),
+                move || perform(Action::Compare(before.clone(), after.clone())),
+            ));
+        }
+        if let Some(comparison) = current.comparison {
+            for pair in comparison.reconciliation.matches {
+                choices = choices.child(caption(format!(
+                    "{} → {} · {:.2} m · {}",
+                    pair.before_observation_id,
+                    pair.after_observation_id,
+                    pair.distance_m,
+                    pair.suggestion
+                )));
             }
-            if let Some(comparison) = current.comparison {
-                for pair in comparison.reconciliation.matches {
-                    choices = choices.child(caption(format!(
-                        "{} → {} · {:.2} m · {}",
-                        pair.before_observation_id,
-                        pair.after_observation_id,
-                        pair.distance_m,
-                        pair.suggestion
-                    )));
-                }
-            }
-            choices
-        }))
+        }
+        choices
+    }));
+    out = out.child(dynamic(move || {
+        (detail_tab.get() == 0 || detail_tab.get() == 2).then(|| room_card.clone().into_element())
+    }));
+
+    let revision = id.clone();
+    let link_revision = id.clone();
+    let apply_revision = id.clone();
+    let prop_id = id.clone();
+    let placement_card = crate::nsh_ui::surface_card()
+        .px_3()
+        .py_2p5()
+        .gap_2()
+        .child(crate::nsh_ui::section_heading("INVENTORY PLACEMENT"))
         .child(
             text(move || {
                 format!(
@@ -608,34 +664,31 @@ fn RevisionDetail() -> impl IntoElement {
                 )
             })
             .text_sm(),
-        );
-    out = out.child(dynamic(move || {
-        let mut choices = view();
-        for row in snap.with(|s| s.inventory.clone()) {
-            let id = row.item.id.clone();
-            choices = choices.child(action(row.item.label, move || {
-                let placement = state()
-                    .snap
-                    .placements
-                    .iter()
-                    .find(|p| p.item_id == id)
-                    .cloned();
-                expected.set(Some((
-                    id.clone(),
-                    placement.as_ref().map_or(0, |p| p.revision),
-                )));
-                x.set(placement.as_ref().map_or(0, |p| p.x).to_string());
-                y.set(placement.as_ref().map_or(0, |p| p.y).to_string());
-                rotation.set(placement.as_ref().map_or(0, |p| p.rot).to_string());
-                item.set(id.clone());
-            }));
-        }
-        choices
-    }));
-    let revision = id.clone();
-    let link_revision = id.clone();
-    let apply_revision = id.clone();
-    out = out
+        )
+        .child(dynamic(move || {
+            let mut choices = view().flex_row().flex_wrap().gap_1p5();
+            for row in snap.with(|s| s.inventory.clone()) {
+                let id = row.item.id.clone();
+                let active = item.get() == id;
+                choices = choices.child(crate::nsh_ui::pill_tab(row.item.label, active, move || {
+                    let placement = state()
+                        .snap
+                        .placements
+                        .iter()
+                        .find(|p| p.item_id == id)
+                        .cloned();
+                    expected.set(Some((
+                        id.clone(),
+                        placement.as_ref().map_or(0, |p| p.revision),
+                    )));
+                    x.set(placement.as_ref().map_or(0, |p| p.x).to_string());
+                    y.set(placement.as_ref().map_or(0, |p| p.y).to_string());
+                    rotation.set(placement.as_ref().map_or(0, |p| p.rot).to_string());
+                    item.set(id.clone());
+                }));
+            }
+            choices
+        }))
         .child(action("Link observation to inventory item", move || {
             perform(Action::Link {
                 space: space.get(),
@@ -663,7 +716,7 @@ fn RevisionDetail() -> impl IntoElement {
         .child(action("Use proposed position", move || {
             if let Some(p) = state().snap.proposal.as_ref().filter(|p| {
                 p.space_id == space.get()
-                    && p.revision_id == id
+                    && p.revision_id == prop_id
                     && p.observation_id == observation.get()
                     && p.item_id == item.get()
             }) {
@@ -702,6 +755,10 @@ fn RevisionDetail() -> impl IntoElement {
                 rot,
             });
         }));
+    out = out.child(dynamic(move || {
+        (detail_tab.get() == 0 || detail_tab.get() == 3)
+            .then(|| placement_card.clone().into_element())
+    }));
     out
 }
 
@@ -939,12 +996,19 @@ pub fn InteriorScreen() -> impl IntoElement {
                 }))
                 .child(action("Refresh", load)),
         )
-        .child(
+        .child(dynamic(move || {
+            let is_layouts = layouts.get();
             view()
                 .flex_row()
-                .child(action("Scans", move || layouts.set(false)))
-                .child(action("Layouts", move || layouts.set(true))),
-        )
+                .gap_2()
+                .child(crate::nsh_ui::pill_tab("Scans", !is_layouts, move || {
+                    layouts.set(false)
+                }))
+                .child(crate::nsh_ui::pill_tab("Layouts", is_layouts, move || {
+                    layouts.set(true)
+                }))
+                .into_element()
+        }))
         .child(
             text(move || {
                 snap.with(|s| {
@@ -980,40 +1044,47 @@ pub fn InteriorScreen() -> impl IntoElement {
                     for record in current.local {
                         let id = record.draft.draft_id;
                         let chosen = id.clone();
-                        out = out
-                            .child(action(
-                                format!("{} · {}", record.draft.created_at, record.sync_state),
-                                move || {
-                                    let mut s = state();
-                                    s.snap.selected = Some(chosen.clone());
-                                    s.snap.proposal = None;
-                                    s.snap.comparison = None;
-                                    s.snap.comparison = None;
-                                    s.snap.proposal = None;
-                                    publish(&s);
-                                },
-                            ))
-                            .child(caption(id));
+                        out = out.child(
+                            crate::nsh_ui::surface_card()
+                                .px_3()
+                                .py_2()
+                                .gap_1()
+                                .child(action(
+                                    format!("{} · {}", record.draft.created_at, record.sync_state),
+                                    move || {
+                                        let mut s = state();
+                                        s.snap.selected = Some(chosen.clone());
+                                        s.snap.proposal = None;
+                                        s.snap.comparison = None;
+                                        publish(&s);
+                                    },
+                                ))
+                                .child(caption(id)),
+                        );
                     }
                     for revision in current.revisions.revisions {
-                        let chosen = revision.draft_id;
-                        out = out.child(action(
-                            format!(
-                                "{} · {}",
-                                revision.created_at,
-                                revision
-                                    .review
-                                    .map(|r| r.decision)
-                                    .unwrap_or_else(|| "Unreviewed".into())
-                            ),
-                            move || {
-                                let mut s = state();
-                                s.snap.selected = Some(chosen.clone());
-                                s.snap.comparison = None;
-                                s.snap.proposal = None;
-                                publish(&s);
-                            },
-                        ));
+                        let chosen = revision.draft_id.clone();
+                        let decision = revision
+                            .review
+                            .map(|r| r.decision)
+                            .unwrap_or_else(|| "Unreviewed".into());
+                        out = out.child(
+                            crate::nsh_ui::surface_card()
+                                .px_3()
+                                .py_2()
+                                .gap_1()
+                                .child(action(
+                                    format!("{} · {decision}", revision.created_at),
+                                    move || {
+                                        let mut s = state();
+                                        s.snap.selected = Some(chosen.clone());
+                                        s.snap.comparison = None;
+                                        s.snap.proposal = None;
+                                        publish(&s);
+                                    },
+                                ))
+                                .child(caption(revision.draft_id)),
+                        );
                     }
                     out
                 }))

@@ -23,6 +23,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 mod audio;
 mod events;
+mod health;
 mod host;
 mod identity;
 mod launch;
@@ -53,6 +54,8 @@ pub enum Tab {
     Settings,
     Mail,
     Documents,
+    Finance,
+    Inventory,
 }
 enum Event {
     Status(String),
@@ -79,6 +82,9 @@ enum Event {
     RoomplanUpload(String),
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
     RoomplanArchive(Vec<RoomPlanLocalRecord>),
+    /// One HealthKit read from `host/Health.swift`, the body for the Mac's health capability.
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    HealthUpload(String),
     Ready(Node, NodeHealth),
     /// The phone's replica after it was opened, read or written: its rows and queued count.
     Board(Board),

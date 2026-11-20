@@ -3,7 +3,7 @@ use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::searchable_list::{SearchableListItem, SearchableVec};
 use gpui_kit::component::select::{Select, SelectState};
 use gpui_kit::{
-    div, point, prelude::*, px, rgba, AnyElement, Context, Entity, Focusable, FontWeight,
+    div, point, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, Focusable, FontWeight,
     SharedString, Subscription, Window,
 };
 use serde_json::Value;
@@ -37,6 +37,8 @@ pub(crate) struct Form {
     pub(super) kind: FormKind,
     /// (key, label, input). A fact form keys its inputs by what they mean: `place`, `from`, …
     pub(super) fields: Vec<(String, String, Entity<TextInput>)>,
+    /// Per-field metadata `(field_type, enum_options, source)` for grouped rendering & quick pills.
+    pub(super) field_meta: std::collections::HashMap<String, (String, Vec<String>, Option<String>)>,
     /// The name input, for the two person forms.
     pub(super) name: Option<Entity<TextInput>>,
     introducer: Option<Entity<SelectState<SearchableVec<Introducer>>>>,
@@ -125,6 +127,7 @@ pub(super) fn label_placeholder(label: &str) -> String {
         "company" => "Analytical Engine Co.".into(),
         "role" => "Mathematician".into(),
         "location" => "London".into(),
+        "photo" => "Image URL or local file path".into(),
         _ => String::new(),
     }
 }
@@ -164,6 +167,7 @@ impl PeoplePage {
         let mut name = None;
         let mut introducer = None;
         let mut fields = Vec::new();
+        let mut field_meta = std::collections::HashMap::new();
         let mut choice = String::new();
         match &kind {
             FormKind::New => {
@@ -171,10 +175,22 @@ impl PeoplePage {
                 for field in edit_fields(&declared, &Default::default()) {
                     let held = String::new();
                     let placeholder = label_placeholder(&field.label);
+                    field_meta.insert(
+                        field.key.clone(),
+                        (field.field_type.clone(), field.options.clone(), None),
+                    );
                     fields.push((
                         field.key.clone(),
                         field.label.clone(),
                         input(held, &placeholder, window, cx),
+                    ));
+                }
+                if !fields.iter().any(|(k, _, _)| k == "photo") {
+                    field_meta.insert("photo".into(), ("text".into(), Vec::new(), None));
+                    fields.push((
+                        "photo".into(),
+                        "Photo".into(),
+                        input(String::new(), "Image URL or local file path", window, cx),
                     ));
                 }
             }
@@ -186,10 +202,25 @@ impl PeoplePage {
                 for field in edit_fields(&declared, &person.values) {
                     let held = person.value(&field.key);
                     let placeholder = label_placeholder(&field.label);
+                    let source = person.sources.get(&field.key).cloned();
+                    field_meta.insert(
+                        field.key.clone(),
+                        (field.field_type.clone(), field.options.clone(), source),
+                    );
                     fields.push((
                         field.key.clone(),
                         field.label.clone(),
                         input(held, &placeholder, window, cx),
+                    ));
+                }
+                if !fields.iter().any(|(k, _, _)| k == "photo") {
+                    let held = person.photo.clone().unwrap_or_default();
+                    let source = person.sources.get("photo").cloned();
+                    field_meta.insert("photo".into(), ("text".into(), Vec::new(), source));
+                    fields.push((
+                        "photo".into(),
+                        "Photo".into(),
+                        input(held, "Image URL or local file path", window, cx),
                     ));
                 }
             }
@@ -283,6 +314,7 @@ impl PeoplePage {
         self.form = Some(Form {
             kind,
             fields,
+            field_meta,
             name,
             introducer,
             choice,
@@ -458,7 +490,10 @@ impl PeoplePage {
         });
         let mut form_body = div().flex().flex_col().gap_3().flex_none().w_full();
         if let Some(name) = &form.name {
-            form_body = form_body.child(Input::new(name).size(ControlSize::Sm));
+            form_body = form_body.child(
+                FormField::new("people-field-name", "Full name")
+                    .child(Input::new(name).size(ControlSize::Sm)),
+            );
         }
         if let Some(picker) = &form.introducer {
             form_body = form_body.child(
@@ -472,14 +507,159 @@ impl PeoplePage {
                 ),
             );
         }
-        for (key, label, input) in &form.fields {
-            form_body = form_body.child(
-                FormField::new(
-                    SharedString::from(format!("people-field-{key}")),
-                    label.clone(),
+        let render_field_row = |key: &String,
+                                label: &String,
+                                input: &Entity<TextInput>,
+                                cx: &gpui::App|
+         -> AnyElement {
+            let meta = form.field_meta.get(key);
+            let field_type = meta.map(|m| m.0.as_str()).unwrap_or("text");
+            let options = meta.map(|m| m.1.as_slice()).unwrap_or(&[]);
+            let source = meta.and_then(|m| m.2.as_deref());
+            let current_val = input.read(cx).text().trim().to_string();
+            let display_label = match source {
+                Some(src) if src != "operator" => format!("{label} · {src}"),
+                _ => label.clone(),
+            };
+            let mut field_el = div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(
+                    FormField::new(
+                        SharedString::from(format!("people-field-{key}")),
+                        display_label,
+                    )
+                    .child(Input::new(input).size(ControlSize::Sm)),
+                );
+            if field_type == "enum" && !options.is_empty() {
+                field_el = field_el.child(div().flex().flex_wrap().gap_1().children(
+                    options.iter().map(|opt| {
+                        let opt_val = opt.clone();
+                        let input_ref = input.clone();
+                        let active = current_val.eq_ignore_ascii_case(&opt_val);
+                        Button::new(
+                            SharedString::from(format!("people-enum-{key}-{opt_val}")),
+                            opt.clone(),
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(if active {
+                            ButtonVariant::Primary
+                        } else {
+                            ButtonVariant::Ghost
+                        })
+                        .on_click(move |_, _, cx| {
+                            input_ref.update(cx, |state, cx| state.set_text(opt_val.clone(), cx));
+                        })
+                    }),
+                ));
+            } else if key == sjel_gpui_core::people::FOLLOW_UP_WEEKS {
+                field_el = field_el.child(div().flex().flex_wrap().gap_1().children(
+                    [("1", "1w"), ("2", "2w"), ("4", "1m"), ("12", "3m"), ("26", "6m")]
+                        .into_iter()
+                        .map(|(weeks, text)| {
+                            let input_ref = input.clone();
+                            let active = current_val == weeks;
+                            Button::new(
+                                SharedString::from(format!("people-followup-preset-{weeks}")),
+                                text,
+                            )
+                            .size(ControlSize::Sm)
+                            .variant(if active {
+                                ButtonVariant::Primary
+                            } else {
+                                ButtonVariant::Ghost
+                            })
+                            .on_click(move |_, _, cx| {
+                                input_ref.update(cx, |state, cx| state.set_text(weeks, cx));
+                            })
+                        }),
+                ));
+            }
+            field_el.into_any_element()
+        };
+
+        if matches!(form.kind, FormKind::New | FormKind::Edit(_)) {
+            let is_identity = |k: &str| {
+                matches!(
+                    k.to_ascii_lowercase().as_str(),
+                    "email"
+                        | "emails"
+                        | "mail"
+                        | "phone"
+                        | "phones"
+                        | "mobile"
+                        | "tel"
+                        | "company"
+                        | "org"
+                        | "organization"
+                        | "role"
+                        | "title"
+                        | "position"
+                        | "location"
+                        | "city"
+                        | "place"
+                        | "photo"
+                        | "avatar"
+                        | "picture"
+                        | "alias"
+                        | "aliases"
                 )
-                .child(Input::new(input).size(ControlSize::Sm)),
-            );
+            };
+            let is_relationship = |k: &str| {
+                matches!(
+                    k.to_ascii_lowercase().as_str(),
+                    "linkedin" | "connected_on" | "met_at"
+                ) || k == sjel_gpui_core::people::FOLLOW_UP_WEEKS
+            };
+            let identity_fields: Vec<_> = form
+                .fields
+                .iter()
+                .filter(|(k, _, _)| is_identity(k))
+                .collect();
+            let rel_fields: Vec<_> = form
+                .fields
+                .iter()
+                .filter(|(k, _, _)| is_relationship(k))
+                .collect();
+            let other_fields: Vec<_> = form
+                .fields
+                .iter()
+                .filter(|(k, _, _)| !is_identity(k) && !is_relationship(k))
+                .collect();
+            let section_hdr = |title: &'static str| {
+                div()
+                    .pt_2()
+                    .pb_1()
+                    .border_b_1()
+                    .border_color(rgba(palette.border))
+                    .text_xs()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(rgb(palette.muted))
+                    .child(title)
+            };
+            if !identity_fields.is_empty() {
+                form_body = form_body.child(section_hdr("IDENTITY & CONTACT"));
+                for (key, label, input) in identity_fields {
+                    form_body = form_body.child(render_field_row(key, label, input, cx));
+                }
+            }
+            if !rel_fields.is_empty() {
+                form_body = form_body.child(section_hdr("RELATIONSHIP & CADENCE"));
+                for (key, label, input) in rel_fields {
+                    form_body = form_body.child(render_field_row(key, label, input, cx));
+                }
+            }
+            if !other_fields.is_empty() {
+                form_body = form_body.child(section_hdr("TAGS & CUSTOM FIELDS"));
+                for (key, label, input) in other_fields {
+                    form_body = form_body.child(render_field_row(key, label, input, cx));
+                }
+            }
+        } else {
+            for (key, label, input) in &form.fields {
+                form_body = form_body.child(render_field_row(key, label, input, cx));
+            }
         }
         let choices: Vec<(&str, &str)> = match &form.kind {
             FormKind::Fact(_) => FACT_PREDICATES.to_vec(),

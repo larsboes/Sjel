@@ -10,7 +10,8 @@ use gpui_kit::{
     Window,
 };
 use sjel_gpui_core::calendar::{self, entries_on};
-use sjel_gpui_core::shell::{self, CalendarEntry, CalendarEntryDetail, ShellError};
+use sjel_gpui_core::data::RequestVersion;
+use sjel_gpui_core::shell::{self, CalendarEntry, CalendarEntryDetail, ShellError, ShellResult};
 
 use crate::data::{Remote, Repo};
 use crate::primitives::key_bar;
@@ -36,6 +37,7 @@ pub struct CalendarPage {
     pub entries: Remote<Vec<CalendarEntry>>,
     /// The `[from, to)` window `entries` answers.
     pub(super) loaded: Option<(String, String)>,
+    entries_request: RequestVersion,
     pub(super) proposals: Remote<Vec<CalendarEntry>>,
     pub(super) proposals_window: Option<(String, String)>,
     pub(super) reviewing_proposals: bool,
@@ -78,6 +80,7 @@ impl CalendarPage {
             day: Local::now().date_naive(),
             entries: Remote::default(),
             loaded: None,
+            entries_request: RequestVersion::default(),
             proposals: Remote::default(),
             proposals_window: None,
             reviewing_proposals: false,
@@ -156,9 +159,11 @@ impl CalendarPage {
         if self.loaded.as_ref() == Some(&window) {
             return;
         }
+        let request = self.entries_request.advance();
         let shell = match self.repo.shell() {
             Ok(shell) => shell,
             Err(error) => {
+                self.loaded = None;
                 self.entries.settle(Err(error));
                 cx.notify();
                 return;
@@ -167,28 +172,43 @@ impl CalendarPage {
         self.loaded = Some(window.clone());
         self.entries.loading = true;
         cx.notify();
-        let (from, to) = window.clone();
+        let (from, to) = window;
         let work = shell::run(async move { shell.calendar(&from, &to).await });
         let repo = self.repo.clone();
         let status_work = shell::run(async move { repo.calendar_sync_status().await.ok() });
         cx.spawn(async move |this, cx| {
             let status = status_work.await.flatten();
             let _ = this.update(cx, |view, cx| {
-                view.sync_status = status;
-                cx.notify();
+                if view.entries_request == request {
+                    view.sync_status = status;
+                    cx.notify();
+                }
             });
         })
         .detach();
         cx.spawn(async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |view, cx| {
-                if view.loaded.as_ref() == Some(&window) {
-                    view.entries.settle(result);
-                    cx.notify();
-                }
+                view.finish_entries(request, result, cx);
             });
         })
         .detach();
+    }
+
+    fn finish_entries(
+        &mut self,
+        request: RequestVersion,
+        result: ShellResult<Vec<CalendarEntry>>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.entries_request != request {
+            return;
+        }
+        if result.is_err() {
+            self.loaded = None;
+        }
+        self.entries.settle(result);
+        cx.notify();
     }
 
     /// Reads the window on screen again (⌘R and after a write).
@@ -248,7 +268,11 @@ impl CalendarPage {
         }
     }
 
-    pub(super) fn set_view(&mut self, view: View, cx: &mut Context<Self>) {
+    pub fn pending_proposals_count(&self) -> usize {
+        self.proposals.value.as_ref().map_or(0, Vec::len)
+    }
+
+    pub fn set_view(&mut self, view: View, cx: &mut Context<Self>) {
         self.view = view;
         self.load(cx);
         cx.notify();
@@ -656,3 +680,30 @@ impl Render for CalendarPage {
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod refresh_tests {
+    use super::*;
+    use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn a_stale_calendar_answer_cannot_replace_a_refresh_of_the_same_window(
+        cx: &mut TestAppContext,
+    ) {
+        let page = cx.new(|cx| CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx));
+        page.update(cx, |page, cx| {
+            let first = page.entries_request.advance();
+            let second = page.entries_request.advance();
+            page.loaded = calendar::window(&page.dates());
+            page.entries.loading = true;
+            page.finish_entries(first, Err(ShellError::Unreachable), cx);
+            assert!(page.entries.loading);
+            page.finish_entries(second, Ok(Vec::new()), cx);
+            page.finish_entries(first, Err(ShellError::Unreachable), cx);
+            assert!(page.loaded.is_some());
+            assert!(page.entries.value.is_some());
+            assert!(page.entries.error.is_none());
+            assert!(!page.entries.loading);
+        });
+    }
+}

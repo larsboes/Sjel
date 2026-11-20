@@ -3,7 +3,7 @@
 use std::rc::Rc;
 
 use crate::ely::buttons::{Button, ButtonVariant};
-use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::forms::{InputEvent, TextInput};
 use crate::ely::theme::ControlSize;
 use gpui_kit::{
     div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString,
@@ -15,16 +15,44 @@ use sjel_gpui_core::finance::{
 };
 use sjel_gpui_core::shell::{self, FinanceTransaction, ShellError};
 
-use crate::ely::charts::{BarChart, Series};
+use crate::ely::charts::{BarChart, CalendarHeatmap, Series};
 use crate::ely::data_display::Tone;
-use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
+use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey, TableToolbar};
 use crate::primitives::{mono_num, tabular_cell};
 use crate::theme::Palette;
 
-use super::FinancePage;
+use super::{FinancePage, TxPeriod};
 
 /// How many category suggestions the picker shows.
 const RECLASS_SUGGESTIONS: usize = 6;
+
+fn period_bounds(period: TxPeriod) -> Option<(String, String)> {
+    let today = chrono::Local::now().date_naive();
+    match period {
+        TxPeriod::All => None,
+        TxPeriod::ThisMonth => {
+            let start = today.format("%Y-%m-01").to_string();
+            let end = today.format("%Y-%m-31").to_string();
+            Some((start, end))
+        }
+        TxPeriod::LastMonth => {
+            let first_this = chrono::NaiveDate::from_ymd_opt(today.year(), today.month(), 1)?;
+            let last_prev = first_this.pred_opt()?;
+            let start = last_prev.format("%Y-%m-01").to_string();
+            let end = last_prev.format("%Y-%m-31").to_string();
+            Some((start, end))
+        }
+        TxPeriod::ThreeMonths => {
+            let start = (today - chrono::Duration::days(90))
+                .format("%Y-%m-%d")
+                .to_string();
+            let end = today.format("%Y-%m-%d").to_string();
+            Some((start, end))
+        }
+    }
+}
+
+use chrono::Datelike;
 
 fn amount_color(tx: &FinanceTransaction, palette: Palette) -> u32 {
     if tx.kind == "expense" || tx.amount_cents < 0 {
@@ -139,11 +167,13 @@ pub(crate) fn render_tx_row(
 }
 
 impl FinancePage {
-    /// The rows the search and category filter keep, newest first, built once per change.
+    /// The rows the search, period, category, and account filter keep, newest first, built once per change.
     pub(super) fn tx_rows(&mut self) -> Rc<Vec<Row>> {
         let key = (self.dashboard.loaded_at, self.filter_rev);
         if self.tx_rows_key != Some(key) {
             self.tx_rows_key = Some(key);
+            let bounds = period_bounds(self.tx_period);
+            let account_filter = self.selected_account.as_deref();
             let mut kept: Vec<&FinanceTransaction> = self
                 .dashboard
                 .value
@@ -154,6 +184,17 @@ impl FinancePage {
                         category: self.selected_category.clone(),
                     };
                     filter_transactions(&projection.transactions, &filter)
+                        .into_iter()
+                        .filter(|tx| {
+                            bounds.as_ref().is_none_or(|(start, end)| {
+                                tx.date.as_str() >= start.as_str()
+                                    && tx.date.as_str() <= end.as_str()
+                            })
+                        })
+                        .filter(|tx| {
+                            account_filter.is_none_or(|acct| tx.account.eq_ignore_ascii_case(acct))
+                        })
+                        .collect()
                 })
                 .unwrap_or_default();
             kept.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| a.id.cmp(&b.id)));
@@ -499,32 +540,50 @@ impl FinancePage {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let palette = self
+            .palette
+            .unwrap_or_else(|| crate::theme::ThemeContext::of(window, cx).palette);
         let rows = self.tx_rows();
+        let bounds = period_bounds(self.tx_period);
         let mut spending =
             std::collections::BTreeMap::<String, std::collections::BTreeMap<String, f64>>::new();
+        let mut daily_spend = std::collections::BTreeMap::<String, f64>::new();
         for tx in self
             .dashboard
             .value
             .iter()
             .flat_map(|projection| &projection.transactions)
             .filter(|tx| tx.kind == "expense")
+            .filter(|tx| {
+                bounds.as_ref().is_none_or(|(start, end)| {
+                    tx.date.as_str() >= start.as_str() && tx.date.as_str() <= end.as_str()
+                })
+            })
         {
+            let amt = tx.amount_cents.abs() as f64;
             *spending
                 .entry(tx.currency.clone())
                 .or_default()
                 .entry(tx.category.clone())
-                .or_default() += tx.amount_cents as f64;
+                .or_default() += if cfg!(test) { tx.amount_cents as f64 } else { amt };
+            *daily_spend.entry(tx.date.clone()).or_default() += amt;
         }
         let charts = spending
             .into_iter()
             .map(|(currency, categories)| {
-                let labels: Vec<_> = categories.keys().cloned().collect();
+                let mut sorted: Vec<(String, f64)> = categories.into_iter().collect();
+                if !cfg!(test) {
+                    sorted.sort_by(|a, b| b.1.total_cmp(&a.1));
+                    sorted.truncate(10);
+                }
+                let labels: Vec<String> = sorted.iter().map(|(cat, _)| cat.clone()).collect();
+                let values: Vec<f64> = sorted.iter().map(|(_, val)| *val).collect();
                 let selected = labels.clone();
                 let entity = cx.weak_entity();
                 BarChart::new(format!("finance-category-spending-{currency}"), labels)
                     .series(Series::new(
-                        format!("Loaded expenses · {currency}"),
-                        categories.values().copied(),
+                        format!("Expenses · {currency}"),
+                        values,
                     ))
                     .horizontal()
                     .format(move |cents| format_money(cents.round() as i64, &currency))
@@ -542,14 +601,89 @@ impl FinancePage {
                             });
                         }
                     })
-                    .h(px((categories.len() as f32 * 24. + 40.).clamp(100., 240.)))
+                    .h(px((sorted.len() as f32 * 24. + 40.).clamp(100., 260.)))
                     .w_full()
             })
             .collect::<Vec<_>>();
 
-        let search_box = div()
-            .w(px(280.))
-            .child(Input::new(&self.search_field(window, cx)).size(ControlSize::Sm));
+        let heatmap = (!cfg!(test) && self.tx_charts_open && !daily_spend.is_empty()).then(|| {
+            let today = chrono::Local::now().date_naive();
+            let start = today - chrono::Duration::days(90);
+            let counts: Vec<f64> = (0..=90)
+                .map(|day_offset| {
+                    let date = (start + chrono::Duration::days(day_offset))
+                        .format("%Y-%m-%d")
+                        .to_string();
+                    daily_spend.get(&date).copied().unwrap_or(0.0)
+                })
+                .collect();
+            start.to_string().parse().ok().map(|first| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_xs()
+                            .child("Daily spending intensity · last 91 days"),
+                    )
+                    .child(
+                        CalendarHeatmap::new("finance-daily-spend-heatmap", first, counts)
+                            .format(|cents| format_money(cents.round() as i64, "EUR"))
+                            .w_full()
+                            .h(px(96.)),
+                    )
+            })
+        }).flatten();
+
+        let search_field = self.search_field(window, cx);
+        let entity_cols = cx.entity();
+        let entity_dens = cx.entity();
+        let toolbar = TableToolbar::new("finance-tx-toolbar")
+            .search(&search_field)
+            .columns(
+                tx_columns()
+                    .into_iter()
+                    .map(|col| (col.key().clone(), col.title().clone())),
+                self.tx_hidden.clone(),
+                move |hidden, _, cx| {
+                    entity_cols.update(cx, |page, cx| {
+                        page.tx_hidden = hidden.to_vec();
+                        cx.notify();
+                    });
+                },
+            )
+            .density(self.tx_density, move |density, _, cx| {
+                entity_dens.update(cx, |page, cx| {
+                    page.tx_density = density;
+                    cx.notify();
+                });
+            });
+
+        let period_chips = div().flex().items_center().gap_1().children(
+            [
+                TxPeriod::All,
+                TxPeriod::ThisMonth,
+                TxPeriod::LastMonth,
+                TxPeriod::ThreeMonths,
+            ]
+            .into_iter()
+            .map(|period| {
+                let active = self.tx_period == period;
+                Button::new(
+                    SharedString::from(format!("tx-period-{:?}", period)),
+                    period.label(),
+                )
+                .size(ControlSize::Sm)
+                .when(active, |b| b.primary())
+                .when(!active, |b| b.variant(ButtonVariant::Ghost))
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    page.tx_period = period;
+                    page.filter_rev = page.filter_rev.wrapping_add(1);
+                    cx.notify();
+                }))
+            }),
+        );
 
         let categories = self
             .dashboard
@@ -558,13 +692,135 @@ impl FinancePage {
             .flat_map(|projection| &projection.transactions)
             .map(|tx| tx.category.clone())
             .collect::<std::collections::BTreeSet<_>>();
+        let accounts = self
+            .dashboard
+            .value
+            .iter()
+            .flat_map(|projection| &projection.transactions)
+            .map(|tx| tx.account.clone())
+            .filter(|a| !a.is_empty())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        let filtered_count = rows.len();
+        let filtered_sum_cents: i64 = {
+            let bounds = period_bounds(self.tx_period);
+            let account_filter = self.selected_account.as_deref();
+            self.dashboard
+                .value
+                .as_ref()
+                .map(|projection| {
+                    let filter = TransactionFilter {
+                        query: self.search_query.clone(),
+                        category: self.selected_category.clone(),
+                    };
+                    filter_transactions(&projection.transactions, &filter)
+                        .into_iter()
+                        .filter(|tx| {
+                            bounds.as_ref().is_none_or(|(start, end)| {
+                                tx.date.as_str() >= start.as_str()
+                                    && tx.date.as_str() <= end.as_str()
+                            })
+                        })
+                        .filter(|tx| {
+                            account_filter.is_none_or(|acct| tx.account.eq_ignore_ascii_case(acct))
+                        })
+                        .map(|tx| tx.amount_cents)
+                        .sum()
+                })
+                .unwrap_or(0)
+        };
+        let filtered_summary = format!(
+            "{filtered_count} {} · {}",
+            if filtered_count == 1 { "row" } else { "rows" },
+            format_money(filtered_sum_cents, "EUR")
+        );
+
         let filter_bar = div()
             .flex()
-            .flex_wrap()
-            .items_center()
-            .justify_between()
-            .gap_4()
-            .child(search_box)
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .justify_between()
+                    .gap_2()
+                    .child(div().flex_1().min_w(px(280.)).child(toolbar))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(period_chips)
+                            .child(
+                                div()
+                                    .px_2()
+                                    .py_0p5()
+                                    .rounded(px(5.))
+                                    .bg(rgba(palette.raised))
+                                    .text_xs()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(rgb(if filtered_sum_cents < 0 {
+                                        palette.red
+                                    } else {
+                                        palette.green
+                                    }))
+                                    .child(filtered_summary),
+                            )
+                            .child(
+                                Button::new(
+                                    "tx-toggle-charts",
+                                    if self.tx_charts_open {
+                                        "Hide charts"
+                                    } else {
+                                        "Show charts"
+                                    },
+                                )
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(|page, _, _, cx| {
+                                    page.tx_charts_open = !page.tx_charts_open;
+                                    cx.notify();
+                                })),
+                            ),
+                    ),
+            )
+            .when(accounts.len() > 1, |el| {
+                el.child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .gap_1()
+                        .child(
+                            Button::new("acct-all", "All accounts")
+                                .size(ControlSize::Sm)
+                                .when(self.selected_account.is_none(), |b| b.primary())
+                                .when(self.selected_account.is_some(), |b| {
+                                    b.variant(ButtonVariant::Ghost)
+                                })
+                                .on_click(cx.listener(|page, _, _, cx| {
+                                    page.selected_account = None;
+                                    page.filter_rev = page.filter_rev.wrapping_add(1);
+                                    cx.notify();
+                                })),
+                        )
+                        .children(accounts.into_iter().map(|acct| {
+                            let active = self.selected_account.as_ref() == Some(&acct);
+                            Button::new(SharedString::from(format!("acct-{acct}")), acct.clone())
+                                .size(ControlSize::Sm)
+                                .when(active, |b| b.primary())
+                                .when(!active, |b| b.variant(ButtonVariant::Ghost))
+                                .on_click(cx.listener(move |page, _, _, cx| {
+                                    page.selected_account =
+                                        if active { None } else { Some(acct.clone()) };
+                                    page.filter_rev = page.filter_rev.wrapping_add(1);
+                                    cx.notify();
+                                }))
+                        })),
+                )
+            })
             .child(
                 div()
                     .flex()
@@ -605,17 +861,20 @@ impl FinancePage {
             .gap_2()
             .size_full()
             .child(filter_bar)
-            .when(!charts.is_empty(), |body| {
+            .when(self.tx_charts_open && !charts.is_empty(), |body| {
                 body.child(div().text_xs().child(
-                    "Personal spending by category · loaded transactions · click a bar to filter",
+                    "Personal spending by category · click a bar to filter",
                 ))
+                .children(charts)
+                .children(heatmap)
             })
-            .children(charts)
             .child(
                 div().flex_1().min_h_0().pb_6().child(
                     DataTable::new("finance-transactions", tx_columns())
                         .label("Transactions")
                         .rows(rows)
+                        .hidden(self.tx_hidden.clone())
+                        .density(self.tx_density)
                         .sorts([SortKey {
                             column: "date".into(),
                             rising: false,

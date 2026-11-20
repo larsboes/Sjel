@@ -10,18 +10,15 @@ pub mod types;
 
 pub use types::{bind_keys, ContextEvent, NextDay, PreviousDay, Refresh, Today};
 
-use crate::ely::buttons::{Button, ButtonVariant};
-use crate::ely::theme::ControlSize;
 use chrono::{Duration, Local, NaiveDate};
-use gpui_kit::{
-    div, prelude::*, rgb, AnyElement, Context, EventEmitter, FocusHandle, FontWeight, Window,
-};
+use gpui_kit::{div, prelude::*, AnyElement, Context, EventEmitter, FocusHandle, Window};
 use sjel_gpui_core::context::{ContextDay, TimelineItem, TimelineKind};
 use sjel_gpui_core::shell::{
     self, CalendarEntry, FinanceDashboardProjection, GlobalTask, ShellError,
 };
 
 use crate::data::{Remote, Repo};
+use crate::primitives::sub_tabs;
 use crate::theme::{Density, Palette, ThemeContext};
 
 use self::cards::{render_day_header, render_filter_action, render_metric_cards};
@@ -35,6 +32,7 @@ pub struct ContextPage {
     pub filter_kind: Option<TimelineKind>,
     pub show_timeline: bool,
     pub show_spending: bool,
+    pub inbox_count: Option<usize>,
     pub entries: Remote<Vec<CalendarEntry>>,
     pub tasks: Remote<Vec<GlobalTask>>,
     pub finance: Remote<FinanceDashboardProjection>,
@@ -54,6 +52,7 @@ impl ContextPage {
             filter_kind: None,
             show_timeline: true,
             show_spending: true,
+            inbox_count: None,
             entries: Remote::default(),
             tasks: Remote::default(),
             finance: Remote::default(),
@@ -68,6 +67,10 @@ impl ContextPage {
         if !show_spending && self.filter_kind == Some(TimelineKind::Spend) {
             self.filter_kind = None;
         }
+    }
+
+    pub fn set_inbox_count(&mut self, count: Option<usize>) {
+        self.inbox_count = count;
     }
 
     pub fn toggle_filter(&mut self, kind: TimelineKind, cx: &mut Context<Self>) {
@@ -251,14 +254,32 @@ impl ContextPage {
             is_today,
             self.filter_kind,
             self.show_spending,
+            self.inbox_count,
             palette,
             cx,
         );
 
-        let filtered_timeline: Vec<TimelineItem> = context
+        let all_timeline: Vec<TimelineItem> = context
             .timeline
             .into_iter()
             .filter(|item| self.show_spending || item.kind != TimelineKind::Spend)
+            .collect();
+        let all_count = all_timeline.len();
+        let event_count = all_timeline
+            .iter()
+            .filter(|item| item.kind == TimelineKind::Event)
+            .count();
+        let task_count = all_timeline
+            .iter()
+            .filter(|item| item.kind == TimelineKind::Task)
+            .count();
+        let spend_count = all_timeline
+            .iter()
+            .filter(|item| item.kind == TimelineKind::Spend)
+            .count();
+
+        let filtered_timeline: Vec<TimelineItem> = all_timeline
+            .into_iter()
             .filter(|item| self.filter_kind.is_none_or(|k| item.kind == k))
             .collect();
 
@@ -268,6 +289,39 @@ impl ContextPage {
             render_timeline_content(filtered_timeline, self.filter_kind, self.day, palette, cx);
 
         let filter_action = render_filter_action(self.filter_kind, self.day, cx);
+
+        let mut tabs_spec = vec![
+            ("Overview", Some(all_count), self.filter_kind.is_none()),
+            (
+                "Events",
+                Some(event_count),
+                self.filter_kind == Some(TimelineKind::Event),
+            ),
+            (
+                "Tasks",
+                Some(task_count),
+                self.filter_kind == Some(TimelineKind::Task),
+            ),
+        ];
+        if self.show_spending {
+            tabs_spec.push((
+                "Spending",
+                Some(spend_count),
+                self.filter_kind == Some(TimelineKind::Spend),
+            ));
+        }
+        let entity = cx.entity();
+        let filter_pills = sub_tabs("context-timeline", tabs_spec, move |idx, _, cx| {
+            entity.update(cx, |page, cx| {
+                page.filter_kind = match idx {
+                    0 => None,
+                    1 => Some(TimelineKind::Event),
+                    2 => Some(TimelineKind::Task),
+                    _ => Some(TimelineKind::Spend),
+                };
+                cx.notify();
+            });
+        });
 
         div()
             .key_context("ContextTimeline")
@@ -285,40 +339,12 @@ impl ContextPage {
                 el.child(
                     div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .justify_between()
+                        .gap_2()
                         .pt_1()
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_2()
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(rgb(palette.muted))
-                                        .child(match self.filter_kind {
-                                            Some(TimelineKind::Event) => "DAILY TIMELINE · EVENTS",
-                                            Some(TimelineKind::Task) => "DAILY TIMELINE · TASKS",
-                                            Some(TimelineKind::Spend) => {
-                                                "DAILY TIMELINE · SPENDING"
-                                            }
-                                            None => "DAILY TIMELINE",
-                                        }),
-                                )
-                                .when(self.filter_kind.is_some(), |el| {
-                                    el.child(
-                                        Button::new("context-clear-filter", "Show all")
-                                            .size(ControlSize::Sm)
-                                            .variant(ButtonVariant::Ghost)
-                                            .on_click(cx.listener(|page, _, _, cx| {
-                                                page.filter_kind = None;
-                                                cx.notify();
-                                            })),
-                                    )
-                                }),
-                        )
+                        .child(filter_pills)
                         .children(filter_action),
                 )
                 .child(timeline_content)
@@ -342,6 +368,42 @@ mod tests {
             assert_eq!(page.day, NaiveDate::from_ymd_opt(2026, 10, 23).unwrap());
             page.select(page.day - Duration::days(2), cx);
             assert_eq!(page.day, NaiveDate::from_ymd_opt(2026, 10, 21).unwrap());
+        });
+    }
+
+    #[gpui::test]
+    fn context_timeline_renders_ely_data_table_and_sub_tabs(cx: &mut TestAppContext) {
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, cx| {
+            let mut page = ContextPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            let day = page.day.format("%Y-%m-%d").to_string();
+            page.tasks.value = Some(vec![serde_json::from_value(serde_json::json!({
+                "id": "t1",
+                "project": "Sjel",
+                "title": "Review UI",
+                "done": false,
+                "priority": 1,
+                "due": day,
+            }))
+            .expect("task fixture")]);
+            page.filter_kind = Some(TimelineKind::Task);
+            page
+        });
+        assert!(
+            cx.debug_bounds("context-timeline-tabs").is_some(),
+            "timeline sub-tabs render"
+        );
+        assert!(
+            cx.debug_bounds("table-action task:t1 done").is_some(),
+            "timeline DataTable row action renders"
+        );
+        let tabs = cx.debug_bounds("context-timeline-tabs").unwrap();
+        cx.simulate_click(
+            tabs.origin + gpui_kit::point(gpui_kit::px(12.), gpui_kit::px(10.)),
+            gpui_kit::Modifiers::none(),
+        );
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.filter_kind, None);
         });
     }
 }

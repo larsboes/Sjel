@@ -25,7 +25,7 @@ use crate::ely::forms::{Input, InputEvent, TextInput};
 use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
 use crate::ely::theme::ControlSize;
 use crate::ely::theme::Density as ElyDensity;
-use crate::primitives::{filter_pill, SortOrder};
+use crate::primitives::{filter_pill, sub_tabs, SortOrder};
 use crate::theme::{tint, Density, Palette};
 
 mod duplicates;
@@ -329,6 +329,7 @@ pub struct Documents {
     pub(super) filing_compare_detail: Remote<DocumentDetail>,
     pub(super) filing_compare_reader: Reader,
     pub(super) show_compare_picker: bool,
+    pub(super) reader_tab: usize,
 }
 
 impl Documents {
@@ -397,6 +398,7 @@ impl Documents {
             filing_compare_detail: Remote::default(),
             filing_compare_reader: Reader::default(),
             show_compare_picker: false,
+            reader_tab: 0,
         }
     }
 
@@ -1494,15 +1496,39 @@ impl Render for Documents {
             } else {
                 format!("Page {} of {}", page + 1, pages)
             };
+            let reader_tab = self.reader_tab;
             let detail: AnyElement = match (&self.detail.value, &self.detail.error) {
-                (Some(detail), _) => div()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .child(detail_panel(detail, palette))
-                    .child(workflow_panel(self, detail, &split_input, palette, cx))
-                    .child(proposal_panel(self, detail, palette, cx))
-                    .into_any_element(),
+                (Some(detail), _) => {
+                    let proposal_count = detail.proposals.len();
+                    let entity = cx.entity();
+                    let reader_tabs = sub_tabs(
+                        "document-reader-tabs",
+                        vec![
+                            ("Overview & Split", None, reader_tab == 0),
+                            ("Proposals", Some(proposal_count), reader_tab == 1),
+                            ("Compact", None, reader_tab == 2),
+                        ],
+                        move |ix, _, cx| {
+                            entity.update(cx, |view, cx| {
+                                view.reader_tab = ix;
+                                cx.notify();
+                            });
+                        },
+                    );
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_2()
+                        .child(detail_panel(detail, palette))
+                        .child(reader_tabs)
+                        .when(reader_tab == 0, |col| {
+                            col.child(workflow_panel(self, detail, &split_input, palette, cx))
+                        })
+                        .when(reader_tab == 1, |col| {
+                            col.child(proposal_panel(self, detail, palette, cx))
+                        })
+                        .into_any_element()
+                }
                 (_, Some(error)) => div()
                     .text_sm()
                     .text_color(rgb(palette.red))

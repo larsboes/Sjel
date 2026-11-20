@@ -2,11 +2,11 @@
 
 use crate::ely::buttons::Button;
 use crate::ely::forms::{InputEvent, TextInput};
-use crate::ely::theme::ControlSize;
+use crate::ely::theme::{ControlSize, Density as TableDensity};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
-    Focusable, KeyBinding, Render, ScrollHandle, Subscription, Window,
+    Focusable, KeyBinding, Render, ScrollHandle, SharedString, Subscription, Window,
 };
 
 use crate::data::{Remote, Repo};
@@ -65,10 +65,20 @@ pub enum InventoryTab {
     MailReview,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum WishlistViewMode {
+    #[default]
+    Table,
+    Cards,
+}
+
 pub struct InventoryPage {
     pub(super) repo: Repo,
     pub(super) palette: Option<Palette>,
     pub tab: InventoryTab,
+    pub wishlist_mode: WishlistViewMode,
+    pub owned_hidden: Vec<SharedString>,
+    pub owned_density: TableDensity,
     pub rows: Remote<Vec<InventoryRow>>,
     pub wishlist: Remote<InventoryWishlist>,
     pub wish_groups: Remote<Vec<WishGroup>>,
@@ -127,6 +137,9 @@ impl InventoryPage {
             repo,
             palette: None,
             tab: InventoryTab::Owned,
+            wishlist_mode: WishlistViewMode::default(),
+            owned_hidden: Vec::new(),
+            owned_density: TableDensity::Comfortable,
             rows: Remote::default(),
             wishlist: Remote::default(),
             wish_groups: Remote::default(),
@@ -323,7 +336,7 @@ impl InventoryPage {
         field.update(cx, |input, cx| window.focus(&input.focus_handle(cx), cx));
     }
 
-    fn render_header_bar(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub fn badge_counts(&mut self) -> (usize, usize, usize, usize) {
         self.sync_owned_derived();
         let owned_count = self.owned_derived.owned_count;
         let wishlist_count = self
@@ -333,10 +346,20 @@ impl InventoryPage {
             .map(|w| w.items.len())
             .unwrap_or(0);
         let layouts_count = self.layouts.value.as_ref().map(|l| l.len()).unwrap_or(0);
-
         let mail_count = self.mail_proposals.value.as_ref().map_or(0, |items| {
             items.iter().filter(|p| p.decision.is_none()).count()
         });
+        (owned_count, wishlist_count, layouts_count, mail_count)
+    }
+
+    pub fn mail_review_pending_count(&self) -> usize {
+        self.mail_proposals.value.as_ref().map_or(0, |items| {
+            items.iter().filter(|p| p.decision.is_none()).count()
+        })
+    }
+
+    fn render_header_bar(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let (owned_count, wishlist_count, layouts_count, mail_count) = self.badge_counts();
         let entity = cx.entity();
 
         div()
@@ -565,7 +588,7 @@ impl Render for InventoryPage {
             .flex_col()
             .size_full()
             .gap_4()
-            .child(self.render_header_bar(palette, cx))
+            .when(cfg!(test), |el| el.child(self.render_header_bar(palette, cx)))
             .child(if self.tab == InventoryTab::Owned {
                 div()
                     .id("inventory-content")
@@ -822,6 +845,7 @@ mod tests {
             crate::test_support::mount_root(cx, Some(gpui::size(px(800.), px(720.))), |_, cx| {
                 let mut page = InventoryPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
                 page.set_tab(InventoryTab::Wishlist, cx);
+                page.wishlist_mode = WishlistViewMode::Cards;
                 page.wishlist.value = Some(sjel_gpui_core::inventory::InventoryWishlist {
                     items: vec![sjel_gpui_core::inventory::InventoryItem {
                         id: "long-note".into(),
@@ -876,6 +900,40 @@ mod tests {
         page.read_with(cx, |page, _| {
             let form = page.edit_form.as_ref().expect("Edit opens the form");
             assert_eq!(form.item.id, "2");
+        });
+    }
+
+    #[gpui::test]
+    fn wishlist_defaults_to_table_and_actions_open_edit_sheet(cx: &mut gpui::TestAppContext) {
+        let (page, cx) =
+            crate::test_support::mount_root(cx, Some(gpui::size(px(1000.), px(900.))), |_, cx| {
+                let mut page = InventoryPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+                let chair = owned("chair", "Chair", Some(12000)).item;
+                page.wishlist.value = Some(InventoryWishlist {
+                    items: vec![chair],
+                    total_low_cents: 12000,
+                    total_high_cents: 12000,
+                    unpriced_count: 0,
+                    monthly_balance: None,
+                    months_to_pay: None,
+                });
+                page.set_tab(InventoryTab::Wishlist, cx);
+                page
+            });
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.wishlist_mode, WishlistViewMode::Table);
+        });
+        let edit = cx
+            .debug_bounds("table-action chair edit")
+            .expect("wishlist table draws Edit row action");
+        cx.simulate_click(edit.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            let form = page
+                .edit_form
+                .as_ref()
+                .expect("Edit opens the item edit sheet");
+            assert_eq!(form.item.id, "chair");
         });
     }
 }

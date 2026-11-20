@@ -56,16 +56,19 @@ pub fn open(cx: &mut App) {
         nsh_mail::set_offline(offline);
     }
     set_pdf_viewer();
-    if std::env::var("SJEL_NSH_TRIAL").as_deref() == Ok("mail") {
-        set_nsh_page(NshPage::Mail);
-    } else {
-        set_nsh_page(NshPage::Documents);
+    match std::env::var("SJEL_NSH_TRIAL").as_deref() {
+        Ok("mail") => set_nsh_page(NshPage::Mail),
+        Ok("finance") => set_nsh_page(NshPage::Finance),
+        Ok("inventory" | "wishlist") => set_nsh_page(NshPage::Inventory),
+        _ => set_nsh_page(NshPage::Documents),
     }
     let endpoint = &sjel_gpui_core::environment::current().endpoint;
     if let Ok(shell) = Shell::new(endpoint) {
         let shell = Arc::new(shell);
         connect(Source::Shell(shell.clone()));
-        nsh_mail::connect(Source::Shell(shell));
+        nsh_mail::connect(Source::Shell(shell.clone()));
+        sjel_gpui_ui::nsh_finance::connect(Source::Shell(shell.clone()));
+        sjel_gpui_ui::nsh_inventory::connect(Source::Shell(shell));
     }
     let options = AppOptions {
         title: "Sjel (NSH)".to_owned(),

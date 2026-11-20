@@ -460,24 +460,79 @@ pub fn ProjectsScreen() -> impl IntoElement {
     let board = signal(false);
     let project_filter = signal(None::<String>);
     let form = signal(false);
+    let filters_open = signal(false);
     let selected = computed(move || snap.with(|s| s.record.as_ref().map(|r| r.path.clone())));
     view()
         .flex_1()
         .px_4()
-        .gap_2()
-        .child(heading("Projects"))
-        .child(text(move || snap.with(|s| s.sync.clone())).text_xs())
+        .gap_3()
         .child(
             view()
                 .flex_row()
-                .flex_wrap()
-                .child(action("Hubs", move || tab.set(0)))
-                .child(action("All tasks", move || tab.set(1)))
-                .child(action("All notes", move || tab.set(2)))
-                .child(action("Objects", move || tab.set(3)))
-                .child(action("Refresh", load))
-                .child(action("New", move || form.update(|v| *v = !*v))),
+                .justify_between()
+                .items_center()
+                .child(heading("Projects"))
+                .child(
+                    view()
+                        .flex_row()
+                        .gap_1p5()
+                        .child(action("Refresh", load))
+                        .child(action("New", move || form.update(|v| *v = !*v))),
+                ),
         )
+        .child(text(move || snap.with(|s| s.sync.clone())).text_xs())
+        .child(dynamic(move || {
+            let (proj_count, open_sum, note_sum) = snap.with(|s| {
+                let open_sum: usize = s.projects.iter().map(|p| p.open).sum();
+                let note_sum: usize = s.projects.iter().map(|p| p.notes).sum();
+                (s.projects.len(), open_sum, note_sum)
+            });
+            view()
+                .flex_row()
+                .gap_2()
+                .child(crate::nsh_ui::metric_tile(
+                    "PROJECTS",
+                    proj_count.to_string(),
+                    "Hubs",
+                ))
+                .child(crate::nsh_ui::metric_tile(
+                    "OPEN",
+                    open_sum.to_string(),
+                    "Tasks",
+                ))
+                .child(crate::nsh_ui::metric_tile(
+                    "NOTES",
+                    note_sum.to_string(),
+                    "Saved",
+                ))
+                .into_element()
+        }))
+        .child(dynamic(move || {
+            let current_tab = tab.get();
+            view()
+                .flex_row()
+                .flex_wrap()
+                .gap_1p5()
+                .child(crate::nsh_ui::pill_tab("Hubs", current_tab == 0, move || {
+                    tab.set(0)
+                }))
+                .child(crate::nsh_ui::pill_tab(
+                    "All tasks",
+                    current_tab == 1,
+                    move || tab.set(1),
+                ))
+                .child(crate::nsh_ui::pill_tab(
+                    "All notes",
+                    current_tab == 2,
+                    move || tab.set(2),
+                ))
+                .child(crate::nsh_ui::pill_tab(
+                    "Objects",
+                    current_tab == 3,
+                    move || tab.set(3),
+                ))
+                .into_element()
+        }))
         .child(field("Search", search))
         .child(scroll().flex_1().child(dynamic(move || {
             if tab.get() == 3 {
@@ -521,69 +576,144 @@ pub fn ProjectsScreen() -> impl IntoElement {
                     }
                     if let Some(project) = current.project {
                         out = out
-                            .child(heading(project))
-                            .child(action("All projects", || open_project(None)));
+                            .child(
+                                view()
+                                    .flex_row()
+                                    .items_center()
+                                    .justify_between()
+                                    .gap_2()
+                                    .child(heading(project))
+                                    .child(crate::nsh_ui::pill_tab("‹ All projects", false, || {
+                                        open_project(None)
+                                    })),
+                            );
                         for record in current.records.iter().filter(|r| matches(&r.title)) {
                             let path = record.path.clone();
-                            out = out.child(action(
-                                format!("{} · {}", record.kind, record.title),
+                            out = out.child(crate::nsh_ui::list_row(
+                                record.title.clone(),
+                                record.path.clone(),
+                                Some(record.kind.clone()),
                                 move || open_record(path.clone()),
                             ));
                         }
                     } else if tab.get() == 0 {
                         for project in current.projects.iter().filter(|p| matches(&p.name)) {
                             let name = project.name.clone();
-                            out = out.child(action(
-                                format!(
-                                    "{} · {} open · {} notes",
-                                    project.name, project.open, project.notes
-                                ),
-                                move || open_project(Some(name.clone())),
-                            ));
+                            let total = project.open + project.done;
+                            let ratio = if total > 0 {
+                                project.done as f32 / total as f32
+                            } else {
+                                0.0
+                            };
+                            out = out.child(
+                                crate::nsh_ui::surface_card()
+                                    .px_3()
+                                    .py_2()
+                                    .flex_row()
+                                    .items_center()
+                                    .justify_between()
+                                    .gap_2()
+                                    .child(action(
+                                        format!(
+                                            "{} · {} open · {} notes",
+                                            project.name, project.open, project.notes
+                                        ),
+                                        move || open_project(Some(name.clone())),
+                                    ))
+                                    .child(crate::nsh_ui::progress_bar(ratio)),
+                            );
                         }
                     } else if tab.get() == 1 {
-                        let mut filters = view()
+                        let status_summary = match status.get() {
+                            StatusFilter::Active => "Active",
+                            StatusFilter::All => "All statuses",
+                            StatusFilter::Is(s) => status_label(s),
+                        };
+                        let proj_summary = project_filter
+                            .with(|p| p.clone().unwrap_or_else(|| "All projects".into()));
+                        let quick_row = view()
                             .flex_row()
                             .flex_wrap()
-                            .child(action("Active", move || status.set(StatusFilter::Active)))
-                            .child(action("All statuses", move || {
-                                status.set(StatusFilter::All)
-                            }));
-                        for value in TASK_STATUSES {
-                            filters = filters.child(action(status_label(value), move || {
-                                status.set(StatusFilter::Is(value))
-                            }));
-                        }
-                        out = out.child(filters).child(
+                            .gap_1p5()
+                            .child(crate::nsh_ui::pill_tab(
+                                "Active",
+                                matches!(status.get(), StatusFilter::Active),
+                                move || status.set(StatusFilter::Active),
+                            ))
+                            .child(crate::nsh_ui::pill_tab(
+                                "All statuses",
+                                matches!(status.get(), StatusFilter::All),
+                                move || status.set(StatusFilter::All),
+                            ))
+                            .child(crate::nsh_ui::pill_tab(
+                                "List / board",
+                                board.get(),
+                                move || board.update(|v| *v = !*v),
+                            ))
+                            .child(crate::nsh_ui::pill_tab(
+                                "All projects",
+                                project_filter.with(Option::is_none),
+                                move || project_filter.set(None),
+                            ));
+
+                        let drawer_body = filters_open.get().then(|| {
+                            let mut status_pills = view().flex_row().flex_wrap().gap_1p5();
+                            for value in TASK_STATUSES {
+                                status_pills = status_pills.child(crate::nsh_ui::pill_tab(
+                                    status_label(value),
+                                    status.get() == StatusFilter::Is(value),
+                                    move || status.set(StatusFilter::Is(value)),
+                                ));
+                            }
+                            let mut project_pills = view().flex_row().flex_wrap().gap_1p5();
+                            for p in &current.projects {
+                                let name = p.name.clone();
+                                let active =
+                                    project_filter.with(|pf| pf.as_deref() == Some(p.name.as_str()));
+                                project_pills = project_pills.child(crate::nsh_ui::pill_tab(
+                                    name.clone(),
+                                    active,
+                                    move || project_filter.set(Some(name.clone())),
+                                ));
+                            }
+                            let mut sorts = view().flex_row().flex_wrap().gap_1p5();
+                            for (value, label) in [
+                                (TaskSort::Default, "Default"),
+                                (TaskSort::Title, "Title"),
+                                (TaskSort::Project, "Project"),
+                                (TaskSort::Status, "Status"),
+                                (TaskSort::Due, "Due"),
+                                (TaskSort::Priority, "Priority"),
+                            ] {
+                                sorts = sorts.child(crate::nsh_ui::pill_tab(
+                                    label,
+                                    task_sort.get() == value,
+                                    move || task_sort.set(value),
+                                ));
+                            }
+                            sorts = sorts.child(crate::nsh_ui::pill_tab(
+                                "Reverse sort",
+                                !ascending.get(),
+                                move || ascending.update(|v| *v = !*v),
+                            ));
                             view()
-                                .flex_row()
-                                .flex_wrap()
-                                .child(action("List / board", move || board.update(|v| *v = !*v)))
-                                .child(action("Reverse sort", move || {
-                                    ascending.update(|v| *v = !*v)
-                                }))
-                                .child(action("All projects", move || project_filter.set(None))),
-                        );
-                        let mut projects = view().flex_row().flex_wrap();
-                        for p in &current.projects {
-                            let name = p.name.clone();
-                            projects = projects.child(action(name.clone(), move || {
-                                project_filter.set(Some(name.clone()))
-                            }));
-                        }
-                        out = out.child(projects);
-                        let mut sorts = view().flex_row().flex_wrap();
-                        for (value, label) in [
-                            (TaskSort::Default, "Default"),
-                            (TaskSort::Title, "Title"),
-                            (TaskSort::Project, "Project"),
-                            (TaskSort::Status, "Status"),
-                            (TaskSort::Due, "Due"),
-                            (TaskSort::Priority, "Priority"),
-                        ] {
-                            sorts = sorts.child(action(label, move || task_sort.set(value)));
-                        }
-                        out = out.child(sorts);
+                                .gap_2()
+                                .pt_1()
+                                .child(crate::nsh_ui::section_heading("STATUS"))
+                                .child(status_pills)
+                                .child(crate::nsh_ui::section_heading("PROJECT"))
+                                .child(project_pills)
+                                .child(crate::nsh_ui::section_heading("SORT"))
+                                .child(sorts)
+                        });
+
+                        out = out.child(quick_row).child(crate::nsh_ui::filter_drawer(
+                            "FILTERS & SORT",
+                            format!("{status_summary} · {proj_summary}"),
+                            filters_open,
+                            drawer_body,
+                        ));
+
                         let mut tasks: Vec<_> = current
                             .tasks
                             .iter()
@@ -610,27 +740,36 @@ pub fn ProjectsScreen() -> impl IntoElement {
                                 out = out.child(heading(status_label(task.status())));
                             }
                             let path = task.id.clone();
-                            out = out
-                                .child(action(
-                                    format!("{} · {}", task.title, task.project),
-                                    move || open_record(path.clone()),
-                                ))
-                                .child(caption(format!(
-                                    "{} · priority {} · {}",
-                                    task.status(),
-                                    task.priority,
-                                    task.due.as_deref().unwrap_or("No due date")
-                                )));
+                            out = out.child(
+                                crate::nsh_ui::surface_card()
+                                    .px_3()
+                                    .py_2()
+                                    .gap_1()
+                                    .child(action(
+                                        format!("{} · {}", task.title, task.project),
+                                        move || open_record(path.clone()),
+                                    ))
+                                    .child(caption(format!(
+                                        "{} · priority {} · {}",
+                                        task.status(),
+                                        task.priority,
+                                        task.due.as_deref().unwrap_or("No due date")
+                                    ))),
+                            );
                         }
                     } else {
-                        let mut sorts = view().flex_row().flex_wrap();
+                        let mut sorts = view().flex_row().flex_wrap().gap_1p5();
                         for (value, label) in [
                             (NoteSort::Default, "Default"),
                             (NoteSort::Title, "Title"),
                             (NoteSort::Project, "Project"),
                             (NoteSort::Kind, "Kind"),
                         ] {
-                            sorts = sorts.child(action(label, move || note_sort.set(value)));
+                            sorts = sorts.child(crate::nsh_ui::pill_tab(
+                                label,
+                                note_sort.get() == value,
+                                move || note_sort.set(value),
+                            ));
                         }
                         out = out.child(sorts);
                         let mut notes: Vec<_> =
@@ -638,10 +777,15 @@ pub fn ProjectsScreen() -> impl IntoElement {
                         sort_notes(&mut notes, note_sort.get(), ascending.get());
                         for note in notes {
                             let path = note.path.clone();
-                            out = out.child(action(
-                                format!("{} · {}", note.title, note.project),
-                                move || open_record(path.clone()),
-                            ));
+                            out = out.child(
+                                crate::nsh_ui::surface_card()
+                                    .px_3()
+                                    .py_2()
+                                    .child(action(
+                                        format!("{} · {}", note.title, note.project),
+                                        move || open_record(path.clone()),
+                                    )),
+                            );
                         }
                     }
                     out

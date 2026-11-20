@@ -18,9 +18,10 @@ use crate::data::Remote;
 use crate::ely::buttons::{Button as ElyButton, ButtonVariant, ToggleButton, ToggleItem};
 use crate::ely::data_display::Tone;
 use crate::ely::forms::{Form as ElyForm, FormError, FormField, Input, InputEvent, TextInput};
-use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
+use crate::ely::layout::Sheet;
+use crate::ely::primitives::Place;
+use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey, TableToolbar};
 use crate::ely::theme::ControlSize;
-use crate::ely::theme::Density;
 use crate::primitives::{stat_card, stat_strip};
 use crate::theme::{tint, Palette};
 
@@ -533,6 +534,28 @@ impl InventoryPage {
         let categories = self.owned_derived.categories.clone();
 
         let search_field = self.search_field(window, cx);
+        let entity_cols = cx.entity();
+        let entity_dens = cx.entity();
+        let toolbar = TableToolbar::new("inventory-owned-toolbar")
+            .columns(
+                owned_columns()
+                    .into_iter()
+                    .filter(|col| !col.title().is_empty())
+                    .map(|col| (col.key().clone(), col.title().clone())),
+                self.owned_hidden.clone(),
+                move |hidden, _, cx| {
+                    entity_cols.update(cx, |page, cx| {
+                        page.owned_hidden = hidden.to_vec();
+                        cx.notify();
+                    });
+                },
+            )
+            .density(self.owned_density, move |density, _, cx| {
+                entity_dens.update(cx, |page, cx| {
+                    page.owned_density = density;
+                    cx.notify();
+                });
+            });
 
         let mut content = div()
             .flex()
@@ -623,7 +646,8 @@ impl InventoryPage {
                                     }
                                 })
                             })),
-                    ),
+                    )
+                    .child(toolbar),
             );
         if let Some(form) = self.render_wish_form(palette, cx) {
             content = content.child(form);
@@ -645,11 +669,12 @@ impl InventoryPage {
                     DataTable::new("inventory-owned", owned_columns())
                         .label("Owned assets")
                         .rows(rows)
+                        .hidden(self.owned_hidden.clone())
                         .sorts([SortKey {
                             column: "name".into(),
                             rising: true,
                         }])
-                        .density(Density::Comfortable)
+                        .density(self.owned_density)
                         .virtualized()
                         .track_scroll(&self.owned_scroll)
                         .on_action(move |key, _, window, cx| {
@@ -844,76 +869,80 @@ impl InventoryPage {
             );
         }
 
-        Some(
-            div()
-                .p_4()
-                .rounded(px(12.))
-                .bg(rgba(tint(palette.raised, 0x30)))
-                .border_1()
-                .border_color(rgba(tint(palette.border, 0x25)))
-                .flex()
-                .flex_col()
-                .gap_3()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .child(format!("Edit {}", form.item.label)),
-                        )
-                        .child(
-                            ElyButton::new("inventory-edit-cancel", "Cancel")
-                                .size(ControlSize::Sm)
-                                .variant(ButtonVariant::Ghost)
-                                .disabled(saving)
-                                .on_click(cx.listener(|page, _, _, cx| {
-                                    page.edit_form = None;
-                                    cx.notify();
-                                })),
-                        ),
-                )
-                .child(fields)
-                .child(history_box)
-                .children(impact_box)
-                .child(
-                    div()
-                        .flex()
-                        .justify_end()
-                        .gap_2()
-                        .child(
-                            ElyButton::new(
-                                "inventory-edit-impact",
-                                if impact_busy {
-                                    "Checking layouts…"
-                                } else {
-                                    "Preview layout impact"
-                                },
-                            )
+        let title = format!("Edit {}", form.item.label);
+        let close_entity = cx.entity();
+        let body = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child(title.clone()),
+                    )
+                    .child(
+                        ElyButton::new("inventory-edit-cancel", "Cancel")
                             .size(ControlSize::Sm)
                             .variant(ButtonVariant::Ghost)
-                            .disabled(saving || impact_busy)
-                            .on_click(cx.listener(|page, _, _, cx| {
-                                page.preview_item_impact(cx);
-                            })),
-                        )
-                        .child(
-                            ElyButton::new(
-                                "inventory-edit-save",
-                                if saving { "Saving…" } else { "Save changes" },
-                            )
-                            .size(ControlSize::Sm)
-                            .primary()
                             .disabled(saving)
-                            .on_click(
-                                cx.listener(|page, _, window, cx| page.save_item_edit(window, cx)),
-                            ),
+                            .on_click(cx.listener(|page, _, _, cx| {
+                                page.edit_form = None;
+                                cx.notify();
+                            })),
+                    ),
+            )
+            .child(fields)
+            .child(history_box)
+            .children(impact_box)
+            .child(
+                div()
+                    .flex()
+                    .justify_end()
+                    .gap_2()
+                    .child(
+                        ElyButton::new(
+                            "inventory-edit-impact",
+                            if impact_busy {
+                                "Checking layouts…"
+                            } else {
+                                "Preview layout impact"
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .disabled(saving || impact_busy)
+                        .on_click(cx.listener(|page, _, _, cx| {
+                            page.preview_item_impact(cx);
+                        })),
+                    )
+                    .child(
+                        ElyButton::new(
+                            "inventory-edit-save",
+                            if saving { "Saving…" } else { "Save changes" },
+                        )
+                        .size(ControlSize::Sm)
+                        .primary()
+                        .disabled(saving)
+                        .on_click(
+                            cx.listener(|page, _, window, cx| page.save_item_edit(window, cx)),
                         ),
-                )
-                .into_any_element(),
+                    ),
+            );
+        Some(
+            Sheet::new("inventory-edit-sheet", Place::Right, title, move |_, cx| {
+                close_entity.update(cx, |page, cx| {
+                    page.edit_form = None;
+                    cx.notify();
+                });
+            })
+            .child(body)
+            .into_any_element(),
         )
     }
 }

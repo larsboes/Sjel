@@ -475,13 +475,26 @@ pub fn AgentScreen() -> impl IntoElement {
             let mut out = view().gap_2();
             if let Some(pending) = current.pending {
                 let blocked = pending.is_block();
-                out = out
-                    .child(heading(pending.name))
+                let mut approval_card = crate::nsh_ui::surface_card()
+                    .p_3()
+                    .gap_2()
+                    .child(
+                        view()
+                            .flex_row()
+                            .justify_between()
+                            .items_center()
+                            .child(heading(pending.name))
+                            .child(crate::nsh_ui::status_chip(
+                                if blocked { "Blocked" } else { "Approval" },
+                                true,
+                            )),
+                    )
                     .child(text(pending.preview).text_sm());
                 if let Some(diff) = pending.diff {
-                    out =
-                        out.child(nsh_base::text_view().markdown(format!("```diff\n{diff}\n```")));
+                    approval_card = approval_card
+                        .child(nsh_base::text_view().markdown(format!("```diff\n{diff}\n```")));
                 }
+                out = out.child(approval_card);
                 let deny = pending.approval.clone();
                 if !blocked {
                     let once = pending.approval.clone();

@@ -56,7 +56,13 @@ impl Area {
             Self::Projects => &[Page::Projects],
             Self::Documents => &[Page::Documents, Page::Media, Page::Import, Page::Docs],
             Self::Travel => &[Page::Travel],
-            Self::Life => &[Page::People, Page::Finance, Page::Inventory, Page::Cv],
+            Self::Life => &[
+                Page::People,
+                Page::Finance,
+                Page::Inventory,
+                Page::Cv,
+                Page::Posts,
+            ],
             Self::Sjel => &[
                 Page::Capabilities,
                 Page::Systems,

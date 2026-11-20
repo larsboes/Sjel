@@ -105,6 +105,25 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Open and focus the 24-hour quick Scratchpad seat in the right edge.
+    pub fn open_scratchpad(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.right_panel.open_on(Seat::Scratchpad);
+        self.scratchpad
+            .update(cx, |seat, cx| seat.focus_editor(window, cx));
+        cx.notify();
+    }
+
+    /// Toggle the 24-hour quick Scratchpad seat in the right edge (`⌘\`).
+    pub fn toggle_scratchpad(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.right_panel.is_open() && self.right_panel.seat() == Seat::Scratchpad {
+            self.right_panel.close();
+            self.refocus = true;
+            cx.notify();
+        } else {
+            self.open_scratchpad(window, cx);
+        }
+    }
+
     /// Open or focus the terminal drawer.
     pub(super) fn open_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.right_panel.open_on(Seat::Terminal);
@@ -157,6 +176,11 @@ impl Workspace {
         }
         let seat = self.right_panel.seat();
         let body = match seat {
+            Seat::Scratchpad => {
+                self.scratchpad
+                    .update(cx, |s, cx| s.set_palette(palette, cx));
+                self.scratchpad.clone().into_any_element()
+            }
             Seat::Agent => self.finder.read(cx).agent.clone().into_any_element(),
             Seat::Soundscape => div()
                 .p_4()

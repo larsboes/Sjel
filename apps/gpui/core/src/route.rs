@@ -35,6 +35,9 @@ pub enum Page {
     SelfModel,
     /// CV builder, profiles, and job applications ledger (`sjel://cv`).
     Cv,
+    /// Post drafts, ordered photos and collages for upload (`sjel://posts`). The dashboard has
+    /// no page of that name, so it is not in `DESTINATIONS`.
+    Posts,
     /// Media ingest gate and indexed volume integrity ledger (`sjel://media`).
     Media,
     /// Research articles, upstream projects, and model benchmarks (`sjel://research`).
@@ -48,7 +51,7 @@ pub enum Page {
 }
 
 impl Page {
-    pub const ALL: [Page; 24] = [
+    pub const ALL: [Page; 25] = [
         Page::Home,
         Page::Context,
         Page::Capabilities,
@@ -68,6 +71,7 @@ impl Page {
         Page::Packs,
         Page::SelfModel,
         Page::Cv,
+        Page::Posts,
         Page::Media,
         Page::Research,
         Page::Setup,
@@ -96,6 +100,7 @@ impl Page {
             Self::Packs => "/packs",
             Self::SelfModel => "/self",
             Self::Cv => "/cv",
+            Self::Posts => "/posts",
             Self::Media => "/media",
             Self::Research => "/research",
             Self::Setup => "/setup",
@@ -115,6 +120,7 @@ impl Page {
             Self::Packs => "Packs",
             Self::SelfModel => "Self-model",
             Self::Cv => "CV",
+            Self::Posts => "Posts",
             Self::Media => "Media",
             Self::Docs => "Docs",
             Self::Record => "Record",
@@ -207,6 +213,8 @@ pub enum Target {
     Record(String),
     /// Open the finder, and ask this question in the one Ask session when it is not empty.
     Ask(String),
+    /// Open or focus the 24-hour quick scratchpad seat in the right edge.
+    Scratchpad,
     /// A terminal on the Mac: the newest one still running, or a new login shell.
     Terminal,
     /// A path no native page answers, query included.
@@ -250,6 +258,9 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
     }
     if path_only == "/docs" {
         return Some(Target::Native(Page::Docs));
+    }
+    if matches!(path_only, "/scratchpad" | "/scratch") {
+        return Some(Target::Scratchpad);
     }
     if path_only == "/terminal" {
         return Some(Target::Terminal);

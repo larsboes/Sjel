@@ -1,12 +1,15 @@
 //! Status badges, pills, and indicator chips.
 
-use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, App, FontWeight, SharedString, Window};
+use gpui_kit::{
+    div, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, ElementId, FontWeight,
+    SharedString, Window,
+};
 
 use super::tokens::RADIUS_SM;
 use crate::ely::{
     buttons::{ToggleButton, ToggleItem},
     feedback::InlineMessage,
-    primitives::Severity,
+    primitives::{Severity, Tooltip},
     theme::ControlSize,
 };
 use crate::theme::{tint, Palette};
@@ -211,4 +214,34 @@ pub fn mono_num(text: impl Into<SharedString>, color: u32) -> gpui_kit::Div {
         .text_right()
         .text_color(rgb(color))
         .child(text.into())
+}
+
+/// Interactive tinted status pill with tooltip and click handler.
+pub fn interactive_pill(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    tone: u32,
+    tooltip: impl Into<SharedString>,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> AnyElement {
+    div()
+        .id(id.into())
+        .flex()
+        .items_center()
+        .gap_1p5()
+        .px_2p5()
+        .py(px(3.))
+        .rounded_full()
+        .bg(rgba(tint(tone, 0x20)))
+        .border_1()
+        .border_color(rgba(tint(tone, 0x48)))
+        .text_xs()
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(rgb(tone))
+        .cursor_pointer()
+        .tooltip(Tooltip::text(tooltip.into()))
+        .hover(move |s| s.opacity(0.85))
+        .on_click(on_click)
+        .child(label.into())
+        .into_any_element()
 }

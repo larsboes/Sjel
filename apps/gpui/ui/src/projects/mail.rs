@@ -1,8 +1,14 @@
 //! Mail proposal review and target record selection for Projects.
 
+use std::rc::Rc;
+
+use crate::ely::data_display::Tone;
+use crate::ely::layout::Sheet;
+use crate::ely::primitives::Place;
+use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
-use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context, FontWeight};
+use gpui_kit::{div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, FontWeight};
 
 use crate::data::Remote;
 use crate::theme::Palette;
@@ -231,14 +237,12 @@ impl Projects {
         if let Some(message) = &self.mail_message {
             body = body.child(div().text_sm().child(message.clone()));
         }
-        if let Some(proposal) = &self.mail_selected {
+        let review_sheet = self.mail_selected.as_ref().map(|proposal| {
             let mut detail = div()
                 .flex()
                 .flex_col()
-                .gap_2()
+                .gap_3()
                 .p_3()
-                .border_1()
-                .border_color(rgba(palette.border))
                 .child(
                     div()
                         .font_weight(FontWeight::SEMIBOLD)
@@ -250,7 +254,16 @@ impl Projects {
                 ))
                 .child(format!("Source: {}", proposal.source_id))
                 .child("Evidence (exact)")
-                .child(proposal.evidence.clone())
+                .child(
+                    div()
+                        .p_2()
+                        .rounded(px(6.))
+                        .border_1()
+                        .border_color(rgba(palette.border))
+                        .bg(rgba(palette.raised))
+                        .text_xs()
+                        .child(proposal.evidence.clone()),
+                )
                 .child(format!(
                     "Task suggestion (not applied): {}",
                     proposal.task_suggestion.as_deref().unwrap_or("none")
@@ -271,9 +284,10 @@ impl Projects {
                 detail = detail.child(format!("Could not load records: {error}"));
             }
             if let Some(rows) = &records.value {
+                let mut target_list = div().flex().flex_wrap().gap_1p5();
                 for record in rows {
                     let path = record.path.clone();
-                    detail = detail.child(
+                    target_list = target_list.child(
                         Button::new(format!("mail-target-{path}"))
                             .small()
                             .label(format!("{} · {}", record.title, record.path))
@@ -285,6 +299,8 @@ impl Projects {
                 }
                 if rows.is_empty() {
                     detail = detail.child("No existing records are available.");
+                } else {
+                    detail = detail.child(target_list);
                 }
             }
             if self.mail_target_loading {
@@ -297,7 +313,16 @@ impl Projects {
                         target.title, target.path
                     ))
                     .child("Exact current content (approval requires this unchanged):")
-                    .child(target.content.clone())
+                    .child(
+                        div()
+                            .p_2()
+                            .rounded(px(6.))
+                            .border_1()
+                            .border_color(rgba(palette.border))
+                            .bg(rgba(palette.raised))
+                            .text_xs()
+                            .child(target.content.clone()),
+                    )
                     .child(
                         Button::new("project-mail-approve")
                             .small()
@@ -311,60 +336,130 @@ impl Projects {
                             ),
                     );
             }
-            detail = detail
-                .child(
-                    Button::new("project-mail-reject")
-                        .small()
-                        .label("Reject proposal")
-                        .disabled(self.mail_busy || self.mail.loading || self.mail.error.is_some())
-                        .on_click(
-                            cx.listener(|view, _, _, cx| view.decide_project_mail(false, cx)),
-                        ),
-                )
-                .child(
-                    Button::new("project-mail-close")
-                        .small()
-                        .ghost()
-                        .label("Close review")
-                        .disabled(self.mail_busy || self.mail_target_loading)
-                        .on_click(cx.listener(|view, _, _, cx| {
+            detail = detail.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        Button::new("project-mail-reject")
+                            .small()
+                            .label("Reject proposal")
+                            .disabled(
+                                self.mail_busy || self.mail.loading || self.mail.error.is_some(),
+                            )
+                            .on_click(
+                                cx.listener(|view, _, _, cx| view.decide_project_mail(false, cx)),
+                            ),
+                    )
+                    .child(
+                        Button::new("project-mail-close")
+                            .small()
+                            .ghost()
+                            .label("Close review")
+                            .disabled(self.mail_busy || self.mail_target_loading)
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.mail_selected = None;
+                                view.mail_target = None;
+                                cx.notify();
+                            })),
+                    ),
+            );
+            let close_entity = cx.entity();
+            Sheet::new(
+                "project-mail-review-sheet",
+                Place::Right,
+                "Review Mail Proposal",
+                move |_, cx| {
+                    close_entity.update(cx, |view, cx| {
+                        if !view.mail_busy && !view.mail_target_loading {
                             view.mail_selected = None;
                             view.mail_target = None;
                             cx.notify();
-                        })),
-                );
-            body = body.child(detail);
-        }
+                        }
+                    });
+                },
+            )
+            .child(detail)
+        });
+
         if let Some(proposals) = &self.mail.value {
-            if proposals.is_empty() {
-                body = body.child(if self.mail_more {
-                    "No proposals for this project on the pages loaded so far."
-                } else {
-                    "No mail proposals need review."
-                });
-            }
-            for proposal in proposals {
-                let selected = proposal.clone();
-                body = body.child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(format!("{} · {}", proposal.title, proposal.data_class))
-                        .child(
-                            Button::new(format!("project-mail-review-{}", proposal.id))
-                                .small()
-                                .label("Review")
-                                .disabled(self.mail_busy || self.mail_target_loading)
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.mail_selected = Some(selected.clone());
+            let columns = vec![
+                Column::new("title", "PROPOSAL").min_width(rems(14.)),
+                Column::new("class", "CLASS").width(rems(5.)),
+                Column::new("source", "SOURCE").width(rems(12.)),
+                Column::new("suggestion", "SUGGESTED TASK").min_width(rems(10.)),
+                Column::new("actions", "")
+                    .width(rems(6.))
+                    .actions([RowAction::new("review", "Review")]),
+            ];
+            let rows: Rc<Vec<Row>> = Rc::new(
+                proposals
+                    .iter()
+                    .map(|p| {
+                        let title_line = p.title.replace(['\r', '\n'], " ");
+                        let evidence_line = p.evidence.replace(['\r', '\n'], " ");
+                        let suggestion_line = p
+                            .task_suggestion
+                            .as_deref()
+                            .unwrap_or("—")
+                            .replace(['\r', '\n'], " ");
+                        Row::new(
+                            p.id.to_string(),
+                            [
+                                Cell::Lines(title_line.into(), evidence_line.into()),
+                                Cell::Tag(p.data_class.clone().into(), Tone::Neutral),
+                                Cell::Text(p.source_id.clone().into()),
+                                Cell::Text(suggestion_line.into()),
+                                Cell::Actions(vec!["review".into()]),
+                            ],
+                        )
+                    })
+                    .collect(),
+            );
+            let proposals_by_id: std::collections::HashMap<String, _> = proposals
+                .iter()
+                .map(|p| (p.id.to_string(), p.clone()))
+                .collect();
+            let open_map = proposals_by_id.clone();
+            let (on_open, on_act) = (cx.entity(), cx.entity());
+            let empty_msg = if self.mail_more {
+                "No proposals for this project on the pages loaded so far."
+            } else {
+                "No mail proposals need review."
+            };
+            let table = DataTable::new("project-mail-proposals-table", columns)
+                .label("Project mail proposals")
+                .rows(rows)
+                .current(self.mail_selected.as_ref().map(|p| p.id.to_string()))
+                .on_open(move |key, _, cx| {
+                    if let Some(chosen) = open_map.get(key.as_ref()).cloned() {
+                        on_open.update(cx, |view, cx| {
+                            if !view.mail_busy && !view.mail_target_loading {
+                                view.mail_selected = Some(chosen);
+                                view.mail_target = None;
+                                view.mail_message = None;
+                                cx.notify();
+                            }
+                        });
+                    }
+                })
+                .on_action(move |key, action, _, cx| {
+                    if action.as_ref() == "review" {
+                        if let Some(chosen) = proposals_by_id.get(key.as_ref()).cloned() {
+                            on_act.update(cx, |view, cx| {
+                                if !view.mail_busy && !view.mail_target_loading {
+                                    view.mail_selected = Some(chosen);
                                     view.mail_target = None;
                                     view.mail_message = None;
                                     cx.notify();
-                                })),
-                        ),
-                );
-            }
+                                }
+                            });
+                        }
+                    }
+                })
+                .empty(empty_msg);
+            body = body.child(table);
             if self.mail_more {
                 body = body.child(
                     Button::new("project-mail-more")
@@ -381,6 +476,7 @@ impl Projects {
             .min_h_0()
             .overflow_y_scroll()
             .child(body)
+            .children(review_sheet)
             .into_any_element()
     }
 }

@@ -12,7 +12,7 @@ use sjel_gpui_core::shell::GlobalTask;
 
 use super::types::ContextEvent;
 use super::ContextPage;
-use crate::primitives::{stat_card_interactive, stat_strip, InteractiveStatCard};
+use crate::primitives::{dashboard_metric_tile, stat_strip, InteractiveStatCard};
 use crate::theme::Palette;
 
 pub fn render_day_header(
@@ -119,6 +119,7 @@ pub fn render_metric_cards(
     is_today: bool,
     filter_kind: Option<TimelineKind>,
     show_spending: bool,
+    inbox_count: Option<usize>,
     palette: Palette,
     cx: &mut Context<ContextPage>,
 ) -> AnyElement {
@@ -143,35 +144,45 @@ pub fn render_metric_cards(
     let total_spend_str = format_money(context.total_spent_cents, &context.currency);
 
     let mut cards = vec![
-        stat_card_interactive(
+        dashboard_metric_tile(
             InteractiveStatCard {
                 id: "context-stat-events".into(),
                 label: "EVENTS".into(),
-                value: format!("{event_count} scheduled").into(),
+                value: event_count.to_string().into(),
                 detail: Some(if event_count == 0 {
                     "Calendar clear".into()
+                } else if event_count == 1 {
+                    "1 scheduled · click to filter".into()
                 } else {
-                    "Click to filter · Meetings & blocks".into()
+                    format!("{event_count} scheduled · click to filter").into()
                 }),
-                tone: palette.text,
+                tone: if event_count > 0 {
+                    palette.accent
+                } else {
+                    palette.text
+                },
                 active: filter_kind == Some(TimelineKind::Event),
                 palette,
             },
             cx.listener(|page, _, _, cx| page.toggle_filter(TimelineKind::Event, cx)),
         ),
-        stat_card_interactive(
+        dashboard_metric_tile(
             InteractiveStatCard {
                 id: "context-stat-tasks".into(),
                 label: "TASKS".into(),
-                value: format!("{open_task_count} open").into(),
+                value: open_task_count.to_string().into(),
                 detail: Some(if is_today && !attention.is_empty() {
                     format!("{} urgent / due today", attention.len()).into()
                 } else if done_task_count > 0 {
                     format!("{done_task_count} completed").into()
                 } else {
-                    "Due today".into()
+                    "Open today".into()
                 }),
-                tone: palette.text,
+                tone: if is_today && !attention.is_empty() {
+                    palette.amber
+                } else {
+                    palette.text
+                },
                 active: filter_kind == Some(TimelineKind::Task),
                 palette,
             },
@@ -179,14 +190,41 @@ pub fn render_metric_cards(
         ),
     ];
 
+    if let Some(count) = inbox_count {
+        cards.push(dashboard_metric_tile(
+            InteractiveStatCard {
+                id: "context-stat-inbox".into(),
+                label: "INBOX".into(),
+                value: count.to_string().into(),
+                detail: Some(if count == 0 {
+                    "Triage clear".into()
+                } else if count == 1 {
+                    "1 item to sort".into()
+                } else {
+                    format!("{count} items to sort").into()
+                }),
+                tone: if count > 0 {
+                    palette.accent
+                } else {
+                    palette.green
+                },
+                active: false,
+                palette,
+            },
+            cx.listener(|_, _, _, cx| cx.emit(ContextEvent::OpenInbox)),
+        ));
+    }
+
     if show_spending {
-        cards.push(stat_card_interactive(
+        cards.push(dashboard_metric_tile(
             InteractiveStatCard {
                 id: "context-stat-spend".into(),
                 label: "SPENDING".into(),
                 value: total_spend_str.into(),
                 detail: Some(if context.spend.is_empty() {
                     "No transactions".into()
+                } else if context.spend.len() == 1 {
+                    "1 transaction".into()
                 } else {
                     format!("{} transactions", context.spend.len()).into()
                 }),

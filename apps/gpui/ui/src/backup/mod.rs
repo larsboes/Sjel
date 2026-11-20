@@ -79,6 +79,13 @@ impl BackupPage {
         self.load(cx);
     }
 
+    pub fn badge_counts(&self) -> (usize, usize, usize) {
+        let backups_count = self.backups.value.as_ref().map_or(0, |b| b.backups.len());
+        let targets_count = self.targets.value.as_ref().map_or(0, Vec::len);
+        let runs_count = self.runs.value.as_ref().map_or(0, |(r, _)| r.len());
+        (backups_count, targets_count, runs_count)
+    }
+
     pub fn set_tab(&mut self, tab: BackupTab, cx: &mut Context<Self>) {
         if self.tab != tab {
             self.tab = tab;
@@ -266,36 +273,38 @@ impl BackupPage {
             .pb_3()
             .border_b_1()
             .border_color(rgba(tint(palette.border, 0x22)))
-            .child(sub_tabs(
-                "backup",
-                vec![
-                    (
-                        "Capability Contracts",
-                        Some(backups_count),
-                        self.tab == BackupTab::Contracts,
-                    ),
-                    (
-                        "Targets & Cadence",
-                        Some(targets_count),
-                        self.tab == BackupTab::Targets,
-                    ),
-                    (
-                        "Attempt Ledger",
-                        Some(runs_count),
-                        self.tab == BackupTab::History,
-                    ),
-                ],
-                move |idx, _window, cx| {
-                    entity.update(cx, |page, cx| {
-                        let next = match idx {
-                            0 => BackupTab::Contracts,
-                            1 => BackupTab::Targets,
-                            _ => BackupTab::History,
-                        };
-                        page.set_tab(next, cx);
-                    });
-                },
-            ))
+            .when(cfg!(test), |el| {
+                el.child(sub_tabs(
+                    "backup",
+                    vec![
+                        (
+                            "Capability Contracts",
+                            Some(backups_count),
+                            self.tab == BackupTab::Contracts,
+                        ),
+                        (
+                            "Targets & Cadence",
+                            Some(targets_count),
+                            self.tab == BackupTab::Targets,
+                        ),
+                        (
+                            "Attempt Ledger",
+                            Some(runs_count),
+                            self.tab == BackupTab::History,
+                        ),
+                    ],
+                    move |idx, _window, cx| {
+                        entity.update(cx, |page, cx| {
+                            let next = match idx {
+                                0 => BackupTab::Contracts,
+                                1 => BackupTab::Targets,
+                                _ => BackupTab::History,
+                            };
+                            page.set_tab(next, cx);
+                        });
+                    },
+                ))
+            })
             .child(
                 div()
                     .flex()

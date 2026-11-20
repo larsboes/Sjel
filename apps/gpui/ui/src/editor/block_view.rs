@@ -161,7 +161,7 @@ pub(crate) fn render_block(
     let field = if let Some(live) = live.filter(|_| editor.active == Some(index)) {
         live.update(cx, |live, _| {
             live.palette = palette;
-            live.readonly = !editor.editable;
+            live.readonly = !editor.can_edit();
         });
         live.clone().into_any_element()
     } else if editor.active == Some(index) {
@@ -173,7 +173,7 @@ pub(crate) fn render_block(
             .mx(-TEXTAREA.input_px())
             .my(-TEXTAREA.input_py())
             .line_height(relative(1.3))
-            .readonly(!editor.editable);
+            .readonly(!editor.can_edit());
         // The textarea sets its own text size, so a heading styles the textarea itself.
         match kind {
             Kind::Heading(1) => field.text_2xl().font_weight(FontWeight::BOLD),

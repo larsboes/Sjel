@@ -4083,6 +4083,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "health-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+]
+
+[[package]]
 name = "heapless"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8896,6 +8904,7 @@ dependencies = [
  "chrono",
  "device-auth",
  "futures",
+ "health-api",
  "nsh-base",
  "nsh-platform-ios",
  "objc2 0.6.5",

@@ -547,23 +547,55 @@ impl Travel {
             day_card = day_card.child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
                     .justify_between()
+                    .gap_2()
                     .border_b_1()
                     .border_color(rgba(palette.border))
                     .pb_2()
                     .child(
                         div()
-                            .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(rgb(palette.text))
-                            .child(formatted_day),
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(rgb(palette.text))
+                                    .child(formatted_day),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(counts_summary),
+                            ),
                     )
                     .child(
                         div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(counts_summary),
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .children(self.form_button(
+                                format!("day-{day_str}-add-stage"),
+                                "+ Stage",
+                                super::forms::FormKind::Stage(None),
+                                cx,
+                            ))
+                            .children(self.form_button(
+                                format!("day-{day_str}-add-booking"),
+                                "+ Booking",
+                                super::forms::FormKind::Booking(None),
+                                cx,
+                            ))
+                            .children(self.form_button(
+                                format!("day-{day_str}-add-stay"),
+                                "+ Stay",
+                                super::forms::FormKind::Stay(None),
+                                cx,
+                            )),
                     ),
             );
 

@@ -14,6 +14,7 @@ sjel-gpui-core.workspace = true
 # Native UIKit screens through NSH (docs/plans/gpui.md §11).
 sjel-gpui-ui = { workspace = true, default-features = false, features = ["nsh"] }
 device-auth = { path = "../../../crates/device-auth" }
+health-api = { path = "../../../crates/health-api" }
 # `SJEL_DAY` names the calendar day a screenshot opens on (src/lib.rs, `launch_day`).
 chrono.workspace = true
 futures.workspace = true

@@ -1,12 +1,18 @@
 //! Inventory mail review and match decision workflow.
 
-use gpui::{div, prelude::*, rgb, rgba, AnyElement, Context, Entity, Subscription, Window};
+use std::rc::Rc;
+
+use gpui::{div, prelude::*, rems, rgb, rgba, AnyElement, Context, Entity, Subscription, Window};
 use sjel_gpui_core::inventory::{MailMatchSnapshot, MailProposal};
 use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::data_display::Tone;
 use crate::ely::forms::{FormField, Input, InputEvent, TextInput};
-use crate::ely::theme::ControlSize;
+use crate::ely::layout::Sheet;
+use crate::ely::primitives::Place;
+use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction};
+use crate::ely::theme::{ControlSize, Density};
 use crate::theme::{tint, Palette};
 
 use super::InventoryPage;
@@ -252,6 +258,7 @@ impl InventoryPage {
         }
         if let Some(form) = &self.mail_form {
             let p = &form.proposal;
+            let close_entity = cx.entity();
             let mut detail = div()
                 .flex()
                 .flex_col()
@@ -312,6 +319,7 @@ impl InventoryPage {
             detail = detail.child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .gap_2()
                     .child(
                         Button::new("mail-create", "Approve and create")
@@ -353,32 +361,80 @@ impl InventoryPage {
                             })),
                     ),
             );
-            content = content.child(detail);
+            content = content.child(
+                Sheet::new(
+                    "inventory-mail-review-sheet",
+                    Place::Right,
+                    format!("Review {}", p.title),
+                    move |_, cx| {
+                        close_entity.update(cx, |page, cx| {
+                            page.mail_form = None;
+                            cx.notify();
+                        });
+                    },
+                )
+                .child(detail),
+            );
         }
         if let Some(proposals) = &self.mail_proposals.value {
-            let pending: Vec<_> = proposals.iter().filter(|p| p.decision.is_none()).collect();
-            if pending.is_empty() {
-                content = content.child("No mail proposals need review.");
-            }
-            for p in pending {
-                let proposal = p.clone();
-                content = content.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .gap_3()
-                        .child(format!("{} · {} · {}", p.title, p.event, p.data_class))
-                        .child(
-                            Button::new(format!("mail-open-{}", p.id), "Review")
-                                .size(ControlSize::Sm)
-                                .disabled(self.mail_busy)
-                                .on_click(cx.listener(move |page, _, window, cx| {
-                                    page.open_mail(proposal.clone(), window, cx)
-                                })),
-                        ),
-                );
-            }
+            let pending: Vec<MailProposal> = proposals
+                .iter()
+                .filter(|p| p.decision.is_none())
+                .cloned()
+                .collect();
+            let columns = [
+                Column::new("title", "PROPOSAL"),
+                Column::new("event", "EVENT").width(rems(8.)),
+                Column::new("class", "CLASS").width(rems(6.)),
+                Column::new("actions", "")
+                    .width(rems(7.))
+                    .actions([RowAction::new("review", "Review").primary()]),
+            ];
+            let rows: Vec<Row> = pending
+                .iter()
+                .map(|p| {
+                    let event_tone = if p.event == "delivered" {
+                        Tone::Success
+                    } else {
+                        Tone::Neutral
+                    };
+                    let class_tone = if p.data_class == "c2" {
+                        Tone::Warning
+                    } else {
+                        Tone::Accent
+                    };
+                    Row::new(
+                        p.id.to_string(),
+                        [
+                            Cell::Lines(
+                                p.title.clone().into(),
+                                format!("Source: {}", p.source_id).into(),
+                            ),
+                            Cell::Tag(p.event.clone().into(), event_tone),
+                            Cell::Tag(p.data_class.clone().into(), class_tone),
+                            Cell::Empty,
+                        ],
+                    )
+                })
+                .collect();
+            let page_entity = cx.entity();
+            content = content.child(
+                DataTable::new("inventory-mail-proposals-table", columns)
+                    .label("Mail proposals")
+                    .rows(Rc::new(rows))
+                    .density(Density::Comfortable)
+                    .empty("No mail proposals need review.")
+                    .on_action(move |key, _, window, cx| {
+                        let list = pending.clone();
+                        page_entity.update(cx, |page, cx| {
+                            if let Some(proposal) =
+                                list.iter().find(|p| p.id.to_string() == key.as_ref())
+                            {
+                                page.open_mail(proposal.clone(), window, cx);
+                            }
+                        });
+                    }),
+            );
         }
         content.into_any_element()
     }

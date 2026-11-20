@@ -38,6 +38,9 @@ void sjel_ios_unlocked(bool ok);
 // ios/src/host.rs: a pinch on the page, its scale since it began, and whether it ended. The
 // terminal steps its font size with it.
 void sjel_ios_pinch(double scale, bool ended);
+// ios/src/health.rs: one HealthKit read from host/Health.swift, the `POST /health/api/days` body.
+// NUL-terminated UTF-8, valid only for the call.
+void sjel_ios_health_upload(const char *json);
 // ios/src/host.rs: mounts all phone screens into `container`, a UIView.
 bool sjel_ios_nsh_mount(void *container);
 void sjel_ios_nsh_apply_theme(void);

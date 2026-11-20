@@ -153,7 +153,6 @@ impl Feed {
             .flex()
             .flex_col()
             .gap_3()
-            .child(self.title_row(cx))
             .child(head)
             .child(list)
             .into_any_element()

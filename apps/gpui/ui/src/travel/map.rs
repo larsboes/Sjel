@@ -304,10 +304,25 @@ impl Travel {
     }
 
     pub(super) fn map_stops(&self, cx: &mut Context<Self>) -> AnyElement {
-        let markers: Vec<LocationMarker> = if matches!(self.route, TravelRoute::Map) {
+        let all_markers: Vec<LocationMarker> = if matches!(self.route, TravelRoute::Map) {
             self.location_markers()
         } else {
             self.current_plan_markers()
+        };
+        let markers: Vec<LocationMarker> = if self.place_query.is_empty() {
+            all_markers
+        } else {
+            let q = self.place_query.as_str();
+            all_markers
+                .into_iter()
+                .filter(|m| {
+                    m.place.name.to_lowercase().contains(q)
+                        || m.place
+                            .address
+                            .as_deref()
+                            .is_some_and(|a| a.to_lowercase().contains(q))
+                })
+                .collect()
         };
         let places: Vec<_> = markers.iter().map(|marker| marker.place.clone()).collect();
         let overview = matches!(self.route, TravelRoute::Map);
@@ -349,7 +364,10 @@ impl Travel {
                         .text_color(rgb(palette.muted))
                         .child(format!("{} stops", places.len())),
                 ),
-        );
+        )
+        .when_some(self.place_search_input.as_ref(), |panel, (input, _)| {
+            panel.child(crate::ely::forms::Input::new(input).size(ControlSize::Sm))
+        });
 
         if overview {
             let mut upcoming_plans: Vec<_> = self

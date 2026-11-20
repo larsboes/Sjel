@@ -4,8 +4,10 @@
 //! The labels, order and status groups were the dashboard's (`dashboard/src/routes/feed/+page.svelte`);
 //! this module owns them now (AGENTS.md, "The dashboard is the second consumer").
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +37,8 @@ pub struct MailOutboxEntry {
     pub thread_ids: Vec<String>,
     pub action: MailAction,
     pub queued_at: String,
+    #[serde(default)]
+    pub failures: Vec<BulkFailure>,
 }
 
 /// Local storage for opened mail threads and offline triage actions.
@@ -107,22 +111,34 @@ impl MailOffline {
         thread_ids: Vec<String>,
         action: MailAction,
     ) -> Result<String, String> {
-        let _ = fs::create_dir_all(self.outbox_dir());
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let now = chrono::Utc::now();
         let id = format!(
-            "{}_{}",
-            chrono::Utc::now().timestamp_millis(),
-            thread_ids.first().map(String::as_str).unwrap_or("batch")
+            "{}_{}_{}",
+            now.timestamp_micros(),
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
         );
         let entry = MailOutboxEntry {
             id: id.clone(),
             thread_ids,
             action,
-            queued_at: chrono::Utc::now().to_rfc3339(),
+            queued_at: now.to_rfc3339_opts(chrono::SecondsFormat::Nanos, false),
+            failures: Vec::new(),
         };
-        let json = serde_json::to_vec(&entry).map_err(|e| e.to_string())?;
-        fs::write(self.outbox_dir().join(format!("{id}.json")), json)
-            .map_err(|e| format!("Could not queue action in outbox: {e}"))?;
+        self.store_outbox_entry(&entry)?;
         Ok(id)
+    }
+
+    fn store_outbox_entry(&self, entry: &MailOutboxEntry) -> Result<(), String> {
+        let dir = self.outbox_dir();
+        let temporary = dir.join(format!("{}.tmp", entry.id));
+        let target = dir.join(format!("{}.json", entry.id));
+        let json = serde_json::to_vec(entry).map_err(|e| e.to_string())?;
+        fs::create_dir_all(&dir)
+            .and_then(|()| fs::write(&temporary, json))
+            .and_then(|()| fs::rename(&temporary, target))
+            .map_err(|e| format!("Could not save mail outbox entry: {e}"))
     }
 
     /// Returns all queued outbox entries, oldest first.
@@ -136,31 +152,82 @@ impl MailOffline {
             .filter_map(|e| fs::read(e.path()).ok())
             .filter_map(|b| serde_json::from_slice(&b).ok())
             .collect();
-        list.sort_by(|a, b| a.queued_at.cmp(&b.queued_at));
+        list.sort_by(|a, b| a.queued_at.cmp(&b.queued_at).then_with(|| a.id.cmp(&b.id)));
         list
     }
 
-    /// Removes an outbox entry after it has been applied to the Mac.
-    pub fn remove_outbox_entry(&self, id: &str) {
-        let _ = fs::remove_file(self.outbox_dir().join(format!("{id}.json")));
+    fn remove_outbox_entry(&self, id: &str) -> Result<(), String> {
+        fs::remove_file(self.outbox_dir().join(format!("{id}.json")))
+            .map_err(|e| format!("Could not remove applied mail outbox entry: {e}"))
     }
 
-    /// Replays any queued outbox actions through `source`.
+    fn record_result(
+        &self,
+        entry: &mut MailOutboxEntry,
+        result: &BulkResult,
+    ) -> Result<(), String> {
+        result.retain_unapplied(&mut entry.thread_ids);
+        if entry.thread_ids.is_empty() {
+            return self.remove_outbox_entry(&entry.id);
+        }
+        entry.failures = entry
+            .thread_ids
+            .iter()
+            .map(|id| {
+                result
+                    .failures
+                    .iter()
+                    .find(|failure| &failure.id == id)
+                    .cloned()
+                    .unwrap_or_else(|| BulkFailure {
+                        id: id.clone(),
+                        error: "The Mac did not acknowledge this action.".into(),
+                    })
+            })
+            .collect();
+        self.store_outbox_entry(entry)
+    }
+
+    /// Replays queued triage actions in order and retains work the owner did not acknowledge.
     pub async fn replay_outbox(&self, source: &Source) -> Result<usize, String> {
-        let entries = self.outbox_entries();
+        static REPLAY: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+        let _replay = REPLAY.lock().await;
         let mut replayed = 0;
-        for entry in entries {
-            match source.mail_action(&entry.thread_ids, &entry.action).await {
-                Ok(_) => {
-                    self.remove_outbox_entry(&entry.id);
-                    replayed += 1;
+        let mut blocked_threads = HashSet::new();
+        let mut first_failure = None;
+        for mut entry in self.outbox_entries() {
+            if entry
+                .thread_ids
+                .iter()
+                .any(|id| blocked_threads.contains(id))
+            {
+                continue;
+            }
+            let result = source
+                .mail_action(&entry.thread_ids, &entry.action)
+                .await
+                .map_err(|err| format!("Outbox replay stopped on {}. {err}", entry.id))?;
+            self.record_result(&mut entry, &result)?;
+            if entry.thread_ids.is_empty() {
+                replayed += 1;
+            } else {
+                if first_failure.is_none() {
+                    first_failure = entry
+                        .failures
+                        .into_iter()
+                        .next()
+                        .map(|failure| failure.error);
                 }
-                Err(err) => {
-                    return Err(format!("Outbox replay stopped on {}: {err}", entry.id));
-                }
+                blocked_threads.extend(entry.thread_ids);
             }
         }
-        Ok(replayed)
+        match first_failure {
+            Some(reason) => Err(format!(
+                "{} thread action(s) still queued. {reason}",
+                blocked_threads.len()
+            )),
+            None => Ok(replayed),
+        }
     }
 }
 
@@ -304,6 +371,58 @@ mod tests {
     }
 
     #[test]
+    fn older_outbox_entries_load_without_failure_metadata() {
+        let entry: MailOutboxEntry = serde_json::from_value(serde_json::json!({
+            "id": "old",
+            "thread_ids": ["thread"],
+            "action": "Archive",
+            "queued_at": "2026-11-08T12:00:00+00:00",
+        }))
+        .unwrap();
+        assert_eq!(entry.action, MailAction::Archive);
+        assert!(entry.failures.is_empty());
+    }
+
+    #[test]
+    fn partial_outbox_replay_keeps_unacknowledged_ids_and_reasons() {
+        let dir = std::env::temp_dir().join(format!(
+            "sjel-mail-replay-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        let offline = MailOffline::new(dir.clone());
+        let id = offline
+            .queue_action(
+                vec!["applied".into(), "refused".into(), "omitted".into()],
+                MailAction::Archive,
+            )
+            .unwrap();
+        let mut entry = offline.outbox_entries().pop().unwrap();
+        let result = BulkResult {
+            succeeded: vec!["applied".into()],
+            failures: vec![BulkFailure {
+                id: "refused".into(),
+                error: "Review required".into(),
+            }],
+            narrowed: 0,
+        };
+        offline.record_result(&mut entry, &result).unwrap();
+        let offline = MailOffline::new(dir.clone());
+        let mut remaining = offline.outbox_entries().pop().unwrap();
+        assert_eq!(remaining.id, id);
+        assert_eq!(remaining.thread_ids, ["refused", "omitted"]);
+        assert_eq!(remaining.failures[0], result.failures[0]);
+        assert_eq!(remaining.failures[1].id, "omitted");
+        let result = BulkResult {
+            succeeded: remaining.thread_ids.clone(),
+            ..Default::default()
+        };
+        offline.record_result(&mut remaining, &result).unwrap();
+        assert!(offline.outbox_entries().is_empty());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn mail_offline_caches_threads_and_queues_outbox_actions() {
         let temp_dir = std::env::temp_dir().join(format!(
             "sjel-mail-test-{}",
@@ -340,7 +459,7 @@ mod tests {
         assert_eq!(entries[0].action, MailAction::Archive);
         assert_eq!(entries[0].thread_ids, vec!["thread_offline"]);
 
-        offline.remove_outbox_entry(&entry_id);
+        offline.remove_outbox_entry(&entry_id).unwrap();
         assert!(offline.outbox_entries().is_empty());
         let _ = std::fs::remove_dir_all(temp_dir);
     }

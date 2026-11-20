@@ -66,6 +66,7 @@ pub struct NoteEditor {
     pub(crate) saver: Saver,
     /// The page's palette. `None` follows the window's appearance; the phone sets its own.
     pub(crate) palette: Option<Palette>,
+    renaming: bool,
     /// A title waiting for the last keystroke to be saved before the page renames the note.
     pub(crate) pending_rename: Option<SharedString>,
     /// One per block: the reader view built last time. `None` until a block is drawn.
@@ -108,6 +109,7 @@ impl NoteEditor {
             menu: None,
             saver,
             palette: None,
+            renaming: false,
             pending_rename: None,
             shown: Vec::new(),
             preview: None,
@@ -180,7 +182,7 @@ impl NoteEditor {
         };
         match event {
             InputEvent::Change => self.text_changed(index, window, cx),
-            InputEvent::PressEnter { shift: false, .. } if self.editable => {
+            InputEvent::PressEnter { shift: false, .. } if self.can_edit() => {
                 match self.menu.as_ref().filter(|menu| menu.block == index) {
                     Some(menu) => {
                         if let Some(choice) = menu.choices().get(menu.selected) {
@@ -212,6 +214,13 @@ impl NoteEditor {
 
     fn text_changed(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         let input = self.rows[index].input.clone();
+        if self.renaming {
+            let text = &self.doc.blocks[index].text;
+            if input.read(cx).value().as_ref() != text {
+                input.update(cx, |input, cx| input.set_value(text.clone(), window, cx));
+            }
+            return;
+        }
         let block = &mut self.doc.blocks[index];
         block.text = input.read(cx).value().to_string();
         if block.apply_shortcut() {
@@ -244,6 +253,9 @@ impl NoteEditor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.can_edit() {
+            return;
+        }
         let slash = self.menu.take().is_some_and(|menu| menu.query.is_some());
         let block = &mut self.doc.blocks[index];
         if slash {
@@ -265,7 +277,7 @@ impl NoteEditor {
 
     /// Opens the kind menu for a block from its handle.
     pub(crate) fn open_menu(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.editable {
+        if !self.can_edit() {
             return;
         }
         let end = self.doc.blocks[index].text.len();
@@ -299,7 +311,7 @@ impl NoteEditor {
     ) {
         let last = self.rows.len().saturating_sub(1);
         let to = to.min(last);
-        if from == to || !self.editable || from > last {
+        if from == to || !self.can_edit() || from > last {
             return;
         }
         self.menu = None;
@@ -339,6 +351,9 @@ impl NoteEditor {
     /// [`EditorEvent::Rename`], so the page renames a settled note rather than one whose last
     /// keystroke is still in the air.
     pub fn request_rename(&mut self, title: String, cx: &mut Context<Self>) {
+        if self.renaming {
+            return;
+        }
         self.pending_rename = Some(title.into());
         self.save(cx);
         self.settled(cx);
@@ -350,8 +365,24 @@ impl NoteEditor {
             return;
         }
         if let Some(title) = self.pending_rename.take() {
+            self.renaming = true;
+            self.menu = None;
+            cx.notify();
             cx.emit(EditorEvent::Rename(title));
         }
+    }
+
+    pub(crate) fn can_edit(&self) -> bool {
+        self.editable && !self.renaming
+    }
+
+    pub(crate) fn renaming(&self) -> bool {
+        self.renaming
+    }
+
+    pub(crate) fn rename_failed(&mut self, cx: &mut Context<Self>) {
+        self.renaming = false;
+        cx.notify();
     }
 
     /// Bench only: types one character at the end of the last block, the way a keystroke does.
@@ -430,7 +461,7 @@ impl NoteEditor {
             let state = self.rows[index].input.read(cx);
             state.cursor() == 0 && state.selected_range().is_empty()
         };
-        if !at_start || !self.editable {
+        if !at_start || !self.can_edit() {
             return false;
         }
         let block = &mut self.doc.blocks[index];
@@ -529,7 +560,7 @@ impl NoteEditor {
     }
 
     pub(crate) fn toggle(&mut self, index: usize, cx: &mut Context<Self>) {
-        if self.editable {
+        if self.can_edit() {
             self.doc.blocks[index].toggle_done();
             self.changed(cx);
         }
@@ -539,7 +570,7 @@ impl NoteEditor {
         // A moved or retyped block must not read back as part of the one above it.
         self.doc.repair_gaps();
         cx.notify();
-        if !self.editable {
+        if !self.can_edit() {
             return;
         }
         self.revision += 1;
@@ -556,6 +587,9 @@ impl NoteEditor {
     }
 
     pub fn save(&mut self, cx: &mut Context<Self>) {
+        if self.renaming {
+            return;
+        }
         let content = self.doc.markdown();
         if !self.editable || !self.editable_saves || self.saving || content == self.base {
             if content == self.base {
@@ -605,6 +639,9 @@ impl NoteEditor {
     }
 
     fn status(&self) -> (&str, bool) {
+        if self.renaming {
+            return ("Renaming…", false);
+        }
         match (&self.problem, self.saving) {
             (Some(problem), _) => (problem.as_str(), true),
             (None, true) => ("Saving…", false),
@@ -934,6 +971,34 @@ mod tests {
                 .contains("project source"));
             assert_eq!(editor.base, CONTENT);
         });
+    }
+
+    #[gpui::test]
+    fn rename_blocks_edits_until_it_finishes(cx: &mut TestAppContext) {
+        let (editor, cx) = open(cx);
+        let last = editor.read_with(cx, |editor, _| editor.doc.blocks.len() - 1);
+        focus_end(&editor, last, cx);
+        let before = markdown(&editor, cx);
+        cx.update(|window, cx| {
+            editor.update(cx, |editor, cx| {
+                editor.request_rename("New title".into(), cx);
+                assert!(editor.renaming());
+                assert!(!editor.can_edit());
+                editor.apply(0, Kind::Heading(2), window, cx);
+                editor.toggle(1, cx);
+                editor.request_rename("Another title".into(), cx);
+                assert!(editor.pending_rename.is_none());
+                assert_eq!(editor.doc.markdown(), before);
+            });
+        });
+        cx.run_until_parked();
+        cx.simulate_keystrokes("x enter cmd-shift-up");
+        cx.run_until_parked();
+        assert_eq!(markdown(&editor, cx), before);
+        cx.update(|_, cx| editor.update(cx, |editor, cx| editor.rename_failed(cx)));
+        cx.run_until_parked();
+        cx.simulate_keystrokes("x");
+        assert!(markdown(&editor, cx).contains("Textx"));
     }
 
     fn record() -> ProjectRecord {

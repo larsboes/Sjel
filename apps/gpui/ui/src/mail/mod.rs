@@ -20,6 +20,7 @@ use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::data::{Remote, Repo};
 use crate::theme::Palette;
+use sjel_gpui_core::data::RequestVersion;
 
 /// How many rows render before "Show more".
 // ponytail: a capped plain list; 821 pending threads made a full render the slow path. Move to
@@ -32,6 +33,7 @@ pub struct Mail {
     pub density: crate::theme::Density,
     pub opened_thread: Option<String>,
     pub rows: Remote<Vec<MailProposal>>,
+    rows_request: RequestVersion,
     pub status: StatusFilter,
     pub category: Option<&'static str>,
     pub cursor: Option<String>,
@@ -54,6 +56,7 @@ impl Mail {
             density: crate::theme::Density::Desktop,
             opened_thread: None,
             rows: Remote::default(),
+            rows_request: RequestVersion::default(),
             status: StatusFilter::Pending,
             category: None,
             cursor: None,
@@ -92,6 +95,7 @@ impl Mail {
     }
 
     pub fn load(&mut self, cx: &mut Context<Self>) {
+        let request = self.rows_request.advance();
         let shell = match self.repo.shell() {
             Ok(shell) => shell,
             Err(error) => {
@@ -106,14 +110,26 @@ impl Mail {
         cx.spawn(async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |view, cx| {
-                view.rows.settle(result);
-                // A thread that left the view cannot stay selected.
-                let ids: Vec<String> = view.visible().iter().map(|m| m.id.clone()).collect();
-                view.selected.retain(|id| ids.contains(id));
-                cx.notify();
+                view.finish_load(request, result, cx);
             });
         })
         .detach();
+    }
+
+    fn finish_load(
+        &mut self,
+        request: RequestVersion,
+        result: shell::ShellResult<Vec<MailProposal>>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.rows_request != request {
+            return;
+        }
+        self.rows.settle(result);
+        // A thread that left the view cannot stay selected.
+        let ids: Vec<String> = self.visible().iter().map(|m| m.id.clone()).collect();
+        self.selected.retain(|id| ids.contains(id));
+        cx.notify();
     }
 
     pub fn visible(&self) -> Vec<&MailProposal> {
@@ -180,7 +196,7 @@ impl Mail {
                 view.busy = false;
                 match result {
                     Ok(result) => {
-                        view.selected.retain(|id| !result.succeeded.contains(id));
+                        result.retain_unapplied(&mut view.selected);
                         view.notice = notice(&result);
                     }
                     Err(error) => view.notice = Some((format!("Not applied: {error}"), true)),
@@ -571,6 +587,22 @@ mod tests {
             authenticity: None,
             model: None,
         }
+    }
+
+    #[gpui::test]
+    fn an_older_mail_refresh_cannot_replace_new_rows_or_clear_the_selection(
+        cx: &mut TestAppContext,
+    ) {
+        let mail = cx.new(|cx| Mail::new(Repo::new(Err(ShellError::NotSetUp)), cx));
+        mail.update(cx, |mail, cx| {
+            let first = mail.rows_request.advance();
+            let second = mail.rows_request.advance();
+            mail.finish_load(second, Ok(vec![proposal("current")]), cx);
+            mail.selected = vec!["current".into()];
+            mail.finish_load(first, Ok(vec![proposal("old")]), cx);
+            assert_eq!(mail.selected, ["current"]);
+            assert_eq!(mail.visible()[0].id, "current");
+        });
     }
 
     /// Trash waits for a confirmation, holding the ids it will apply to, and sets nothing busy:

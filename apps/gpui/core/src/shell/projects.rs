@@ -3,6 +3,7 @@
 use super::*;
 use projects_api::reads::{
     ProjectListResponse, ProjectReadResponse, RecordListResponse, RecordReadResponse,
+    TaskListResponse, TaskResponse,
 };
 use projects_api::{
     proxy_route_mail_decision, AddNoteRequest, AddProjectRequest, AddTaskRequest,
@@ -29,12 +30,9 @@ impl Shell {
     }
 
     pub async fn project_link_record(&self, path: &str) -> ShellResult<ProjectLinkRecord> {
-        #[derive(Deserialize)]
-        struct Envelope {
-            record: ProjectLinkRecord,
-        }
         let path = with_query(PROXY_ROUTE_RECORD, &[("path", path)]);
-        let result: Envelope = self.json(Method::GET, &path, None, 10).await?;
+        let result: RecordReadResponse<ProjectLinkRecord> =
+            self.json(Method::GET, &path, None, 10).await?;
         Ok(result.record)
     }
 
@@ -80,13 +78,10 @@ impl Shell {
     }
 
     pub async fn project_mail_target(&self, path: &str) -> ShellResult<ProjectMailTarget> {
-        #[derive(Deserialize)]
-        struct One {
-            record: ProjectMailTarget,
-        }
         let path = with_query(PROXY_ROUTE_RECORD, &[("path", path)]);
-        let one: One = self.json(Method::GET, &path, None, 10).await?;
-        Ok(one.record)
+        let result: RecordReadResponse<ProjectMailTarget> =
+            self.json(Method::GET, &path, None, 10).await?;
+        Ok(result.record)
     }
 
     pub async fn project_mail_decision(
@@ -175,15 +170,11 @@ impl Shell {
 
     /// Marks a task done, or open again, and answers with the record's new frontmatter.
     pub async fn set_task_done(&self, path: &str, done: bool) -> ShellResult<GlobalTask> {
-        #[derive(Deserialize)]
-        struct Task {
-            task: GlobalTask,
-        }
         let request = SetDoneRequest {
             id: path.to_owned(),
             done,
         };
-        let task: Task = self
+        let task: TaskResponse<GlobalTask> = self
             .json(
                 Method::POST,
                 PROXY_ROUTE_TASKS_DONE,
@@ -202,16 +193,12 @@ impl Shell {
         key: &str,
         value: &str,
     ) -> ShellResult<GlobalTask> {
-        #[derive(Deserialize)]
-        struct Task {
-            task: GlobalTask,
-        }
         let request = SetPropertyRequest {
             path: path.to_owned(),
             key: key.to_owned(),
             value: value.to_owned(),
         };
-        let task: Task = self
+        let task: TaskResponse<GlobalTask> = self
             .json(
                 Method::POST,
                 PROXY_ROUTE_RECORD_PROPERTY,
@@ -247,15 +234,11 @@ impl Shell {
 
     /// Tasks across all live projects, optionally filtered by ?status=open|done.
     pub async fn tasks(&self, status: Option<&str>) -> ShellResult<Vec<GlobalTask>> {
-        #[derive(Deserialize)]
-        struct List {
-            tasks: Vec<GlobalTask>,
-        }
         let path = match status {
             Some(s) => with_query(PROXY_ROUTE_TASKS, &[("status", s)]),
             None => PROXY_ROUTE_TASKS.to_owned(),
         };
-        let list: List = self.json(Method::GET, &path, None, 10).await?;
+        let list: TaskListResponse<GlobalTask> = self.json(Method::GET, &path, None, 10).await?;
         Ok(list.tasks)
     }
 

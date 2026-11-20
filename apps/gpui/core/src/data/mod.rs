@@ -123,6 +123,17 @@ impl<T> Remote<T> {
     }
 }
 
+/// Identity of the latest request for a slot, even when its query key repeats.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RequestVersion(u64);
+
+impl RequestVersion {
+    pub fn advance(&mut self) -> Self {
+        self.0 = self.0.wrapping_add(1);
+        *self
+    }
+}
+
 /// The writes in flight, by key, so one button cannot be pressed twice.
 #[derive(Default)]
 pub struct Busy(HashSet<String>);
@@ -149,6 +160,17 @@ impl Busy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_refresh_replaces_the_previous_request_identity() {
+        let mut latest = RequestVersion::default();
+        let first = latest.advance();
+        let second = latest.advance();
+        let third = latest.advance();
+        assert_ne!(latest, first);
+        assert_ne!(latest, second);
+        assert_eq!(latest, third);
+    }
 
     #[test]
     fn a_second_read_does_not_start_while_one_is_in_flight() {

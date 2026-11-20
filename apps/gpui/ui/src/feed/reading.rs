@@ -55,12 +55,11 @@ impl Feed {
             .gap_3()
             .flex_1()
             .min_h_0()
-            .child(self.title_row(cx))
+            .child(toolbar)
             .child(muted(
                 "j/k move · s keep · d dismiss · u undo · o read",
                 palette,
-            ))
-            .child(toolbar);
+            ));
         if self.rows.value.is_none() && self.rows.loading {
             column = column.child(muted("Loading the feed…", palette));
         }
@@ -153,11 +152,17 @@ impl Feed {
         });
         let keep_id = entry.id.clone();
         let dismiss_id = entry.id.clone();
+        let group_name = SharedString::from(format!("feed-row-group-{ix}"));
+        let group_hover_name = group_name.clone();
         let quick_triage = (entry.status == "new").then(|| {
             div()
                 .flex()
                 .items_center()
                 .gap_1()
+                .when(!chosen, |el| {
+                    el.opacity(0.)
+                        .group_hover(group_hover_name, |s| s.opacity(1.))
+                })
                 .child(
                     div()
                         .id(("feed-quick-keep", ix))
@@ -195,6 +200,7 @@ impl Feed {
         });
         let row = div()
             .id(("feed-row", ix))
+            .group(group_name)
             .flex()
             .flex_col()
             .gap_1()

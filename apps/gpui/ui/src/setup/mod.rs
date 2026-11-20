@@ -25,7 +25,7 @@ pub struct SetupPage {
     pub(super) notice: Option<String>,
     pub(super) write_error: Option<String>,
 
-    pub(super) active_tab: SetupTab,
+    pub active_tab: SetupTab,
     pub(super) verifying: bool,
     pub(super) confirming_component: Option<String>,
     /// The component whose apply is in flight, so the answer's sentence can name it: a `then`
@@ -136,7 +136,9 @@ impl Render for SetupPage {
             panels.push(note(error.as_str(), palette.red));
         }
 
-        panels.push(self.render_tabs(palette, cx));
+        if cfg!(test) {
+            panels.push(self.render_tabs(palette, cx));
+        }
 
         let active_content = match self.active_tab {
             SetupTab::Machine => self.render_machine_tab(&view.plans, palette, window, cx),

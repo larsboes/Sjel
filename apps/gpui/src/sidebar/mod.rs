@@ -14,7 +14,7 @@ use gpui_kit::{div, prelude::*, px, rgba, Context, IntoElement, Window};
 use crate::workspace::Workspace;
 use sjel_gpui_ui::theme::Palette;
 
-pub use nav::{nav, palette_hint, settings_row, soundscape};
+pub use nav::{nav, palette_hint, scratchpad_row, settings_row, soundscape};
 pub use status::{footer, status, storage};
 pub use types::{GLASS_INSET, WIDTH};
 
@@ -40,18 +40,19 @@ pub fn render(
                 .border_r_1()
                 .border_color(rgba(palette.border))
         })
-        // Nine rows, so the list never scrolls: every area is one keystroke away and none of them
-        // hides below the fold. The player, Search, Settings and the footer sit under it.
         .child(
             div()
                 .id("sidebar-nav")
                 .flex_1()
                 .min_h_0()
+                .overflow_y_scroll()
                 .flex()
                 .flex_col()
+                .gap(px(1.))
                 .children(nav(view, palette, cx)),
         )
         .child(soundscape(view, palette, window, cx))
+        .child(scratchpad_row(view, palette, window, cx))
         .child(palette_hint(palette, window))
         .child(settings_row(view, palette, window, cx))
         .child(footer(view, palette, cx))

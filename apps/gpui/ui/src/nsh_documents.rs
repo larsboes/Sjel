@@ -44,10 +44,34 @@ pub enum NshPage {
     Settings,
     Documents,
     Mail,
+    Finance,
+    Inventory,
+}
+
+impl NshPage {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Today => "Today",
+            Self::Calendar => "Calendar",
+            Self::Map => "Map",
+            Self::Travel => "Travel",
+            Self::Projects => "Projects",
+            Self::Interior => "Interior",
+            Self::Edge => "Panel",
+            Self::Capture => "Capture",
+            Self::People => "People & Places",
+            Self::Settings => "Settings",
+            Self::Documents => "Documents",
+            Self::Mail => "Mail",
+            Self::Finance => "Finance",
+            Self::Inventory => "Inventory & Wishlist",
+        }
+    }
 }
 
 struct PageRouter {
     current: Mutex<NshPage>,
+    history: Mutex<Vec<NshPage>>,
     tx: Mutex<Option<UnboundedSender<NshPage>>>,
 }
 
@@ -55,17 +79,31 @@ fn page_router() -> &'static PageRouter {
     static ROUTER: OnceLock<PageRouter> = OnceLock::new();
     ROUTER.get_or_init(|| PageRouter {
         current: Mutex::new(NshPage::Today),
+        history: Mutex::new(Vec::new()),
         tx: Mutex::new(None),
     })
 }
 
-/// Switches [`NshHostScreen`] to `page` (`Documents` or `Mail`).
+/// Switches [`NshHostScreen`] to `page` and records previous page in the back stack.
 pub fn set_nsh_page(page: NshPage) {
-    if nsh_page() == NshPage::Edge && page != NshPage::Edge {
+    let previous = nsh_page();
+    if previous == NshPage::Edge && page != NshPage::Edge {
         crate::nsh_edge::leaving();
     }
     if page != NshPage::Map {
         crate::nsh_map::hide();
+    }
+    if previous != page && previous != NshPage::Edge {
+        let mut hist = page_router()
+            .history
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if hist.last().copied() != Some(previous) {
+            hist.push(previous);
+            if hist.len() > 16 {
+                hist.remove(0);
+            }
+        }
     }
     *page_router()
         .current
@@ -78,6 +116,43 @@ pub fn set_nsh_page(page: NshPage) {
         .as_ref()
     {
         let _ = tx.send(page);
+    }
+}
+
+/// Navigates to the previous page on the phone's back stack, or `Today` if none.
+pub fn navigate_back() {
+    let previous = nsh_page();
+    let target = {
+        let mut hist = page_router()
+            .history
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut found = None;
+        while let Some(candidate) = hist.pop() {
+            if candidate != previous {
+                found = Some(candidate);
+                break;
+            }
+        }
+        found.unwrap_or(NshPage::Today)
+    };
+    if previous == NshPage::Edge && target != NshPage::Edge {
+        crate::nsh_edge::leaving();
+    }
+    if target != NshPage::Map {
+        crate::nsh_map::hide();
+    }
+    *page_router()
+        .current
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = target;
+    if let Some(tx) = page_router()
+        .tx
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+    {
+        let _ = tx.send(target);
     }
 }
 
@@ -381,10 +456,12 @@ struct Open {
 #[component]
 pub fn NshHostScreen() -> impl IntoElement {
     let page = signal(nsh_page());
+    let more_open = signal(false);
     let (tx, mut rx) = unbounded_channel();
     *page_router().tx.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
     spawn(async move {
         while let Some(next) = rx.recv().await {
+            more_open.set(false);
             page.set(next);
         }
     });
@@ -397,6 +474,16 @@ pub fn NshHostScreen() -> impl IntoElement {
         button()
             .px_3()
             .py_1()
+            .rounded_full()
+            .border(px(1.0))
+            .border_color(move || {
+                if page.get() == target {
+                    nsh_base::theme().primary
+                } else {
+                    nsh_base::theme().border
+                }
+            })
+            .bg(move || nsh_base::theme().card)
             .on_press(move || set_nsh_page(target))
             .child(
                 text(move || {
@@ -418,14 +505,17 @@ pub fn NshHostScreen() -> impl IntoElement {
             };
             button()
                 .flex_1()
+                .min_h(px(44.0))
                 .py_2()
+                .items_center()
+                .justify_center()
+                .accessibility_label(label)
                 .on_press(move || {
                     if let Some(tp) = target_page {
                         if tp == NshPage::Travel {
                             crate::nsh_travel::open(sjel_gpui_core::travel::TravelRoute::Trips);
-                        } else {
-                            set_nsh_page(tp);
                         }
+                        set_nsh_page(tp);
                     } else {
                         switch_tab_target(route_name);
                     }
@@ -439,6 +529,7 @@ pub fn NshHostScreen() -> impl IntoElement {
                         }
                     })
                     .text_xs()
+                    .font_weight(FontWeight::MEDIUM)
                     .number_of_lines(1u32),
                 )
         };
@@ -448,12 +539,118 @@ pub fn NshHostScreen() -> impl IntoElement {
         .px_2()
         .pt_1()
         .pb_2()
+        .border_t(px(1.0))
+        .border_color(move || nsh_base::theme().border)
+        .bg(move || nsh_base::theme().card)
         .child(tab_item("Today", Some(NshPage::Today), "today"))
         .child(tab_item("Mail", Some(NshPage::Mail), "mail"))
         .child(tab_item("Docs", Some(NshPage::Documents), "documents"))
         .child(tab_item("Calendar", Some(NshPage::Calendar), "calendar"))
         .child(tab_item("Travel", Some(NshPage::Travel), "travel"))
-        .child(tab_item("Agent", None, "agent"));
+        .child(tab_item("Agent", None, "agent"))
+        .child(
+            button()
+                .min_h(px(44.0))
+                .px_2p5()
+                .py_2()
+                .items_center()
+                .justify_center()
+                .accessibility_label("More")
+                .on_press(move || more_open.update(|v| *v = !*v))
+                .child(
+                    text(move || if more_open.get() { "More •" } else { "More" })
+                        .text_xs()
+                        .font_weight(FontWeight::SEMIBOLD),
+                ),
+        );
+
+    let top_drilldown_bar = dynamic(move || {
+        let current = page.get();
+        let is_secondary = matches!(
+            current,
+            NshPage::Projects
+                | NshPage::People
+                | NshPage::Capture
+                | NshPage::Interior
+                | NshPage::Settings
+                | NshPage::Finance
+                | NshPage::Inventory
+        );
+        is_secondary.then(|| {
+            let trailing = button()
+                .px_2p5()
+                .py_1()
+                .rounded_full()
+                .border(px(1.0))
+                .border_color(move || nsh_base::theme().border)
+                .bg(move || nsh_base::theme().background)
+                .on_press(move || more_open.update(|v| *v = !*v))
+                .child(
+                    text(move || if more_open.get() { "Close menu" } else { "All areas" })
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM),
+                )
+                .into_element();
+            crate::nsh_ui::nav_bar(
+                format!("Area · {}", current.label()),
+                Some("‹ Back"),
+                navigate_back,
+                Some(trailing),
+            )
+            .into_element()
+        })
+    });
+
+    let more_drawer = dynamic(move || {
+        more_open.get().then(|| {
+            let jump = move |target: NshPage| {
+                crate::nsh_ui::pill_tab(target.label(), page.get() == target, move || {
+                    if target == NshPage::Travel {
+                        crate::nsh_travel::open(sjel_gpui_core::travel::TravelRoute::Trips);
+                    }
+                    set_nsh_page(target);
+                })
+            };
+            crate::nsh_ui::surface_card()
+                .mx_4()
+                .mt_2()
+                .p_3()
+                .gap_2()
+                .child(
+                    view()
+                        .flex_row()
+                        .items_center()
+                        .justify_between()
+                        .child(crate::nsh_ui::section_heading("SWITCH PHONE AREA"))
+                        .child(
+                            button()
+                                .px_2()
+                                .py_1()
+                                .on_press(move || more_open.set(false))
+                                .child(text("Close").text_xs()),
+                        ),
+                )
+                .child(
+                    view()
+                        .flex_row()
+                        .flex_wrap()
+                        .gap_1p5()
+                        .child(jump(NshPage::Today))
+                        .child(jump(NshPage::Projects))
+                        .child(jump(NshPage::Finance))
+                        .child(jump(NshPage::Inventory))
+                        .child(jump(NshPage::Capture))
+                        .child(jump(NshPage::People))
+                        .child(jump(NshPage::Interior))
+                        .child(jump(NshPage::Documents))
+                        .child(jump(NshPage::Mail))
+                        .child(jump(NshPage::Calendar))
+                        .child(jump(NshPage::Travel))
+                        .child(jump(NshPage::Settings)),
+                )
+                .into_element()
+        })
+    });
 
     view()
         .flex_1()
@@ -463,13 +660,28 @@ pub fn NshHostScreen() -> impl IntoElement {
         .child((!closable).then(|| {
             view()
                 .flex_row()
+                .flex_wrap()
                 .px_4()
                 .pt_2()
                 .gap_2()
                 .child(page_chip(NshPage::Today, "Today"))
                 .child(page_chip(NshPage::Documents, "Documents"))
                 .child(page_chip(NshPage::Mail, "Mail"))
+                .child(page_chip(NshPage::Finance, "Finance"))
+                .child(page_chip(NshPage::Inventory, "Wishlist"))
+                .child(
+                    button()
+                        .px_3()
+                        .py_1()
+                        .rounded_full()
+                        .border(px(1.0))
+                        .border_color(move || nsh_base::theme().border)
+                        .on_press(move || more_open.update(|v| *v = !*v))
+                        .child(text("More").text_xs()),
+                )
         }))
+        .child(top_drilldown_bar)
+        .child(more_drawer)
         .child(view().flex_1().child(dynamic(move || match page.get() {
             NshPage::Today => today_screen().into_element(),
             NshPage::Calendar => calendar_screen().into_element(),
@@ -483,6 +695,8 @@ pub fn NshHostScreen() -> impl IntoElement {
             NshPage::Settings => settings_screen().into_element(),
             NshPage::Documents => documents_screen().into_element(),
             NshPage::Mail => mail_screen().into_element(),
+            NshPage::Finance => crate::nsh_finance::finance_screen().into_element(),
+            NshPage::Inventory => crate::nsh_inventory::inventory_screen().into_element(),
         })))
         .child(closable.then_some(bottom_tab_bar))
 }

@@ -15,6 +15,7 @@ targets:
       - path: Audio.swift
       - path: DeviceIdentity.swift
       - path: Documents.swift
+      - path: Health.swift
       - path: Discovery.swift
       - path: Notifications.swift
       - path: PairScanner.swift
@@ -43,9 +44,17 @@ targets:
         NSCameraUsageDescription: Sjel scans pairing codes and captures room layouts.
         # Face ID confirms the person before a terminal on the Mac opens.
         NSFaceIDUsageDescription: Sjel confirms it is you before it opens a terminal on your Mac.
+        # Apple Health, read-only: daily values and sleep go to the health capability on the Mac.
+        NSHealthShareUsageDescription: Sjel reads your sleep, activity, heart and body data and keeps a daily copy on your Mac.
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+    # HealthKit read access (host/Health.swift). XcodeGen writes the file from these properties.
+    entitlements:
+      path: SjelIOS.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.sjel.ios
@@ -77,6 +86,7 @@ targets:
           - "-framework RoomPlan"
           - "-framework QuickLook"
           - "-framework RealityKit"
+          - "-framework HealthKit"
   # A touch check, not a feature test: GPUI paints every pixel, so only a real tap proves that
   # UIKit's touch reaches the view (`UITests/JoinTap.swift`). ios/run-sim --tap runs it.
   SjelIOSUITests:

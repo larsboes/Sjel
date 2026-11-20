@@ -618,7 +618,7 @@ pub fn MapScreen() -> impl IntoElement {
         )
         .child(dynamic(move || {
             let current_category = category.get();
-            let mut row = view().flex_row().flex_wrap().px_4();
+            let mut row = view().flex_row().flex_wrap().gap_1p5().px_4();
             for (category, label) in [
                 (None, "All places"),
                 (Some(PlaceCategory::Stay), "Stay"),
@@ -626,17 +626,16 @@ pub fn MapScreen() -> impl IntoElement {
                 (Some(PlaceCategory::Airport), "Airport"),
                 (Some(PlaceCategory::Place), "Place"),
             ] {
-                let label = if current_category == category {
-                    format!("{label} •")
-                } else {
-                    label.into()
-                };
-                row = row.child(action(label, move || {
-                    let mut state = state();
-                    state.snap.category = category;
-                    state.snap.selected = None;
-                    publish(&state);
-                }));
+                row = row.child(crate::nsh_ui::pill_tab(
+                    label,
+                    current_category == category,
+                    move || {
+                        let mut state = state();
+                        state.snap.category = category;
+                        state.snap.selected = None;
+                        publish(&state);
+                    },
+                ));
             }
             row
         }))
@@ -916,7 +915,7 @@ mod tests {
         app.wait_for("text:Trip · 10–11 November").unwrap();
         app.wait_for("text:Open trip").unwrap();
         app.press("text:Station").unwrap();
-        app.wait_for("text:Station •").unwrap();
+        assert_eq!(state().snap.category, Some(PlaceCategory::Station));
         assert!(!app
             .screen()
             .texts()

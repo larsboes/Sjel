@@ -7,16 +7,14 @@ pub mod cards;
 pub mod constants;
 pub mod inspector;
 
-use crate::ely::buttons::{Button, ButtonVariant};
-use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::primitives::{card, note, placeholder, section};
+use crate::primitives::{card, note, pill_tab, placeholder, section};
 use crate::theme::ThemeContext;
 use sjel_gpui_core::self_model::{isolated_units, SelfModelResponse, SelfUnit};
 
-use self::cards::{stats_summary, unit_card};
+use self::cards::{architecture_diagram, stats_summary, unit_card};
 use self::constants::KINDS;
 use self::inspector::unit_inspector;
 
@@ -123,6 +121,11 @@ impl gpui::Render for SelfPage {
         // Stats Card
         panels.push(stats_summary(&res, palette));
 
+        // Live Mermaid Dependency Diagram
+        if let Some(diagram) = architecture_diagram(&res, palette) {
+            panels.push(diagram);
+        }
+
         // Inspector if selected
         if let Some(inspector) = unit_inspector(self, &res, palette, cx) {
             panels.push(inspector);
@@ -134,17 +137,17 @@ impl gpui::Render for SelfPage {
             .map(|kind| {
                 let is_active = self.filter_kind == *kind;
                 let k = *kind;
-                Button::new(
+                pill_tab(
                     SharedString::from(format!("filter-kind-{}", kind)),
                     if *kind == "all" { "All units" } else { *kind },
+                    None,
+                    is_active,
+                    palette,
+                    cx.listener(move |page, _, _, cx| {
+                        page.filter_kind = k;
+                        cx.notify();
+                    }),
                 )
-                .size(ControlSize::Sm)
-                .when(!is_active, |b| b.variant(ButtonVariant::Ghost))
-                .on_click(cx.listener(move |page, _, _, cx| {
-                    page.filter_kind = k;
-                    cx.notify();
-                }))
-                .into_any_element()
             })
             .collect();
 

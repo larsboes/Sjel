@@ -62,8 +62,8 @@ pub(super) fn hubs_portfolio_charts(
     });
 
     let bullets = {
-        let mut chart = BulletChart::new("projects-health-bullets")
-            .format(|v| format!("{v:.0} done"));
+        let mut chart =
+            BulletChart::new("projects-health-bullets").format(|v| format!("{v:.0} done"));
         for project in with_tasks.iter().take(MAX_BULLET_PROJECTS) {
             let total = (project.open + project.done).max(1) as f64;
             chart = chart.bullet(
@@ -99,11 +99,7 @@ pub(super) fn hubs_portfolio_charts(
 }
 
 /// Counts active tasks due on each day in `[start, start + days)`.
-pub(super) fn due_counts_window(
-    tasks: &[GlobalTask],
-    start: NaiveDate,
-    days: i64,
-) -> Vec<f64> {
+pub(super) fn due_counts_window(tasks: &[GlobalTask], start: NaiveDate, days: i64) -> Vec<f64> {
     let mut by_date: BTreeMap<NaiveDate, usize> = BTreeMap::new();
     for task in tasks {
         let status = task.status();
@@ -142,37 +138,32 @@ pub(super) fn tasks_pressure_charts(
 
     let heatmap = if has_window_due {
         let owner = cx.entity();
-        today
-            .to_string()
-            .parse()
-            .ok()
-            .map(|first| {
-                let chart = CalendarHeatmap::new("tasks-due-heatmap", first, counts)
-                    .format(|c| format!("{c:.0} due"))
-                    .on_select(move |offset, _, cx| {
-                        let date = (today + Duration::days(offset as i64))
-                            .format("%Y-%m-%d")
-                            .to_string();
-                        owner.update(cx, |view, cx| {
-                            view.due_date_filter = if view.due_date_filter.as_deref() == Some(&date)
-                            {
-                                None
-                            } else {
-                                Some(date)
-                            };
-                            cx.notify();
-                        });
-                    })
-                    .w_full()
-                    .h(px(96.))
-                    .into_any_element();
-                chart_card(
-                    "DUE-DATE PRESSURE",
-                    Some("Active tasks due over the next 8 weeks · click day to filter".into()),
-                    chart,
-                    palette,
-                )
-            })
+        today.to_string().parse().ok().map(|first| {
+            let chart = CalendarHeatmap::new("tasks-due-heatmap", first, counts)
+                .format(|c| format!("{c:.0} due"))
+                .on_select(move |offset, _, cx| {
+                    let date = (today + Duration::days(offset as i64))
+                        .format("%Y-%m-%d")
+                        .to_string();
+                    owner.update(cx, |view, cx| {
+                        view.due_date_filter = if view.due_date_filter.as_deref() == Some(&date) {
+                            None
+                        } else {
+                            Some(date)
+                        };
+                        cx.notify();
+                    });
+                })
+                .w_full()
+                .h(px(96.))
+                .into_any_element();
+            chart_card(
+                "DUE-DATE PRESSURE",
+                Some("Active tasks due over the next 8 weeks · click day to filter".into()),
+                chart,
+                palette,
+            )
+        })
     } else {
         None
     };

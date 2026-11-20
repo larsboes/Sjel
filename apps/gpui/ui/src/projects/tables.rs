@@ -15,8 +15,7 @@ use crate::theme::{Density, Palette};
 use sjel_gpui_core::shell::{GlobalNote, GlobalTask, ProjectRecord};
 
 use super::{
-    search_box, NoteKindFilter, ProjectSection, ProjectSort, Projects, ProjectsTab,
-    TaskFocusFilter,
+    search_box, NoteKindFilter, ProjectSection, ProjectSort, Projects, ProjectsTab, TaskFocusFilter,
 };
 
 fn ely_density(density: Density) -> ElyDensity {

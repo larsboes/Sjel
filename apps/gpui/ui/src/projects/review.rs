@@ -33,7 +33,11 @@ impl Projects {
             .collect();
 
         let day_dates: Vec<String> = (0..7)
-            .map(|offset| (today_date + Duration::days(offset)).format("%Y-%m-%d").to_string())
+            .map(|offset| {
+                (today_date + Duration::days(offset))
+                    .format("%Y-%m-%d")
+                    .to_string()
+            })
             .collect();
         let chart_owner = cx.entity();
 
@@ -160,15 +164,17 @@ impl Projects {
                                 )
                                 .size(ControlSize::Sm)
                                 .variant(ButtonVariant::Ghost)
-                                .on_click(cx.listener(move |view, _, window, cx| {
-                                    view.set_task_property(
-                                        t_today.id.clone(),
-                                        "due",
-                                        today_str.clone(),
-                                        window,
-                                        cx,
-                                    );
-                                })),
+                                .on_click(cx.listener(
+                                    move |view, _, window, cx| {
+                                        view.set_task_property(
+                                            t_today.id.clone(),
+                                            "due",
+                                            today_str.clone(),
+                                            window,
+                                            cx,
+                                        );
+                                    },
+                                )),
                             )
                             .child(
                                 Button::new(
@@ -177,14 +183,16 @@ impl Projects {
                                 )
                                 .size(ControlSize::Sm)
                                 .variant(ButtonVariant::Primary)
-                                .on_click(cx.listener(move |view, _, window, cx| {
-                                    view.toggle_global_task(
-                                        t_done.id.clone(),
-                                        !t_done.done,
-                                        window,
-                                        cx,
-                                    );
-                                })),
+                                .on_click(cx.listener(
+                                    move |view, _, window, cx| {
+                                        view.toggle_global_task(
+                                            t_done.id.clone(),
+                                            !t_done.done,
+                                            window,
+                                            cx,
+                                        );
+                                    },
+                                )),
                             ),
                     )
                     .into_any_element()
@@ -228,14 +236,19 @@ impl Projects {
                             ),
                     )
                     .child(
-                        Button::new(SharedString::from(format!("review-blocked-{ix}")), "Inspect")
-                            .size(ControlSize::Sm)
-                            .variant(ButtonVariant::Ghost)
-                            .on_click(cx.listener(move |view, _, window, cx| {
+                        Button::new(
+                            SharedString::from(format!("review-blocked-{ix}")),
+                            "Inspect",
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(cx.listener(
+                            move |view, _, window, cx| {
                                 view.review_mode = false;
                                 view.tab = ProjectsTab::AllTasks;
                                 view.select_task(&target, window, cx);
-                            })),
+                            },
+                        )),
                     )
                     .into_any_element()
             })
@@ -285,48 +298,46 @@ impl Projects {
             })
             .collect();
 
-        let project_rows: Vec<AnyElement> = active_projects
-            .iter()
-            .take(6)
-            .enumerate()
-            .map(|(ix, project)| {
-                let name = project.name.clone();
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .gap_2()
-                    .px_3()
-                    .py_2()
-                    .rounded(px(6.))
-                    .bg(rgba(palette.raised))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(div().text_sm().truncate().child(project.name.clone()))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(format!("{} open · {} done", project.open, project.done)),
-                            ),
-                    )
-                    .child(
-                        Button::new(SharedString::from(format!("review-proj-{ix}")), "Open")
-                            .size(ControlSize::Sm)
-                            .variant(ButtonVariant::Ghost)
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.review_mode = false;
-                                view.open_project(name.clone(), cx);
-                            })),
-                    )
-                    .into_any_element()
-            })
-            .collect();
+        let project_rows: Vec<AnyElement> =
+            active_projects
+                .iter()
+                .take(6)
+                .enumerate()
+                .map(|(ix, project)| {
+                    let name = project.name.clone();
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap_2()
+                        .px_3()
+                        .py_2()
+                        .rounded(px(6.))
+                        .bg(rgba(palette.raised))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(div().text_sm().truncate().child(project.name.clone()))
+                                .child(div().text_xs().text_color(rgb(palette.muted)).child(
+                                    format!("{} open · {} done", project.open, project.done),
+                                )),
+                        )
+                        .child(
+                            Button::new(SharedString::from(format!("review-proj-{ix}")), "Open")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.review_mode = false;
+                                    view.open_project(name.clone(), cx);
+                                })),
+                        )
+                        .into_any_element()
+                })
+                .collect();
 
         let header = div()
             .flex()
@@ -385,7 +396,12 @@ impl Projects {
                                         .child("No overdue tasks.")
                                         .into_any_element()
                                 } else {
-                                    div().flex().flex_col().gap_1p5().children(overdue_rows).into_any_element()
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap_1p5()
+                                        .children(overdue_rows)
+                                        .into_any_element()
                                 },
                                 palette,
                             ))
@@ -398,7 +414,12 @@ impl Projects {
                                         .child("Pin a task with ☆ Pin Next in its panel.")
                                         .into_any_element()
                                 } else {
-                                    div().flex().flex_col().gap_1p5().children(next_rows).into_any_element()
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap_1p5()
+                                        .children(next_rows)
+                                        .into_any_element()
                                 },
                                 palette,
                             )),
@@ -419,7 +440,12 @@ impl Projects {
                                         .child("Nothing blocked.")
                                         .into_any_element()
                                 } else {
-                                    div().flex().flex_col().gap_1p5().children(blocked_rows).into_any_element()
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap_1p5()
+                                        .children(blocked_rows)
+                                        .into_any_element()
                                 },
                                 palette,
                             ))
@@ -432,7 +458,12 @@ impl Projects {
                                         .child("No active projects with open tasks.")
                                         .into_any_element()
                                 } else {
-                                    div().flex().flex_col().gap_1p5().children(project_rows).into_any_element()
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap_1p5()
+                                        .children(project_rows)
+                                        .into_any_element()
                                 },
                                 palette,
                             )),

@@ -262,11 +262,7 @@ impl Projects {
             .as_deref()
             .map(|notes| {
                 let title_lower = task.title.to_lowercase();
-                let summary_lower = task
-                    .summary
-                    .as_deref()
-                    .unwrap_or("")
-                    .to_lowercase();
+                let summary_lower = task.summary.as_deref().unwrap_or("").to_lowercase();
                 notes
                     .iter()
                     .filter(|n| {

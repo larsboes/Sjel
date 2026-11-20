@@ -284,8 +284,7 @@ pub(super) fn unblocked_by_task<'a>(
             raw.split(',').any(|part| {
                 let token = part.trim().to_lowercase();
                 !token.is_empty()
-                    && (token == needle_id
-                        || (!needle_title.is_empty() && token == needle_title))
+                    && (token == needle_id || (!needle_title.is_empty() && token == needle_title))
             })
         })
         .collect()
@@ -1764,12 +1763,7 @@ impl Projects {
                 .size(crate::ely::theme::ControlSize::Sm)
                 .variant(crate::ely::buttons::ButtonVariant::Ghost)
                 .on_click(cx.listener(move |view, _, window, cx| {
-                    view.create_task_from_text(
-                        project_name.clone(),
-                        task_text.clone(),
-                        window,
-                        cx,
-                    );
+                    view.create_task_from_text(project_name.clone(), task_text.clone(), window, cx);
                 }))
                 .into_any_element()
             })
@@ -2425,7 +2419,12 @@ impl Projects {
                                     .gap_3()
                                     .child(self.note_title(editor, palette, cx))
                                     .when_some(
-                                        self.promote_checklist_strip(&project_name, editor, palette, cx),
+                                        self.promote_checklist_strip(
+                                            &project_name,
+                                            editor,
+                                            palette,
+                                            cx,
+                                        ),
                                         |el, strip| el.child(strip),
                                     )
                                     .child(div().flex_1().min_h_0().child(editor.clone())),
@@ -2554,9 +2553,7 @@ impl Projects {
                                                 })
                                                 .when(!is_current, |el| {
                                                     el.text_color(rgb(palette.text))
-                                                        .hover(move |s| {
-                                                            s.bg(rgba(palette.raised))
-                                                        })
+                                                        .hover(move |s| s.bg(rgba(palette.raised)))
                                                 })
                                                 .on_click(cx.listener(
                                                     move |view, _, window, cx| {
@@ -2615,10 +2612,7 @@ impl Projects {
                                         palette,
                                     ))
                                     .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(rgb(palette.muted))
-                                            .child("/"),
+                                        div().text_xs().text_color(rgb(palette.muted)).child("/"),
                                     )
                                     .child(
                                         div()
@@ -2816,11 +2810,11 @@ impl Projects {
                             .flex_wrap()
                             .items_center()
                             .gap_3()
-                            .child(
-                                div()
-                                    .w(px(110.))
-                                    .child(crate::primitives::progress_bar(ratio, palette.green, palette)),
-                            )
+                            .child(div().w(px(110.)).child(crate::primitives::progress_bar(
+                                ratio,
+                                palette.green,
+                                palette,
+                            )))
                             .child(
                                 div()
                                     .text_xs()
@@ -2859,12 +2853,14 @@ impl Projects {
                                 )
                                 .size(crate::ely::theme::ControlSize::Sm)
                                 .variant(crate::ely::buttons::ButtonVariant::Ghost)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.put_away_editor(cx);
-                                    view.project_section = ProjectSection::MailReview;
-                                    view.load_project_mail(false, cx);
-                                    cx.notify();
-                                })),
+                                .on_click(cx.listener(
+                                    |view, _, _, cx| {
+                                        view.put_away_editor(cx);
+                                        view.project_section = ProjectSection::MailReview;
+                                        view.load_project_mail(false, cx);
+                                        cx.notify();
+                                    },
+                                )),
                             )
                             .child(
                                 crate::ely::buttons::Button::new(
@@ -2876,11 +2872,13 @@ impl Projects {
                                 )
                                 .size(crate::ely::theme::ControlSize::Sm)
                                 .variant(crate::ely::buttons::ButtonVariant::Ghost)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.put_away_editor(cx);
-                                    view.project_section = ProjectSection::InventoryLinks;
-                                    cx.notify();
-                                })),
+                                .on_click(cx.listener(
+                                    |view, _, _, cx| {
+                                        view.put_away_editor(cx);
+                                        view.project_section = ProjectSection::InventoryLinks;
+                                        cx.notify();
+                                    },
+                                )),
                             )
                             .child(
                                 crate::ely::buttons::Button::new(
@@ -2889,11 +2887,13 @@ impl Projects {
                                 )
                                 .size(crate::ely::theme::ControlSize::Sm)
                                 .variant(crate::ely::buttons::ButtonVariant::Primary)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.put_away_editor(cx);
-                                    view.project_section = ProjectSection::Tasks;
-                                    cx.notify();
-                                })),
+                                .on_click(cx.listener(
+                                    |view, _, _, cx| {
+                                        view.put_away_editor(cx);
+                                        view.project_section = ProjectSection::Tasks;
+                                        cx.notify();
+                                    },
+                                )),
                             ),
                     )
             });

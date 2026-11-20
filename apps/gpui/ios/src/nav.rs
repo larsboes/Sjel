@@ -36,6 +36,7 @@ pub(crate) fn phone_screen(target: &Target) -> Screen {
         Target::Docs(_) => Screen::Mac("Docs"),
         Target::Record(_) => Screen::Mac("This record"),
         Target::Ask(_) => Screen::Mac("Ask"),
+        Target::Scratchpad => Screen::Mac("Scratchpad"),
         Target::Unknown(path) if path.split('?').next() == Some("/interior") => {
             Screen::Tab(Tab::Interior)
         }

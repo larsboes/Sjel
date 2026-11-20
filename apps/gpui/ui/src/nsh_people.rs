@@ -720,6 +720,7 @@ mod tests {
             company: Some("Acme".to_owned()),
             role: Some("Engineer".to_owned()),
             location: None,
+            photo: None,
             tags: Vec::new(),
             custom_fields: Vec::new(),
             values: Default::default(),

@@ -69,15 +69,18 @@ export (a manual download from LinkedIn, no token).
    user to create one: LinkedIn developer portal, OAuth token generator, scope
    `r_dma_portability_self_serve`. Then the user stores it with
    `security add-generic-password -U -s sjel-linkedin-dma -a "$USER" -w`.
-   Do not ask for the token in the chat. A CSV export carries no About text, so `diff` reports
-   About as absent rather than as different.
-2. Run `$CV linkedin diff`. Report the differences in headline, positions and skills. Its second
-   line names the snapshot's date and whether it came from the API or an export.
-3. Run `$CV linkedin sheet --lang en`. Give the user the text to paste.
+   Do not ask for the token in the chat. The export supplies About only if its separate summary
+   file contains text.
+2. Run `$CV linkedin diff`. Report differences in available fields only. The first line identifies
+   the capture and its source. Unavailable domains are not deletions. Run a new import or pull if
+   the only saved snapshots predate coherent captures.
+3. Use `$CV linkedin sheet --lang en` as a private review draft. The sheet includes every experience
+   and bullet; it is not a publication filter. Only operator-selected fields belong on LinkedIn.
 
 ## Career guidance
 
-Use `$MASTER`, `$DATA/linkedin/*.json` (if present) and the application files as the evidence.
+Use `$MASTER`, the latest `cv linkedin diff` output (if available), and the application files as
+the evidence.
 Give advice that names the item it is based on. Examples: a skill that three postings ask for
 and the master does not have, a role whose bullets have no measured result, or an application
 with no change for 14 days.

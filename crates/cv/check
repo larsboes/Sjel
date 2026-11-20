@@ -6,10 +6,12 @@ set -euo pipefail
 _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-export SJEL_OVERLAY_ROOT="$tmp"
-mkdir -p "$tmp/data/cv/linkedin"
+export SJEL_OVERLAY_ROOT="$tmp" SJEL_PERSONAL_ROOT="$tmp"
+SJEL_ROOT="$(cd "$_dir/../.." && pwd)"
+export SJEL_ROOT
+mkdir -p "$tmp/data/cv"
 cp "$_dir/master_cv.schema.yaml" "$tmp/data/cv/master_cv.yaml"
-cv="$_dir/cv"
+cv="${1:-$_dir/cv}"
 
 fail() { echo "check: FAIL: $*" >&2; exit 1; }
 
@@ -53,26 +55,30 @@ yq -i '.experience[0].role = {"en": "Role EN", "de": "Rolle DE"}' "$tmp/data/cv/
 "$cv" linkedin sheet | grep -q '^HEADLINE' || fail "sheet has no headline"
 "$cv" linkedin sheet --lang de | grep -q '^Rolle DE @' || fail "sheet did not localize the role"
 
-echo '[{"Headline": "Old headline", "Summary": "x"}]' > "$tmp/data/cv/linkedin/PROFILE.json"
-echo '[{"Company Name": "Employer Name", "Title": "Dev", "Started On": "Jan 2024"}]' > "$tmp/data/cv/linkedin/POSITIONS.json"
-echo '[{"Name": "Item A"}, {"Name": "Only On LinkedIn"}]' > "$tmp/data/cv/linkedin/SKILLS.json"
-diff_out="$("$cv" linkedin diff)"
-echo "$diff_out" | grep -q "linkedin: Old headline" || fail "diff headline"
-echo "$diff_out" | sed -n '/only on LinkedIn/,/only in master/p' | grep -q "only on linkedin" || fail "diff skills"
-
-# import: a CSV export fills the same snapshot without a token.
 mkdir -p "$tmp/export"
-printf 'Name\nPython\n' > "$tmp/export/Skills.csv"
+printf 'Headline\nOld headline\n' > "$tmp/export/Profile.csv"
+printf 'Name\nOnly On LinkedIn\n' > "$tmp/export/Skills.csv"
 cat > "$tmp/export/Positions.csv" <<'CSV'
 Company Name,Title,Location,Started On,Finished On,Description
 Acme,Dev,Bonn,Jan 2024,,"Line one, with a comma
 line two"
 CSV
 "$cv" linkedin import "$tmp/export" | grep -q "POSITIONS: 1 record(s)" || fail "import positions"
-[ "$(jq -r '.[0].Description' "$tmp/data/cv/linkedin/POSITIONS.json")" = "Line one, with a comma
+[ "$(jq -r '.domains.POSITIONS[0].Description' "$tmp/data/cv/linkedin/captures/"*.json)" = "Line one, with a comma
 line two" ] || fail "import lost a quoted description"
-[ "$(cat "$tmp/data/cv/linkedin/SOURCE")" = export ] || fail "import did not record its source"
-[ "$(jq -r '.[0].Name' "$tmp/data/cv/linkedin/SKILLS.json")" = Python ] || fail "import skills"
+diff_out="$("$cv" linkedin diff)"
+echo "$diff_out" | grep -q "(export)" || fail "import did not record its source"
+echo "$diff_out" | grep -q "linkedin: Old headline" || fail "diff headline"
+echo "$diff_out" | grep -q '^  only on linkedin$' || fail "diff skills"
+"$cv" status --json | jq -e '.linkedin_pulled != null' >/dev/null || fail "capture date missing"
+
+mkdir -p "$tmp/partial"
+printf 'Headline\nNew headline\n' > "$tmp/partial/Profile.csv"
+"$cv" linkedin import "$tmp/partial" >/dev/null
+diff_out="$("$cv" linkedin diff)"
+echo "$diff_out" | grep -q "linkedin: New headline" || fail "partial capture headline"
+echo "$diff_out" | grep -q "unavailable in this snapshot" || fail "partial capture did not show omissions"
+if echo "$diff_out" | grep -q '^  only on linkedin$'; then fail "diff reused stale skills"; fi
 if "$cv" linkedin import "$tmp" >/dev/null 2>&1; then fail "import accepted a directory with no export"; fi
 
 # edit: a broken put leaves the file unchanged, a good put replaces it.

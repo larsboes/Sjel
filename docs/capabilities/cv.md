@@ -8,7 +8,7 @@ flowchart LR
   subgraph Overlay["$SJEL_PERSONAL_ROOT/data/cv (git)"]
     M[master_cv.yaml]
     A[applications/slug.yaml]
-    L[linkedin/DOMAIN.json]
+    L[linkedin/captures/ID.json]
   end
   UI["Client CV view"] -->|PUT /cv/model, /cv/file| S[sjel-status]
   S -->|stdin| C[cv-cli]
@@ -85,8 +85,8 @@ comments do not survive it. Provenance lives in each item's `source` field.
 
 ## LinkedIn
 
-The Member Data Portability API is read-only and EU/EEA/CH only. Two sources fill the same
-snapshot at `data/cv/linkedin/`, in the same row shape:
+The Member Data Portability API is read-only and EU/EEA/CH only. Either source records one
+capture under `data/cv/linkedin/captures/`:
 
 | Verb | Source | Needs |
 |---|---|---|
@@ -96,9 +96,14 @@ snapshot at `data/cv/linkedin/`, in the same row shape:
 `pull` reads the token from keychain item `sjel-linkedin-dma` per call and passes it to curl on
 stdin. `import` reads `Profile.csv`, `Positions.csv`, `Education.csv`, `Skills.csv`,
 `Languages.csv` and `Organizations.csv`, and takes About from `Profile Summary.csv`, which the
-export keeps separate and often leaves empty. Both write `PULLED_ON` and `SOURCE`, so `diff`
-names the date and origin it compared. Neither commits to the overlay's git.
+export keeps separate and can leave empty. Neither command commits to the overlay's Git.
 
-A CSV export is a snapshot from a manual download, not a live read, and its domains do not all
-match [`DOMAINS`]: it carries no certifications, projects or honors. `import` is the fallback
-when `pull`'s token is not set; no open work is recorded.
+Each file records one source and only the domains obtained in that capture. Its ID contains the
+UTC time that Sjel saved it, not the time LinkedIn generated the data. `diff` identifies the latest
+capture and marks omitted domains unavailable. It does not infer deletions or fill gaps from older
+files. Failed refreshes publish no capture; earlier captures stay on disk. The previous loose
+domain files also stay on disk but are not compared: their metadata cannot establish that the
+files came from one capture. Run a new import or pull before comparing them again.
+
+A CSV export is a manual snapshot, not a live read, and it carries no certifications, projects, or
+honors. Use `import` when `pull`'s token is not set.

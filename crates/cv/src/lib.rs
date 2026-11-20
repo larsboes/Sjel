@@ -539,10 +539,10 @@ fn mtime(path: &Path) -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// Profiles, applications, built PDFs with staleness, and the LinkedIn pull date.
+/// Profiles, applications, built PDFs with staleness, and the latest LinkedIn capture date.
 ///
 /// # Errors
-/// The master or an application does not load.
+/// The master, an application, or the capture directory cannot be read.
 pub fn status(paths: &Paths) -> Res<Value> {
     let master = load_master(paths)?;
     let master_mtime = mtime(&paths.master());
@@ -575,9 +575,7 @@ pub fn status(paths: &Paths) -> Res<Value> {
             v
         })
         .collect();
-    let pulled = fs::read_to_string(paths.linkedin().join("PULLED_ON"))
-        .ok()
-        .map(|s| s.trim().to_string());
+    let pulled = linkedin::last_capture_date(paths)?;
     Ok(json!({
         "master": paths.master(),
         "master_mtime": master_mtime,

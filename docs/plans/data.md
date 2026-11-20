@@ -81,3 +81,11 @@ Registry-derived Mac and phone acceptance belongs to [derived views](gpui.md#der
 - [Reconcile portfolio identities and targets](../tasks/data-investment-inputs.md).
 - [Merge duplicate wishes explicitly](../tasks/data-wishlist-merge.md).
 - [Accept trip budget and transaction links](../tasks/data-trip-finance.md).
+
+### Health
+
+`crates/health` owns the operator's daily health values (`c1`).
+
+- [Decide the health data owner](../tasks/task-bd7107c0-a1a4-4bbf-8206-19acd4ffc6a6.md).
+- [Import the first real Health export](../tasks/task-c30b5f1e-8a96-4643-b3a4-f6c54dc93c7e.md).
+- [Sync HealthKit from the iOS app](../tasks/task-fbaa58b2-0aff-47e4-a482-0aa248dbedab.md).

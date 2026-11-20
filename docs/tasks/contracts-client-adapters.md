@@ -22,7 +22,8 @@ Clients reuse existing capability contracts without losing offline behavior.
 
 ## Verification
 
-The Projects list client uses the existing Projects response envelope. The API test accepts both
-legacy summaries and classified summaries for the client while retaining classification in the
-server projection. The GPUI core build and two offline replay tests pass. Other copied adapters
-remain open.
+The native client shares Projects API response envelopes for project lists, Inventory-link records,
+mail targets, task lists and task writes. Tests cover legacy lists and task replies,
+classified projections, exact record content, the revision required for link review, and offline
+task handling. The Projects API and service pass 62 tests. GPUI core passes 403 tests with 6
+ignored. Other copied adapters remain open.

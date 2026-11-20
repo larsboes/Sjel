@@ -20,3 +20,14 @@ Sync Inventory and wishlist through the existing owner, without treating impleme
 - Add the phone store, owner feed and idempotent Inventory writes.
 - An offline addition reaches the Mac once; Mac edits reach the phone.
 - Use the shared domain contract before adding another writable domain.
+
+## Remaining work
+
+The signed Inventory endpoint handles revisioned edits to existing items. An offline
+addition also needs a signed create operation that commits the item, initial state and
+operation receipt together. Verify that a lost response followed by replay returns the
+same acknowledgement and leaves one item.
+
+Extend the phone replica and its existing replay loop to queue Inventory mutations and
+pull owner changes. Keep a queued operation until the owner acknowledges it and surface
+revision conflicts on the phone. Test replay and a Mac-to-phone update on a paired device.

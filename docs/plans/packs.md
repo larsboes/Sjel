@@ -32,7 +32,6 @@ activation. Material permission, execution, egress or licence changes need re-re
 ## Shared tooling
 
 - [Native activation](../tasks/tool-native-activation.md).
-- [Unit-scoped sync](../tasks/tool-unit-sync.md).
 - [Deployment eligibility](../tasks/tool-component-eligibility.md).
 - [Controlled comparisons](../tasks/tool-owned-comparison.md).
 - [Read-only update checks](../tasks/tool-skill-update-check.md).

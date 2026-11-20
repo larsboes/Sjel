@@ -74,6 +74,7 @@ remain with [Operations](../operations/index.md#cli-only-coding-installation).
 - [Flag private names in fixtures](../tasks/tool-publication-names.md).
 - [Measure verification resource use](../tasks/tool-ci-resources.md).
 - [Rehearse cross-archive restores](../tasks/tool-backup-rehearse.md).
+- [Review archive cleanup candidates](../tasks/tool-archive-cleanup-review.md).
 - [Resolve repository identity in worktrees](../tasks/tool-worktree-self.md).
 - [Probe Pi text rendering](../tasks/tool-pi-render.md).
 - [Check an opt-in learning round-trip](../tasks/tool-learning-rpc.md).

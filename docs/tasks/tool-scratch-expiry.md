@@ -16,5 +16,11 @@ Verification scratch expires under the existing two-day policy.
 
 ## Acceptance
 
-- After the retention interval, observe expiry and recovered volume space.
+- Verify that `sjel cargo --scratch` reuses the checkout's temporary fallback and refreshes its age.
+- On a deployment with the [scratch policy](../../crates/storage/README.md#temporary-cargo-verification), observe expiry and recovered volume space after the retention interval.
 - Keep live release locations unchanged; this verification authorizes no cleanup or service migration.
+
+## Evidence
+
+`tools/cargo-hermetic.test.sh` verifies selection, reuse, age refresh, and guard behavior.
+Live policy admission and expiry remain unverified.

@@ -13,6 +13,20 @@
 # No row records a version: every dependency tracks its upstream release. A measurement belongs in
 # `why` with the date it was taken, and a dependency verdict lives here and nowhere else.
 
+[obsidian-roadmap]
+url = "https://obsidian.md/roadmap/"
+verdict = "inspiration"
+license = "Unspecified; ideas only, no code or text copied"
+summary = "Short roadmap outcomes with links to delivered releases"
+why = "Use concise benefit statements and a separate release-backed delivery view. Sjel owns its Markdown model, static renderer and wording."
+
+[vector-release-writing]
+url = "https://vector.dev/releases/"
+verdict = "inspiration"
+license = "Unspecified; ideas only, no code or text copied"
+summary = "Release highlights, breaking changes and upgrade guidance"
+why = "Separate user-visible changes from compatibility impact and upgrade steps. No Vector implementation, prose or visual assets are copied."
+
 [semver]
 url = "https://github.com/dtolnay/semver"
 verdict = "adopt"
@@ -1237,3 +1251,11 @@ license = "MIT"
 summary = "Native Rust terminal coding agent, candidate harness and idea source for the Sjel agent"
 why = "Audited 2026-11-07 against v0.10.0, with the method in `Packs/security/skills/vendor-audit`. The strengths are real and measurable: 338 lock entries with zero git dependencies and zero `[patch]` sections, both `build.rs` inert, CI builds `--locked`, cosign-signs every artifact and verifies its own signatures before upload with the certificate identity pinned to the workflow commit, every `uses:` SHA-pinned, no `postinstall`, and no telemetry of any kind. The verdict is not adopt because of three findings: the effect broker -- canonical intent hashing, single-use grants, fail-closed without a human, model text never counted as consent -- ships off (`cli.rs` falls through to `EffectPolicy::UnsafeHost`, which `effect.rs` maps to allow), so plain `octet` prompts for nothing and leaves the file tools unconfined; the updater pipes a fetched shell script to `sh`, outside the Sigstore chain that protects the binary; and credentials are plaintext files rather than keychain items. Extensions have no isolation and the Pi adapter declares `filesystem = \"unrestricted\"` with `builtin_tool_overrides` including `bash`. A contained run the same day measured the boundary rather than the program: direct egress refused in 60 ms, the proxy admitting only the provider's hosts, and the profile refusing a real read of the gcloud application-default credentials."
 revisit = "The runtime trial is complete; running Octet is declined under the audited defaults. Re-evaluate only after upstream changes address the effect-policy default, updater verification, credential storage and configuration blockers. Mine selected designs into existing crates/sjel-agent interfaces only for a concrete consumer; research/agent-upstream-integration.md owns that integration boundary. The contained trial refused its state-directory openat walk, and setup --manual-model failed catalog verification both inside and outside containment."
+
+[rex]
+url = "https://www.superlogical.com/rex"
+verdict = "evaluate"
+license = "Proprietary, closed beta"
+summary = "Terminal multiplexer and Mac/iPhone app on trial as the daily terminal, configured through Lua in init.lua"
+why = "Trial started 2026-11-19 on 0.1.0-preview.21. Rex covers ground the agent capability's native terminal also covers (crates/agent/README.md, Terminals). Claude Code reports OSC 7501 program status to it without a hook; Pi reports through Packs/harness/extensions/rex-status.ts. Other customisation stays Rex-native and untracked during the trial (docs/tasks/tool-rex-trial-config.md). Community tools from github.com/beejmaxx/awesome-rex are ideas only, none installed."
+revisit = "Decide after the trial has run on Mac and iPhone: keep Rex as the terminal and move only the parts the trial proves necessary into Sjel, or record reject and continue the native terminal tasks."

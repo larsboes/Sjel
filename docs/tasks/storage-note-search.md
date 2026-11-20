@@ -22,5 +22,6 @@ Accept installed note-path search through the existing owner, without treating i
 
 ## Verification
 
-The installed desktop bundle was found. Native inspection returned no result, so title search,
-path display, and opening the result remain unverified in the installed app.
+The desktop bundle is installed. The native window-list and accessibility-tree commands both
+exit with status 1 and no output. Title search, path display, and opening the result remain
+unverified in the installed app.

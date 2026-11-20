@@ -53,4 +53,5 @@ and terminal behavior. [PLAN.md](../../PLAN.md) sets priority; phone work remain
 - [Bound unattended agent runs](../tasks/agent-run-supervisor.md).
 - [Run one approved proposal-only data task](../tasks/agent-data-tasks.md).
 
+Pi queue removal and plan-led execution remain in [their existing task](../tasks/task-f5d88e82-6737-44c8-a194-9805db3c6ebb.md).
 Project-tier containment remains in [its owning task](../tasks/containment-project-tier.md).

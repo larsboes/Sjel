@@ -22,12 +22,17 @@ Explain scheduled backup starts through the existing owner, without treating imp
 
 ## Verification
 
-- The policy API showed both configured targets present with 24-hour intervals. The latest 500
+- The policy API showed both configured targets present with 24-hour intervals. The initial 500
   attempts contained 493 failures with the producer's absent-volume diagnostic and seven successes.
 - The policy store keeps the current interval and its last update. It has no change history, so
   the reason for a prior timer disable is unverified.
 - New ledger claims record `manual` or `timer`. Older rows read as `unknown`. The runner keeps the
   absent-target diagnostic ahead of the recovery hint. Tests cover trigger attribution, error
   reporting, and the 30-minute retry backoff.
-- The live API reports `unknown` for older runs. Live verification of newly attributed starts
-  remains open. No policy or backup destination changed in this task.
+- The deployed API reports `unknown` for the 500 older attempts inspected. All 17 backup tests
+  pass.
+- The operator started a Media backup from the desktop app. Run 3399 completed with exit code 0,
+  published an archive receipt, and recorded `manual` in the live ledger. Confirm `timer` on the
+  next scheduled run at the existing cadence.
+- Both enabled policies resolve to the same external volume. The one-off Archive restore copy
+  on the internal drive is outside the recurring schedule.

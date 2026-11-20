@@ -12,19 +12,20 @@ spec: docs/plans/storage.md
 
 ## Outcome
 
-Route reads through owners through the existing owner, without treating implementation as live acceptance.
+Finder, the desktop Repo and the phone mirror read through capability-owned interfaces instead
+of shared tables.
 
 ## Acceptance
 
 - Finder search uses capability search routes; desktop Repo uses API crates.
 - Mirror building requests owner exports instead of reading shared tables.
-- Cover all three readers before file splitting.
+- Cover all three readers for each owner before splitting its file.
 
 ## Verification
 
 Finder gets local Inventory results from Inventory's bounded search route. The route checks the
-same words and returns the same hit fields without returning matching notes. Other Finder sources,
-the desktop reader and the mirror remain in scope.
+same words and returns the same hit fields without returning matching notes. The other checks
+below cover the desktop reader and phone mirror where those paths have moved.
 
 Inventory and Interior obtain monthly balance from Finance's owner route. The wishlist rehearsal
 used separate Inventory, Finance and Devices files and exercised an unavailable Finance service.

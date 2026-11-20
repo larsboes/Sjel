@@ -26,13 +26,13 @@ remain with [Operations](../operations/index.md#cli-only-coding-installation).
 - [Reclaim one build profile](../tasks/tool-profile-reclaim.md).
 - [Activate from a writable cache](../tasks/tool-service-cache.md).
 - [Expose clips through normal discovery](../tasks/tool-clips-discovery.md).
+- [Restore MCP discovery after retired capabilities](../tasks/task-b12f47a1-2489-4da7-be65-30613c3308f6.md).
 - [Stage session-owned hunks](../tasks/tool-scoped-staging.md).
 - [Generate architecture from staged inputs](../tasks/tool-index-architecture.md).
 - [Show active area holds](../tasks/tool-session-holds.md).
 - [Check a local UI fork](../tasks/tool-local-fork.md).
 - [Retain denied app staging](../tasks/tool-bundle-replace.md).
 - [Review overlay tracking boundaries](../tasks/tool-overlay-floor.md).
-- [Reclaim a declared orphan cache](../tasks/tool-orphan-root.md).
 - [Control native plugin activation](../tasks/tool-native-activation.md).
 - [Compare controlled skill revisions](../tasks/tool-owned-comparison.md).
 - [Make nested help read-only](../tasks/tool-nonmutating-help.md).
@@ -44,7 +44,6 @@ remain with [Operations](../operations/index.md#cli-only-coding-installation).
 - [Observe scratch retention recovery](../tasks/tool-scratch-expiry.md).
 - [Accept conditional calendar cleanup](../tasks/tool-calendar-dedupe-live.md).
 - [Measure approval and delegation cost](../tasks/tool-approval-cost.md).
-- [Compare build roots read-only](../tasks/tool-target-compare.md).
 - [Install a verified standalone tool](../tasks/tool-atomic-install.md).
 - [Investigate duplicate behavior](../tasks/tool-clone-discovery.md).
 - [Validate native iOS screens](../tasks/tool-ios-host.md).
@@ -54,12 +53,10 @@ remain with [Operations](../operations/index.md#cli-only-coding-installation).
 - [Check an immutable outgoing revision](../tasks/tool-ci-revision.md).
 - [Detect stale repository paths](../tasks/tool-stale-paths.md).
 - [Capture named unpaired phone tabs](../tasks/tool-ios-captures.md).
-- [Select a writable build target](../tasks/tool-sandbox-target.md).
 - [Bound harness intake review](../tasks/tool-review-harness.md).
 - [Reconcile with opaque revisions](../tasks/tool-project-reconcile.md).
 - [Probe atomic deployment capability](../tasks/tool-deploy-preflight.md).
 - [Unify update discovery](../tasks/tool-unified-update.md).
-- [Check global skill revisions](../tasks/tool-skill-update-check.md).
 - [Smoke-test a loaded clipper](../tasks/tool-clipper-smoke.md).
 - [Respect the active Pi profile](../tasks/tool-pi-profile.md).
 - [Report declared host patches](../tasks/tool-remote-patches.md).
@@ -74,6 +71,7 @@ remain with [Operations](../operations/index.md#cli-only-coding-installation).
 - [Manage local inference settings](../tasks/tool-inference-admin.md).
 - [Flag private names in fixtures](../tasks/tool-publication-names.md).
 - [Measure verification resource use](../tasks/tool-ci-resources.md).
+- [Report CI job time and cache hits](../tasks/tool-ci-timings.md).
 - [Rehearse cross-archive restores](../tasks/tool-backup-rehearse.md).
 - [Review archive cleanup candidates](../tasks/tool-archive-cleanup-review.md).
 - [Resolve repository identity in worktrees](../tasks/tool-worktree-self.md).

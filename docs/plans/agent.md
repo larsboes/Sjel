@@ -20,6 +20,8 @@ and terminal behavior. [PLAN.md](../../PLAN.md) sets priority; phone work remain
 - [Qualify exact-edit permission exemptions](../tasks/agent-exact-edits.md).
 - [Enforce the native agent tier sandbox](../tasks/agent-tier-boundary.md).
 - [Complete managed Pi configuration](../tasks/agent-pi-config.md).
+- [Accept the loop-check hook](../tasks/task-2fe8076c-f782-4949-85d0-1f372fd3c40b.md).
+- [Permit routine overlay configuration without opening policy guards](../tasks/task-5fea1385-8315-48b5-94d3-2a264a5cb5d8.md).
 
 <a id="4-plugins-and-the-pi-port"></a>
 <a id="5-phone-and-mac-experience"></a>

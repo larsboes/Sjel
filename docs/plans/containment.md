@@ -33,3 +33,4 @@ human review; scheduled or background subscription calls remain excluded.
 - [Review consumer-app MCP access](../tasks/containment-phone-apps.md).
 - [Resolve native Claude TLS refusal](../tasks/containment-claude-ca.md).
 - [Review zero-retention routing](../tasks/containment-openrouter.md).
+- [Model a lost phone and laptop](../tasks/task-ff5205bc-f2b4-4e3b-bd55-f3ca5b905b5f.md).

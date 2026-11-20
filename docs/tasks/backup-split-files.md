@@ -12,7 +12,7 @@ spec: docs/plans/storage.md
 
 ## Outcome
 
-Back up each owner database through the existing owner, without treating implementation as live acceptance.
+Every owner database has a declared backup contract and can be recovered from its own archive.
 
 ## Acceptance
 
@@ -33,7 +33,5 @@ The retry through the backup gateway succeeded after the watchdog was running an
 its apps, decisions, and sequence counter. The [owner migration task](storage-files.md)
 records the data checks for each owner.
 
-The Documents catalog archive and canonical-originals archive each passed an isolated restore.
-
-Finance and Places each restored their first native archive and matched every owner row.
-Finance journal files retain a separate archive contract.
+Documents originals and the Finance journal retain separate backup contracts. The Documents
+originals archive passed its own isolated restore.

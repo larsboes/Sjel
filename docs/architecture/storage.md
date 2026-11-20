@@ -1,16 +1,17 @@
 # Storage architecture
 
-Capabilities that use the shared relational store open the same SQLite file and own distinct
-table prefixes. Other state, such as mounted media or a vault, retains its own storage contract.
-The [store capability](../../services/store/README.md) owns the shared file's backup contract;
-[`sjel-store`](../../crates/sjel-store/README.md) owns connection and migration behavior.
+Relational state is split between the remaining shared SQLite database and capability-owned
+Turso WAL files. Capabilities that still share a file own distinct table prefixes. Mounted media
+and vaults retain their own storage contracts. The [store capability](../../services/store/README.md)
+owns the shared file's backup contract; [`sjel-store`](../../crates/sjel-store/README.md) owns
+rusqlite connection and migration behavior.
 
 ## Database specifications
 
-[`sjel-config`](../../crates/sjel-config/src/lib.rs) resolves `SJEL_DB_PATH`, then
-`<overlay>/data/sjel/sjel.db`, with a temporary scratch file as its fallback when no overlay
-resolves. [`sjel-store`](../../crates/sjel-store/src/lib.rs) applies these settings to each pooled
-connection:
+For the shared database, [`sjel-config`](../../crates/sjel-config/src/lib.rs) resolves
+`SJEL_DB_PATH`, then `<overlay>/data/sjel/sjel.db`, with a temporary scratch file as its fallback
+when no overlay resolves. [`sjel-store`](../../crates/sjel-store/src/lib.rs) applies these settings
+to each pooled rusqlite connection:
 
 ```sql
 PRAGMA journal_mode = WAL;
@@ -25,7 +26,7 @@ writer service.
 
 ### Immediate write locking
 
-Use `sjel_store::write_transaction(&mut conn)` for a transaction that reads and then writes.
+For rusqlite, use `sjel_store::write_transaction(&mut conn)` for a transaction that reads and then writes.
 It starts `BEGIN IMMEDIATE`, taking the writer lock before the read. A deferred transaction can
 fail immediately when it upgrades a read lock, even with a busy timeout configured.
 
@@ -50,8 +51,9 @@ in the active overlay's `config/machine.toml`; see the
 [machine schema](../../schemas/machine.toml.example).
 
 The shared store uses `backup_sqlite_online`: `tools/backup.sh` takes a live SQLite `.backup`
-snapshot. Do not copy an open database file without its SQLite snapshot protocol. Container-owned
-SQLite files use the separate cold-backup contract described in the
+snapshot. A Turso WAL backup instead requests a closed snapshot from the owner through
+`backup_owner_snapshot` before archiving that snapshot. Do not copy a live owner database file
+directly. Container-owned SQLite files use the separate cold-backup contract described in the
 [service schema](../../schemas/service.toml.example).
 
 ## Backups before migrations

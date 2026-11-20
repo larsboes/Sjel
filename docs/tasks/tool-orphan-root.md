@@ -1,11 +1,12 @@
 ---
 id: tool-orphan-root
 title: "Reclaim a declared orphan cache"
-state: backlog
+state: cancelled
 area: tooling
 kind: maintenance
 priority: 3
 spec: docs/plans/tooling.md
+reason: "No current orphan cache requires explicit-root reclamation. Reopen when a concrete root needs cleanup."
 ---
 
 # Reclaim a declared orphan cache

@@ -12,11 +12,12 @@ spec: docs/plans/storage.md
 
 ## Outcome
 
-Split capability databases through the existing owner, without treating implementation as live acceptance.
+Move the remaining shared-database users to owner-managed files and retain the shared database
+for recovery after the final cutover.
 
 ## Acceptance
 
-- Back up first and migrate one owner per commit: Inventory, Entities, Calendar, then remaining owners.
+- Rehearse a backup restore before each remaining cutover. Migrate one owner per commit.
 - Use one selected engine and one file/version per capability; cross-owner reads use APIs.
 - Remove rusqlite from each migrated owner and archive, never delete, the final shared database.
 
@@ -157,7 +158,7 @@ pagination and all ten legs in Places. The Transit CLI retrieved the restored se
 - Verify a refresh on a paired iPhone.
 - Migrate the remaining owners after their cross-owner readers and independent writers are
   routed through the owning services. The shared store still serves active capabilities
-  including Comms, Devices, Interior, Media, Projects, Scouting, and Trips. See
-  [owner reads](storage-owner-reads.md).
+  including Comms, Devices, Health, Interior, Media, Projects, Scouting and Trips. See
+  [owner reads](storage-owner-reads.md) and the [Health cutover](task-8f68cb3e-631e-4646-a474-1b8a68ae447c.md).
 - Any MVCC cutover requires recovery with the logical log and proof that backups preserve
   committed writes during concurrent use. Keep the original database through rollback acceptance.

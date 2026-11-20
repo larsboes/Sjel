@@ -1,8 +1,8 @@
 # Storage and sync
 
-Canonical open work lives in the linked tasks. Database and backup contracts remain with their
-owners; the [storage architecture](../architecture/storage.md) describes the current shared-file
-system, not an already-completed split.
+The [storage architecture](../architecture/storage.md) describes the split between capability-owned
+Turso WAL files and the remaining shared database. The tasks below own the remaining cutover,
+backup and sync checks.
 
 ## Decisions
 
@@ -10,7 +10,8 @@ system, not an already-completed split.
 - Capabilities own writes and cross-owner reads. No whole-file phone replication bypasses owners.
 - Private configuration stays in the overlay; personal data belongs outside Git repositories.
 - Knowledge prose stays in the learning vault; Projects owns project prose; typed facts stay in owners.
-- The phone follows [chosen offline data](gpui.md#what-may-live-on-the-phone), with no second writer.
+- [Native UI boundaries](../architecture/native-ui-boundaries.md#platform-and-ownership) govern
+  paired phone access and offline writes.
 - Secrets stay in the OS keychain. A secret database needs its own security decision.
 
 ## 1. Migration acceptance
@@ -32,7 +33,6 @@ source identifiers remain provenance, not an active vault dependency.
 
 ## 3. Phone standalone
 
-- [Share domain sync contracts](../tasks/sync-contract.md).
 - [Make change cursors durable](../tasks/sync-sequence.md).
 - [Replay phone writes exactly once](../tasks/sync-idempotency.md).
 - [Add the Projects changes feed](../tasks/sync-projects-feed.md).
@@ -54,6 +54,7 @@ Pending local writes are protected from pull. Captures remain create-only.
 - [Remove unused replica infrastructure](../tasks/storage-remove-replica.md).
 - [Route reads through owners](../tasks/storage-owner-reads.md).
 - [Split capability databases](../tasks/storage-files.md).
+- [Move Health onto its own Turso WAL file](../tasks/task-8f68cb3e-631e-4646-a474-1b8a68ae447c.md).
 - [Specify encrypted sync admission](../tasks/storage-sync-security.md).
 
 Backups precede each migration. ATTACH is for migration/reporting only. Per-file schema versions

@@ -81,6 +81,9 @@ capabilities and its remaining reductions live in the [product plan](plans/produ
 
 ## Architecture
 
+This diagram describes the target design. The [architecture overview](architecture/index.md)
+describes the current repository and links to the live storage boundaries.
+
 ```mermaid
 flowchart TB
   subgraph sources["Sources"]

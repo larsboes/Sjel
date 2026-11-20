@@ -36,9 +36,14 @@ them through the signed owner route. A lost response and an acknowledgement for 
 operation keep the write queued. A matching duplicate acknowledgement clears it. A
 write from an earlier pairing stays on the device.
 
+## Live read verification
+
+The physical paired iPhone refreshed Inventory and Wishlist through the gateway's signed
+GET route. The screen showed the live owner's counts after the refresh. This did not submit
+an Inventory sync write.
+
 ## Remaining work
 
-Connect the iPhone Inventory screen to the queue and its paired owner. Pull owner
-changes into the local Inventory replica and surface pending writes and revision
-conflicts in the app. Verify an offline addition and a Mac-to-phone edit on a paired
-device.
+Connect the phone's Inventory additions to the outbox. Pull owner changes into the local
+replica and surface pending writes and revision conflicts. Verify an offline addition and a
+Mac-to-phone edit on a paired device.

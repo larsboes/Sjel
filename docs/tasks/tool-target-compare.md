@@ -1,11 +1,12 @@
 ---
 id: tool-target-compare
 title: "Compare build roots read-only"
-state: backlog
+state: cancelled
 area: tooling
 kind: maintenance
 priority: 3
 spec: docs/plans/tooling.md
+reason: "No current workflow needs artifact identity across build roots. Reopen if cache reuse leaves a concrete comparison need."
 ---
 
 # Compare build roots read-only

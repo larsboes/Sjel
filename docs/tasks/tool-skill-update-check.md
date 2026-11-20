@@ -1,18 +1,20 @@
 ---
 id: tool-skill-update-check
 title: "Check global skill revisions"
-state: backlog
+state: cancelled
 area: tooling
 kind: maintenance
 priority: 3
 spec: docs/plans/tooling.md
+reason: "Superseded by tool-unified-update, which retains the read-only revision checks."
 ---
 
 # Check global skill revisions
 
 ## Outcome
 
-Global update discovery neither installs nor changes focus.
+Global update discovery neither installs nor changes focus. The
+[unified update task](tool-unified-update.md) owns these checks.
 
 ## Acceptance
 

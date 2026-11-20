@@ -22,5 +22,7 @@ Current manuals explain interfaces without duplicating task or dependency record
 ## Verification
 
 Contributor onboarding links the engineering, Pack and release-preparation owners. The
-operations entry point routes installation and release work separately. Existing section
-anchors resolve. The link checker covers relative HTML links and ignores nested worktrees.
+operations entry point routes installation and release work separately. Architecture routes
+readers to the active crate and service roots and distinguishes owner storage from the shared
+file. The relative-link gate covers Markdown and HTML links, including compatibility anchors.
+The remaining owner manuals still need review.

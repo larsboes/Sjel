@@ -179,14 +179,13 @@ Sjel organizes all code into three nouns:
   supervised third-party software and scripts under `services/<name>/`).
 - **Pack**: Modular agent know-how and workflows under `Packs/<name>/`.
 
-See [docs/architecture/index.md](../../docs/architecture/index.md) for full topology and boundary rules.
-Shared Rust code belongs in `crates/`; third-party services in `services/`; contracts belong in `schemas/`; operator tools belong in `tools/`.
-Do not introduce unstructured `utils/` catch-alls.
+See the [architecture overview](index.md) for topology and boundary rules. Do not introduce
+unstructured `utils/` catch-alls.
 
 ### Schemas and dependency direction
 
 `schemas/` defines shared contracts: import them, never redefine them. Dependencies point downward:
-Packs -> Spine -> Capabilities -> Libraries (`libs/`).
+Packs use Spine and capability interfaces; capabilities use shared crates under `crates/`.
 Capabilities interact with other capabilities via loopback HTTP contracts and declared schemas, never
 via direct database mutation.
 
@@ -211,13 +210,12 @@ to replace it with a stock installation. The harness Pack records the current ow
 
 ### Cargo and bun are the build path
 
-`cargo` builds and tests the Rust workspace: one root workspace, one `Cargo.lock`, with each member
-manifest managing its own direct dependencies. A service manifest declares its `target/release` binary,
-and `tools/service-runner.sh` compiles it on demand. `bun` powers TypeScript tooling and UI bundles.
-Freshness of generated artifacts is enforced via `tools/check-architecture-fresh.sh`.
+Cargo builds the root Rust workspace and the separate [`apps/gpui` workspace](../../apps/gpui/Cargo.toml).
+Each workspace owns its lockfile and each member declares its direct dependencies. Service manifests
+name their `target/release` binaries; `tools/service-runner.sh` builds them on demand. Bun runs
+TypeScript tooling and builds UI bundles.
 
-Operator machinery is unified in `tools/sjel-cli` and `tools/storage` in Rust for fast parallel execution,
-with lightweight wrapper scripts maintaining stable paths.
+The Rust CLI and storage tools live in `crates/sjel-cli` and `crates/storage`; launchers live in `tools/`.
 
 Build artifacts are ephemeral. `sjel storage target` bounds debug-to-release ratio (`target/debug` within
 3× of `target/release`), verified by `tools/doctor`. Space is reclaimed via `sjel storage reclaim --repo`.
@@ -240,7 +238,7 @@ Configuration has one owner per concern (see [docs/capabilities/manifest.md](../
 | `toolchain.toml` | Host executables Sjel commands assume, with requiredness, scope and install hints |
 | `systems.toml` | Systems, services and projects that have a role in the setup |
 | `<overlay>/config/machine.toml` | OS, container runtime, enabled capabilities and state mounts for this machine. An overlay owning several machines uses `<overlay>/config/machines/<name>.toml` instead, selected by `sjel.local.toml` or the hostname |
-| `<overlay>/config/deployment.env` | facts true of the whole deployment rather than one machine or one capability — the home timezone, and `SJEL_INBOUND_TOKEN_FILE`, the reference to the shared secret every capability server authenticates inbound requests against (`libs/sjel-server/README.md`). Declared once because several capabilities need it and independent copies drift silently (`schemas/deployment.env.example`) |
+| `<overlay>/config/deployment.env` | facts true of the whole deployment rather than one machine or one capability — the home timezone, and `SJEL_INBOUND_TOKEN_FILE`, the reference to the shared secret every capability server authenticates inbound requests against ([server contract](../../crates/sjel-server/README.md)). Declared once because several capabilities need it and independent copies drift silently (`schemas/deployment.env.example`) |
 
 `tools/lib/toml.sh` is the parser for single-line scalar and array fields. More complex TOML goes
 through the shared Bun parser; no caller grows another partial parser or duplicates manifest data.
@@ -367,12 +365,9 @@ operations and `sjel search <task>` to narrow the current capability and Pack su
 installed agent skill. Repository policy lives in `AGENTS.md`; command help and capability or Pack
 contracts own operational detail.
 
-There is deliberately no separate CLI reference. `docs/sjel-cli.md` was one, and every row of it
-restated something `sjel help` already prints — a command table, the harness names, the discovery
-instruction `AGENTS.md` carries verbatim. A second copy of a generated surface is the kind of doc
-that rots first and is believed longest. `tools/install.sh` owns the installation contract: it
-links `~/.local/bin/sjel` to the tracked launcher, never overwrites a non-Sjel command at that
-path, and reports the exact shell-path action when `~/.local/bin` is absent from `PATH`.
+The CLI help owns the command reference. `tools/install.sh` links `~/.local/bin/sjel` to the
+tracked launcher, refuses to overwrite a non-Sjel command, and reports whether the directory
+needs to be added to `PATH`.
 
 ## Packs and agent harnesses
 
@@ -509,10 +504,10 @@ comes from published-release receipts. Code, tests and owner manuals describe cu
 
 | Adding | Goes in | Boundary |
 | --- | --- | --- |
-| Bounded domain, external system or data store | `capabilities/<name>/` | Register an upstream verdict before consuming external code |
-| User-facing command for one capability | `capabilities/<name>/<name>` | The shell discovers commands by capability name |
-| UI serving one capability | `capabilities/<name>/ui/` | Serve it through that capability's HTTP surface |
-| Shared code with no domain | `libs/<name>/` | Requires a second consumer and its own crate in the Cargo workspace |
+| Bounded domain, external system or data store | `crates/<name>/` or `services/<name>/` | Register an upstream verdict before consuming external code |
+| User-facing command for one capability | The owning capability | Register discovery through the CLI rather than adding a second owner |
+| Native capability view | `apps/gpui/` | Use capability interfaces for reads and writes |
+| Shared Rust code with no domain | `crates/<name>/` | Requires a second consumer and its own crate in the Cargo workspace |
 | Shared contract | `schemas/` | Import it; do not redefine it |
 | Agent workflow | `Packs/<pack>/skills/<name>/` | Public and runtime-configured through the overlay |
 | System or project Sjel connects to | `systems.toml` | Private URLs go in the overlay extension |
@@ -541,7 +536,7 @@ that the CLI and agents use. A rule the Mac and the phone share lives in a capab
 | `sjel.toml` | Sjel manifest: platform name, the release-tag pattern, default overlay root. Tracked and shared, so nothing machine-specific lives here |
 | `sjel.local.toml` | this machine's overlay root, and optionally which of that overlay's machines this is. Gitignored, one per machine, written by `tools/install.sh` (`sjel.local.toml.example` is the template) |
 | `<overlay>/config/machine.toml` | this machine's identity: os, container runtime, enabled capabilities, state-mount registry. One file per machine once an overlay holds more than one, under `config/machines/` |
-| `<overlay>/config/deployment.env` | this deployment's shared facts, resolved by `libs/sjel-config` and `libs/sjel-server` for every capability that needs one. A capability may still override, but may not silently disagree |
+| `<overlay>/config/deployment.env` | Deployment-wide values resolved by `sjel-config` and `sjel-server` |
 | `profiles.toml` | named Pack sets (`tools/packs-codex use <profile>`). Tracked and shared: a profile says which Packs belong together, while which machine deploys them stays in the overlay |
 | `upstreams.toml` | every external project: url, verdict, license, why |
 | `README.md` | what Sjel is, where it stands, and how to start |
@@ -550,9 +545,9 @@ that the CLI and agents use. A rule the Mac and the phone share lives in a capab
 | `docs/` | architecture, capability contracts, operations manuals and the area plans, published as the public site |
 | `AGENTS.md` | minimal cross-harness bootstrap that routes assistants into the `sjel` skill. Every harness, Claude Code included, reads it. There is no `CLAUDE.md`. |
 | `ARCHITECTURE.md` | generated snapshot of capabilities/Packs/upstreams/systems — never hand-edited, see `tools/generate-architecture.sh`. State mounts are machine-local and deliberately absent; `tools/doctor` reports those |
-| `capabilities/<name>/` | one dir per capability: curated README + its code as it lands |
-| `apps/` | `gpui`, the native app for Mac and iPhone, and `mac`, the Swift menu bar and CloudKit relay. Both reach capabilities through the `sjel-status` shell; neither owns domain data |
-| `libs/<name>/` | spine-owned shared code with no domain of its own — statically linked into capability binaries at compile time, own crate in the Cargo workspace from day one |
+| `crates/` | Rust capabilities, shared crates and Rust operator tooling |
+| `services/` | Supervised software, scripts and backup-only units |
+| `apps/` | `gpui`, the native app for Mac and iPhone, and `mac`, the Swift menu bar and CloudKit relay |
 | `schemas/` | shared contracts; import, never redefine |
 | `tools/` | operator tools: `install.sh`, `capability.sh` (enable, disable, resolve `requires`), `update.sh`, `doctor`, `audit` (gitleaks and osv-scanner), `storage` (disk classes from the overlay policy, `target` and `reclaim --repo`), `generate-architecture.sh`, `agent-integrations.sh`, and the `sjel-cli` behind `sjel` |
 
@@ -582,9 +577,9 @@ flowchart TB
         M["sjel.toml + upstreams.toml"]
         S["schemas/"]
         T["tools/ (install, doctor, audit, generate-architecture)"]
-        CAP["capabilities/ (domain owners)"]
+        CAP["crates/ and services/ (domain owners)"]
         SH["sjel-status (shell)"]
-        L["libs/ (spine-owned shared code)"]
+        L["crates/ (spine-owned shared code)"]
         A -->|HTTP| SH
         SH -.->|proxies + starts on demand| CAP
         L --> CAP

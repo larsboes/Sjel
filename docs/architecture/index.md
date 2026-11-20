@@ -8,17 +8,16 @@ Sjel separates the runtime, domain services, and agent workflows. The
 
 ### 1. The Spine
 
-The spine contains root manifests, `schemas/`, operator tools in `tools/` and shared libraries in
-`libs/`. The client is the native app in [`apps/gpui`](../../apps/gpui/README.md). It presents
-capability surfaces and owns no domain state.
+The Spine contains root manifests, `schemas/`, operator tools in `tools/` and shared Rust crates
+in `crates/`. The native client in [`apps/gpui`](../../apps/gpui/README.md) presents capability
+surfaces and owns no domain state.
 
 ### 2. Capabilities
 
-Capabilities own domain behavior under `capabilities/<name>/`. A capability may begin as a README;
-its `service.toml` declares runtime and backup contracts when needed. Some run a process or
-container, while a data capability owns state without running a service. Private capabilities
-may also live in the active overlay.
-See the [manifest guide](../capabilities/manifest.md).
+Rust capabilities live in `crates/<name>/`; supervised third-party software, scripts and
+backup-only units live in `services/<name>/`. Private capabilities may live in the active overlay.
+The [manifest guide](../capabilities/manifest.md) describes how `service.toml` declares runtime
+and backup contracts.
 
 ### 3. Packs
 
@@ -28,11 +27,11 @@ manifests declare the capabilities and external systems they use. See the
 
 ## Boundary invariants
 
-- Shared contracts belong in `schemas/`; reusable implementation belongs in `libs/`.
-- Capabilities use another capability's declared interface rather than mutating its tables.
-  A shared database supports cross-domain reads without transferring table ownership.
-- Public code and schemas stay in this repository. Deployment configuration and private data
-  stay in the active overlay; secrets follow the [security boundary](security.md).
+- Shared contracts belong in `schemas/`; reusable Rust implementation belongs in `crates/`.
+- Capabilities use owner interfaces for cross-domain access. The [storage architecture](storage.md)
+  describes the shared database that remains during migration.
+- Public code and schemas stay in this repository. Private configuration and data stay outside
+  the public checkout and follow the [security boundary](security.md).
 
 Read [storage](storage.md) before changing a store, [security](security.md) before changing a
 listener or authentication policy, [data processing policy](data-processing-policy.md) before

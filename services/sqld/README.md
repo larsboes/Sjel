@@ -1,10 +1,8 @@
 # sqld — the libSQL primary
 
-A libSQL primary that holds no data and has no replicas: `crates/sjel-turso` opens local files
-only ([`crates/sjel-turso/README.md`](../../crates/sjel-turso/README.md), "Embedded replicas:
-removed"). It stays until the engine decision in
-[`docs/plans/storage.md`](../../docs/plans/storage.md#4-full-migration) (§4 steps 1 and 2) either
-brings replicas back or removes it.
+This libSQL primary has no replica clients: [`sjel-turso`](../../crates/sjel-turso/README.md)
+opens only local files. [Replica retirement](../../docs/tasks/storage-remove-replica.md) owns the
+check for remaining consumers before removal.
 
 There is no code in this directory. `sqld` is Turso's published release, adopted as-is and pinned
 in [`tools/install-sqld.sh`](../../tools/install-sqld.sh); this manifest is what makes it a service

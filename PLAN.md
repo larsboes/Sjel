@@ -22,8 +22,7 @@ Finish existing contracts and acceptance before introducing another framework or
 - [Derived views and shared UI controls](docs/plans/gpui.md#derived-views).
 - [Capability boundaries](docs/plans/product.md).
 - [Work-tracking acceptance](docs/tasks/work-tracking-verification.md).
-- [Shared API contracts](docs/plans/restructure.md).
-- [Maintenance and owner-document reduction](docs/plans/restructure.md).
+- [Shared API contracts and maintenance](docs/plans/restructure.md).
 
 Directory/workspace changes require measured benefit. Scanner adoption does not waive admission
 rules. Fewer lines alone do not establish better boundaries or equivalent behavior.
@@ -67,7 +66,6 @@ own priority. Implemented phone paths keep their outstanding device checks.
 
 ## Ownership
 
-The [product page](docs/product.md) owns product scope. Capability READMEs own capability
-contracts; architecture owns cross-cutting specifications; tasks own work and evidence.
-Decisions live with the subject they govern, not in this priority index. Deferral preserves its
-acceptance check and never authorizes a replacement architecture.
+The [product page](docs/product.md) owns scope. The [documentation rules](docs/architecture/engineering.md#documentation)
+assign each fact to its owner. Deferral preserves acceptance checks without authorizing a
+replacement architecture.

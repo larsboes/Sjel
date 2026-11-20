@@ -2,7 +2,7 @@
 
 Repository Markdown owns planned work. GitHub Issues provide intake and discussion, not a second
 task database. The website renders the same records that local validation and release preparation
-read. Existing area plans retain authority for sections not yet migrated.
+read. Area plans route readers to canonical tasks and specifications.
 
 ## Records
 
@@ -113,21 +113,13 @@ Example: **Notes in Finder** — Find notes by title and folder, then open the s
 
 ## Migration and verification
 
-Inventory the whole planning corpus, then migrate reviewed batches. Classify each section as a
-task, unresolved decision, specification, manual, completed history or duplicate. Verify every
-original open acceptance has a destination or explicit rejection before deleting its source list.
-Remove completed prose without replacing it with commit breadcrumbs. Git retains the old text.
+When consolidating plans, give each open acceptance check a canonical destination or an explicit
+rejection before removing its source. Keep durable constraints with their implemented owners or
+specifications. Preserve compatibility anchors and leave completed records addressable. Git
+retains removed prose. Issue reports link tasks rather than mirroring their bodies.
 
-Existing issue reports link canonical task records rather than mirror task bodies. Preserve
-compatibility anchors when moving lists. Never overwrite a plan held by another session.
-[The migration task](../tasks/work-tracking-migration.md) records the source reconciliation;
+[The migration record](../tasks/work-tracking-migration.md) retains the reconciliation evidence;
 [the verification task](../tasks/work-tracking-verification.md) owns remaining acceptance.
-
-PLAN.md and the area indexes route unfinished work to canonical tasks. The Agent, Data, GPUI,
-Calendar and Learning source lists have been reconciled. Long-lived constraints live with
-architecture or implemented owners rather than chronological plan journals. Media retains
-Instagram drafting; Posts retains LinkedIn drafting. The roadmap groups public outcomes, not
-every maintenance task. Local acceptance does not establish public delivery.
 
 `tools/check-work.sh` runs in the repository gate registry. Model tests cover malformed records,
 references, lifecycle and exact-source acceptance. Website tests cover empty states, escaping,

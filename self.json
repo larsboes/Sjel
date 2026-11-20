@@ -403,10 +403,6 @@
       "kind": "pack"
     },
     {
-      "name": "libsql-auth",
-      "kind": "lib"
-    },
-    {
       "name": "links",
       "kind": "lib"
     },
@@ -693,15 +689,6 @@
           "transit",
           "trips"
         ]
-      }
-    },
-    {
-      "name": "sqld",
-      "kind": "capability",
-      "service": {
-        "kind": "process",
-        "requires": [],
-        "port": "8089"
       }
     },
     {
@@ -2799,16 +2786,6 @@
     },
     {
       "from": "sjel-cli",
-      "to": "libsql-auth",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "crates/sjel-cli/Cargo.toml"
-      ]
-    },
-    {
-      "from": "sjel-cli",
       "to": "places-api",
       "kinds": [
         "cargo-dep"
@@ -2820,16 +2797,6 @@
     {
       "from": "sjel-cli",
       "to": "runtime",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "crates/sjel-cli/Cargo.toml"
-      ]
-    },
-    {
-      "from": "sjel-cli",
-      "to": "setup-api",
       "kinds": [
         "cargo-dep"
       ],
@@ -3905,7 +3872,7 @@
     },
     {
       "name": "libsql-server",
-      "verdict": "adopt"
+      "verdict": "reject"
     },
     {
       "name": "lifeos",

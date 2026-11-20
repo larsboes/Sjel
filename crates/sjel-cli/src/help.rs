@@ -7,8 +7,6 @@ Discover Sjel:
   help [command]                 Show commands or one command's usage
   search <words...>              Search commands, tools, capabilities, Packs and code
   doctor                          Check this Sjel installation
-  setup [plan|apply|verify] [component]
-                                 What this machine still needs, and what applying it would do
   context with [capability]      Emit bounded current operating context
   context on [unit-or-path]      Emit bounded current repository context
   storage <browse|report|discover|installed|reclaim|target>
@@ -93,25 +91,6 @@ directly, so it holds a copy and reads that.
   path                    where the copy lives
 
 Nothing writes to the copy, and nothing written on the device comes back."#;
-
-pub const SETUP: &str = r#"Usage: sjel setup [plan|apply|verify] [component] [flags]
-
-Reports what this machine still needs for a component, and what applying it would
-change. `plan` is the default and writes nothing; `apply` needs --confirm.
-
-  plan [component] [--json]      Probe this machine; change nothing
-  apply [component] --confirm [--url <url>] [--interval-secs <n>] [--token-stdin]
-                                 Run the steps marked apply, then verify
-  verify [component] [--json]    Ask the primary itself whether the credential works
-
-A step this tool does not own is printed with its exact path and line and marked
-manual or blocked, never edited: a Cargo.toml feature is a build decision its owner
-makes, and a capability's machine-only env section has its own writer.
-
-Components:
-  turso                          Embedded replicas of a remote Turso primary
-
-Exit: 0 all good, 1 a check failed, 2 usage (nothing written)."#;
 
 pub const CAPABILITY: &str = r#"Usage: sjel capability <command>
 

@@ -16,7 +16,6 @@ backup and sync checks.
 
 ## 1. Migration acceptance
 
-- [Accept live key rotation](../tasks/storage-rotation-acceptance.md).
 - [Separate personal data from configuration](../tasks/storage-data-root.md).
 - [Protect the unsorted archive](../tasks/storage-archive-backup.md).
 - [Accept knowledge-vault cutover](../tasks/storage-knowledge-cutover.md).
@@ -51,7 +50,7 @@ Pending local writes are protected from pull. Captures remain create-only.
 
 ## 4. Full migration
 
-- [Remove unused replica infrastructure](../tasks/storage-remove-replica.md).
+- [Remove the replica setup tab from the Mac app](../tasks/task-759d37d6-8ff9-41d6-a757-a8485d47df17.md).
 - [Route reads through owners](../tasks/storage-owner-reads.md).
 - [Split capability databases](../tasks/storage-files.md).
 - [Move Health onto its own Turso WAL file](../tasks/task-8f68cb3e-631e-4646-a474-1b8a68ae447c.md).
@@ -66,7 +65,6 @@ use PRAGMA user_version. Archive the old shared database after all owners have m
 - [Prove each backup target kind](../tasks/backup-target-kinds.md).
 - [Back up each owner database](../tasks/backup-split-files.md).
 - [Choose phone-only data protection](../tasks/backup-phone-decision.md).
-- [Handle a never-created database](../tasks/backup-empty-primary.md).
 
 ## 6. Agent databases
 

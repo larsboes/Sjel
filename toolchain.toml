@@ -116,16 +116,6 @@ min_version = "0.7.0"
 why = "capabilities/macmon runs `macmon serve` for the app's Systems page; tools/sysmon power runs it as a TUI"
 install_macos = "cargo install macmon --locked"   # latest; min_version is a floor, not a target
 
-[sqld]
-required = "optional"
-os = "macos"
-needed_by = ["capability:sqld"]
-upstream = "libsql-server"
-version_cmd = "sqld --version"
-min_version = "0.24.32"
-why = "capabilities/sqld runs it as the libSQL primary other devices replicate from"
-install_macos = "tools/install-sqld.sh"   # pinned version + digest, into ~/.local/bin
-
 [exiftool]
 required = "optional"
 upstream = "exiftool"

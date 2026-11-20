@@ -41,15 +41,12 @@ mod persist;
 mod pi_config;
 mod provider_login;
 mod registry;
-mod rotation_guard;
-mod rotation_probe;
 mod runargs;
 mod runner;
 mod runtime;
 mod schedule;
 mod search;
 mod self_model;
-mod setup;
 mod sparpreis_watch;
 mod testflight;
 mod time;
@@ -150,10 +147,6 @@ fn main() -> ExitCode {
             println!("sjel-service-runner-held-restart-v1");
             return ExitCode::SUCCESS;
         }
-        "--service-runner-protocol" if rest.is_empty() => {
-            println!("sjel-service-runner-sqld-rotation-v1");
-            return ExitCode::SUCCESS;
-        }
         "harnesses" => return harnesses::run(rest),
         "packs-claude" | "packs-codex" | "packs-opencode" | "packs-copilot" | "packs-pi" => {
             return packs::run(command, rest)
@@ -196,8 +189,6 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "doctor" => doctor::run(rest),
         "copilot" => copilot::run(root, rest),
         "pi" => pi_config::run(root, rest),
-        // What this machine still needs, and what applying it would do (tools/sjel-cli/src/setup/).
-        "setup" => setup::run(rest),
         "fda-launcher" => {
             let mut command = Command::new(tool("tools/fda-launcher/install"));
             if rest.is_empty() {
@@ -293,7 +284,6 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "work" => return exec(Command::new(root.join("tools/work")).arg("--help")),
         "update" => help::UPDATE,
         "mirror" => help::MIRROR,
-        "setup" => help::SETUP,
         "gates" | "test" | "check" => help::GATES,
         "ci-cache" => {
             "Usage: sjel ci-cache [prune [--apply]]  (prune without --apply deletes nothing)"

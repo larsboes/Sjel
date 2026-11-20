@@ -3148,15 +3148,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libsql-auth"
-version = "0.1.0"
-dependencies = [
- "base64 0.23.1",
- "ring",
- "serde_json",
-]
-
-[[package]]
 name = "libsql-ffi"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5549,7 +5540,6 @@ dependencies = [
  "distribution-api",
  "entities-api",
  "getrandom 0.4.3",
- "libsql-auth",
  "places-api",
  "regex",
  "reqwest",
@@ -5558,7 +5548,6 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "setup-api",
  "sha2 0.11.1",
  "signal-hook",
  "sjel-agent",

@@ -379,15 +379,16 @@ why = "Its dependency bound prevents upgrading to the patched bundled SQLite. Sj
 url = "https://github.com/tursodatabase/libsql"
 verdict = "adopt"
 license = "MIT"
-summary = "SQLite fork with async I/O, concurrent writes (BEGIN CONCURRENT/MVCC), and embedded replicas"
-why = "Evaluated 2026-10-21 against the live store (274 MB, 107 tables) as the engine for the multi-tenant store and the app's client: it connects in 1.25 ms, passes PRAGMA table discovery over all 107 tables, runs JSON1 json_each predicates with no translation and serves 10 concurrent readers in 43 ms, at byte-level SQLite compatibility. It replaces rusqlite's single-writer limitation, and local embedded mode needs no network, daemon or remote server."
+summary = "SQLite fork that opens the remaining shared database and the app's local copies"
+why = "Evaluated 2026-10-21 against the live store (274 MB, 107 tables) as the engine for the multi-tenant store and the app's client: it connects in 1.25 ms, passes PRAGMA table discovery over all 107 tables, runs JSON1 json_each predicates with no translation and serves 10 concurrent readers in 43 ms, at byte-level SQLite compatibility. Sjel uses local embedded mode only; replica sync was removed (crates/sjel-turso/README.md, \"Embedded replicas: removed\")."
 
 [libsql-server]
 url = "https://github.com/tursodatabase/libsql"
-verdict = "adopt"
+verdict = "reject"
 license = "MIT"
-summary = "sqld, the libSQL database server; runs as an empty primary with no replicas until storage §4 decides"
-why = "The server half of the libsql repository, consumed completely differently: the crate comes from crates.io while sqld ships only as release binaries, installed by tools/install-sqld.sh at one version and one digest, because it is on neither Homebrew nor crates.io. This Mac is the primary and a phone the first replica; the pin is a compatibility fact measured against the libsql 0.10.0 crate, and upstream has been quiet since 2025-02-14, which is recorded as a risk because a primary is on the critical path."
+summary = "sqld, the libSQL database server; removed with the unused replica infrastructure"
+why = "Removed 2026-11-20. The primary held no data and served no replica after embedded replicas were dropped on 2026-10-22 (crates/sjel-turso/README.md, \"Embedded replicas: removed\"), and owners moved to their own Turso WAL files (docs/tasks/storage-files.md)."
+revisit = "Reopen only if a device needs a replica that owner APIs and the phone outbox cannot serve."
 
 [grafeo]
 url = "https://github.com/GrafeoDB/grafeo"
@@ -408,8 +409,8 @@ url = "https://github.com/tursodatabase/turso"
 verdict = "adopt"
 license = "MIT"
 summary = "Native WAL engine for capability-owned database files"
-why = "Inventory, Entities, Calendar, Software, Punctuality, Documents, Finance, Places and Transit run on their own Turso WAL files. Each cutover restored a receipt-backed backup with exact row parity (docs/tasks/storage-files.md). Builds disable optional sync, FTS and the allocator replacement. Documents replaces FTS with its own Unicode61-compatible search."
-revisit = "MVCC needs logical-log recovery and proof that backups keep committed writes during concurrent use before any owner switches to it."
+why = "Inventory, Entities, Calendar, Software, Punctuality, Documents, Finance, Places, Transit and Health run on their own Turso WAL files at 0.8.4. Each cutover restored a receipt-backed backup with exact row parity (docs/tasks/storage-files.md). Builds disable optional sync, FTS and the allocator replacement. Turso FTS missed prefix and prefix-OR matches on the Documents fixture and failed the arm64 iOS build, so Documents keeps its own Unicode61-compatible search (research/benchmarks/storage-engine/README.md). Sync stays off because owner APIs and the phone outbox carry changes, not file replication."
+revisit = "MVCC needs logical-log recovery, a fix for converted AUTOINCREMENT sequences and proof that backups keep committed writes during concurrent use. On a stable 0.9 release, re-measure FTS and evaluate change data capture for durable sync cursors."
 
 [bun]
 url = "https://github.com/oven-sh/bun"

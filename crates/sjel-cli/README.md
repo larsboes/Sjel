@@ -17,8 +17,6 @@ sjel projects projects         # run the projects CLI
 sjel operator-profile show     # run the operator-profile CLI
 sjel search <query>            # search across skills, tools, and docs
 sjel doctor                    # diagnostic health and contract checks
-sjel setup plan                # inspect required host and capability configuration
-sjel setup apply --confirm     # apply host and capability configuration steps
 sjel harnesses sync --all      # synchronize skill packs across agent harnesses
 sjel update report             # check dependencies and toolchain freshness
 sjel audit                     # security vulnerability audit across locks and packages
@@ -56,7 +54,7 @@ the existing supervisor retry behavior.
 
 Operator tooling is consolidated into a single Rust crate rather than independent scripts:
 
-1. **Shared runtime state.** Commands like `sjel doctor`, `sjel setup`, and `sjel capability`
+1. **Shared runtime state.** Commands like `sjel doctor` and `sjel capability`
    inspect manifests, system configs, overlay state, and database tables. Compiling them in one binary
    avoids subprocess spawning overhead and eliminates duplicate schema parsers.
 2. **In-process ledger inspection.** Harness synchronization, pack drift hooks, and self-model queries
@@ -65,23 +63,6 @@ Operator tooling is consolidated into a single Rust crate rather than independen
 3. **Hermetic path and overlay resolution.** Centralizing filesystem logic in `src/paths.rs` guarantees
    that overlay hierarchies (`$SJEL_PERSONAL_ROOT`), cargo target locations, and state mounts are
    interpreted consistently across all maintenance tasks.
-
-## Why this shape: Setup planning and execution
-
-Host and service setup via `sjel setup` (`src/setup/mod.rs`) decouples inspection from mutation:
-
-1. **`plan` is the default and writes nothing.** Querying a host's readiness inspects system properties
-   without altering state.
-2. **`apply` requires explicit confirmation.** Every applied step is idempotent; running setup on a
-   configured system produces a no-op verification report.
-3. **Direct execution.** Setup plans contain only machine-executable steps executed directly by the binary,
-   avoiding instructions that require manual operator execution.
-4. **Credential isolation.** Secrets (such as replication tokens) are accepted exclusively via standard
-   input (`--token-stdin`) and written directly to overlay deployment environments, preventing exposure
-   in process arguments, logs, or command history.
-5. **Decoupled API representation.** All setup commands support `--json` output, enabling web or native
-   clients (such as `sjel-status` and desktop interfaces) to render status without running as privileged
-   host agents.
 
 ## Why this shape: Host watch and store integration
 

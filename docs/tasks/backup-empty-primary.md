@@ -1,11 +1,12 @@
 ---
 id: backup-empty-primary
 title: "Handle a never-created database"
-state: backlog
+state: cancelled
 area: storage
 kind: fix
 priority: 2
 spec: docs/plans/storage.md
+reason: "Replica removal eliminated sqld, the only consumer of a declared but never-created database."
 ---
 
 # Handle a never-created database

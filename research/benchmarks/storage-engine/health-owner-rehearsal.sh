@@ -16,8 +16,7 @@ mkdir -m 700 "$2"
 cd "$2"
 work=$(pwd -P)
 overlay="$work/overlay"
-cap=health-wal-backup
-mkdir -p "$overlay/config" "$overlay/capabilities/$cap" "$overlay/data/health" "$work/target"
+mkdir -p "$overlay/config" "$overlay/data/health" "$overlay/data/sjel" "$work/target"
 printf '%s\n' health-owner-rehearsal > "$work/fixture-bearer"
 printf 'SJEL_INBOUND_TOKEN_FILE=%s/fixture-bearer\n' "$work" > "$overlay/config/deployment.env"
 case "$(uname -s)" in
@@ -25,15 +24,8 @@ case "$(uname -s)" in
     Linux) os=linux ;;
     *) echo 'unsupported rehearsal host' >&2; exit 1 ;;
 esac
-printf 'os = "%s"\ncontainer_runtime = "docker"\ncapabilities = ["%s"]\n' "$os" "$cap" > "$overlay/config/machine.toml"
-printf '[rehearsal-target]\nkind = "local"\npath = "%s/target"\n' "$work" > "$overlay/config/systems.local.toml"
-cat > "$overlay/capabilities/$cap/service.toml" <<'MANIFEST'
-kind = "data"
-name = "health-wal-backup"
-backup_owner_snapshot = "health"
-backup_sqlite_online = "data/health/snapshots/health.db"
-backup_target = "rehearsal-target"
-MANIFEST
+printf 'os = "%s"\ncontainer_runtime = "docker"\ncapabilities = ["health", "store"]\n' "$os" > "$overlay/config/machine.toml"
+printf '[backup-target]\nkind = "local"\npath = "%s/target"\n' "$work" > "$overlay/config/systems.local.toml"
 cat > export.xml <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <HealthData locale="en_US">
@@ -44,6 +36,8 @@ cat > export.xml <<'XML'
 XML
 
 export SJEL_OVERLAY_ROOT="$overlay" SJEL_PERSONAL_ROOT="$overlay"
+# Only the synthetic overlay exercises the operator-only restore path.
+export SJEL_AGENT=0
 export SJEL_HEALTH_DB_PATH="$overlay/data/health/health.db" SJEL_DB_PATH="$work/unused-shared.db"
 export SJEL_HEALTH_BIN="$binary"
 port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
@@ -65,12 +59,34 @@ jq -e '.metrics[] | select(.metric == "steps") | .days == 2' metrics.json >/dev/
 test ! -e "$work/unused-shared.db"
 echo 'The CLI imported and read through the owner socket; the shared database was not opened.'
 
-"$tools/backup.sh" --no-prune "$cap"
-receipt="$overlay/backup/receipts/$cap.json"
-archive="$work/target/$cap/$(jq -er '.tarball' "$receipt")"
-"$tools/restore.sh" "$cap" "$archive" --receipt "$receipt" --destination "$work/restored"
-restored="$work/restored/data/health/snapshots/health.db"
-test "$(sqlite3 -readonly "file:$restored?immutable=1" 'SELECT count(*) FROM health_days')" = 3
-test "$(sqlite3 -readonly "file:$restored?immutable=1" 'SELECT count(*) FROM health_imports')" = 1
-test "$(sqlite3 -readonly "file:$restored?immutable=1" 'PRAGMA integrity_check')" = ok
-echo 'The owner snapshot backup restored three daily values and one import in isolation.'
+check_overlay="$work/check-overlay"
+staged="$check_overlay/data/health/health.db"
+mkdir -p "$(dirname "$staged")"
+python3 - "$tools/owner-store-cutover.py" "$overlay" "$binary" "$port" "$staged" <<'PY'
+from pathlib import Path
+import runpy
+import shutil
+import subprocess
+import sys
+
+cutover = runpy.run_path(sys.argv[1])
+overlay, binary, staged = map(Path, (sys.argv[2], sys.argv[3], sys.argv[5]))
+machine = overlay / 'config/machine.toml'
+cutover['verify_owner'](overlay, machine, overlay / 'data/health/health.db', binary,
+                        'http://127.0.0.1:' + sys.argv[4])
+shared = overlay / 'data/sjel/sjel.db'
+shutil.copyfile(overlay / 'data/health/snapshots/health.db', shared)
+subprocess.run(['sqlite3', shared, 'CREATE TABLE fixture_other_owner (id INTEGER NOT NULL);'], check=True)
+cutover['stage_shared'](overlay, machine, shared, staged)
+cutover['compare_health'](shared, staged, closed=False)
+assert not any((overlay / 'data/.restore-scratch').iterdir())
+PY
+(
+    unset SJEL_HEALTH_DB_PATH
+    SJEL_OVERLAY_ROOT="$check_overlay" SJEL_PERSONAL_ROOT="$check_overlay" "$binary" check-owner
+)
+test "$(sqlite3 -readonly "file:$staged?immutable=1" 'SELECT count(*) FROM health_days')" = 3
+test "$(sqlite3 -readonly "file:$staged?immutable=1" 'SELECT count(*) FROM health_imports')" = 1
+test "$(sqlite3 -readonly "file:$staged?immutable=1" "SELECT seq FROM sqlite_sequence WHERE name='health_imports'")" = 1
+test "$(sqlite3 -readonly "file:$staged?immutable=1" "SELECT count(*) FROM sqlite_schema WHERE name='fixture_other_owner'")" = 0
+echo 'Both receipt-backed restores passed. Staging preserved the two Health tables and their sequence and excluded the unrelated table.'

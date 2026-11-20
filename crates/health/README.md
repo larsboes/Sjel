@@ -4,10 +4,10 @@ The operator's daily health values from Apple Health: sleep, activity, heart and
 per metric per day, in metric units. Data class `c1`: the operator allows cloud models to read it
 (task `task-bd7107c0-a1a4-4bbf-8206-19acd4ffc6a6`).
 
-The default build stores the values in the shared database. A `turso-wal` build stores them in
-Health's own owner file, named by `SJEL_HEALTH_DB_PATH`. Only the server opens that file: CLI
-imports and reads go to it as jobs on the owner socket, and `health-wal-backup` takes its backups
-from an owner snapshot.
+The default build uses the shared database. A `turso-wal` build opens the staged file at
+`data/health/health.db` in the overlay. `SJEL_HEALTH_DB_PATH` overrides that location. In normal
+operation, CLI imports and reads go through the owner socket, and `health-wal-backup` takes its
+backups from an owner snapshot. See the [cutover runbook](../../docs/tasks/task-8f68cb3e-631e-4646-a474-1b8a68ae447c.md).
 
 ## Surface
 

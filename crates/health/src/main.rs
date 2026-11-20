@@ -268,12 +268,17 @@ fn router(state: Arc<AppState>) -> Router {
 fn database() -> PathBuf {
     #[cfg(feature = "turso-wal")]
     {
-        sjel_config::env_var("SJEL_HEALTH_DB_PATH")
+        if let Some(path) = sjel_config::env_var("SJEL_HEALTH_DB_PATH")
             .ok()
             .filter(|path| !path.trim().is_empty())
-            .map(|path| sjel_config::expand_tilde(&path))
+        {
+            return sjel_config::expand_tilde(&path);
+        }
+        sjel_config::overlay_data_dir("health")
+            .map(|dir| dir.join("health.db"))
+            .filter(|path| path.is_file())
             .unwrap_or_else(|| {
-                eprintln!("health: SJEL_HEALTH_DB_PATH must name the separate owner file");
+                eprintln!("health: no staged owner file; set SJEL_HEALTH_DB_PATH or stage data/health/health.db");
                 std::process::exit(1);
             })
     }
@@ -472,6 +477,14 @@ fn main() {
         ("metrics", None) => std::process::exit(runtime.block_on(print_json("metrics", None))),
         ("imports", None) => std::process::exit(runtime.block_on(print_json("imports", None))),
         ("summary", days) => std::process::exit(runtime.block_on(print_json("summary", days))),
+        #[cfg(feature = "turso-wal")]
+        ("check-owner", None) => runtime.block_on(async {
+            let store = open().await;
+            if let Err(error) = store.store.metrics().await {
+                eprintln!("health: staged owner check failed: {error}");
+                std::process::exit(1);
+            }
+        }),
         #[cfg(feature = "turso-wal")]
         ("snapshot", None) => {
             if let Err(error) = runtime.block_on(sjel_server::owner_snapshot::submit("health")) {

@@ -150,6 +150,31 @@ TMPDIR="$ROOT" expect_fail_with "live checkout temporary directory" "temporary d
   "$RESTORE" vaultwarden "$SCRATCH/vaultwarden.tar.gz" --destination "$SCRATCH/live-tmp-out"
 [ ! -e "$SCRATCH/live-tmp-out" ] || { echo "FAIL: refused temporary directory created a destination"; fails=$((fails + 1)); }
 
+(
+  export SJEL_OVERLAY_ROOT="$SCRATCH/overlay" SJEL_PERSONAL_ROOT="$SCRATCH/overlay" SJEL_AGENT=0
+  private="$SJEL_OVERLAY_ROOT/data/.restore-scratch"
+  mkdir -p "$private"
+  archive="$SCRATCH/vaultwarden.tar.gz"
+  receipt="$SCRATCH/vaultwarden-receipt.json"
+  expect_fail_with "normal restore into overlay" "destination may not be inside the active private overlay" \
+    "$RESTORE" vaultwarden "$archive" --receipt "$receipt" --destination "$private/normal"
+  expect_fail_with "private restore into live data" "must be under overlay data/.restore-scratch" \
+    "$RESTORE" vaultwarden "$archive" --receipt "$receipt" --private-scratch --destination "$SJEL_OVERLAY_ROOT/data/live"
+  ln -s "$SJEL_OVERLAY_ROOT/data" "$private/escape"
+  expect_fail_with "private restore through a symlink" "must be under overlay data/.restore-scratch" \
+    "$RESTORE" vaultwarden "$archive" --receipt "$receipt" --private-scratch --destination "$private/escape/live"
+  mkdir "$private/pre-existing"
+  expect_fail_with "private restore into an existing directory" "requires a new destination" \
+    "$RESTORE" vaultwarden "$archive" --receipt "$receipt" --private-scratch --destination "$private/pre-existing"
+  SJEL_AGENT=1 expect_fail_with "agent private restore" "requires an operator session" \
+    "$RESTORE" vaultwarden "$archive" --receipt "$receipt" --private-scratch --destination "$private/agent"
+  expect_pass "receipt-verified private scratch restore" \
+    "$RESTORE" vaultwarden "$archive" --receipt "$receipt" --private-scratch --destination "$private/verified"
+  [ -f "$private/verified/data/vaultwarden/data/db.sqlite3" ] || fails=$((fails + 1))
+  [ ! -e "$SJEL_OVERLAY_ROOT/data/live" ] || fails=$((fails + 1))
+  [ "$fails" -eq 0 ]
+) || fails=$((fails + 1))
+
 container_payload="$SCRATCH/container-payload"
 container_stage="$SCRATCH/container-stage"
 mkdir -p "$container_payload" "$container_stage"

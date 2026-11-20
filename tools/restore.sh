@@ -10,7 +10,7 @@ source "$TOOLS_DIR/lib/paths.sh"
 source "$TOOLS_DIR/lib/pipe.sh"
 
 usage() {
-  echo "usage: restore.sh <capability> <archive.tar.gz> [--receipt <receipt.json>] [--destination <empty-dir>] [--compare-archive-source <dir>] [--allow-legacy]" >&2
+  echo "usage: restore.sh <capability> <archive.tar.gz> [--receipt <receipt.json>] [--destination <empty-dir>] [--private-scratch] [--compare-archive-source <dir>] [--allow-legacy]" >&2
   exit 1
 }
 
@@ -23,6 +23,7 @@ DEST_ARG=""
 RECEIPT=""
 ARCHIVE_SOURCE=""
 ALLOW_LEGACY=0
+PRIVATE_SCRATCH=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --receipt)
@@ -37,6 +38,9 @@ while [ $# -gt 0 ]; do
       [ "$CAP" = archive ] && [ $# -ge 2 ] && [ -d "$2" ] || usage
       ARCHIVE_SOURCE="$2"; shift 2
       ;;
+    --private-scratch)
+      PRIVATE_SCRATCH=1; shift
+      ;;
     --allow-legacy)
       ALLOW_LEGACY=1; shift
       ;;
@@ -47,7 +51,11 @@ done
 case "$CAP" in
   ''|*[!A-Za-z0-9._-]*) echo "restore.sh: invalid capability name" >&2; exit 1 ;;
 esac
-if [ "$CAP" = archive ]; then umask 077; fi
+if [ "$PRIVATE_SCRATCH" -eq 1 ]; then
+  [ -n "$DEST_ARG" ] && [ -n "$RECEIPT" ] && [ "$ALLOW_LEGACY" -eq 0 ] || usage
+  [ "${SJEL_AGENT:-0}" != 1 ] || { echo "restore.sh: private scratch requires an operator session" >&2; exit 1; }
+fi
+if [ "$CAP" = archive ] || [ "$PRIVATE_SCRATCH" -eq 1 ]; then umask 077; fi
 
 # The manifest is read from the checkout by default. `SJEL_RESTORE_MANIFEST` exists for
 # tools/restore.test.sh: its container-path case needs a capability that declares
@@ -65,7 +73,9 @@ DEST_AUTO=0
 RESTORE_COMPLETE=0
 
 fail() { echo "restore.sh: $*" >&2; exit 1; }
-TEMP_ROOT="$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P)" || fail "temporary directory does not exist"
+if [ "$PRIVATE_SCRATCH" -eq 0 ]; then
+  TEMP_ROOT="$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P)" || fail "temporary directory does not exist"
+fi
 
 sha256_file() {
   if command -v shasum >/dev/null 2>&1; then
@@ -92,6 +102,7 @@ if [ -n "$RECEIPT" ]; then
   if [ -n "$RECEIPT_SHA256" ]; then
     [ "$RECEIPT_SHA256" = "$ARCHIVE_SHA256" ] || fail "archive SHA-256 does not match the receipt"
   else
+    [ "$PRIVATE_SCRATCH" -eq 0 ] || fail "private scratch requires a receipt with SHA-256"
     echo "restore.sh: warning: legacy receipt has no SHA-256; size is the only receipt-level check" >&2
   fi
 fi
@@ -152,11 +163,22 @@ fi
 SJEL_REAL="$(cd "$SJEL_ROOT" && pwd -P)"
 OVERLAY_REAL="$(cd "$SJEL_PERSONAL_ROOT" 2>/dev/null && pwd -P || true)"
 path_within "$DEST" "$SJEL_REAL" && fail "destination may not be inside the Sjel checkout"
-[ -n "$OVERLAY_REAL" ] && path_within "$DEST" "$OVERLAY_REAL" \
-  && fail "destination may not be inside the active private overlay"
-path_within "$TEMP_ROOT" "$SJEL_REAL" && fail "temporary directory may not be inside the Sjel checkout"
-[ -n "$OVERLAY_REAL" ] && path_within "$TEMP_ROOT" "$OVERLAY_REAL" \
-  && fail "temporary directory may not be inside the active private overlay"
+if [ "$PRIVATE_SCRATCH" -eq 1 ]; then
+  # The caller cleans up its workspace. Never extract to a pre-existing destination.
+  [ -n "$OVERLAY_REAL" ] && [ "$DEST_NEEDS_CREATE" -eq 1 ] && [ ! -L "$DEST" ] \
+    || fail "private scratch requires a new destination in the active overlay"
+  scratch_root="$OVERLAY_REAL/data/.restore-scratch"
+  case "$DEST" in
+    "$scratch_root"/*) TEMP_ROOT="$(dirname "$DEST")" ;;
+    *) fail "private scratch destination must be under overlay data/.restore-scratch" ;;
+  esac
+else
+  [ -n "$OVERLAY_REAL" ] && path_within "$DEST" "$OVERLAY_REAL" \
+    && fail "destination may not be inside the active private overlay"
+  path_within "$TEMP_ROOT" "$SJEL_REAL" && fail "temporary directory may not be inside the Sjel checkout"
+  [ -n "$OVERLAY_REAL" ] && path_within "$TEMP_ROOT" "$OVERLAY_REAL" \
+    && fail "temporary directory may not be inside the active private overlay"
+fi
 # Refused BEFORE the destination exists, for the reason the container preflight this replaces
 # existed (#163): the one operation whose purpose is proving a backup is recoverable must not
 # announce that it cannot, having already created a directory and extracted into it.
@@ -184,7 +206,7 @@ cleanup() {
 trap cleanup EXIT
 
 case "$DEST_NEEDS_CREATE" in
-  1) mkdir "$DEST" ;;
+  1) mkdir "$DEST"; DEST_AUTO="$PRIVATE_SCRATCH" ;;
   2) DEST="$(mktemp -d "$DEST")"; DEST_AUTO=1 ;;
 esac
 

@@ -245,8 +245,8 @@ pub const CARGO: &str = r#"Usage: sjel cargo <args...>
 
 cargo, with the four things a run on this machine has to be protected from:
 
-  a scratch CARGO_TARGET_DIR   the repository's target/release/<bin> IS the binary a
-                               live service is running, and replacing it kills it
+  a scratch CARGO_TARGET_DIR   the repository's target/release/<bin> IS the binary
+                               the supervisor starts; a test build must not replace it
   --release refused            for the same reason
   a scratch overlay            SJEL_* is cleared, then pointed at a throwaway root
   scratch projection roots     trips, finance, interior and comms export notes into

@@ -15,6 +15,7 @@ pub const ROUTE_PUNCTUALITY_HEALTH: &str = "/health";
 pub const ROUTE_PUNCTUALITY_ROUTES: &str = "/routes";
 pub const ROUTE_PUNCTUALITY_LOOKUP: &str = "/lookup";
 pub const ROUTE_PUNCTUALITY_STATIONS: &str = "/stations";
+pub const ROUTE_PUNCTUALITY_STATION_NAME: &str = "/station-name";
 
 pub const MIN_SAMPLE: i64 = 30;
 pub const MAX_LOOKUP_STOPS: usize = 200;

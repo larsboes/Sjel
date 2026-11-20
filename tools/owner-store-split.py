@@ -17,6 +17,12 @@ OWNERS = {
         "calendar_rhythms",
         "calendar_trip_materializations",
     },
+    "punctuality": {
+        "punctuality_ingest_months",
+        "punctuality_ingest_runs",
+        "punctuality_stations",
+        "punctuality_stop_stats",
+    },
     "software": {"software_apps", "software_decisions"},
 }
 

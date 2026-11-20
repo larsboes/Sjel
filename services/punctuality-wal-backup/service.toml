@@ -1,0 +1,6 @@
+kind                  = "data"
+name                  = "punctuality-wal-backup"
+requires              = ["punctuality"]
+backup_owner_snapshot = "punctuality"
+backup_sqlite_online  = "data/punctuality/snapshots/punctuality.db"
+backup_target         = "backup-target"

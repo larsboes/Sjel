@@ -41,6 +41,11 @@ const ROUTES: &[route_manifest::Route] = &[
          the row predates it.",
     ),
     r("GET", "/stations", "Station search. Requires a query."),
+    r(
+        "GET",
+        "/station-name",
+        "Exact station name from the dataset for an EVA code. Requires eva.",
+    ),
 ];
 
 /// Shorthand so the table above reads as a table.
@@ -187,8 +192,59 @@ async fn handle_station(State(state): State<AppState>, Query(p): Query<StationQu
     Ok(Json(value))
 }
 
+#[derive(Deserialize)]
+struct StationNameQuery {
+    eva: String,
+}
+
+async fn handle_station_name(
+    State(state): State<AppState>,
+    Query(query): Query<StationNameQuery>,
+) -> ApiResult {
+    let eva = query.eva;
+    if eva.is_empty() || eva.len() > 16 || !eva.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid EVA code".into(),
+        ));
+    }
+    let store = state.store;
+    let name =
+        tokio::task::spawn_blocking(move || store.station_name(&eva).map_err(|e| e.to_string()))
+            .await
+            .map_err(fail)?
+            .map_err(fail)?;
+    Ok(Json(json!(name)))
+}
+
+#[cfg(feature = "turso-wal")]
+#[path = "jobs.rs"]
+mod jobs;
+
+#[cfg(feature = "turso-wal")]
+fn fatal(error: impl std::fmt::Display) -> ! {
+    eprintln!("punctuality-server: {error}");
+    std::process::exit(1);
+}
+
 #[tokio::main]
 async fn main() {
+    #[cfg(feature = "turso-wal")]
+    match std::env::args().nth(1).as_deref() {
+        Some("snapshot") if std::env::args().len() == 2 => {
+            sjel_server::owner_snapshot::submit("punctuality")
+                .await
+                .unwrap_or_else(|error| fatal(error));
+            return;
+        }
+        Some(_) => fatal("usage: punctuality-server [snapshot]"),
+        None if sjel_config::env_var("SJEL_PUNCTUALITY_DB_PATH")
+            .map_or(true, |path| path.trim().is_empty()) =>
+        {
+            fatal("Turso requires SJEL_PUNCTUALITY_DB_PATH to name the separate owner file");
+        }
+        None => {}
+    }
     let cfg = Config::load();
     // rusqlite is a blocking API over a file: an open on an async worker holds that
     // thread for the migration and, under a busy writer, for busy_timeout as well.
@@ -219,11 +275,29 @@ async fn main() {
     // in one file rather than two -- resolution itself lives in sjel_server.
     let port = sjel_server::resolve_port(None, None, 8085);
 
+    #[cfg(feature = "turso-wal")]
+    let owner_jobs = {
+        let store = Arc::clone(&state.store);
+        let database = Arc::new(cfg.database_path.clone());
+        let jobs = jobs::router(Arc::new(cfg), Arc::clone(&store));
+        sjel_server::owner_snapshot::serve_with_jobs(
+            "punctuality",
+            database,
+            move |database, target| {
+                store
+                    .snapshot(database, target)
+                    .map_err(|error| error.to_string())
+            },
+            jobs,
+        )
+    };
+
     let app = Router::new()
         .route("/routes", get(routes))
         .route("/health", get(handle_health))
         .route("/lookup", post(handle_lookup))
         .route("/stations", get(handle_station))
+        .route("/station-name", get(handle_station_name))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -231,7 +305,11 @@ async fn main() {
     // with no auth, and binding it to the LAN would be a decision nobody made. That
     // rationale is now sjel_server::serve_local's policy (this crate's bind-failure
     // behavior became the shared default there, too).
-    sjel_server::serve_local("punctuality", port, app).await;
+    let http = sjel_server::serve_local("punctuality", port, app);
+    #[cfg(feature = "turso-wal")]
+    tokio::join!(http, owner_jobs);
+    #[cfg(not(feature = "turso-wal"))]
+    http.await;
 }
 
 #[cfg(test)]

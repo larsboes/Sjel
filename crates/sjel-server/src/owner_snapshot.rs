@@ -9,7 +9,11 @@ use std::{
 use crate::{serve_unix, InboundAuth};
 use axum::{http::StatusCode, routing::post, Router};
 
-fn socket_path(owner: &str) -> Result<PathBuf, &'static str> {
+/// Find the protected socket for this local owner.
+///
+/// # Errors
+/// Returns an error when the deployment has no overlay.
+pub fn socket_path(owner: &str) -> Result<PathBuf, &'static str> {
     sjel_config::overlay_root()
         .map(|root| root.join("secrets").join(format!("{owner}-jobs.sock")))
         .ok_or("owner snapshot requires an overlay")
@@ -51,12 +55,22 @@ pub async fn serve(
     database: Arc<PathBuf>,
     snapshot: impl Fn(&Path, &Path) -> Result<(), String> + Clone + Send + Sync + 'static,
 ) {
+    serve_with_jobs(owner, database, snapshot, Router::new()).await;
+}
+
+/// Serve the snapshot and other local jobs under the same credential gate.
+pub async fn serve_with_jobs(
+    owner: &str,
+    database: Arc<PathBuf>,
+    snapshot: impl Fn(&Path, &Path) -> Result<(), String> + Clone + Send + Sync + 'static,
+    jobs: Router,
+) {
     let socket = socket_path(owner).unwrap_or_else(|error| panic!("{owner}: {error}"));
     let target = sjel_config::overlay_data_dir(owner)
         .expect("owner snapshot requires an overlay")
         .join("snapshots")
         .join(format!("{owner}.db"));
-    let router = Router::new().route(
+    let router = jobs.route(
         "/snapshot",
         post(move || async move {
             tokio::task::spawn_blocking(move || snapshot(&database, &target))

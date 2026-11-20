@@ -26,13 +26,19 @@ path = "src/main.rs"
 name = "punctuality-server"
 path = "src/server.rs"
 
+[features]
+default = ["sqlite"]
+sqlite = ["dep:rusqlite", "dep:sjel-store"]
+turso-wal = ["dep:sjel-native-wal"]
+
 [dependencies]
 # Outbound HTTP goes through one factory: the user-agent, the timeout and the
 # connection pool are decided there, not at each call site (libs/sjel-http).
 sjel-http = { path = "../sjel-http" }
 sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }
-sjel-store = { path = "../sjel-store" }
+sjel-store = { path = "../sjel-store", optional = true }
+sjel-native-wal = { path = "../sjel-native-wal", optional = true }
 punctuality-api = { path = "../punctuality-api" }
 route-manifest = { path = "../route-manifest" }
 # arrow-rs (upstreams.toml [arrow-rs]) -- the parquet reader. Pure Rust, which is the
@@ -45,7 +51,7 @@ arrow = "=60.1.0"
 # depend on whichever SQLite the host ships; upstreams.toml [rusqlite] has the
 # measurement that settled it. Blocking, which matches this crate: ingest is a batch
 # job and the CLI is a batch job.
-rusqlite.workspace = true
+rusqlite = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["blocking", "json"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

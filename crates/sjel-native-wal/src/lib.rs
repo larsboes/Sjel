@@ -8,9 +8,12 @@ use std::{
     sync::{Mutex, OnceLock},
     time::Duration,
 };
-use turso::{Builder, Database, Error, IntoParams, Statement};
+use turso::{Builder, Database, IntoParams, Statement};
 
-pub use turso::{params, params_from_iter, transaction::TransactionBehavior, Result};
+pub use turso::{params, params_from_iter, transaction::TransactionBehavior, Error, Result};
+/// The UTC timestamp expression used in persisted Sjel records.
+pub const NOW: &str = "strftime('%Y-%m-%d %H:%M:%f+00:00','now')";
+
 pub struct Row<'row> {
     row: &'row turso::Row,
     columns: &'row [String],
@@ -154,8 +157,29 @@ impl Connection {
         params: impl IntoParams,
         decode: impl FnOnce(&Row<'_>) -> Result<T>,
     ) -> Result<T> {
+        self.prepare(sql)?.query_row(params, decode)
+    }
+}
+
+pub struct Query(Statement);
+
+impl Query {
+    /// Execute the prepared statement with new parameters.
+    ///
+    /// # Errors
+    /// Returns an error if the statement fails or returns rows.
+    pub fn execute(&mut self, params: impl IntoParams) -> Result<usize> {
+        let changed = block_on(self.0.execute(params))?;
+        usize::try_from(changed).map_err(|error| Error::ConversionFailure(error.to_string()))
+    }
+
+    pub fn query_row<T>(
+        &mut self,
+        params: impl IntoParams,
+        decode: impl FnOnce(&Row<'_>) -> Result<T>,
+    ) -> Result<T> {
         let (row, columns) = block_on(async {
-            let mut rows = self.0.query(sql, params).await?;
+            let mut rows = self.0.query(params).await?;
             let columns = rows.column_names();
             let row = rows.next().await?.ok_or(Error::QueryReturnedNoRows)?;
             // Finish RETURNING statements so their writes commit before decoding.
@@ -167,11 +191,7 @@ impl Connection {
             columns: &columns,
         })
     }
-}
 
-pub struct Query(Statement);
-
-impl Query {
     pub fn query_map<T>(
         &mut self,
         params: impl IntoParams,

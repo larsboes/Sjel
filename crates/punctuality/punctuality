@@ -19,7 +19,7 @@ BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/punctuality-cli"
 # Build output goes to stderr so `punctuality stations bonn | cut -f1` still works.
 if [ ! -x "$BIN" ]; then
   echo "punctuality: building (first run)…" >&2
-  (cd "$SJEL_ROOT" && cargo build --locked --release --bin punctuality-cli) >&2
+  (cd "$SJEL_ROOT" && cargo build --locked --release -p sjel-punctuality --no-default-features --features turso-wal --bin punctuality-cli) >&2
 fi
 
 exec "$BIN" "$@"

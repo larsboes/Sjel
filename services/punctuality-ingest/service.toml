@@ -2,6 +2,6 @@
 kind     = "process"
 name     = "punctuality-ingest"
 command  = ["target/release/punctuality-cli", "ingest"]
-build    = ["cargo", "build", "--locked", "--release", "--bin", "punctuality-cli"]
+build    = ["cargo", "build", "--locked", "--release", "-p", "sjel-punctuality", "--no-default-features", "--features", "turso-wal", "--bin", "punctuality-cli"]
 schedule = "24h"
 requires = ["punctuality"]

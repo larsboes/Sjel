@@ -6,11 +6,6 @@ use sjel_config::{database_path, expand_tilde, overlay_data_dir};
 use std::path::PathBuf;
 
 pub struct Config {
-    /// The one shared SQLite file, under the table prefix `punctuality` (PRD Q45).
-    /// Resolved by `sjel_config::database_path`: `SJEL_DB_PATH`, else
-    /// `<overlay>/data/sjel/sjel.db`. Not a per-capability setting any more — a file
-    /// per capability would drop the cross-capability joins the shared instance
-    /// existed for, so `SJEL_PUNCTUALITY_DATABASE_URL` is now ignored.
     pub database_path: PathBuf,
     /// Where downloaded monthly parquet lands. A cache, not state: everything in it is
     /// re-downloadable, so it is deliberately outside the backup set.
@@ -26,7 +21,10 @@ impl Config {
             .unwrap_or_else(|| PathBuf::from("data/punctuality/raw"));
 
         Self {
-            database_path: database_path(),
+            database_path: sjel_config::env_var("SJEL_PUNCTUALITY_DB_PATH")
+                .ok()
+                .filter(|path| !path.trim().is_empty())
+                .map_or_else(database_path, |path| expand_tilde(&path)),
             raw_dir,
         }
     }

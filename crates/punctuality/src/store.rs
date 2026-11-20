@@ -9,8 +9,14 @@
 
 use crate::ingest::CellKey;
 use crate::stats::Cell;
-use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
-use sjel_store::QueryAll;
+#[cfg(feature = "turso-wal")]
+use engine::{params, Connection, OptionalExtension, Result as DatabaseResult, Row, Transaction};
+#[cfg(not(feature = "turso-wal"))]
+use rusqlite::{params, Connection, OptionalExtension, Result as DatabaseResult, Row, Transaction};
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal as engine;
+#[cfg(not(feature = "turso-wal"))]
+use sjel_store::{self as engine, json_column, QueryAll};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -21,7 +27,7 @@ pub struct Store {
     /// a consumer that wants its migration half carries its pool half too — and
     /// carrying the dependency while hand-rolling a second connection strategy
     /// beside it would be the worse of the two outcomes.
-    pool: sjel_store::Pool,
+    pool: engine::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `punctuality` here means `punctuality_stop_stats` and its two siblings.
     prefix: String,
@@ -99,7 +105,7 @@ impl Store {
         validate_prefix(prefix)?;
         // A pool checkout, and the migration runs once per process per (file,
         // prefix) rather than once per open -- libs/sjel-store/README.md has why.
-        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
+        let pool = engine::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -108,12 +114,25 @@ impl Store {
         })
     }
 
+    /// Write the running owner's closed native WAL snapshot.
+    ///
+    /// # Errors
+    /// Returns an error when the connection or snapshot path is unavailable.
+    #[cfg(feature = "turso-wal")]
+    pub fn snapshot(
+        &self,
+        database: &Path,
+        target: &Path,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        engine::snapshot(&self.conn()?, database, target)
+    }
+
     /// A connection from the shared pool.
     ///
     /// Held across a whole transaction by `replace_stats`, which is the intended
     /// use of a checkout rather than a problem with one: the connection is this
     /// caller's until it is dropped, and r2d2 hands the next caller a different one.
-    fn conn(&self) -> Result<sjel_store::PooledClient, Box<dyn std::error::Error>> {
+    fn conn(&self) -> Result<engine::PooledClient, Box<dyn std::error::Error>> {
         Ok(self.pool.get()?)
     }
 
@@ -200,7 +219,7 @@ impl Store {
             );
             ",
             prefix = prefix,
-            now = sjel_store::NOW
+            now = engine::NOW
         ))?;
 
         // SQLite has no portable `ADD COLUMN IF NOT EXISTS`. Older deployments
@@ -208,18 +227,18 @@ impl Store {
         // migration sees that it is absent.
         let has_sum_delay = conn
             .prepare(&format!("PRAGMA table_info({prefix}_stop_stats)"))?
-            .query_map([], |row| row.get::<_, String>(1))?
+            .query_map(params![], |row| row.get::<_, String>(1))?
             .collect::<Result<Vec<_>, _>>()?
             .iter()
             .any(|name| name == "sum_delay");
         if !has_sum_delay {
             conn.execute(
                 &format!("ALTER TABLE {prefix}_stop_stats ADD COLUMN sum_delay INTEGER NOT NULL DEFAULT 0"),
-                [],
+                params![],
             )?;
             conn.execute(
                 &format!("UPDATE {prefix}_stop_stats SET sum_delay = CAST(ROUND(mean_delay * n) AS INTEGER)"),
-                [],
+                params![],
             )?;
         }
         Ok(())
@@ -237,7 +256,7 @@ impl Store {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let prefix = self.prefix.clone();
         let mut conn = self.conn()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
+        let tx = engine::write_transaction(&mut conn)?;
         replace_stats_tx(&tx, &prefix, cells, stations)?;
         tx.commit()?;
         Ok(())
@@ -254,9 +273,9 @@ impl Store {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let prefix = self.prefix.clone();
         let mut conn = self.conn()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
+        let tx = engine::write_transaction(&mut conn)?;
         replace_stats_tx(&tx, &prefix, cells, stations)?;
-        tx.execute(&format!("DELETE FROM {prefix}_ingest_months"), [])?;
+        tx.execute(&format!("DELETE FROM {prefix}_ingest_months"), params![])?;
         insert_months(&tx, &prefix, months)?;
         tx.commit()?;
         Ok(())
@@ -273,7 +292,7 @@ impl Store {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let prefix = self.prefix.clone();
         let mut conn = self.conn()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
+        let tx = engine::write_transaction(&mut conn)?;
         let mut select = tx.prepare(&format!(
             "SELECT n, canceled, sum_delay, counts FROM {prefix}_stop_stats
              WHERE eva = ?1 AND train_type = ?2 AND hour = ?3 AND weekend = ?4"
@@ -293,13 +312,18 @@ impl Store {
         for (key, cell) in cells {
             let old = select
                 .query_row(
-                    params![&key.eva, &key.train_type, key.hour as i16, key.weekend],
+                    params![
+                        key.eva.as_str(),
+                        key.train_type.as_str(),
+                        key.hour as i16,
+                        key.weekend
+                    ],
                     |row| {
                         Ok((
                             row.get::<_, i64>(0)?,
                             row.get::<_, i64>(1)?,
                             row.get::<_, i64>(2)?,
-                            sjel_store::json_column::<Vec<i32>>(row, 3)?,
+                            json_column::<Vec<i32>>(row, 3)?,
                         ))
                     },
                 )
@@ -312,8 +336,8 @@ impl Store {
                 merged.merge(&existing);
             }
             upsert.execute(params![
-                &key.eva,
-                &key.train_type,
+                key.eva.as_str(),
+                key.train_type.as_str(),
                 key.hour as i16,
                 key.weekend,
                 merged.n as i64,
@@ -341,8 +365,8 @@ impl Store {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let prefix = self.prefix.clone();
         let mut conn = self.conn()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
-        tx.execute(&format!("DELETE FROM {prefix}_ingest_months"), [])?;
+        let tx = engine::write_transaction(&mut conn)?;
+        tx.execute(&format!("DELETE FROM {prefix}_ingest_months"), params![])?;
         insert_months(&tx, &prefix, months)?;
         tx.commit()?;
         Ok(())
@@ -352,7 +376,7 @@ impl Store {
         let prefix = &self.prefix;
         Ok(self.conn()?.query_all(
             &format!("SELECT month, source_oid FROM {prefix}_ingest_months ORDER BY month"),
-            [],
+            params![],
             |row| {
                 Ok(IngestedMonth {
                     month: row.get(0)?,
@@ -377,7 +401,7 @@ impl Store {
                 "INSERT INTO {prefix}_ingest_runs (from_month, to_month, months, rows_read, rows_skipped, cells)
                  VALUES (?1,?2,?3,?4,?5,?6)"
             ),
-            params![&from, &to, months, rows, skipped, cells],
+            params![from, to, months, rows, skipped, cells],
         )?;
         Ok(())
     }
@@ -405,7 +429,7 @@ impl Store {
         );
         Ok(self
             .conn()?
-            .query_all(&sql, params![&eva, &train_type, min_n], row_to_stat)?)
+            .query_all(&sql, params![eva.as_str(), train_type, min_n], row_to_stat)?)
     }
 
     /// One cell, or `None` when it does not exist or is thinner than `min_n`.
@@ -433,7 +457,7 @@ impl Store {
                      WHERE s.eva = ?1 AND s.train_type = ?2 AND s.hour = ?3 AND s.weekend = ?4
                        AND s.n >= ?5"
                 ),
-                params![&eva, &train_type, hour, weekend, min_n],
+                params![eva.as_str(), train_type, hour, weekend, min_n],
                 row_to_stat,
             )
             .optional()?)
@@ -451,10 +475,25 @@ impl Store {
                     "SELECT from_month, to_month, cells, ran_at FROM {prefix}_ingest_runs
                      ORDER BY id DESC LIMIT 1"
                 ),
-                [],
+                params![],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .optional()?)
+    }
+
+    /// The exact station name for an EVA code, including legacy unpadded values.
+    ///
+    /// # Errors
+    /// Returns a database error if the station list cannot be read.
+    pub fn station_name(&self, eva: &str) -> Result<Option<String>, Box<dyn std::error::Error>> {
+        let prefix = &self.prefix;
+        let padded = normalize_eva(eva);
+        let unpadded = punctuality_api::unpad_eva(eva);
+        Ok(self.conn()?.query_row(
+            &format!("SELECT station_name FROM {prefix}_stations WHERE eva IN (?1, ?2) ORDER BY eva = ?1 DESC LIMIT 1"),
+            params![padded, unpadded],
+            |row| row.get(0),
+        ).optional()?)
     }
 
     /// EVA numbers whose station name contains `needle`, case-insensitively.
@@ -473,7 +512,7 @@ impl Store {
                 "SELECT eva, station_name FROM {prefix}_stations
                  WHERE station_name LIKE '%' || ?1 || '%' ORDER BY station_name LIMIT 25"
             ),
-            params![&needle],
+            params![needle],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )?)
     }
@@ -481,7 +520,7 @@ impl Store {
     /// The cheapest statement that proves this store can actually reach its database.
     pub fn ping(&self) -> Result<(), Box<dyn std::error::Error>> {
         let conn = self.conn()?;
-        conn.query_row("SELECT 1", [], |row| row.get::<_, i64>(0))?;
+        conn.query_row("SELECT 1", params![], |row| row.get::<_, i64>(0))?;
         Ok(())
     }
 }
@@ -492,7 +531,7 @@ fn replace_stats_tx(
     cells: &HashMap<CellKey, Cell>,
     stations: &HashMap<String, String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    tx.execute(&format!("DELETE FROM {prefix}_stop_stats"), [])?;
+    tx.execute(&format!("DELETE FROM {prefix}_stop_stats"), params![])?;
     let mut insert = tx.prepare(&format!(
         "INSERT INTO {prefix}_stop_stats
            (eva, train_type, hour, weekend, n, canceled, mean_delay, p50, p90,
@@ -501,8 +540,8 @@ fn replace_stats_tx(
     ))?;
     for (key, cell) in cells {
         insert.execute(params![
-            &key.eva,
-            &key.train_type,
+            key.eva.as_str(),
+            key.train_type.as_str(),
             key.hour as i16,
             key.weekend,
             cell.n as i64,
@@ -530,7 +569,7 @@ fn upsert_stations(
          ON CONFLICT (eva) DO UPDATE SET station_name = excluded.station_name"
     ))?;
     for (eva, name) in stations {
-        station_insert.execute(params![eva, name])?;
+        station_insert.execute(params![eva.as_str(), name.as_str()])?;
     }
     Ok(())
 }
@@ -548,8 +587,8 @@ fn insert_months(
     ))?;
     for month in months {
         insert.execute(params![
-            &month.month,
-            &month.source_oid,
+            month.month.as_str(),
+            month.source_oid.as_deref(),
             month.rows_read,
             month.rows_skipped,
         ])?;
@@ -557,22 +596,39 @@ fn insert_months(
     Ok(())
 }
 
-fn row_to_stat(r: &Row) -> rusqlite::Result<StatRow> {
+#[cfg(feature = "turso-wal")]
+fn json_column<T: serde::de::DeserializeOwned>(row: &Row<'_>, index: usize) -> DatabaseResult<T> {
+    serde_json::from_str(&row.get::<_, String>(index)?)
+        .map_err(|error| engine::Error::ConversionFailure(error.to_string()))
+}
+
+#[cfg(feature = "turso-wal")]
+fn small_integer(row: &Row<'_>, index: usize) -> DatabaseResult<i16> {
+    i16::try_from(row.get::<_, i64>(index)?)
+        .map_err(|error| engine::Error::ConversionFailure(error.to_string()))
+}
+
+#[cfg(not(feature = "turso-wal"))]
+fn small_integer(row: &Row<'_>, index: usize) -> DatabaseResult<i16> {
+    row.get(index)
+}
+
+fn row_to_stat(r: &Row) -> DatabaseResult<StatRow> {
     Ok(StatRow {
         eva: r.get(0)?,
         station_name: r.get(1)?,
         train_type: r.get(2)?,
-        hour: r.get(3)?,
-        weekend: r.get(4)?,
+        hour: small_integer(r, 3)?,
+        weekend: r.get::<_, i64>(4)? != 0,
         n: r.get(5)?,
         canceled: r.get(6)?,
-        mean_delay: r.get(7)?,
-        p50: r.get(8)?,
-        p90: r.get(9)?,
-        share_late_6: r.get(10)?,
-        cancel_rate: r.get(11)?,
+        mean_delay: r.get::<_, f64>(7)? as f32,
+        p50: small_integer(r, 8)?,
+        p90: small_integer(r, 9)?,
+        share_late_6: r.get::<_, f64>(10)? as f32,
+        cancel_rate: r.get::<_, f64>(11)? as f32,
         sum_delay: r.get(12)?,
-        counts: sjel_store::json_column(r, 13)?,
+        counts: json_column(r, 13)?,
     })
 }
 
@@ -678,6 +734,25 @@ mod db_tests {
             Store::open(&blocker.join("sjel.db")).is_err(),
             "an unusable path opened anyway"
         );
+    }
+
+    #[test]
+    fn station_name_resolves_padded_codes_and_legacy_unpadded_codes() {
+        let store = open_test_store("station-name");
+        let stations = HashMap::from([
+            ("08000044".into(), "Padded".into()),
+            ("8000105".into(), "Unpadded".into()),
+        ]);
+        store.replace_stats(&HashMap::new(), &stations).unwrap();
+        assert_eq!(
+            store.station_name("8000044").unwrap().as_deref(),
+            Some("Padded")
+        );
+        assert_eq!(
+            store.station_name("08000105").unwrap().as_deref(),
+            Some("Unpadded")
+        );
+        assert_eq!(store.station_name("8000000").unwrap(), None);
     }
 
     /// The histogram is the reason the array column exists, and JSON text is the only

@@ -42,6 +42,27 @@ pub fn transit_url() -> String {
         .unwrap_or_else(|| "http://127.0.0.1:3000".to_string())
 }
 
+fn punctuality_station_name(client: &reqwest::blocking::Client, eva: &str) -> Option<String> {
+    let base = sjel_config::env_var("SJEL_PUNCTUALITY_URL").unwrap_or_else(|_| {
+        format!(
+            "http://127.0.0.1:{}",
+            punctuality_api::DEFAULT_PUNCTUALITY_PORT
+        )
+    });
+    let url = format!(
+        "{}{}",
+        base.trim_end_matches('/'),
+        punctuality_api::ROUTE_PUNCTUALITY_STATION_NAME
+    );
+    sjel_server::InboundAuth::with_loopback_auth(client.get(&url).query(&[("eva", eva)]), &url)
+        .send()
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<Option<String>>()
+        .ok()?
+}
+
 // ---------------------------------------------------------------------------
 // Fingerprint recomputation (the finance candidate identity)
 // ---------------------------------------------------------------------------
@@ -850,20 +871,7 @@ pub fn stations(store: &PlacesStore, today: &str) -> Fallible<()> {
                 // aggregate codes) that punctuality's station list lacks (the
                 // specific codes are live data and stay in the overlay evidence
                 // note).
-                let known_name: Option<String> = {
-                    let conn = store.conn()?;
-                    // `lpad($1, 8, '0')` has no SQLite counterpart. The padded
-                    // spelling is computed here instead, by the same helper the
-                    // rest of this module normalizes EVAs with, so the two forms
-                    // cannot drift apart in two places.
-                    conn.query_row(
-                        "SELECT station_name FROM punctuality_stations
-                         WHERE eva = ?1 OR eva = ?2",
-                        params![&eva, &normalize_eva(eva)],
-                        |row| row.get(0),
-                    )
-                    .optional()?
-                };
+                let known_name = punctuality_station_name(&client, eva);
                 let query = known_name.clone().unwrap_or_else(|| eva.clone());
                 let url = format!("{suggest_base}/api/suggest");
                 let request = sjel_server::InboundAuth::with_loopback_auth(

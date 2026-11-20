@@ -116,6 +116,14 @@ The live owner ran a scan after the cutover. Its first successful backup restore
 32 historical decisions, and the sequence counter. All app keys and decisions matched the
 pre-cutover export, and all restored values matched the native owner snapshot.
 
+Punctuality runs on its native owner file. The scheduled ingester and CLI use the protected
+owner socket, and Places resolves station names through the API. The rehearsal matched an
+existing histogram-based lookup and recovered 566,427 aggregate rows. The first live backup
+restored all four owner tables and the sequence counter with exact row parity. After the
+scheduled ingester resumed, a second receipt-backed restore contained the new run record
+with no change to the aggregate rows. The four users of the shared native adapter passed
+304 package tests.
+
 ## Remaining migration gates
 
 - Verify a successful signed request from a paired client against the live Inventory owner.

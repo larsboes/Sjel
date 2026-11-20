@@ -11,6 +11,7 @@
 //! the number a model has to beat, and without it "our prediction is good" is not a
 //! claim anyone can check.
 
+pub mod commands;
 pub mod config;
 pub mod dataset;
 pub mod ingest;

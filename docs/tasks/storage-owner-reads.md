@@ -46,3 +46,7 @@ Calendar read uses the same entries route as the shell. The phone mirror uses th
 classified changes feed and carries only C0 or C1 rows. A fixture with stale shared rows
 verified that the phone copy uses the owner projection. Live Finder and Now requests passed
 against native Calendar, and the gateway rebuilt the phone mirror.
+
+Places resolves station names through Punctuality's exact EVA lookup. The lookup accepts
+padded and legacy unpadded codes. The isolated native owner matched the SQLite control
+for the name and the underlying punctuality histogram.

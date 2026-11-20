@@ -16,7 +16,7 @@
 use crate::geocode::{GeocodeQuery, Geocoder, StructuredQuery};
 use crate::layers::{normalize_eva, parse_station_ref};
 use candidate_fingerprint::CandidateKey;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::params;
 use sjel_store::QueryAll;
 
 use crate::store::{stable_id, validate_prefix, Fallible, Place, PlaceVisit, PlacesStore};
@@ -1118,64 +1118,61 @@ pub struct CalendarReport {
     pub places_created: usize,
 }
 
-pub fn calendar_from(
-    store: &PlacesStore,
-    calendar_prefix: &str,
-    today: &str,
-) -> Fallible<CalendarReport> {
-    calendar_from_geocoder(store, &Geocoder::new(store), calendar_prefix, today)
+#[derive(serde::Deserialize)]
+struct CalendarAttendance {
+    id: String,
+    location: Option<String>,
+    #[serde(default)]
+    attendees: Vec<String>,
+    starts_at: String,
+    ends_at: String,
 }
 
-pub fn calendar_from_geocoder(
+fn calendar_attendance() -> Fallible<Vec<CalendarAttendance>> {
+    let base = sjel_config::env_var("SJEL_CALENDAR_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8087".into());
+    let url = format!(
+        "{}{}",
+        base.trim_end_matches('/'),
+        calendar_api::ROUTE_ENTRIES
+    );
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("places-calendar-backfill"),
+        std::time::Duration::from_secs(15),
+    )?;
+    let request = client
+        .get(&url)
+        .query(&[("from", "0001-01-01"), ("to", "9999-12-31")]);
+    Ok(sjel_server::InboundAuth::with_loopback_auth(request, &url)
+        .send()?
+        .error_for_status()?
+        .json()?)
+}
+
+fn calendar_from_geocoder(
     store: &PlacesStore,
     geocoder: &Geocoder,
-    calendar_prefix: &str,
+    mut rows: Vec<CalendarAttendance>,
     today: &str,
 ) -> Fallible<CalendarReport> {
-    validate_prefix(calendar_prefix)?;
-    let conn = store.conn()?;
-    let has_table: bool = conn
-        .query_row(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
-            [&format!("{calendar_prefix}_entries")],
-            |_| Ok(()),
-        )
-        .optional()?
-        .is_some();
-    if !has_table {
-        return Ok(CalendarReport::default());
-    }
-
-    let rows: Vec<(String, Option<String>, String, String, String)> = conn.query_all(
-        &format!(
-            "SELECT id, location, attendees, substr(starts_at, 1, 10), substr(ends_at, 1, 10)
-             FROM {calendar_prefix}_entries
-             WHERE attendees IS NOT NULL AND attendees != '[]'
-             ORDER BY starts_at, id"
-        ),
-        [],
-        |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-            ))
-        },
-    )?;
-
+    rows.retain(|entry| !entry.attendees.is_empty());
+    rows.sort_by(|left, right| (&left.starts_at, &left.id).cmp(&(&right.starts_at, &right.id)));
     let mut report = CalendarReport {
+        entries: rows.len(),
         entries_with_attendees: rows.len(),
         ..CalendarReport::default()
     };
 
-    for (entry_id, location, attendees_json, date_start, date_end) in rows {
-        report.entries += 1;
-        let attendees: Vec<String> = serde_json::from_str(&attendees_json).unwrap_or_default();
-        if attendees.is_empty() {
+    for entry in rows {
+        let Some(date_start) = entry.starts_at.get(..10) else {
             continue;
-        }
+        };
+        let Some(date_end) = entry.ends_at.get(..10) else {
+            continue;
+        };
+        let entry_id = entry.id;
+        let attendees = entry.attendees;
+        let location = entry.location;
         let Some(loc_str) = location
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
@@ -1202,8 +1199,8 @@ pub fn calendar_from_geocoder(
                 &id,
                 person,
                 &place.id,
-                Some(&date_start),
-                Some(&date_end),
+                Some(date_start),
+                Some(date_end),
                 6500,
                 "calendar-attendees",
                 today,
@@ -1219,7 +1216,8 @@ pub fn calendar_from_geocoder(
 }
 
 pub fn calendar(store: &PlacesStore, today: &str) -> Fallible<()> {
-    let report = calendar_from(store, "calendar", today)?;
+    let report =
+        calendar_from_geocoder(store, &Geocoder::new(store), calendar_attendance()?, today)?;
     println!(
         "backfill calendar: {} entries with attendees, {} pairs, {} proposals written, \
          {} already present, {} without located destination/location",
@@ -2874,24 +2872,32 @@ mod db_tests {
 
     #[test]
     fn calendar_attendees_become_proposals() {
-        let (store, path) = open_test_store("calendar_attendees");
-        {
-            let conn = Connection::open(&path).unwrap();
-            conn.execute_batch(&format!(
-                "CREATE TABLE {SCRATCH}_entries (
-                     id TEXT PRIMARY KEY,
-                     location TEXT,
-                     attendees TEXT NOT NULL,
-                     starts_at TEXT NOT NULL,
-                     ends_at TEXT NOT NULL
-                 );
-                 INSERT INTO {SCRATCH}_entries VALUES
-                 ('entry-1', 'Berlin', '[\"Alice\", \"Bob\"]', '2026-09-10T10:00:00', '2026-09-10T12:00:00'),
-                 ('entry-2', NULL, '[\"Alice\"]', '2026-09-11T10:00:00', '2026-09-11T12:00:00'),
-                 ('entry-3', 'Munich', '[]', '2026-09-12T10:00:00', '2026-09-12T12:00:00');"
-            ))
-            .unwrap();
-        }
+        let (store, _) = open_test_store("calendar_attendees");
+        let entries = || {
+            serde_json::from_value(serde_json::json!([
+                {
+                    "id": "entry-1",
+                    "location": "Berlin",
+                    "attendees": ["Alice", "Bob"],
+                    "starts_at": "2026-09-10T10:00:00",
+                    "ends_at": "2026-09-10T12:00:00"
+                },
+                {
+                    "id": "entry-2",
+                    "location": null,
+                    "attendees": ["Alice"],
+                    "starts_at": "2026-09-11T10:00:00",
+                    "ends_at": "2026-09-11T12:00:00"
+                },
+                {
+                    "id": "entry-3",
+                    "location": "Munich",
+                    "starts_at": "2026-09-12T10:00:00",
+                    "ends_at": "2026-09-12T12:00:00"
+                }
+            ]))
+            .unwrap()
+        };
 
         // Stub geocoder for Berlin
         let (url, _hits) = stub(
@@ -2899,7 +2905,7 @@ mod db_tests {
         );
         let geocoder = Geocoder::with_url(&store, url);
 
-        let report = calendar_from_geocoder(&store, &geocoder, SCRATCH, "2026-08-25").unwrap();
+        let report = calendar_from_geocoder(&store, &geocoder, entries(), "2026-08-25").unwrap();
         assert_eq!(report.entries, 2);
         assert_eq!(report.entries_with_attendees, 2);
         assert_eq!(report.without_location, 1);
@@ -2912,7 +2918,7 @@ mod db_tests {
         assert!(proposed.iter().any(|p| p.person == "Bob"));
 
         // Idempotent
-        let again = calendar_from_geocoder(&store, &geocoder, SCRATCH, "2026-08-25").unwrap();
+        let again = calendar_from_geocoder(&store, &geocoder, entries(), "2026-08-25").unwrap();
         assert_eq!(again.proposals_written, 0);
         assert_eq!(again.proposals_existing, 2);
     }

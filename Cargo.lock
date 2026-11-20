@@ -5964,6 +5964,7 @@ name = "sjel-places"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "calendar-api",
  "candidate-fingerprint",
  "civil-date",
  "csv",

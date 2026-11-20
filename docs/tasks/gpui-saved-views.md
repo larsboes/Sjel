@@ -5,7 +5,7 @@ state: "backlog"
 area: "gpui"
 kind: "feature"
 priority: 1
-depends_on: ["gpui-view-format"]
+depends_on: ["task-336bf8f4-9597-436e-84bb-ef6ff052ce59"]
 spec: "docs/architecture/native-ui-boundaries.md"
 ---
 

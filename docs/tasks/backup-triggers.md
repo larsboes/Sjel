@@ -1,11 +1,14 @@
 ---
 id: backup-triggers
 title: "Explain scheduled backup starts"
-state: verify
+state: done
 area: storage
 kind: fix
 priority: 0
 spec: docs/plans/storage.md
+evidence:
+  - "Scheduled attempts 3411–3417 on 2026-11-20 recorded trigger timer with exit code 0 and an archive receipt; manual run 3399 recorded manual."
+  - "All 17 backup tests pass, covering trigger attribution, absent-target reporting and the 30-minute retry backoff."
 ---
 
 # Explain scheduled backup starts
@@ -32,7 +35,11 @@ Explain scheduled backup starts through the existing owner, without treating imp
 - The deployed API reports `unknown` for the 500 older attempts inspected. All 17 backup tests
   pass.
 - The operator started a Media backup from the desktop app. Run 3399 completed with exit code 0,
-  published an archive receipt, and recorded `manual` in the live ledger. Confirm `timer` on the
-  next scheduled run at the existing cadence.
+  published an archive receipt, and recorded `manual` in the live ledger.
+- The scheduled run on 2026-11-20 recorded `timer` for attempts 3411–3417 (Finance, store,
+  knowledge-base, Packs, Projects, Documents and Media), all with exit code 0 and an archive
+  receipt (`sjel backup runs`).
+- The cause of the earlier timer disable stays unverified: the policy store keeps no change
+  history. The trigger field now makes each start attributable.
 - Both enabled policies resolve to the same external volume. The one-off Archive restore copy
   on the internal drive is outside the recurring schedule.

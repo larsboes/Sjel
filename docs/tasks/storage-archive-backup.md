@@ -6,7 +6,7 @@ area: storage
 kind: fix
 priority: 0
 spec: docs/plans/storage.md
-blocked_by: "Staging from earlier failed backups remains in protected storage. Recurring backup enrollment has not been approved or verified."
+blocked_by: "Owner decisions: a recurring target on a physical drive other than the archive drive, and removal of the staging left by failed runs."
 ---
 
 # Protect the unsorted archive
@@ -30,3 +30,8 @@ Protect the unsorted archive through the existing owner, without treating implem
   path, file byte, and symbolic link target. The disposable restore copy was removed.
 - Older protected staging remains untouched. Scheduler state could not be verified from the
   managed environment. No schedule was changed.
+- The archive and the `backup-target` volume are on the same external drive, so the archive
+  cannot enroll in the existing recurring contract. The `archive` capability is not enabled and
+  has no scheduled attempts in `sjel backup runs`.
+- The backup staging directory holds 11 directories from failed runs between 2026-09-30 and
+  2026-11-19: five archive runs, four knowledge-base runs, one store run and one cleanup probe.

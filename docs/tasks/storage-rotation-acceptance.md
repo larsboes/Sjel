@@ -1,11 +1,12 @@
 ---
 id: storage-rotation-acceptance
 title: "Accept live key rotation"
-state: verify
+state: cancelled
 area: storage
 kind: fix
 priority: 0
 spec: docs/plans/storage.md
+reason: "Superseded by storage-remove-replica. The sqld primary holds no data and has no replicas since embedded replicas were removed (crates/sjel-turso/README.md, Embedded replicas: removed). Reopen only if a replica becomes justified."
 ---
 
 # Accept live key rotation

@@ -1,7 +1,7 @@
 ---
 id: "gpui-documents-decisions"
 title: "Complete reviewable document decisions"
-state: "backlog"
+state: "verify"
 area: "gpui"
 kind: "feature"
 priority: 2

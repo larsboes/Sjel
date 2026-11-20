@@ -5,8 +5,9 @@ _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=../../tools/lib/paths.sh
 source "$_dir/../../tools/lib/paths.sh"
 BIN="$SJEL_RELEASE_TARGET/release/projects"
-if [ ! -x "$BIN" ]; then
-  echo "projects: building (first run)…" >&2
+# A stale CLI could write to a store the owner no longer reads, so rebuild after source changes.
+if [ ! -x "$BIN" ] || [ -n "$(find "$_dir/src" "$_dir/Cargo.toml" -newer "$BIN" -print -quit 2>/dev/null)" ]; then
+  echo "projects: building…" >&2
   (cd "$SJEL_ROOT" && CARGO_TARGET_DIR="$SJEL_RELEASE_TARGET" cargo build --locked --release --bin projects) >&2
 fi
 exec "$BIN" "$@"

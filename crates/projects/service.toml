@@ -2,7 +2,7 @@
 kind               = "process"
 name               = "projects"
 command            = ["target/release/projects-server"]
-build              = ["cargo", "build", "--locked", "--release", "--bin", "projects-server"]
+build              = ["cargo", "build", "--locked", "--release", "--no-default-features", "--features", "turso-wal", "--bin", "projects-server"]
 port               = "8103"
 health_path        = "/health"
 ready_path         = "/ready"

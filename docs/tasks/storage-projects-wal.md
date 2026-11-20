@@ -1,7 +1,7 @@
 ---
 id: storage-projects-wal
 title: "Move Projects onto its own Turso WAL file"
-state: backlog
+state: verify
 area: storage
 kind: maintenance
 priority: 2
@@ -43,8 +43,20 @@ tests for both owners, with one skipped that needs a legacy Health binary.
 The extended rehearsal also drives the CLI through the owner and checks its refusal without one.
 It has not run since that extension: the agent shell may not write the fixture credential.
 
+## Live cutover
+
+On 2026-11-20 the operator ran `owner-store-cutover.py projects --apply`. A receipt-backed
+shared-store restore staged 1,211 records and 2 mail proposals; both link tables were empty. The
+first owner backup restored all four tables, 1,213 rows, with exact parity, and the command
+enabled `projects-wal-backup`. The tracked build now selects `turso-wal`.
+
+The command's live CLI check ran an outdated release CLI: the launcher built only a missing
+binary, so `verify` read the shared tables. The launcher now rebuilds after source changes. The
+rebuilt CLI's `verify` went through the owner and reported that the index and files match.
+Records written through the outdated CLI in that window reached their Markdown files, which the
+owner reindexes; whether any reached the shared index only is not checked.
+
 ## Remaining work
 
-Run the extended rehearsal, then `python3 tools/owner-store-cutover.py projects --check` and
-`--apply`, from a deployment operator terminal. Repeat the archive checks against live data, including reindex and the
-Projects file backup. The live service remains on the shared database.
+Check one live write through the owner and the existing Projects file backup after cutover.
+The extended scratch rehearsal result is not recorded.

@@ -158,7 +158,8 @@ pagination and all ten legs in Places. The Transit CLI retrieved the restored se
 - Verify a refresh on a paired iPhone.
 - Migrate the remaining owners after their cross-owner readers and independent writers are
   routed through the owning services. The shared store still serves active capabilities
-  including Comms, Devices, Health, Interior, Media, Projects, Scouting and Trips. See
-  [owner reads](storage-owner-reads.md) and the [Health cutover](task-8f68cb3e-631e-4646-a474-1b8a68ae447c.md).
+  including Comms, Devices, Interior, Media, Scouting and Trips. See
+  [owner reads](storage-owner-reads.md). Health and Projects moved on 2026-11-20
+  ([Health](task-8f68cb3e-631e-4646-a474-1b8a68ae447c.md), [Projects](storage-projects-wal.md)).
 - Any MVCC cutover requires recovery with the logical log and proof that backups preserve
   committed writes during concurrent use. Keep the original database through rollback acceptance.

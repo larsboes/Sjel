@@ -32,3 +32,7 @@ Interior uses Inventory's owner catalogue for model and RoomPlan requests. The s
 rehearsal verified model loading and confirmed that only the owned item could be linked.
 The scheduled wishlist price refresh and comparison CLI use Inventory's owner routes.
 Inventory's remaining CLI reads, creation and overlay import also go through the service.
+
+Finder requests a bounded name and kind projection from Entities. The owner endpoint preserves
+the five-hit cap and matches every query word without returning field values or dated facts.
+The status service skips an unavailable owner while continuing to search its other sources.

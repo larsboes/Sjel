@@ -34,6 +34,9 @@ with their entity on delete and move to the kept entity on merge.
 
 ## Run
 
+The server and its scheduled commands read `SJEL_ENTITIES_DB_PATH` when an owner database is
+configured. They use the shared store by default.
+
 The service is managed through `tools/service-runner.sh` and its `service.toml` manifest. The live HTTP contract is available at `GET /routes`.
 
 ## Considered and declined

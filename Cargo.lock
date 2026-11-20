@@ -6120,6 +6120,7 @@ name = "sjel-status"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "entities-api",
  "futures-util",
  "reqwest",
  "ring",

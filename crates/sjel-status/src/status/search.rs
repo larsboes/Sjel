@@ -2,7 +2,7 @@
 //!
 //! The finder ranks what the app already holds (pages, projects, tasks, notes) on every keystroke;
 //! this answers for everything else, from the one shared database (`sjel_config::database_path`)
-//! for legacy sources. Inventory supplies its results through its own search route.
+//! for legacy sources. Entities and Inventory supply their own results.
 //!
 //! Every query word must appear in a source's text (`LIKE`, bound as a parameter, wildcards
 //! escaped), and each source returns at most [`PER_SOURCE`] rows. A hit carries a `sjel://` link,
@@ -48,16 +48,6 @@ const SOURCES: &[Source] = &[
         // Nearest to now first, ahead or behind: the event you mean is rarely the oldest.
         order: "abs(julianday(starts_at) - julianday('now'))",
         link: |_| "sjel://calendar".into(),
-    },
-    Source {
-        kind: "person",
-        table: "entities_entities",
-        id: "id",
-        title: "name",
-        detail: "kind",
-        haystack: "name",
-        order: "length(name)",
-        link: |_| "sjel://people".into(),
     },
     Source {
         kind: "document",
@@ -191,43 +181,75 @@ pub(crate) struct SearchQuery {
     q: String,
 }
 
-async fn inventory_hits(query: &str) -> Vec<SearchHit> {
-    #[derive(Deserialize)]
-    struct Hits {
-        hits: Vec<SearchHit>,
-    }
+#[derive(Deserialize)]
+struct InventoryHits {
+    hits: Vec<SearchHit>,
+}
 
-    async fn fetch(query: &str) -> Option<Hits> {
-        let url = registry()
-            .await
-            .ok()?
-            .into_iter()
-            .find(|service| service.name == "inventory" && !service.is_external())?
-            .probe_url("/api/search")?;
-        static CLIENT: OnceLock<Option<reqwest::Client>> = OnceLock::new();
-        CLIENT
-            .get_or_init(|| {
-                reqwest::Client::builder()
-                    .no_proxy()
-                    .redirect(reqwest::redirect::Policy::none())
-                    .build()
-                    .ok()
-            })
-            .as_ref()?
-            .get(url)
-            .query(&[("q", query)])
-            .timeout(Duration::from_millis(500))
-            .send()
-            .await
-            .ok()?
-            .error_for_status()
-            .ok()?
-            .json()
-            .await
-            .ok()
+async fn owner_search<T: serde::de::DeserializeOwned>(
+    services: &[Service],
+    name: &str,
+    path: &str,
+    query: &str,
+) -> Option<T> {
+    let service = services
+        .iter()
+        .find(|service| service.name == name && !service.is_external())?;
+    let port = service.port.parse::<u16>().ok()?;
+    static CLIENT: OnceLock<Option<reqwest::Client>> = OnceLock::new();
+    let client = CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .ok()
+        })
+        .as_ref()?;
+    let mut request = client
+        .get(format!("http://127.0.0.1:{port}{path}"))
+        .query(&[("q", query)])
+        .timeout(Duration::from_millis(500));
+    if let Some(bearer) = sjel_server::InboundAuth::from_deployment().bearer_header() {
+        request = request.header(reqwest::header::AUTHORIZATION, bearer);
     }
+    request
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json()
+        .await
+        .ok()
+}
 
-    fetch(query).await.map_or_else(Vec::new, |response| response.hits)
+async fn owner_hits(query: &str) -> (Vec<SearchHit>, Vec<SearchHit>) {
+    let Ok(services) = registry().await else {
+        return (Vec::new(), Vec::new());
+    };
+    let (entities, inventory) = tokio::join!(
+        owner_search::<entities_api::EntitySearchResponse>(
+            &services,
+            "entities",
+            entities_api::ROUTE_SEARCH,
+            query,
+        ),
+        owner_search::<InventoryHits>(&services, "inventory", "/api/search", query),
+    );
+    let entities = entities
+        .into_iter()
+        .flat_map(|response| response.hits)
+        .take(PER_SOURCE)
+        .map(|entity| SearchHit {
+            kind: "person".into(),
+            title: entity.name,
+            detail: entity.kind,
+            link: "sjel://people".into(),
+        })
+        .collect();
+    let inventory = inventory.map_or_else(Vec::new, |response| response.hits);
+    (entities, inventory)
 }
 
 pub(crate) async fn search_handler(
@@ -240,11 +262,13 @@ pub(crate) async fn search_handler(
     }
     let db_path = sjel_config::database_path();
     let local_query = text.clone();
-    let (local, inventory) = tokio::join!(
+    let (local, (entities, inventory)) = tokio::join!(
         tokio::task::spawn_blocking(move || search(&db_path, &local_query)),
-        inventory_hits(&text),
+        owner_hits(&text),
     );
     let mut hits = local.unwrap_or_default();
+    let entities_position = hits.iter().take_while(|hit| hit.kind == "event").count();
+    hits.splice(entities_position..entities_position, entities);
     let inventory_position = hits
         .iter()
         .position(|hit| matches!(hit.kind.as_str(), "subscription" | "trip" | "mail"))
@@ -266,16 +290,15 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         let conn = rusqlite::Connection::open(&path).unwrap();
         conn.execute_batch(
-            "CREATE TABLE entities_entities (id TEXT, kind TEXT, name TEXT);
-             INSERT INTO entities_entities VALUES ('1', 'person', 'Anna Berg'), ('2', 'person', 'Bob 100%');
-             CREATE TABLE trips_plans (id TEXT, title TEXT, origin TEXT, destinations TEXT,
+            "CREATE TABLE trips_plans (id TEXT, title TEXT, origin TEXT, destinations TEXT,
                                        date_start TEXT, date_end TEXT);
              INSERT INTO trips_plans VALUES ('t1', 'Lisbon week', 'Köln', 'Lisbon, Sintra',
                                              '2026-11-02', '2026-11-09');
              CREATE TABLE comms_triage_items (id TEXT, subject TEXT, from_addr TEXT,
                                               snippet TEXT, internal_date INTEGER);
              INSERT INTO comms_triage_items VALUES ('m1', 'Your Lisbon booking', 'tap@example.com',
-                                                    'secret body text', 1);",
+                                                    'secret body text', 1),
+                                                   ('m2', 'Receipt 100%', NULL, NULL, 2);",
         )
         .unwrap();
         path
@@ -300,11 +323,7 @@ mod tests {
             "both words, trip only"
         );
         assert!(search(&db, "lisbon zzz").is_empty());
-        assert_eq!(
-            search(&db, "ANNA")[0].title,
-            "Anna Berg",
-            "ASCII case folds"
-        );
+        assert_eq!(search(&db, "LISBON").len(), 2, "ASCII case folds");
         assert!(search(&db, "   ").is_empty());
     }
 
@@ -318,6 +337,6 @@ mod tests {
         // `%` is a character to find, not "anything".
         let hits = search(&db, "%");
         assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].title, "Bob 100%");
+        assert_eq!(hits[0].title, "Receipt 100%");
     }
 }

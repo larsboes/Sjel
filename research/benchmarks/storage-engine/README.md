@@ -216,3 +216,17 @@ fresh authenticated snapshot before packaging
 `data/inventory/snapshots/inventory.db`. A stale snapshot does not satisfy the job. The
 rehearsal uses the scheduler's backup command against a scratch local target and restores
 from the new receipt. The installed scheduler and configured target remain deployment checks.
+
+## Entities owner-only rehearsal
+
+Run against a private database extracted by `tools/restore.sh` from a verified store backup.
+Pass the reviewed Turso CLI and a new scratch directory.
+
+```sh
+sh research/benchmarks/storage-engine/entities-rehearsal.sh "$restored_db" "$tursodb" "$scratch/entities"
+```
+
+The probe extracts the nine Entities tables and recreates their indexes. SQLite and Turso WAL
+commit an entity, a sourced field value and revision 2 together, then roll back revision 3.
+The SQLite backup of the Turso-written file passes integrity and foreign-key checks and
+matches the SQLite control. The probe exercises SQL and recovery on a copy.

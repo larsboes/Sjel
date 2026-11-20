@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 // ============================================================================
 
 pub const ROUTE_ENTITIES: &str = "/api/entities";
+pub const ROUTE_SEARCH: &str = "/api/search";
 pub const ROUTE_ENTITY_BY_ID: &str = "/api/entities/{id}";
 pub const ROUTE_FIELDS: &str = "/api/fields";
 pub const ROUTE_DUPLICATES: &str = "/api/duplicates";
@@ -29,8 +30,9 @@ pub const ROUTE_ENTITY_FACTS: &str = "/api/entities/{id}/facts";
 pub const ROUTE_ENTITY_FACT_BY_ID: &str = "/api/entities/{id}/facts/{fact_id}";
 
 /// Every route constant above. The server test checks each one against its manifest.
-pub const ALL_ROUTES: [&str; 12] = [
+pub const ALL_ROUTES: [&str; 13] = [
     ROUTE_ENTITIES,
+    ROUTE_SEARCH,
     ROUTE_ENTITY_BY_ID,
     ROUTE_FIELDS,
     ROUTE_DUPLICATES,
@@ -171,6 +173,19 @@ pub struct EntityRecord {
 }
 
 pub type Entity = EntityRecord;
+
+/// The bounded name search used by Finder.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct EntitySearchResponse {
+    pub hits: Vec<EntityName>,
+}
+
+/// An entity's name and kind without its stored fields or facts.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct EntityName {
+    pub name: String,
+    pub kind: String,
+}
 
 /// One side of a probable duplicate (`/entities/api/duplicates`).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, schemars::JsonSchema)]

@@ -1,5 +1,4 @@
-//! Config. This crate is public, so nothing personal lives here: the rows are in the
-//! overlay's database (`sjel_config::database_path`), and the port is the runner's.
+//! Store and service settings for the Entities owner.
 
 use std::path::PathBuf;
 
@@ -22,7 +21,10 @@ pub struct Config {
 impl Config {
     pub fn load() -> Self {
         Self {
-            database_path: database_path(),
+            database_path: sjel_config::env_var("SJEL_ENTITIES_DB_PATH")
+                .ok()
+                .filter(|path| !path.trim().is_empty())
+                .map_or_else(database_path, |path| sjel_config::expand_tilde(&path)),
             port: resolve_port(None, None, 8097),
             places_url: sjel_config::env_var("SJEL_PLACES_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:8093".to_string()),

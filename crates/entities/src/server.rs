@@ -50,6 +50,11 @@ const ROUTES: &[route_manifest::Route] = &[
         "Entities with their values and dated facts, name order. Optional ?kind= and ?q= \
          (name contains, case-insensitive).",
     ),
+    route_manifest::get(
+        "GET",
+        entities_api::ROUTE_SEARCH,
+        "Search entity names with ?q=.",
+    ),
     route_manifest::Route {
         method: "POST",
         path: "/api/entities",
@@ -363,6 +368,20 @@ async fn list_entities(State(state): State<Arc<AppState>>, Query(q): Query<ListQ
     })
     .await?;
     Ok(Json(json!({ "entities": entities })))
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchQuery {
+    #[serde(default)]
+    q: String,
+}
+
+async fn search_names(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<SearchQuery>,
+) -> Reply {
+    let hits = blocking(&state, move |s| s.store.search_names(&query.q)).await?;
+    Ok(to_json(entities_api::EntitySearchResponse { hits }))
 }
 
 async fn create_entity(
@@ -737,6 +756,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/routes", get(routes))
         .route("/api/fields", get(list_fields).post(declare_field))
         .route("/api/entities", get(list_entities).post(create_entity))
+        .route(entities_api::ROUTE_SEARCH, get(search_names))
         .route(
             "/api/entities/{id}",
             get(get_entity).patch(patch_entity).delete(delete_entity),
@@ -1003,6 +1023,57 @@ mod http_tests {
             let _ = axum::serve(listener, router(state)).await;
         });
         (format!("http://{addr}"), dir)
+    }
+
+    #[tokio::test]
+    async fn finder_search_returns_only_bounded_name_matches() {
+        let (base, dir) = scratch_server("find-names").await;
+        let client = reqwest::Client::new();
+        for name in [
+            "Ada Berg 100%",
+            "Berg Ada",
+            "Ada Berg II",
+            "Ada Berg III",
+            "Ada Berg IV",
+            "Ada Berg V",
+            "Ada Long",
+        ] {
+            client
+                .post(format!("{base}{}", entities_api::ROUTE_ENTITIES))
+                .json(&json!({"kind":"person", "name":name, "values":{"company":"Private Co"}}))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap();
+        }
+        let lookup = |query: &'static str| {
+            let (client, base) = (&client, &base);
+            async move {
+                client
+                    .get(format!("{base}{}", entities_api::ROUTE_SEARCH))
+                    .query(&[("q", query)])
+                    .send()
+                    .await
+                    .unwrap()
+                    .error_for_status()
+                    .unwrap()
+                    .json::<Value>()
+                    .await
+                    .unwrap()
+            }
+        };
+        let found = lookup("ADA berg").await;
+        let hits = found["hits"].as_array().unwrap();
+        assert_eq!(hits.len(), 5);
+        assert_eq!(hits[0], json!({"name":"Berg Ada","kind":"person"}));
+        assert_eq!(
+            lookup("berg %").await,
+            json!({"hits":[{"name":"Ada Berg 100%","kind":"person"}]})
+        );
+        assert_eq!(lookup("Private Co").await, json!({"hits":[]}));
+        assert_eq!(lookup("  ").await, json!({"hits":[]}));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[tokio::test]

@@ -72,12 +72,24 @@ also reopened the restored database and served its catalogue.
 The live owner rejected unsigned sync. The signed sync test passed with an isolated Devices
 registry and verified retries, nonce replay rejection, and receipt recovery.
 
+## Entities verification
+
+A private extraction from a receipt-backed shared-store restore matched all nine Entities tables
+row for row. Schema, indexes, integrity, foreign keys, and WAL mode checks passed on the copy.
+The search cutover routes Finder through the Entities owner. The server and scheduled commands
+share the opt-in owner database path. The server served the extracted catalogue with the
+shared-file path pointed at an absent file.
+
+The [Entities SQL rehearsal](../../research/benchmarks/storage-engine/README.md#entities-owner-only-rehearsal)
+matched the Turso WAL commit, rollback and SQLite restore against the SQLite control.
+
 ## Remaining migration gates
 
 - Verify a successful signed request from a paired client against the live Inventory owner.
-- Move Entities and Calendar consumers to owner reads before splitting their databases.
-  Finder still reads both from the shared store, the Now view reads Calendar there, and
-  the phone mirror copies tables from both. [Route reads through owners](storage-owner-reads.md).
+- Replace the phone mirror's direct Entities table reads with an owner export. Rehearse
+  Entities writes, backup and rollback on Turso WAL before changing the live store.
+- Move Finder and the Now view to Calendar owner reads and replace its phone mirror table copy.
+  [Route reads through owners](storage-owner-reads.md).
 - Keep Documents on its current search implementation until a replacement passes prefix,
   diacritic, status and pagination parity. The [engine measurements](storage-engine.md) record
   the FTS and iOS results.

@@ -437,6 +437,45 @@ impl EntitiesStore {
         rows.collect::<std::result::Result<_, _>>().map_err(db)
     }
 
+    /// Return up to five entity names containing every query word.
+    ///
+    /// # Errors
+    /// Returns a store error if the query cannot be executed.
+    pub fn search_names(&self, query: &str) -> Result<Vec<entities_api::EntityName>> {
+        let words: Vec<_> = query
+            .chars()
+            .take(200)
+            .collect::<String>()
+            .split_whitespace()
+            .take(6)
+            .map(str::to_lowercase)
+            .collect();
+        if words.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.conn()?;
+        let condition = (1..=words.len())
+            .map(|index| format!("instr(lower(name), ?{index}) > 0"))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        let mut statement = conn
+            .prepare(&format!(
+                "SELECT name, kind FROM {}_entities
+                 WHERE {condition} ORDER BY length(name), id LIMIT 5",
+                self.prefix
+            ))
+            .map_err(db)?;
+        let rows = statement
+            .query_map(rusqlite::params_from_iter(&words), |row| {
+                Ok(entities_api::EntityName {
+                    name: row.get(0)?,
+                    kind: row.get(1)?,
+                })
+            })
+            .map_err(db)?;
+        rows.collect::<std::result::Result<_, _>>().map_err(db)
+    }
+
     fn check_source(source: &str) -> Result<()> {
         check_one_of("source", source, SOURCES).map_err(StoreError::Invalid)
     }

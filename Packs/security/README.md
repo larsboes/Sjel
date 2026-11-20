@@ -11,7 +11,7 @@ differ from Pi's tool-call interception and `vault_exec`; it is not a Pi extensi
 | Artifact | Harness | What it does |
 |----------|---------|-------------|
 | `extensions/secrets-guard.ts` | **pi** | Intercepts `read`, `edit`, `ls`, `grep`, `find`, `bash` tool calls to block reading/searching .env, .secrets, credentials, .pem/.key, .netrc, git-credentials, kubeconfig, ssh keys, and Bitwarden items. Registers `vault_exec` and `vault_keys` custom tools for safe credential usage. |
-| `extensions/command-policy/` | **pi** | Classifies shell commands and direct writes, adds machine-local autonomy for routine work, and supplies live permission context. Consequential exceptions retain approval cards. The runtime profile still controls local builds (P1). The shared baseline lives in [`docs/plans/agent.md` §3](../../docs/plans/agent.md); Pi-specific grants and limits are below. Not a sandbox. |
+| `extensions/command-policy/` | **pi** | Classifies shell commands and direct writes and adds machine-local autonomy for routine work. Consequential exceptions retain approval cards. The runtime profile still controls local builds (P1). The shared baseline lives in [`docs/plans/agent.md` §3](../../docs/plans/agent.md); Pi-specific grants and limits are below. Not a sandbox. |
 | `extensions/inference-keys/` | **pi** | Supplies provider API keys from the macOS login keychain, falling back to the Bitwarden/Vaultwarden vault, instead of from environment variables or `auth.json`. The key is handed to pi by a command and never enters the conversation. The pi entry stays in TypeScript; its credential gateway, unlock flow, and keychain migration are implemented in the shared Rust CLI. See its [README](extensions/inference-keys/README.md). |
 | `skills/secrets-guard/` | **Claude Code** | Skill teaching the safe credential workflow (env-sourcing, never read/echo secrets, hand off secret creation to `tools/setup-secret.sh`) — the counterpart to Sjel's deny policy in the user-level Claude Code settings (`tools/templates/claude-code/settings.base.json`, applied by `sjel claude`). Deploy with `tools/packs.sh link security`. |
 | `skills/threat-model/` | **Claude Code** | Maps which assets hold which data class, walks one compromise at a time (exposure, reach, detection, response) and keeps a risk register. All output stays in `<overlay>/data/security/threat-model/`. |
@@ -70,12 +70,11 @@ remain gated. Privilege escalation, destructive history changes, secrets, publis
 recognized network writes retain their existing guards. The separate secrets guard and
 runtime-profile build policy remain active.
 
-### Context and checkpoints
+### Checkpoints
 
-Every model request receives fresh extension-generated context from the active grants,
-including after compaction. It states the allowed roots, dependency execution risk, disposable
-output and remaining boundaries. Context is advisory and never grants permission. Execution
-permission does not authorize new tasks or waive repository and vault rules.
+Permission status is available through `/permissions`. The extension does not inject grant
+details into model requests. Execution permission does not authorize new tasks or waive
+repository and vault rules.
 
 Direct writes to existing files require a successful current read. A changed inode, size or
 timestamp requires a reread and reconciliation, without an approval card. Successful direct

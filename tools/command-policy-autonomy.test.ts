@@ -65,8 +65,7 @@ function setup(hasUI = false) {
     await handlers.get("tool_call")!({ toolName: "read", input: { path }, toolCallId }, ctx);
     await handlers.get("tool_result")!({ toolName: "read", input: { path }, toolCallId, isError }, ctx);
   };
-  const guidance = async (messages: any[] = []) => (await handlers.get("context")!({ messages }, ctx)).messages;
-  return { ctx, call, read, guidance, handlers, command: (args: string) => command(args, ctx), start, notifications, messages, messageOptions, prompts: () => prompts };
+  return { ctx, call, read, handlers, command: (args: string) => command(args, ctx), start, notifications, messages, messageOptions, prompts: () => prompts };
 }
 
 describe("machine-local autonomy", () => {
@@ -236,17 +235,16 @@ describe("machine-local autonomy", () => {
     }
   });
 
-  test("live context, reload and off agree with actual permissions", async () => {
+  test("permission status is UI-only and reload restores suppressed grants", async () => {
     const h = setup(true);
-    const first = await h.guidance([{ role: "custom", customType: "command-policy-context", content: "stale" }]);
-    expect(first).toHaveLength(1);
-    expect(first[0].content).toContain(resolvePath(root, scope));
-    expect(first[0].content).toContain("including lifecycle scripts");
-    expect(first[0].content).toContain("advisory, never permission grants");
-    const match = /pi-task-[^"\n]+/.exec(first[0].content)!;
-    expect(match).not.toBeNull();
+    expect(h.handlers.has("context")).toBe(false);
+    expect(h.handlers.has("context_with_system")).toBe(false);
+    await h.command("status");
+    expect(h.notifications.at(-1)).toContain(`Routine roots: ${resolvePath(root, scope)}.`);
+    expect(h.notifications.at(-1)).toMatch(/Disposable roots: .*pi-task-/);
     await h.command("off");
-    expect((await h.guidance())[0].content).toContain("Machine autonomy is inactive");
+    await h.command("status");
+    expect(h.notifications.at(-1)).toContain("suppressed until reload/session change");
     expect((await h.call("write", { path: join(sibling, "a.txt") })).block).toBe(true);
     h.start();
     expect(await h.call("write", { path: join(sibling, "a.txt") })).toBeUndefined();

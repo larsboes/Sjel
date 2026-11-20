@@ -450,14 +450,15 @@ describe.skipIf(!piConfigured)("pack extensions", () => {
     const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = await import(join(piInstall.packageDir, "dist", "index.js"));
     const fixture = mkdtempSync(join(tmpdir(), "pi-policy-session-"));
     const project = join(fixture, "project");
+    const cleanup = join(project, "disposable");
     const notes = join(fixture, "knowledge");
     const overlay = join(fixture, "private");
     const previousOverlay = process.env.SJEL_OVERLAY_ROOT;
     const previousPersonal = process.env.SJEL_PERSONAL_ROOT;
     let session: any;
-    for (const path of [project, notes, join(overlay, "config")]) mkdirSync(path, { recursive: true });
+    for (const path of [cleanup, notes, join(overlay, "config")]) mkdirSync(path, { recursive: true });
     writeFileSync(join(project, "package.json"), "{}");
-    writeFileSync(join(overlay, "config", "command-policy.json"), JSON.stringify({ markdown_write_roots: [], write_roots: [project, notes], protected_roots: [overlay] }));
+    writeFileSync(join(overlay, "config", "command-policy.json"), JSON.stringify({ markdown_write_roots: [], write_roots: [project, notes], disposable_roots: [cleanup], protected_roots: [overlay] }));
     process.env.SJEL_OVERLAY_ROOT = overlay;
     delete process.env.SJEL_PERSONAL_ROOT;
     try {
@@ -495,11 +496,10 @@ describe.skipIf(!piConfigured)("pack extensions", () => {
       expect((await tools.executeTool("bash", { command: `rm -rf '${notes}'` })).isError).toBe(true);
       expect(readFileSync(note, "utf8")).toBe("concurrent");
       expect((await tools.executeTool("write", { path: join(project, "AGENTS.md"), content: "weaken guards" })).isError).toBe(true);
-      const context = await runner.emitContext([{ role: "user", content: "Compacted task summary", timestamp: Date.now() }]);
-      const guidance = context.find((message: any) => message.role === "custom" && message.customType === "command-policy-context");
-      expect(guidance.content).toContain(notes);
-      expect(guidance.content).toContain("advisory, never permission grants");
-      const cleanup = JSON.parse(/Disposable cleanup roots: (\[.*?\])\. Protected roots:/.exec(guidance.content)![1])[0];
+      const first = [{ role: "user", content: "Compacted task summary", timestamp: Date.now() }];
+      const next = [...first, { role: "user", content: "Continue", timestamp: Date.now() }];
+      expect(await runner.emitContext(first)).toEqual(first);
+      expect(await runner.emitContext(next)).toEqual(next);
       expect((await tools.executeTool("bash", { command: `mkdir -p '${cleanup}/output' && touch '${cleanup}/output/a' && rm -rf '${cleanup}/output'` })).isError).toBe(false);
       await runner.emit({ type: "session_shutdown" });
       expect(errors).toEqual([]);

@@ -139,8 +139,11 @@ existing scheduled job resumed.
 
 Places runs on its own Turso WAL file. The first native backup restored all seven tables
 with exact parity across 1,075 rows. Live checks covered the 257-place registry, 436 linked
-expenses, 10 travel legs, visits, and map layers. The rebuilt phone mirror matched all 257
-registry rows. The live Media ledger had zero indexed photos.
+expenses, 10 travel legs, visits, and map layers. All 263 restored Amex place links matched
+the live Finance candidates and local export fingerprints. The gateway rebuilt a valid phone
+mirror whose 257 Place rows matched the restore. The live Media ledger had zero indexed photos.
+A fixture verified that the authenticated map projection supplies location links while the
+regular geotag response keeps its existing fields.
 
 ## Remaining migration gates
 

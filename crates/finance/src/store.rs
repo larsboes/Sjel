@@ -1794,6 +1794,10 @@ impl FinanceStore {
                      LIMIT 1
                  ), 'reinstated') <> 'superseded'"
             ))?;
+            #[allow(
+                clippy::let_and_return,
+                reason = "rusqlite rows borrow the statement, which drops at the block end"
+            )]
             let ids = statement
                 .query_map(params![], |row| row.get::<_, String>(0))?
                 .collect::<sql::Result<Vec<_>>>()?;

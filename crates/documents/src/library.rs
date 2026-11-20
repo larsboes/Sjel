@@ -808,6 +808,10 @@ impl Library {
                  FROM documents_classification_proposals
                  WHERE document_id = ?1 ORDER BY generated_at, proposal_id",
             )?;
+            #[allow(
+                clippy::let_and_return,
+                reason = "rusqlite rows borrow the statement, which drops at the block end"
+            )]
             let rows = statement
                 .query_map(params![document_id], |row| {
                     Ok((
@@ -832,6 +836,10 @@ impl Library {
                      FROM documents_classification_reviews
                      WHERE proposal_id = ?1 ORDER BY review_id",
                 )?;
+                #[allow(
+                    clippy::let_and_return,
+                    reason = "rusqlite rows borrow the statement, which drops at the block end"
+                )]
                 let rows = statement
                     .query_map(params![id.as_str()], |row| {
                         Ok((
@@ -1106,6 +1114,10 @@ impl Library {
                  )
                  ORDER BY item.rowid LIMIT ?2",
             )?;
+            #[allow(
+                clippy::let_and_return,
+                reason = "rusqlite rows borrow the statement, which drops at the block end"
+            )]
             let documents = statement
                 .query_map(params![version, limit as i64], |row| {
                     Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))

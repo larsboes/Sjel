@@ -1,8 +1,13 @@
 # health
 
 The operator's daily health values from Apple Health: sleep, activity, heart and body. One value
-per metric per day, in metric units, in the shared database. Data class `c1`: the operator
-allows cloud models to read it (task `task-bd7107c0-a1a4-4bbf-8206-19acd4ffc6a6`).
+per metric per day, in metric units. Data class `c1`: the operator allows cloud models to read it
+(task `task-bd7107c0-a1a4-4bbf-8206-19acd4ffc6a6`).
+
+The default build stores the values in the shared database. A `turso-wal` build stores them in
+Health's own owner file, named by `SJEL_HEALTH_DB_PATH`. Only the server opens that file: CLI
+imports and reads go to it as jobs on the owner socket, and `health-wal-backup` takes its backups
+from an owner snapshot.
 
 ## Surface
 
@@ -11,6 +16,7 @@ health import <path>   # the Health app's export .zip, its unpacked folder, or e
 health serve           # HTTP API (service.toml)
 health metrics         # each stored metric with its coverage, as JSON
 health summary [days]  # mean, min and max per metric over the last days (default 30)
+health snapshot        # turso-wal builds: ask the running owner for a backup snapshot
 ```
 
 On the iPhone: Health → profile picture → Export All Health Data. Send the zip to the Mac and run

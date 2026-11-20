@@ -15,6 +15,11 @@ path = "src/lib.rs"
 name = "health"
 path = "src/main.rs"
 
+[features]
+default = ["libsql"]
+libsql = ["dep:sjel-turso"]
+turso-wal = ["dep:sjel-native-wal", "dep:reqwest"]
+
 [dependencies]
 axum.workspace = true
 chrono.workspace = true
@@ -24,7 +29,9 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }
-sjel-turso = { path = "../sjel-turso" }
+sjel-turso = { path = "../sjel-turso", optional = true }
+sjel-native-wal = { path = "../sjel-native-wal", optional = true }
+reqwest = { workspace = true, features = ["json", "blocking"], optional = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "time"] }
 
 [dev-dependencies]

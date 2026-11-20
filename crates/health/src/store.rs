@@ -1,11 +1,17 @@
-//! Two tables in the shared database. `health_days` holds one value per metric per day; a later
-//! import of the same day replaces it, because the Health app's export is cumulative.
-//! `health_imports` records each import run.
+//! Two tables: `health_days` holds one value per metric per day; a later import of the same day
+//! replaces it, because the Health app's export is cumulative. `health_imports` records each
+//! import run. The `turso-wal` feature keeps them in Health's own owner file; otherwise they live
+//! in the shared database.
 
 use std::path::Path;
 
 use serde::Serialize;
-use sjel_turso::{libsql, Store, NOW};
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal::{self as engine, params, Pool as Db, TransactionBehavior, NOW};
+#[cfg(all(feature = "libsql", not(feature = "turso-wal")))]
+use sjel_turso::{libsql, libsql::params, Store as Db, NOW};
+#[cfg(not(any(feature = "libsql", feature = "turso-wal")))]
+compile_error!("sjel-health needs the `libsql` or the `turso-wal` feature");
 
 use crate::export::{describe, DayValue};
 
@@ -53,17 +59,42 @@ pub struct Import {
     pub at: String,
 }
 
+#[cfg_attr(feature = "turso-wal", derive(Clone))]
 pub struct HealthStore {
-    db: Store,
+    db: Db,
 }
 
 impl HealthStore {
     /// # Errors
     /// The database cannot be opened or migrated.
+    #[cfg(all(feature = "libsql", not(feature = "turso-wal")))]
     pub async fn open(path: &Path) -> Fallible<Self> {
         Ok(Self {
-            db: Store::open(path, PREFIX, migrate).await?,
+            db: Db::open(path, PREFIX, migrate).await?,
         })
+    }
+
+    /// # Errors
+    /// The owner file cannot be opened or migrated.
+    #[cfg(feature = "turso-wal")]
+    pub async fn open(path: &Path) -> Fallible<Self> {
+        let path = path.to_path_buf();
+        let db = tokio::task::spawn_blocking(move || {
+            engine::open_pool(&path, PREFIX, |conn| Ok(conn.execute_batch(SCHEMA)?))
+                .map_err(|error| error.to_string())
+        })
+        .await??;
+        Ok(Self { db })
+    }
+
+    /// Write a consistent copy of the owner file to `target`.
+    ///
+    /// # Errors
+    /// The snapshot cannot be staged or published.
+    #[cfg(feature = "turso-wal")]
+    pub fn snapshot(&self, database: &Path, target: &Path) -> Fallible<()> {
+        engine::snapshot(&self.db.get()?, database, target)
+            .map_err(|error| error.to_string().into())
     }
 
     pub async fn ping(&self) -> Fallible<()> {
@@ -96,7 +127,14 @@ impl HealthStore {
         values: &[DayValue],
         replace: bool,
     ) -> Fallible<()> {
+        #[cfg(all(feature = "libsql", not(feature = "turso-wal")))]
         let tx = self.db.begin().await?;
+        #[cfg(feature = "turso-wal")]
+        let mut conn = self.db.connect().await?;
+        #[cfg(feature = "turso-wal")]
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
         if replace {
             let mut ranges: std::collections::BTreeMap<&str, (&str, &str)> = Default::default();
             for value in values {
@@ -123,7 +161,7 @@ impl HealthStore {
                          unit = excluded.unit, source = excluded.source,
                          imported_at = excluded.imported_at"
                 ),
-                libsql::params![
+                params![
                     value.metric,
                     value.day.as_str(),
                     value.value,
@@ -140,7 +178,7 @@ impl HealthStore {
                 "INSERT INTO health_imports (file_name, records, `values`, first_day, last_day, at)
                  VALUES (?1, ?2, ?3, ?4, ?5, {NOW})"
             ),
-            libsql::params![
+            params![
                 file_name,
                 i64::try_from(records)?,
                 i64::try_from(values.len())?,
@@ -161,7 +199,7 @@ impl HealthStore {
                 "SELECT metric, day, value, unit, source FROM health_days
                  WHERE day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR metric = ?3)
                  ORDER BY day, metric",
-                libsql::params![from, to, metric],
+                params![from, to, metric],
             )
             .await?;
         let mut out = Vec::new();
@@ -213,7 +251,7 @@ impl HealthStore {
             .query(
                 "SELECT metric, unit, COUNT(*), AVG(value), MIN(value), MAX(value) FROM health_days
                  WHERE day BETWEEN ?1 AND ?2 GROUP BY metric ORDER BY metric",
-                libsql::params![from, to],
+                params![from, to],
             )
             .await?;
         let mut out = Vec::new();
@@ -258,28 +296,28 @@ impl HealthStore {
     }
 }
 
+const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS health_days (
+        metric TEXT NOT NULL,
+        day TEXT NOT NULL,
+        value REAL NOT NULL,
+        unit TEXT NOT NULL,
+        source TEXT NOT NULL,
+        imported_at TEXT NOT NULL,
+        PRIMARY KEY (metric, day)
+    );
+    CREATE INDEX IF NOT EXISTS health_days_by_day ON health_days (day);
+    CREATE TABLE IF NOT EXISTS health_imports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_name TEXT NOT NULL,
+        records INTEGER NOT NULL,
+        `values` INTEGER NOT NULL,
+        first_day TEXT,
+        last_day TEXT,
+        at TEXT NOT NULL
+    );";
+
+#[cfg(all(feature = "libsql", not(feature = "turso-wal")))]
 async fn migrate(conn: libsql::Connection) -> Fallible<()> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS health_days (
-            metric TEXT NOT NULL,
-            day TEXT NOT NULL,
-            value REAL NOT NULL,
-            unit TEXT NOT NULL,
-            source TEXT NOT NULL,
-            imported_at TEXT NOT NULL,
-            PRIMARY KEY (metric, day)
-        );
-        CREATE INDEX IF NOT EXISTS health_days_by_day ON health_days (day);
-        CREATE TABLE IF NOT EXISTS health_imports (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            file_name TEXT NOT NULL,
-            records INTEGER NOT NULL,
-            `values` INTEGER NOT NULL,
-            first_day TEXT,
-            last_day TEXT,
-            at TEXT NOT NULL
-        );",
-    )
-    .await?;
+    conn.execute_batch(SCHEMA).await?;
     Ok(())
 }

@@ -14,6 +14,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use health::{export, source, HealthStore};
+
+#[cfg(feature = "turso-wal")]
+mod owner;
 pub use health_api::{DaysUpload, SleepSample, UploadValue};
 
 const ROUTES: &[route_manifest::Route] = &[
@@ -261,8 +264,27 @@ fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
+/// The owner file under `turso-wal`, otherwise the shared database.
+fn database() -> PathBuf {
+    #[cfg(feature = "turso-wal")]
+    {
+        sjel_config::env_var("SJEL_HEALTH_DB_PATH")
+            .ok()
+            .filter(|path| !path.trim().is_empty())
+            .map(|path| sjel_config::expand_tilde(&path))
+            .unwrap_or_else(|| {
+                eprintln!("health: SJEL_HEALTH_DB_PATH must name the separate owner file");
+                std::process::exit(1);
+            })
+    }
+    #[cfg(not(feature = "turso-wal"))]
+    {
+        sjel_config::database_path()
+    }
+}
+
 async fn open() -> Arc<AppState> {
-    match HealthStore::open(&sjel_config::database_path()).await {
+    match HealthStore::open(&database()).await {
         Ok(store) => Arc::new(AppState { store }),
         Err(error) => {
             eprintln!("health: cannot open the store: {error}");
@@ -272,7 +294,6 @@ async fn open() -> Arc<AppState> {
 }
 
 async fn import(path: PathBuf) -> i32 {
-    let state = open().await;
     let name = path.file_name().map_or_else(
         || path.display().to_string(),
         |n| n.to_string_lossy().into_owned(),
@@ -302,11 +323,7 @@ async fn import(path: PathBuf) -> i32 {
         );
         return 1;
     }
-    if let Err(error) = state
-        .store
-        .replace(&name, summary.records, &summary.values)
-        .await
-    {
+    if let Err(error) = store_import(&name, &summary).await {
         eprintln!("health: cannot store the import: {error}");
         return 1;
     }
@@ -336,13 +353,73 @@ const USAGE: &str = "usage:
   health import <path>   fold an Apple Health export (.zip, its folder, or export.xml)
   health metrics         each stored metric with its coverage, as JSON
   health imports         the 50 newest imports and phone uploads, as JSON
-  health summary [days]  mean, min and max per metric over the last days (default 30), as JSON";
+  health summary [days]  mean, min and max per metric over the last days (default 30), as JSON
+  health snapshot        ask the running owner for a backup snapshot (turso-wal builds)";
+
+#[cfg(not(feature = "turso-wal"))]
+async fn store_import(name: &str, summary: &export::Summary) -> Result<(), String> {
+    open()
+        .await
+        .store
+        .replace(name, summary.records, &summary.values)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(feature = "turso-wal")]
+async fn store_import(name: &str, summary: &export::Summary) -> Result<(), String> {
+    let job = owner::Job::Import {
+        file_name: name.to_owned(),
+        records: summary.records,
+        values: summary
+            .values
+            .iter()
+            .map(|value| owner::WireValue {
+                metric: value.metric.to_owned(),
+                day: value.day.clone(),
+                value: value.value,
+                source: value.source.clone(),
+            })
+            .collect(),
+    };
+    tokio::task::spawn_blocking(move || owner::send(&job))
+        .await
+        .map_err(|error| error.to_string())?
+        .map(drop)
+}
+
+/// Run one read: through the owner under `turso-wal`, otherwise on the shared database.
+#[cfg(not(feature = "turso-wal"))]
+async fn read(command: &str, window: Option<(String, String)>) -> Result<Value, String> {
+    let store = &open().await.store;
+    match (command, window) {
+        ("metrics", _) => store.metrics().await.map(|m| json!({ "metrics": m })),
+        ("imports", _) => store.imports().await.map(|i| json!({ "imports": i })),
+        (_, Some((from, to))) => store
+            .window(&from, &to)
+            .await
+            .map(|m| json!({ "from": from, "to": to, "metrics": m })),
+        (_, None) => return Err("summary needs a window".to_owned()),
+    }
+    .map_err(|error| error.to_string())
+}
+
+#[cfg(feature = "turso-wal")]
+async fn read(command: &str, window: Option<(String, String)>) -> Result<Value, String> {
+    let job = match (command, window) {
+        ("metrics", _) => owner::Job::Metrics,
+        ("imports", _) => owner::Job::Imports,
+        (_, Some((from, to))) => owner::Job::Window { from, to },
+        (_, None) => return Err("summary needs a window".to_owned()),
+    };
+    tokio::task::spawn_blocking(move || owner::send(&job))
+        .await
+        .map_err(|error| error.to_string())?
+}
 
 async fn print_json(command: &str, days: Option<String>) -> i32 {
-    let state = open().await;
     let result = match command {
-        "metrics" => state.store.metrics().await.map(|m| json!({ "metrics": m })),
-        "imports" => state.store.imports().await.map(|i| json!({ "imports": i })),
+        "metrics" | "imports" => read(command, None).await,
         _ => {
             let span = match days.as_deref().map(str::parse::<u64>) {
                 None => 30,
@@ -354,11 +431,7 @@ async fn print_json(command: &str, days: Option<String>) -> i32 {
             };
             let to = Local::now().date_naive();
             let from = to - Days::new(span - 1);
-            state
-                .store
-                .window(&from.to_string(), &to.to_string())
-                .await
-                .map(|m| json!({ "from": from.to_string(), "to": to.to_string(), "metrics": m }))
+            read(command, Some((from.to_string(), to.to_string()))).await
         }
     };
     match result {
@@ -383,12 +456,29 @@ fn main() {
     match (command.as_str(), args.next()) {
         ("serve", None) => runtime.block_on(async {
             let port = sjel_config::resolve_port(None, None, 8109);
-            sjel_server::serve_local("health", port, router(open().await)).await;
+            let state = open().await;
+            #[cfg(feature = "turso-wal")]
+            {
+                let store = state.store.clone();
+                tokio::join!(
+                    sjel_server::serve_local("health", port, router(state)),
+                    owner::serve(store, Arc::new(database())),
+                );
+            }
+            #[cfg(not(feature = "turso-wal"))]
+            sjel_server::serve_local("health", port, router(state)).await;
         }),
         ("import", Some(path)) => std::process::exit(runtime.block_on(import(PathBuf::from(path)))),
         ("metrics", None) => std::process::exit(runtime.block_on(print_json("metrics", None))),
         ("imports", None) => std::process::exit(runtime.block_on(print_json("imports", None))),
         ("summary", days) => std::process::exit(runtime.block_on(print_json("summary", days))),
+        #[cfg(feature = "turso-wal")]
+        ("snapshot", None) => {
+            if let Err(error) = runtime.block_on(sjel_server::owner_snapshot::submit("health")) {
+                eprintln!("health: snapshot failed: {error}");
+                std::process::exit(1);
+            }
+        }
         _ => {
             eprintln!("{USAGE}");
             std::process::exit(2);

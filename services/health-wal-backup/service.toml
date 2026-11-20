@@ -1,0 +1,6 @@
+kind                  = "data"
+name                  = "health-wal-backup"
+requires              = ["health"]
+backup_owner_snapshot = "health"
+backup_sqlite_online  = "data/health/snapshots/health.db"
+backup_target         = "backup-target"

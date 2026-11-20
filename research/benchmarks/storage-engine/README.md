@@ -242,3 +242,17 @@ sh research/benchmarks/storage-engine/entities-native-rehearsal.sh "$owner_db" "
 The native owner acknowledges an HTTP create, answers the names job over its local socket,
 and exports a snapshot from the running process. The backup verifies and restores the archive
 against its receipt and finds the acknowledged entity in it.
+
+## Engine upgrade rehearsal
+
+`engine-upgrade-rehearsal.sh <turso version> <scratch>` restores every owner's latest
+receipt-backed WAL backup in isolation. `engine-upgrade-probe.rs`, built against the given
+version, commits one write, rolls back a second and removes its table. SQLite then requires
+`integrity_check` and `foreign_key_check` to pass and the full dump to match the pre-probe dump.
+
+```sh
+sh research/benchmarks/storage-engine/engine-upgrade-rehearsal.sh 0.8.4 "$scratch/engine"
+```
+
+Turso 0.8.3, as a control, and 0.8.4 passed on all nine owner archives: Calendar, Documents,
+Entities, Finance, Inventory, Places, Punctuality, Software and Transit.

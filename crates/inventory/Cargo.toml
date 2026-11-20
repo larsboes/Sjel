@@ -40,7 +40,7 @@ devices = { package = "sjel-devices", path = "../devices" }
 inventory-api = { path = "../inventory-api" }
 rusqlite.workspace = true
 tempfile = { version = "3", optional = true }
-turso = { version = "=0.8.3", default-features = false, optional = true }
+turso = { version = "=0.8.4", default-features = false, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 schemars.workspace = true

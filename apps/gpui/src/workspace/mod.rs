@@ -2522,6 +2522,34 @@ mod tests {
         view.read_with(cx, |view, _| assert_eq!(view.selection.cursor, None));
     }
 
+    #[gpui::test]
+    fn the_soundscape_mini_player_stays_compact_with_a_repeatable_session(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        cx.simulate_resize(gpui_kit::size(px(1200.), px(800.)));
+        view.update(cx, |view, cx| {
+            view.appearance_settings.soundscape_mini_player = true;
+            view.soundscape.value = Some(
+                serde_json::from_value(serde_json::json!({
+                    "preset": "focus",
+                    "last_session": {
+                        "scenario": "deep-focus",
+                        "duration_ms": 3_600_000,
+                        "preset": "focus",
+                        "params": {},
+                        "energy": 0.5
+                    }
+                }))
+                .unwrap(),
+            );
+            cx.notify();
+        });
+        cx.run_until_parked();
+        let bounds = cx
+            .debug_bounds("soundscape-mini-player")
+            .expect("visible player");
+        assert!(bounds.size.height < px(110.), "{bounds:?}");
+    }
+
     /// `sjel://terminal` opens the edge on its own seat. The test endpoint is not loopback, so no
     /// shell can be opened here — which is the second half of the assertion: a Mac that cannot
     /// answer leaves the seat saying so rather than a grid that never fills.

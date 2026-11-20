@@ -194,27 +194,37 @@ fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-async fn open() -> Arc<AppState> {
-    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
-        eprintln!("software: HOME is not set");
-        std::process::exit(1);
-    };
-    let store = match SoftwareStore::open(&sjel_config::database_path()).await {
-        Ok(store) => store,
-        Err(error) => {
-            eprintln!("software: cannot open the store: {error}");
-            std::process::exit(1);
-        }
-    };
-    Arc::new(AppState {
-        store,
-        home,
-        scanning: Mutex::new(()),
-    })
+fn fatal(error: impl std::fmt::Display) -> ! {
+    eprintln!("software: {error}");
+    std::process::exit(1);
+}
+
+fn port() -> u16 {
+    sjel_config::resolve_port(Some("SJEL_SOFTWARE_PORT"), None, 8106)
 }
 
 async fn serve() {
-    let state = open().await;
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| fatal("HOME is not set"));
+    let path = sjel_config::env_var("SJEL_SOFTWARE_DB_PATH")
+        .ok()
+        .filter(|path| !path.trim().is_empty())
+        .map(|path| sjel_config::expand_tilde(&path))
+        .unwrap_or_else(|| fatal("SJEL_SOFTWARE_DB_PATH must name the separate owner file"));
+    let database = Arc::new(path);
+    let store = {
+        let database = Arc::clone(&database);
+        tokio::task::spawn_blocking(move || SoftwareStore::open(&database))
+            .await
+            .unwrap_or_else(|error| fatal(error))
+            .unwrap_or_else(|error| fatal(error))
+    };
+    let state = Arc::new(AppState {
+        store,
+        home,
+        scanning: Mutex::new(()),
+    });
     let timer = Arc::clone(&state);
     tokio::spawn(async move {
         loop {
@@ -228,49 +238,72 @@ async fn serve() {
             tokio::time::sleep(RESCAN).await;
         }
     });
-    let port = sjel_config::resolve_port(None, None, 8106);
-    sjel_server::serve_local("software", port, router(state)).await;
+    let snapshot_state = Arc::clone(&state);
+    tokio::join!(
+        sjel_server::serve_local("software", port(), router(state)),
+        sjel_server::owner_snapshot::serve("software", database, move |database, target| {
+            snapshot_state
+                .store
+                .snapshot(database, target)
+                .map_err(|error| error.to_string())
+        }),
+    );
 }
 
-async fn cli(command: &str) -> i32 {
-    let state = open().await;
-    match command {
-        "scan" => match scan(&state).await {
-            Ok(found) => {
-                println!("{found} apps recorded");
-                0
-            }
-            Err(error) => {
-                eprintln!("software: scan failed: {error}");
-                1
-            }
-        },
-        _ => match state.store.apps().await {
-            Ok(apps) => {
-                for app in apps.iter().filter(|a| a.present) {
-                    println!(
-                        "{:<8}  {:>9}  {:<10}  {:<9}  {}{}",
-                        app.kind,
-                        mb(app.app_bytes + app.data_bytes),
-                        app.last_used
-                            .as_deref()
-                            .map_or("never", |d| &d[..10.min(d.len())]),
-                        app.decision.as_deref().unwrap_or("-"),
-                        app.name,
-                        app.review
-                            .as_deref()
-                            .map(|r| format!("  [review: {r}]"))
-                            .unwrap_or_default()
-                    );
-                }
-                0
-            }
-            Err(error) => {
-                eprintln!("software: {error}");
-                1
-            }
-        },
+async fn cli_request<T: serde::de::DeserializeOwned>(
+    method: reqwest::Method,
+    route: &str,
+) -> Result<T, reqwest::Error> {
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(600))
+        .build()?;
+    let mut request = client.request(method, format!("http://127.0.0.1:{}{route}", port()));
+    if let Some(bearer) = sjel_server::InboundAuth::from_deployment().bearer_header() {
+        request = request.header(reqwest::header::AUTHORIZATION, bearer);
     }
+    request.send().await?.error_for_status()?.json().await
+}
+
+async fn cli(command: &str) -> Result<(), Box<dyn std::error::Error>> {
+    match command {
+        "snapshot" => sjel_server::owner_snapshot::submit("software").await?,
+        "scan" => {
+            #[derive(serde::Deserialize)]
+            struct Response {
+                scanned: usize,
+            }
+            let response: Response =
+                cli_request(reqwest::Method::POST, software_api::ROUTE_APPS_SCAN).await?;
+            println!("{} apps recorded", response.scanned);
+        }
+        _ => {
+            #[derive(serde::Deserialize)]
+            struct Response {
+                apps: Vec<software::App>,
+            }
+            let response: Response =
+                cli_request(reqwest::Method::GET, software_api::ROUTE_APPS).await?;
+            for app in response.apps.iter().filter(|a| a.present) {
+                println!(
+                    "{:<8}  {:>9}  {:<10}  {:<9}  {}{}",
+                    app.kind,
+                    mb(app.app_bytes + app.data_bytes),
+                    app.last_used
+                        .as_deref()
+                        .map_or("never", |d| &d[..10.min(d.len())]),
+                    app.decision.as_deref().unwrap_or("-"),
+                    app.name,
+                    app.review
+                        .as_deref()
+                        .map(|r| format!("  [review: {r}]"))
+                        .unwrap_or_default()
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 fn mb(bytes: u64) -> String {
@@ -281,11 +314,12 @@ const USAGE: &str = "software: the apps and tools on this Mac, and what you deci
 
   software serve   HTTP API (scans on start and every six hours)
   software scan    scan apps, ~/Library leftovers and package-manager tooling now
-  software list    what is present: kind, size with data, last used, decision, review";
+  software list    what is present: kind, size with data, last used, decision, review
+  software snapshot  request the running owner's protected backup snapshot";
 
 fn main() {
     let command = std::env::args().nth(1).unwrap_or_default();
-    if !matches!(command.as_str(), "serve" | "scan" | "list") {
+    if !matches!(command.as_str(), "serve" | "scan" | "list" | "snapshot") {
         println!("{USAGE}");
         std::process::exit(if command.is_empty() || command == "-h" {
             0
@@ -297,7 +331,9 @@ fn main() {
     if command == "serve" {
         runtime.block_on(serve());
     } else {
-        std::process::exit(runtime.block_on(cli(&command)));
+        runtime
+            .block_on(cli(&command))
+            .unwrap_or_else(|error| fatal(error));
     }
 }
 
@@ -329,7 +365,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let state = Arc::new(AppState {
-            store: SoftwareStore::open(&dir.join("sjel.db")).await.unwrap(),
+            store: SoftwareStore::open(&dir.join("sjel.db")).unwrap(),
             home: dir.clone(),
             scanning: Mutex::new(()),
         });

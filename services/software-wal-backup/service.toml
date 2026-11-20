@@ -1,0 +1,6 @@
+kind                  = "data"
+name                  = "software-wal-backup"
+requires              = ["software"]
+backup_owner_snapshot = "software"
+backup_sqlite_online  = "data/software/snapshots/software.db"
+backup_target         = "backup-target"

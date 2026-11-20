@@ -23,8 +23,8 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }
-# LibSQL through sjel-turso, as operator-profile: the tables live in the shared database file.
-sjel-turso = { path = "../sjel-turso" }
+sjel-native-wal = { path = "../sjel-native-wal" }
+reqwest = { workspace = true, features = ["json"] }
 software-api = { path = "../software-api" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "time"] }
 

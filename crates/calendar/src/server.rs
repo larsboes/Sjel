@@ -1923,10 +1923,6 @@ async fn markdown_import_selected(
 }
 
 #[cfg(feature = "turso-wal")]
-#[path = "snapshot_job.rs"]
-mod snapshot_job;
-
-#[cfg(feature = "turso-wal")]
 fn fatal(error: impl std::fmt::Display) -> ! {
     eprintln!("calendar: {error}");
     std::process::exit(1);
@@ -1937,7 +1933,7 @@ async fn main() {
     #[cfg(feature = "turso-wal")]
     match std::env::args().nth(1).as_deref() {
         Some("snapshot") if std::env::args().len() == 2 => {
-            snapshot_job::submit()
+            sjel_server::owner_snapshot::submit("calendar")
                 .await
                 .unwrap_or_else(|error| fatal(error));
             return;
@@ -1967,7 +1963,15 @@ async fn main() {
         .await
         .unwrap_or_else(|error| fatal(error))
         .unwrap_or_else(|error| fatal(error));
-        let snapshot = snapshot_job::serve(Arc::clone(&state.database_path));
+        let snapshot = sjel_server::owner_snapshot::serve(
+            "calendar",
+            Arc::clone(&state.database_path),
+            |database, target| {
+                CalendarStore::open(database)
+                    .and_then(|store| store.snapshot(database, target))
+                    .map_err(|error| error.to_string())
+            },
+        );
         tokio::join!(
             sjel_server::serve_local("calendar", port, build_router(state)),
             snapshot

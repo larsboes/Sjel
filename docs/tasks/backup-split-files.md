@@ -19,10 +19,15 @@ Back up each owner database through the existing owner, without treating impleme
 - After each database split, declare one backup contract for its owner file.
 - Pass an isolated tools/restore.sh rehearsal for each file, including Devices.
 
-## Inventory verification
+## Verification
 
-The native WAL probe used `VACUUM INTO` on a second connection in the Inventory process model
-while a write was in flight. SQLite verified the closed snapshot with the prior committed edit,
-its receipt, all ten tables and their sequence counters. The later committed edit appeared in
-the shutdown restore. The production adapter, scheduled backup contract and `tools/restore.sh`
-rehearsal remain open.
+The native WAL probe used `VACUUM INTO` on a second connection while an Inventory write was
+in flight. The snapshot preserved the prior committed edit and its receipt. A separate
+shutdown restore preserved the later commit.
+
+Inventory, Entities, Calendar, and Software each have an enabled contract that asks the
+running owner for a closed snapshot. All four restored under their immutable receipts.
+Software's initial attempt could not reach the private snapshot socket during cutover.
+The retry through the backup gateway succeeded after the watchdog was running and restored
+its apps, decisions, and sequence counter. The [owner migration task](storage-files.md)
+records the data checks for each owner.

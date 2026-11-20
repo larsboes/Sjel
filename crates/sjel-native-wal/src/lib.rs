@@ -1,4 +1,4 @@
-//! Blocking connections for owner-only native Turso WAL databases.
+//! Connections for owner-only native Turso WAL databases.
 
 use futures_executor::block_on;
 use std::{
@@ -10,7 +10,7 @@ use std::{
 };
 use turso::{Builder, Database, Error, IntoParams, Statement};
 
-pub use turso::{params, params_from_iter, Result};
+pub use turso::{params, params_from_iter, transaction::TransactionBehavior, Result};
 pub struct Row<'row> {
     row: &'row turso::Row,
     columns: &'row [String],
@@ -110,10 +110,18 @@ pub fn open_pool(
 
 impl Pool {
     pub fn get(&self) -> Result<Connection> {
+        block_on(self.connect()).map(Connection)
+    }
+
+    /// Open a connection with the owner's WAL settings.
+    ///
+    /// # Errors
+    /// Returns a database error if a connection or its settings cannot be opened.
+    pub async fn connect(&self) -> Result<turso::Connection> {
         let conn = self.0.connect()?;
         conn.busy_timeout(Duration::from_secs(5))?;
-        block_on(conn.pragma_update("foreign_keys", "ON"))?;
-        Ok(Connection(conn))
+        conn.pragma_update("foreign_keys", "ON").await?;
+        Ok(conn)
     }
 }
 

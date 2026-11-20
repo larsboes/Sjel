@@ -109,6 +109,13 @@ restored with all six tables and 188 rows identical to the pre-cutover Calendar 
 The live gateway returned Calendar from Finder and Now, and the phone mirror rebuilt
 from the native owner. The installed desktop build uses the Calendar API.
 
+Software runs on its own native Turso WAL file. Its scan and list commands use the owner API,
+and the protected owner socket supplies backups. All 18 package tests passed. A decision
+appended to an isolated restore retained the historical rows and advanced the sequence by one.
+The live owner ran a scan after the cutover. Its first successful backup restored 124 app rows,
+32 historical decisions, and the sequence counter. All app keys and decisions matched the
+pre-cutover export, and all restored values matched the native owner snapshot.
+
 ## Remaining migration gates
 
 - Verify a successful signed request from a paired client against the live Inventory owner.

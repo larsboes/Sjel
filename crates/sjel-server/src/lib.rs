@@ -32,6 +32,8 @@ pub mod harness;
 pub mod lan;
 /// The browser-origin refusal two capabilities apply to C2 surfaces.
 pub mod origin;
+#[cfg(unix)]
+pub mod owner_snapshot;
 /// Signed browser sessions: minted by the shell, verified by every capability.
 mod stderr_stamp;
 /// The identity `tailscale serve` proves, for the caller that cannot hold a secret.

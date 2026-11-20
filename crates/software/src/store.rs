@@ -1,11 +1,15 @@
-//! Two tables in the shared database. `software_apps` is what the last scan found, one row per
+//! Software's owner tables. `software_apps` is what the last scan found, one row per
 //! bundle id; an app that disappears keeps its row with `present = 0`, so its decision history
 //! still has something to belong to. `software_decisions` is append-only: the newest row per
 //! bundle id is the current decision, and the older ones are why it changed.
 
 use std::path::Path;
 
-use sjel_turso::{libsql, Store, NOW};
+use sjel_native_wal::{
+    self as engine, params, Connection, OptionalExtension, Pool, TransactionBehavior,
+};
+
+const NOW: &str = "strftime('%Y-%m-%d %H:%M:%f+00:00','now')";
 
 use crate::discover::Found;
 
@@ -61,15 +65,16 @@ pub fn review_reason(
 }
 
 pub struct SoftwareStore {
-    db: Store,
+    db: Pool,
 }
 
 impl SoftwareStore {
     /// # Errors
     /// The database cannot be opened or migrated.
-    pub async fn open(path: &Path) -> Fallible<Self> {
+    pub fn open(path: &Path) -> Fallible<Self> {
         Ok(Self {
-            db: Store::open(path, PREFIX, migrate).await?,
+            db: engine::open_pool(path, PREFIX, migrate_on_worker)
+                .map_err(|error| error.to_string())?,
         })
     }
 
@@ -82,7 +87,10 @@ impl SoftwareStore {
 
     /// Record one scan: upsert what was found, and mark every other known app absent.
     pub async fn record_scan(&self, found: &[Found]) -> Fallible<()> {
-        let tx = self.db.begin().await?;
+        let mut conn = self.db.connect().await?;
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
         tx.execute("UPDATE software_apps SET present = 0", ())
             .await?;
         for app in found {
@@ -97,7 +105,7 @@ impl SoftwareStore {
                          data_bytes = excluded.data_bytes, data_paths = excluded.data_paths,
                          last_used = excluded.last_used, present = 1, seen_at = excluded.seen_at"
                 ),
-                libsql::params![
+                params![
                     app.bundle_id.as_str(),
                     app.name.as_str(),
                     app.path.as_str(),
@@ -119,26 +127,16 @@ impl SoftwareStore {
     /// Append a decision. `false` when no scan has seen that bundle id.
     pub async fn decide(&self, bundle_id: &str, decision: Decision, note: &str) -> Fallible<bool> {
         let conn = self.db.connect().await?;
-        let mut rows = conn
-            .query(
-                "SELECT 1 FROM software_apps WHERE bundle_id = ?1",
-                [bundle_id],
-            )
-            .await?;
-        let known = rows.next().await?.is_some();
-        drop(rows);
-        if !known {
-            return Ok(false);
-        }
         conn.execute(
             &format!(
                 "INSERT INTO software_decisions (bundle_id, decision, note, at)
-                 VALUES (?1, ?2, ?3, {NOW})"
+                 SELECT bundle_id, ?2, ?3, {NOW} FROM software_apps WHERE bundle_id = ?1"
             ),
             (bundle_id, decision.as_str(), note),
         )
-        .await?;
-        Ok(true)
+        .await
+        .map(|changed| changed != 0)
+        .map_err(Into::into)
     }
 
     /// Every known app with its newest decision, largest footprint first.
@@ -193,6 +191,15 @@ impl SoftwareStore {
         Ok(out)
     }
 
+    /// Write the running owner's closed snapshot.
+    ///
+    /// # Errors
+    /// Returns an error if the snapshot cannot be staged or published.
+    pub fn snapshot(&self, database: &Path, target: &Path) -> Fallible<()> {
+        engine::snapshot(&self.db.get()?, database, target)
+            .map_err(|error| error.to_string().into())
+    }
+
     /// One row by its key, with its current decision.
     pub async fn get(&self, bundle_id: &str) -> Fallible<Option<App>> {
         Ok(self
@@ -203,7 +210,7 @@ impl SoftwareStore {
     }
 }
 
-async fn migrate(conn: libsql::Connection) -> Fallible<()> {
+fn migrate_on_worker(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS software_apps (
             bundle_id TEXT PRIMARY KEY,
@@ -228,24 +235,22 @@ async fn migrate(conn: libsql::Connection) -> Fallible<()> {
         );
         CREATE INDEX IF NOT EXISTS software_decisions_by_app
             ON software_decisions (bundle_id, id);",
-    )
-    .await?;
+    )?;
     // `kind` arrived with leftovers and tooling (2026-10-22). A table created before it has
     // every row an app, which is what the default says.
-    let mut rows = conn
-        .query(
+    let has_kind = conn
+        .query_row(
             "SELECT 1 FROM pragma_table_info('software_apps') WHERE name = 'kind'",
             (),
+            |_| Ok(()),
         )
-        .await?;
-    let has_kind = rows.next().await?.is_some();
-    drop(rows);
+        .optional()?
+        .is_some();
     if !has_kind {
         conn.execute(
             "ALTER TABLE software_apps ADD COLUMN kind TEXT NOT NULL DEFAULT 'app'",
             (),
-        )
-        .await?;
+        )?;
     }
     Ok(())
 }
@@ -273,10 +278,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("sjel-software-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        (
-            SoftwareStore::open(&dir.join("sjel.db")).await.unwrap(),
-            dir,
-        )
+        (SoftwareStore::open(&dir.join("sjel.db")).unwrap(), dir)
     }
 
     #[tokio::test]

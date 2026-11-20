@@ -1,0 +1,20 @@
+#!/bin/bash
+# Posts launcher for sjel-status and the CLI; resolves the overlay and execs posts-cli.
+# Portable shell only (CONTRIBUTING.md#portable-shell) — no bash-4-only syntax.
+set -euo pipefail
+
+_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=../../tools/lib/paths.sh
+source "$_dir/../../tools/lib/paths.sh"
+export SJEL_ROOT SJEL_PERSONAL_ROOT
+
+BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/posts-cli"
+
+# Rebuild when the binary is missing or older than its sources, so an edit never runs stale.
+# Build output goes to stderr so `posts status --json | jq` still works.
+if [ ! -x "$BIN" ] || [ -n "$(find "$_dir/src" "$_dir/Cargo.toml" -newer "$BIN" 2>/dev/null | head -1)" ]; then
+  echo "posts: building posts-cli…" >&2
+  (cd "$SJEL_ROOT" && cargo build --locked --release --bin posts-cli) >&2
+fi
+
+exec "$BIN" "$@"

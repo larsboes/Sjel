@@ -1,0 +1,14 @@
+[package]
+name = "health-api"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "AGPL-3.0-only"
+description = "Typed API wire models and route constants for the Sjel health capability"
+
+[dependencies]
+schemars = { workspace = true, features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+
+[lints]
+workspace = true

@@ -547,6 +547,14 @@ fn build_router(shell: proxy::Proxy) -> Router {
         )
         .route("/api/sjel-status/cv/pdf", get(cv_pdf_handler))
         .route(
+            status_api::ROUTE_STATUS_POSTS,
+            get(posts_handler).post(posts_write_handler),
+        )
+        .route(
+            status_api::ROUTE_STATUS_POSTS_DETAIL,
+            get(post_detail_handler),
+        )
+        .route(
             "/api/sjel-status/cv/file",
             get(cv_file_handler).put(cv_file_write_handler),
         )

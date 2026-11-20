@@ -21,6 +21,7 @@ use std::{
 use serde::Serialize;
 use sjel_turso::{libsql, Store};
 
+use crate::ops::SaveError;
 use crate::record::{check_attachment, Kind, Record};
 
 pub const PREFIX: &str = "projects";
@@ -378,25 +379,55 @@ impl Projects {
     /// [`NewerFile`] when the file holds bytes the index has not seen; the write or the index
     /// update failed. A failed index update leaves the file written, and `reindex` adopts it.
     pub async fn put(&self, record: &Record) -> Fallible<()> {
-        let prior = self.get(&record.path).await?.map(|r| r.content);
+        let tx = self.db.begin().await?;
+        let prior = Self::get_timed_on(&tx, &record.path)
+            .await?
+            .map(|(r, _)| r.content);
+        Self::index_on(&tx, record).await?;
         self.check_file(&record.path, prior.as_deref())?;
         self.render(record)?;
-        self.index(record).await
+        tx.commit().await?;
+        Ok(())
     }
 
-    /// The file's bytes when they differ from the row the index holds for `path`, or nothing when
-    /// they agree or there is no file.
-    ///
-    /// # Errors
-    /// The row or the file cannot be read.
-    pub async fn newer_file(&self, path: &str) -> Fallible<Option<String>> {
-        let prior = self.get(path).await?.map(|r| r.content);
-        match fs::read_to_string(self.root.join(path)) {
-            Ok(bytes) if Some(&bytes) != prior.as_ref() => Ok(Some(bytes)),
-            Ok(_) => Ok(None),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(e.into()),
+    /// Checks the base under the index writer lock and keeps it through the file replacement.
+    pub(crate) async fn save_checked(&self, record: &Record, base: Option<&str>) -> Fallible<()> {
+        let tx = self.db.begin().await?;
+        let path = record.path.as_str();
+        let prior = Self::get_timed_on(&tx, path).await?.map(|(r, _)| r.content);
+        let disk = match fs::read_to_string(self.root.join(path)) {
+            Ok(content) => Some(content),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        if let Some(content) = disk.filter(|content| Some(content) != prior.as_ref()) {
+            return Err(SaveError::Stale(content).into());
         }
+        match (prior.as_deref(), base) {
+            (Some(current), Some(base)) if current == base => {}
+            (Some(current), Some(_)) => return Err(SaveError::Stale(current.to_owned()).into()),
+            (Some(_), None) => return Err(SaveError::Refused(format!("{path} exists")).into()),
+            (None, Some(_)) => return Err(SaveError::Refused(format!("no record {path:?}")).into()),
+            (None, None) if !record.domain => {
+                let mut rows = tx.query(
+                    "SELECT 1 FROM projects_records WHERE project = ?1 AND archived = 0 LIMIT 1",
+                    [record.project.as_str()],
+                ).await?;
+                if rows.next().await?.is_none() {
+                    return Err(SaveError::Refused(format!(
+                        "no live project named {:?}",
+                        record.project
+                    ))
+                    .into());
+                }
+            }
+            (None, None) => {}
+        }
+        Self::index_on(&tx, record).await?;
+        self.check_file(path, prior.as_deref())?;
+        self.render(record)?;
+        tx.commit().await?;
+        Ok(())
     }
 
     /// Refuse when the file at `path` is not the bytes `prior` names: a different file, a file
@@ -414,9 +445,7 @@ impl Projects {
         }
     }
 
-    /// Insert or replace one row from a record, without touching its file.
-    async fn index(&self, record: &Record) -> Fallible<()> {
-        let tx = self.db.begin().await?;
+    async fn index_on(tx: &libsql::Transaction, record: &Record) -> Fallible<()> {
         tx.execute(
             &format!(
                 "INSERT INTO projects_records
@@ -441,7 +470,6 @@ impl Projects {
             ),
         )
         .await?;
-        tx.commit().await?;
         Ok(())
     }
 
@@ -504,7 +532,18 @@ impl Projects {
                 report.refused.push((id, reason));
                 continue;
             }
-            self.index(&record).await?;
+            let tx = self.db.begin().await?;
+            match fs::read(&file) {
+                Ok(content) if content == record.content.as_bytes() => {}
+                Ok(_) => continue,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => {
+                    report.skipped.push((id, format!("unreadable: {error}")));
+                    continue;
+                }
+            }
+            Self::index_on(&tx, &record).await?;
+            tx.commit().await?;
             if rows.contains_key(&id) {
                 report.adopted.push(id);
             } else {
@@ -515,6 +554,9 @@ impl Projects {
         gone.sort();
         for path in gone {
             let tx = self.db.begin().await?;
+            if self.root.join(path).try_exists()? {
+                continue;
+            }
             tx.execute(
                 "DELETE FROM projects_inventory_links WHERE record_path = ?1",
                 [path.as_str()],
@@ -536,9 +578,8 @@ impl Projects {
     /// # Errors
     /// [`NewerFile`] when the file changed outside Sjel; the delete or the file removal failed.
     pub async fn remove(&self, path: &str) -> Fallible<bool> {
-        let prior = self.get(path).await?.map(|r| r.content);
-        self.check_file(path, prior.as_deref())?;
         let tx = self.db.begin().await?;
+        let prior = Self::get_timed_on(&tx, path).await?.map(|(r, _)| r.content);
         tx.execute(
             "DELETE FROM projects_inventory_links WHERE record_path = ?1",
             [path],
@@ -548,11 +589,12 @@ impl Projects {
             .execute("DELETE FROM projects_records WHERE path = ?1", [path])
             .await?
             > 0;
-        tx.commit().await?;
+        self.check_file(path, prior.as_deref())?;
         match fs::remove_file(self.root.join(path)) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
             _ => {}
         }
+        tx.commit().await?;
         Ok(removed)
     }
 
@@ -561,23 +603,17 @@ impl Projects {
     /// Returns whether a row was there.
     ///
     /// # Errors
-    /// The new path is not a record path, or a row or file already sits there. A render that
-    /// fails after the row moved leaves the row written, as [`Self::put`] does: `render_all`
-    /// repairs the file, and `verify` reports it until then.
+    /// The new path is invalid or occupied, or the source changed outside Sjel.
     pub async fn move_record(&self, from: &str, to: &str) -> Fallible<bool> {
-        if self.get(to).await?.is_some() {
+        let tx = self.db.begin().await?;
+        if Self::get_timed_on(&tx, to).await?.is_some() {
             return Err(format!("{to}: a record is already there").into());
         }
-        let Some(record) = self.get(from).await? else {
+        let Some((record, _)) = Self::get_timed_on(&tx, from).await? else {
             return Ok(false);
         };
-        self.check_file(from, Some(&record.content))?;
         let moved =
             Record::from_content(to, record.content).map_err(|why| format!("{to}: {why}"))?;
-        if self.root.join(to).exists() {
-            return Err(format!("{to}: a file is already there").into());
-        }
-        let tx = self.db.begin().await?;
         tx.execute(
             "UPDATE projects_inventory_links SET record_path = ?1 WHERE record_path = ?2",
             [to, from],
@@ -603,18 +639,14 @@ impl Projects {
             ),
         )
         .await?;
-        tx.commit().await?;
-        // Rendered from the row, not from the bytes read above: a write that landed in the
-        // meantime is then the one that reaches the new file.
-        let moved = self
-            .get(to)
-            .await?
-            .ok_or_else(|| format!("{to}: the row moved away"))?;
+        self.check_file(from, Some(&moved.content))?;
+        self.check_file(to, None)?;
         self.render(&moved)?;
         match fs::remove_file(self.root.join(from)) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
             _ => {}
         }
+        tx.commit().await?;
         Ok(true)
     }
 
@@ -628,6 +660,13 @@ impl Projects {
     /// "did this change since I last read it?" without asking for the content.
     pub async fn get_timed(&self, path: &str) -> Fallible<Option<(Record, String)>> {
         let conn = self.db.connect().await?;
+        Self::get_timed_on(&conn, path).await
+    }
+
+    async fn get_timed_on(
+        conn: &libsql::Connection,
+        path: &str,
+    ) -> Fallible<Option<(Record, String)>> {
         let mut rows = conn
             .query(
                 "SELECT path, content, updated_at FROM projects_records WHERE path = ?1",

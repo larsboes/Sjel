@@ -1,0 +1,10 @@
+# The operator's daily health values from Apple Health exports.
+kind           = "process"
+name           = "health"
+command        = ["target/release/health", "serve"]
+build          = ["cargo", "build", "--locked", "--release", "--bin", "health"]
+port           = "8109"
+health_path    = "/health"
+ready_path     = "/ready"
+autostart      = "true"
+proxy_api_only = "true"

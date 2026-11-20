@@ -28,6 +28,13 @@ impl Route {
     }
 }
 
+/// A folder that holds a regular file with this name is never entered.
+pub const SEALED_MARKER: &str = ".sjel-sealed";
+
+/// The folder the Health app's export unpacks to. `health import` reads it whole; the router's
+/// per-file handover would split it.
+const HEALTH_EXPORT_DIR: &str = "apple_health_export";
+
 /// Directories that hold software, caches or agent tooling, never personal files.
 const SOFTWARE_DIRS: &[&str] = &[
     "node_modules",
@@ -177,6 +184,9 @@ pub fn skip_folder(relative: &Path) -> Option<&'static str> {
         if SOFTWARE_DIRS.contains(&dir) {
             return Some("inside a software or tooling folder");
         }
+        if dir == HEALTH_EXPORT_DIR {
+            return Some("Apple Health export: run `health import` on it");
+        }
         if BUNDLE_SUFFIXES.iter().any(|suffix| dir.ends_with(suffix)) {
             return Some("inside an app or project bundle");
         }
@@ -244,6 +254,14 @@ mod tests {
         assert_eq!(at("Recordings/voice.m4a"), Route::Media);
         assert_eq!(at("Notes/idea.md"), Route::Notes);
         assert_eq!(at("Finanzen/Steuer.note"), Route::Notes);
+    }
+
+    #[test]
+    fn an_apple_health_export_is_left_to_its_owner() {
+        assert_eq!(
+            at("Phone/apple_health_export/export.xml"),
+            Route::Skip("Apple Health export: run `health import` on it")
+        );
     }
 
     #[test]

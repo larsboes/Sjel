@@ -1,0 +1,34 @@
+[package]
+name = "sjel-health"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The operator's daily health values from Apple Health: sleep, activity, heart and body."
+publish = false
+
+[lib]
+name = "health"
+path = "src/lib.rs"
+
+[[bin]]
+name = "health"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+chrono.workspace = true
+health-api = { path = "../health-api" }
+route-manifest = { path = "../route-manifest" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sjel-config = { path = "../sjel-config" }
+sjel-server = { path = "../sjel-server" }
+sjel-turso = { path = "../sjel-turso" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "time"] }
+
+[dev-dependencies]
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

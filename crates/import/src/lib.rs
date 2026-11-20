@@ -112,6 +112,9 @@ pub fn plan(root: &Path) -> Fallible<Vec<Entry>> {
     if !fs::symlink_metadata(root)?.is_dir() {
         return Err(format!("{} is not a directory", root.display()).into());
     }
+    if sealed(root) {
+        return Err("import root is a sealed folder".into());
+    }
     let mut entries = Vec::new();
     let mut pending = vec![root.to_path_buf()];
     while let Some(dir) = pending.pop() {
@@ -122,7 +125,9 @@ pub fn plan(root: &Path) -> Fallible<Vec<Entry>> {
             let relative = path.strip_prefix(root).unwrap_or(&path);
             if metadata.is_dir() {
                 // A skipped folder is listed once, never entered: node_modules can hold 100,000 files.
-                match route::skip_folder(relative) {
+                let reason = route::skip_folder(relative)
+                    .or_else(|| sealed(&path).then_some("inside a sealed folder"));
+                match reason {
                     Some(reason) => entries.push(entry(path, Route::Skip(reason), &metadata)),
                     None => pending.push(path),
                 }
@@ -149,6 +154,10 @@ pub fn plan(root: &Path) -> Fallible<Vec<Entry>> {
     }
     entries.sort_by(|left, right| left.path.cmp(&right.path));
     Ok(entries)
+}
+
+fn sealed(dir: &Path) -> bool {
+    fs::symlink_metadata(dir.join(route::SEALED_MARKER)).is_ok_and(|marker| marker.is_file())
 }
 
 fn entry(path: PathBuf, route: Route, metadata: &fs::Metadata) -> Entry {
@@ -850,6 +859,24 @@ mod tests {
             run_with_media(&entries, &ledger, &documents, Some(&media), |_, _, _| {}).unwrap();
         assert_eq!(third.unchanged, entries.len());
         assert_eq!(*media.uploads.borrow(), 3);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sealed_folders_are_listed_once_and_never_entered() {
+        let root = scratch("sealed");
+        fs::create_dir_all(root.join("vault/inner")).unwrap();
+        fs::write(root.join("vault").join(route::SEALED_MARKER), b"").unwrap();
+        fs::write(root.join("vault/inner/notes.md"), b"md").unwrap();
+        fs::write(root.join("vault/scan.pdf"), b"pdf").unwrap();
+        let entries = plan(&root).unwrap();
+        let vault: Vec<_> = entries
+            .iter()
+            .filter(|e| e.path.starts_with(root.join("vault")))
+            .collect();
+        assert_eq!(vault.len(), 1);
+        assert_eq!(vault[0].route, Route::Skip("inside a sealed folder"));
+        assert!(plan(&root.join("vault")).is_err());
         fs::remove_dir_all(root).unwrap();
     }
 

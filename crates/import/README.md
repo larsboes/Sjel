@@ -34,8 +34,11 @@ in the document library. Each file type now has one owner, and the router decide
 | `skip` | software, caches, bundles, hidden files, unknown types | not handed over, with the reason in the ledger |
 
 The rules are in `src/route.rs`. The router records a software folder (`node_modules`, `plugins`,
-`skills`, an `.app` bundle and others) once and does not enter it. Credential, secret and key
-folders are excluded case-insensitively before descent. Credential filenames and key extensions
+`skills`, an `.app` bundle and others) once and does not enter it. An unpacked Apple Health export
+(`apple_health_export/`) is skipped the same way, with a pointer to `health import`, which reads
+it whole (`crates/health/README.md`). A folder that holds a
+`.sjel-sealed` file is listed once and never entered, and a sealed root is refused. Credential,
+secret and key folders are excluded case-insensitively before descent. Credential filenames and key extensions
 are excluded before any content read, including CSV header inspection. Symlinks are never
 imported, and roots inside credential paths or symlink roots are refused.
 
@@ -84,7 +87,8 @@ The ledger is the table `import_files` in the shared database, keyed by path. `s
 3. **One record per set of bytes.** documents keys a record by bytes plus filename, so the
    same file under a second name made a second record. The router asks documents for the
    SHA-256 first and records `present` instead of uploading.
-4. **documents folder intake no longer takes `.md`, `.txt` or `.csv`.** The 5,888 existing
-   text records stay. Their cleanup is a separate decision.
+4. **documents folder intake no longer takes `.md`, `.txt` or `.csv`.** Existing text
+   records with a copy elsewhere are archived in documents and their blobs stay. Text records
+   without another copy wait in the inbox until the `notes` route can take them.
 
 The remaining routes are tracked in [the data plan](../../docs/plans/data.md#1-import).

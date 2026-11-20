@@ -285,7 +285,9 @@ pub async fn set_done(projects: &Projects, id: &str, done: bool) -> Fallible<Rec
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let content = record::set_done(&current.content, done, &today)?;
     let record = Record::from_content(id, content)?;
-    projects.put(&record).await?;
+    projects
+        .save_checked(&record, Some(&current.content))
+        .await?;
     Ok(record)
 }
 
@@ -354,7 +356,9 @@ pub async fn set_property(
     };
     let record = Record::from_content(path, content)?;
     let record = inherit_project_class(projects, record).await?;
-    projects.put(&record).await?;
+    projects
+        .save_checked(&record, Some(&current.content))
+        .await?;
     Ok(record)
 }
 
@@ -410,7 +414,10 @@ pub async fn normalize(projects: &Projects, apply: bool) -> Fallible<Vec<Normali
         }
         if apply {
             projects
-                .put(&Record::from_content(&current.path, content)?)
+                .save_checked(
+                    &Record::from_content(&current.path, content)?,
+                    Some(&current.content),
+                )
                 .await?;
         }
         report.push(Normalized {
@@ -479,31 +486,7 @@ pub async fn save(
     if let Some(reason) = class_refusal(&record) {
         return Err(SaveError::Refused(reason).into());
     }
-    // An edit made in another editor is the current content, whatever the index says.
-    if let Some(newer) = projects.newer_file(path).await? {
-        return Err(SaveError::Stale(newer).into());
-    }
-    match (projects.get(path).await?, base) {
-        (Some(current), Some(base)) if current.content == base => {}
-        (Some(current), Some(_)) => return Err(SaveError::Stale(current.content).into()),
-        (Some(_), None) => return Err(SaveError::Refused(format!("{path} exists")).into()),
-        (None, Some(_)) => return Err(SaveError::Refused(format!("no record {path:?}")).into()),
-        (None, None) => {
-            if !record.domain
-                && !projects
-                    .by_project(&record.project)
-                    .await?
-                    .iter()
-                    .any(|r| !r.archived)
-            {
-                let project = &record.project;
-                return Err(
-                    SaveError::Refused(format!("no live project named {project:?}")).into(),
-                );
-            }
-        }
-    }
-    projects.put(&record).await?;
+    projects.save_checked(&record, base).await?;
     Ok(record)
 }
 
@@ -559,7 +542,9 @@ pub async fn rename(projects: &Projects, path: &str, title: &str) -> Fallible<Re
         .into_iter()
         .filter(|other| record::rewrite_links(&other.content, &record.title, &title).1 > 0)
         .collect();
-    projects.move_record(path, &to).await?;
+    if !projects.move_record(path, &to).await? {
+        return Err(SaveError::Refused(format!("no record {path:?}")).into());
+    }
     let mut renamed = Renamed {
         path: to,
         title,
@@ -1302,6 +1287,45 @@ mod tests {
                 .is_err()
         );
         assert_eq!(tasks(&projects, Some("open")).await.unwrap().len(), 1);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_saves_from_one_base_have_one_winner() {
+        let (projects, dir) = scratch("save-concurrent").await;
+        add_project(&projects, "W", "").await.unwrap();
+        let path = "W/W.md";
+        let base = projects.get(path).await.unwrap().unwrap().content;
+        let projects = std::sync::Arc::new(projects);
+        let start = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+        let write = |content: String| {
+            let projects = projects.clone();
+            let start = start.clone();
+            let base = base.clone();
+            tokio::spawn(async move {
+                start.wait().await;
+                save(&projects, path, &content, Some(&base)).await
+            })
+        };
+        let (first, second) = tokio::join!(
+            write(format!("{base}\nfirst edit\n")),
+            write(format!("{base}\nsecond edit\n")),
+        );
+        let (first, second) = (first.unwrap(), second.unwrap());
+        let (winner, loser) = match (first, second) {
+            (Ok(record), Err(error)) | (Err(error), Ok(record)) => (record, error),
+            results => panic!("expected one winner and one stale save: {results:?}"),
+        };
+        assert!(matches!(loser.downcast_ref::<SaveError>(),
+            Some(SaveError::Stale(current)) if current == &winner.content));
+        assert_eq!(
+            projects.get(path).await.unwrap().unwrap().content,
+            winner.content
+        );
+        assert_eq!(
+            fs::read_to_string(projects.root().join(path)).unwrap(),
+            winner.content
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 

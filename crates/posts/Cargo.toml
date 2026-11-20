@@ -1,0 +1,27 @@
+[package]
+name = "sjel-posts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Post drafts: text revisions, ordered Photos media, collages and exports for upload."
+publish = false
+
+[lib]
+name = "posts"
+path = "src/lib.rs"
+
+# The `crates/posts/posts` launcher execs posts-cli.
+[[bin]]
+name = "posts-cli"
+path = "src/main.rs"
+
+[dependencies]
+sjel-config = { path = "../sjel-config" }
+status-api = { path = "../status-api" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

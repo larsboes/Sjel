@@ -64,8 +64,8 @@ pub struct ProjectReadResponse {
 
 /// The successful response from the single-record route.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
-pub struct RecordReadResponse {
-    pub record: RecordRead,
+pub struct RecordReadResponse<T = RecordRead> {
+    pub record: T,
 }
 
 /// One live record as the task and record lists serve it.
@@ -87,6 +87,18 @@ pub struct TaskRead {
     pub uri: String,
     pub data_class: String,
     pub data_class_rationale: String,
+}
+
+/// The successful response from a task write.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+pub struct TaskResponse<T = TaskRead> {
+    pub task: T,
+}
+
+/// The successful response from the task list route.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+pub struct TaskListResponse<T = TaskRead> {
+    pub tasks: Vec<T>,
 }
 
 impl From<TaskRead> for GlobalNote {
@@ -147,6 +159,13 @@ mod tests {
             record: read(Some("  body\n")),
         })
         .unwrap();
+        let link: RecordReadResponse<crate::ProjectLinkRecord> =
+            serde_json::from_value(wire.clone()).unwrap();
+        let mail: RecordReadResponse<crate::ProjectMailTarget> =
+            serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(link.record.updated_at, "stamp");
+        assert_eq!(link.record.content, "  body\n");
+        assert_eq!(mail.record.content, "  body\n");
         let record: ProjectRecord = serde_json::from_value::<RecordReadResponse>(wire)
             .unwrap()
             .record

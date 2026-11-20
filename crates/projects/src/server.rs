@@ -15,7 +15,7 @@ use projects::{ops, Kind, Projects};
 use projects_api::{
     reads::{
         ClassifiedProjectSummary, ProjectListResponse, ProjectReadResponse, RecordListResponse,
-        RecordRead, RecordReadResponse,
+        RecordRead, RecordReadResponse, TaskListResponse, TaskResponse,
     },
     ProjectSummary,
 };
@@ -517,7 +517,7 @@ async fn decide_mail_proposal(
 async fn list_tasks(
     State(projects): State<Shared>,
     Query(query): Query<TaskQuery>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<TaskListResponse>, ApiError> {
     if let Some(status) = query.status.as_deref() {
         if !["open", "done"].contains(&status) {
             return Err(ApiError(
@@ -529,7 +529,7 @@ async fn list_tasks(
     let tasks = ops::tasks(&projects, query.status.as_deref())
         .await
         .map_err(|e| api_error(false, e))?;
-    Ok(Json(json!({ "tasks": tasks })))
+    Ok(Json(TaskListResponse { tasks }))
 }
 
 async fn list_projects(
@@ -702,7 +702,7 @@ async fn get_record(
 async fn add_task(
     State(projects): State<Shared>,
     Json(body): Json<AddTask>,
-) -> Result<(StatusCode, Json<Value>), ApiError> {
+) -> Result<(StatusCode, Json<TaskResponse>), ApiError> {
     let record = ops::add_task(
         &projects,
         &body.project,
@@ -715,18 +715,22 @@ async fn add_task(
     .map_err(|e| api_error(true, e))?;
     Ok((
         StatusCode::CREATED,
-        Json(json!({ "task": ops::task(&record) })),
+        Json(TaskResponse {
+            task: ops::task(&record),
+        }),
     ))
 }
 
 async fn set_done(
     State(projects): State<Shared>,
     Json(body): Json<SetDone>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<TaskResponse>, ApiError> {
     let record = ops::set_done(&projects, &body.id, body.done)
         .await
         .map_err(|e| api_error(true, e))?;
-    Ok(Json(json!({ "task": ops::task(&record) })))
+    Ok(Json(TaskResponse {
+        task: ops::task(&record),
+    }))
 }
 
 async fn add_project(
@@ -763,11 +767,13 @@ async fn save_record(State(projects): State<Shared>, Json(body): Json<SaveRecord
 async fn set_property(
     State(projects): State<Shared>,
     Json(body): Json<SetProperty>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<TaskResponse>, ApiError> {
     let record = ops::set_property(&projects, &body.path, &body.key, &body.value)
         .await
         .map_err(|e| api_error(true, e))?;
-    Ok(Json(json!({ "task": ops::task(&record) })))
+    Ok(Json(TaskResponse {
+        task: ops::task(&record),
+    }))
 }
 
 async fn add_note(

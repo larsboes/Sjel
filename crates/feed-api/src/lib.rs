@@ -727,6 +727,13 @@ pub struct BulkResult {
     pub narrowed: usize,
 }
 
+impl BulkResult {
+    /// Retain requested IDs the owner has not acknowledged as applied.
+    pub fn retain_unapplied(&self, ids: &mut Vec<String>) {
+        ids.retain(|id| !self.succeeded.contains(id));
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct BulkFailure {
     pub id: String,

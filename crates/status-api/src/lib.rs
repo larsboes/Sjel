@@ -42,6 +42,8 @@ pub const ROUTE_STATUS_HOST_WATCH: &str = "/api/sjel-status/host-watch";
 pub const ROUTE_STATUS_RUNTIME: &str = "/api/sjel-status/runtime";
 pub const ROUTE_STATUS_PACKS: &str = "/api/sjel-status/packs";
 pub const ROUTE_STATUS_CV: &str = "/api/sjel-status/cv";
+pub const ROUTE_STATUS_POSTS: &str = "/api/sjel-status/posts";
+pub const ROUTE_STATUS_POSTS_DETAIL: &str = "/api/sjel-status/posts/detail";
 pub const ROUTE_STATUS_CREDENTIALS: &str = "/api/sjel-status/credentials";
 pub const PHONE_MIRROR_MODE: &str = "phone-v1";
 pub const PHONE_MIRROR_FILENAME: &str = "phone-v1.db";
@@ -1394,6 +1396,94 @@ pub fn filter_applications<'a>(view: &'a CvView, status: &str) -> Vec<&'a CvAppl
         .iter()
         .filter(|app| app.status == status)
         .collect()
+}
+
+// --- Posts ---
+
+/// One post in the list. `state` is `sketch`, `draft`, `ready` or `published`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct PostSummary {
+    pub slug: String,
+    pub title: String,
+    pub state: String,
+    #[serde(default)]
+    pub event: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    pub media: usize,
+}
+
+/// `GET /api/sjel-status/posts`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct PostsView {
+    pub root: String,
+    pub posts: Vec<PostSummary>,
+}
+
+/// A grid of two photos. `layout` is `pair` or `stack`; `accent` is `none`, `pixels` or `lowpoly`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct PostCollage {
+    pub layout: String,
+    pub accent: String,
+    pub parts: Vec<String>,
+}
+
+/// One image slot in post order: a Photos item or a collage.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct PostMediaItem {
+    #[serde(default)]
+    pub photos_id: String,
+    pub role: String,
+    #[serde(default)]
+    pub people: Vec<String>,
+    #[serde(default)]
+    pub collage: Option<PostCollage>,
+    /// Absolute path of the last export of this slot, when one exists.
+    #[serde(default)]
+    pub file: Option<String>,
+}
+
+/// `GET /api/sjel-status/posts/detail?slug=`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct PostDetail {
+    pub summary: PostSummary,
+    pub text: String,
+    pub media: Vec<PostMediaItem>,
+    pub revisions: usize,
+}
+
+/// Body of `POST /api/sjel-status/posts`. Fields an action does not use are ignored.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PostsWriteRequest {
+    pub action: String,
+    #[serde(default)]
+    pub slug: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub event: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub index: usize,
+    #[serde(default)]
+    pub direction: String,
+    #[serde(default)]
+    pub layout: String,
+    #[serde(default)]
+    pub accent: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct PostsWriteResult {
+    pub action: String,
+    pub detail: String,
+    #[serde(default)]
+    pub warnings: String,
 }
 
 // --- Packs & Harnesses ---

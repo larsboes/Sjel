@@ -1,0 +1,47 @@
+#!/bin/bash
+# crates/posts/check — exercise every posts verb against a throwaway overlay. Touches no real
+# overlay. Set POSTS_CHECK_PHOTOS="<id> <id>" to also export two Photos items into the
+# throwaway overlay; the Photos library itself is only read.
+set -euo pipefail
+
+_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+export SJEL_OVERLAY_ROOT="$tmp"
+posts="$_dir/posts"
+slug=check-post
+dir="$tmp/data/posts/$slug"
+
+fail() { echo "check: FAIL: $*" >&2; exit 1; }
+
+"$posts" new "$slug" --title "Check" >/dev/null
+[ -f "$dir/post.md" ] || fail "new wrote no post.md into the throwaway overlay"
+if "$posts" new "$slug" --title "Again" >/dev/null 2>&1; then fail "new overwrote a post"; fi
+if "$posts" new "Bad Slug" --title x >/dev/null 2>&1; then fail "bad slug accepted"; fi
+
+echo "first" | "$posts" text put "$slug" >/dev/null
+echo "second" | "$posts" text put "$slug" >/dev/null
+[ -f "$dir/revisions/002.md" ] || fail "text put kept no revision"
+"$posts" state "$slug" ready >/dev/null
+if "$posts" state "$slug" done >/dev/null 2>&1; then fail "unknown state accepted"; fi
+
+for id in AAA-1/L0/001 BBB-2/L0/001 CCC-3/L0/001; do "$posts" media add "$slug" "$id" >/dev/null; done
+if "$posts" media add "$slug" 'x";quit' >/dev/null 2>&1; then fail "unsafe photos id accepted"; fi
+"$posts" media move "$slug" 3 up >/dev/null
+"$posts" media pair "$slug" 2 --layout stack --accent pixels >/dev/null
+"$posts" media accent "$slug" 2 lowpoly >/dev/null
+"$posts" get "$slug" --json | grep -q '"accent":"lowpoly"' || fail "accent not saved"
+"$posts" media split "$slug" 2 >/dev/null
+"$posts" media remove "$slug" 1 >/dev/null
+[ "$("$posts" status --json | grep -o '"media":[0-9]*')" = '"media":2' ] || fail "status media count"
+
+if [ -n "${POSTS_CHECK_PHOTOS:-}" ]; then
+  photo="$tmp/data/posts/photo"
+  "$posts" new photo --title "Photos" >/dev/null
+  for id in $POSTS_CHECK_PHOTOS; do "$posts" media add photo "$id" >/dev/null; done
+  "$posts" media pair photo 1 --accent lowpoly >/dev/null
+  "$posts" export photo >/dev/null
+  [ -s "$photo/out/01-collage.jpg" ] || fail "export wrote no collage"
+fi
+
+echo "check: ok (overlay $tmp, removed on exit)"

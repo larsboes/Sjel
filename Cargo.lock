@@ -2346,6 +2346,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e5e5f2b3de970707fc22fd956d8f44211602939d5e4588603afa919cb7b3740"
 
 [[package]]
+name = "health-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+]
+
+[[package]]
 name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5793,6 +5801,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-health"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "health-api",
+ "route-manifest",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-server",
+ "sjel-turso",
+ "tokio",
+ "tower",
+]
+
+[[package]]
 name = "sjel-host-net"
 version = "0.1.0"
 dependencies = [
@@ -5989,6 +6014,17 @@ dependencies = [
  "sjel-server",
  "sjel-store",
  "tokio",
+]
+
+[[package]]
+name = "sjel-posts"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "status-api",
+ "toml",
 ]
 
 [[package]]

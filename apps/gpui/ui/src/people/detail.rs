@@ -24,13 +24,9 @@ impl PeoplePage {
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        render_person_detail(
-            person.clone(),
-            palette,
-            cx,
-            &self.detail_scroll,
-            self.confirm_remove.as_deref() == Some(person.id.as_str()),
-        )
+        let links = self.render_links(&person.id, palette, cx);
+        let confirming = self.confirm_remove.as_deref() == Some(person.id.as_str());
+        render_person_detail(person, palette, cx, &self.detail_scroll, confirming, links)
     }
 
     /// Probable duplicates with the registry's default merge: the side to keep and the name.
@@ -155,6 +151,7 @@ pub(super) fn render_person_detail(
     cx: &mut Context<PeoplePage>,
     scroll: &ScrollHandle,
     confirming: bool,
+    links: AnyElement,
 ) -> AnyElement {
     let company_role = [person.role.as_deref(), person.company.as_deref()]
         .into_iter()
@@ -162,6 +159,7 @@ pub(super) fn render_person_detail(
         .collect::<Vec<_>>()
         .join(" at ");
     let network = person.network_rows();
+    let follow_up_due = person.follow_up_due();
     let origins = person.origins().into_iter().collect::<Vec<_>>().join(", ");
 
     let header_card = div()
@@ -229,6 +227,10 @@ pub(super) fn render_person_detail(
 
     for (label, value) in network {
         contact_fields = contact_fields.child(detail_row(&label.to_uppercase(), value, palette));
+    }
+    if let Some(due) = follow_up_due {
+        contact_fields =
+            contact_fields.child(detail_row("FOLLOW-UP DUE", due.to_string(), palette));
     }
     if !origins.is_empty() {
         contact_fields = contact_fields.child(detail_row("SOURCES", origins, palette));
@@ -311,6 +313,7 @@ pub(super) fn render_person_detail(
                 )
                 .child(contact_fields),
         )
+        .child(links)
         .when(!person.facts.is_empty(), |el| {
             let columns = vec![
                 Column::new("predicate", "PREDICATE").width(rems(8.)),

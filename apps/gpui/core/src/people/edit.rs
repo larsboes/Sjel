@@ -52,7 +52,7 @@ pub fn edit_fields(declared: &[EntityField], held: &BTreeMap<String, String>) ->
         .filter(|field| field.key != "last_contact")
         .map(|field| EditField::new(field, None))
         .collect();
-    for key in held.keys() {
+    for key in held.keys().filter(|key| key.as_str() != "last_contact") {
         if !fields.iter().any(|field| &field.key == key) {
             fields.push(EditField {
                 key: key.clone(),
@@ -275,6 +275,12 @@ pub fn typed_as(key: &str, field_type: &str, text: &str) -> Result<Option<Value>
     if text.is_empty() {
         return Ok(None);
     }
+    if key == entities_api::FOLLOW_UP_WEEKS {
+        let weeks = text.parse::<u32>().ok().filter(|weeks| *weeks > 0);
+        return weeks
+            .map(|weeks| Some(json!(weeks)))
+            .ok_or_else(|| "Enter a positive whole number of weeks.".to_owned());
+    }
     Ok(Some(match field_type {
         "emails" | "phones" | "tags" => {
             let items: Vec<Value> = text
@@ -474,6 +480,7 @@ mod tests {
     fn the_form_offers_the_declared_fields_and_any_the_person_still_holds() {
         let mut held = BTreeMap::new();
         held.insert("old_address".to_string(), "Bonn".to_string());
+        held.insert("last_contact".to_string(), "2026-11-19".to_string());
         let fields = edit_fields(&declared(), &held);
         let keys: Vec<&str> = fields.iter().map(|field| field.key.as_str()).collect();
         assert_eq!(keys, vec!["emails", "company", "old_address"]);

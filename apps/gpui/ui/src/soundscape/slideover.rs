@@ -1,55 +1,56 @@
-//! The soundscape slideover: the player, sliding in over the page it belongs to.
-//!
-//! Why a drawer and not a window. A soundscape is something you leave on while you write, not a
-//! place you go: a second window takes focus from the note, has to be found in the window list, and
-//! at 980 by 700 it was never the size of the thing it contained. Between that window and nothing
-//! there was no third option -- the sidebar strip can cycle a preset and start the transport, but
-//! it cannot show what is playing. So the player is a panel that slides in from the right edge of
-//! the main window, over the page, and slides away again. It is the same window, so nothing steals
-//! focus; the audio lives in a `Global`, so closing the drawer does not cut the music.
-//!
-//! What the panel holds is chosen for a 400-point column rather than a wide window: the drawn
-//! field at the top, the transport and the six presets under it, volume and energy as full-width
-//! bars, and the twelve-value mixer folded behind one disclosure. Everything the old window showed
-//! is still reachable; nothing is shown twice.
-//!
-//! Every control here writes a *patch*, never a whole state: the dashboard, the phone and this
-//! panel drive the same session at once, and a whole-state write from a stale copy would silently
-//! undo whatever another surface just changed.
-//!
-//! It also keeps sounding when the conductor is unreachable. That is not a second source of truth --
-//! nothing is written, and the status line says the conductor is down -- it is the last known intent
-//! continuing, because a music player that goes silent when a helper process dies is worse than one
-//! that carries on and says so.
+//! Desktop Soundscape player and conductor controls.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use chrono::{Local, Timelike, Utc};
 use gpui_kit::{
-    actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Bounds, Context, DragMoveEvent,
-    FocusHandle, Focusable, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Render,
+    actions, div, prelude::*, px, rgb, rgba, App, Bounds, Context, DragMoveEvent, FocusHandle,
+    Focusable, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Render,
     SharedString, Window,
 };
 use sjel_gpui_core::data::{Remote, Repo};
 use sjel_gpui_core::shell::{
     self, SoundscapeLayers, SoundscapeParams, SoundscapeSession, SoundscapeState,
 };
-use sjel_gpui_core::soundscape::{self, LayerName, ParamName, Preset, Visual};
+use sjel_gpui_core::soundscape::{
+    self, BedsideFrame, BedsideOptions, LayerName, ListeningContext, ParamName, Preset, Scenario,
+    SleepRoom, Visual,
+};
 
-use crate::data;
-use crate::theme::{tint, Palette, ThemeContext};
+use crate::data::{self, Busy};
+use crate::ely::buttons::{Button, ButtonVariant, ToggleGroup, ToggleItem};
+use crate::ely::feedback::Toast;
+use crate::ely::forms::Switch;
+use crate::ely::motion::ProgressBar;
+use crate::ely::primitives::IconName;
+use crate::ely::theme::ControlSize;
+use crate::feedback::WindowToastExt;
+use crate::theme::{Palette, ThemeContext};
 use crate::viz::{self, Field};
+
+mod bedside;
 
 actions!(
     soundscape,
-    [ToggleTransport, NextPreset, CloseDrawer, ToggleMix]
+    [
+        ToggleTransport,
+        NextPreset,
+        CloseDrawer,
+        ToggleMix,
+        WidenDrawer,
+        NarrowDrawer
+    ]
 );
 
 /// How wide the panel is. Narrow enough that the page behind it still reads as work in progress,
 /// wide enough for two columns of labelled bars.
 pub const WIDTH: f32 = 400.;
+const MIN_WIDTH: f32 = 320.;
+const MAX_WIDTH: f32 = 760.;
+const KEY_RESIZE_STEP: f32 = 32.;
 
 /// How often a poll reads the conductor, so another surface's change shows up here without the
 /// operator doing anything.
@@ -60,7 +61,8 @@ const WRITE_DEBOUNCE: Duration = Duration::from_millis(180);
 /// at 60 Hz and 120 Hz, and short enough that the slide does not become something to wait for.
 const SLIDE_TAU: f32 = 0.06;
 /// The least height the drawn field keeps, enough for the preset label and the playback line.
-const FIELD_MIN: f32 = 140.;
+const FIELD_HEIGHT: f32 = 190.;
+const CONTEXT_POLL: Duration = Duration::from_secs(60);
 
 /// The six presets the conductor knows, in its own order.
 const PRESETS: [Preset; 6] = [
@@ -112,6 +114,15 @@ enum Write {
     Params(SoundscapeParams),
 }
 
+enum SessionStart {
+    Scenario(Scenario),
+    Repeat,
+    Bedside {
+        options: BedsideOptions,
+        back_to_sleep: bool,
+    },
+}
+
 /// The two channels the audio thread reads, and nothing else: the device itself lives in the app
 /// global so that closing the drawer does not stop the music.
 struct ControlHandles {
@@ -141,12 +152,22 @@ pub struct SoundscapeSlideover {
     last_frame: Instant,
     /// Somewhere to put the focus on the next render: `set_open` has no window.
     refocus: bool,
+    previous_focus: Option<FocusHandle>,
     /// Whether the panel is asked to be on screen, and how far in it has slid (0..1).
     open: bool,
     slide: f32,
+    width: f32,
+    measured_width: Rc<Cell<f32>>,
+    resize_start: Option<(f32, f32)>,
     /// The twelve-value mixer, folded away by default. A 400-point column cannot hold fourteen
     /// values and a picture without becoming a wall of small type.
     mix_open: bool,
+    listening_context: ListeningContext,
+    last_context_read: Option<Instant>,
+    session_write: Busy,
+    bedside_edit: Option<BedsideOptions>,
+    dark_room: Option<SleepRoom>,
+    dark_focus: [FocusHandle; 2],
 }
 
 impl SoundscapeSlideover {
@@ -176,9 +197,19 @@ impl SoundscapeSlideover {
             focus: cx.focus_handle(),
             last_frame: Instant::now(),
             refocus: false,
+            previous_focus: None,
             open: false,
             slide: 0.,
+            width: WIDTH,
+            measured_width: Rc::new(Cell::new(WIDTH)),
+            resize_start: None,
             mix_open: false,
+            listening_context: ListeningContext::at(Local::now().hour(), false),
+            last_context_read: None,
+            session_write: Busy::default(),
+            bedside_edit: None,
+            dark_room: None,
+            dark_focus: std::array::from_fn(|_| cx.focus_handle().tab_stop(true)),
         };
         view.read_state(cx);
         view.start_polling(cx);
@@ -192,10 +223,11 @@ impl SoundscapeSlideover {
             return;
         }
         self.open = open;
+        self.refocus = open;
         if open {
             // The panel is about to be looked at, so it takes the keys: space is play/pause. The
             // focus call needs the window, so it happens on the next render.
-            self.refocus = true;
+            self.read_context(cx);
         }
         cx.notify();
     }
@@ -214,7 +246,7 @@ impl SoundscapeSlideover {
         cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(POLL).await;
             let Ok(shell) = repo.shell() else {
-                continue;
+                return;
             };
             let Some(answer) = shell::run(async move { shell.soundscape_state().await }).await
             else {
@@ -230,11 +262,44 @@ impl SoundscapeSlideover {
                 }
                 view.state.loading = false;
                 view.adopt();
+                if view.open || (view.audio.control.adapt() && view.audio.control.playing()) {
+                    view.read_context(cx);
+                }
                 cx.notify();
             });
             if still_open.is_err() {
                 return;
             }
+        })
+        .detach();
+    }
+
+    fn read_context(&mut self, cx: &mut Context<Self>) {
+        if self
+            .last_context_read
+            .is_some_and(|last| last.elapsed() < CONTEXT_POLL)
+        {
+            return;
+        }
+        self.last_context_read = Some(Instant::now());
+        let Ok(shell) = self.repo.shell() else {
+            self.listening_context = ListeningContext::at(Local::now().hour(), false);
+            self.audio
+                .control
+                .set_activity(self.listening_context.activity);
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let context = shell::run(async move { shell.soundscape_context().await })
+                .await
+                .unwrap_or_else(|| ListeningContext::at(Local::now().hour(), false));
+            let _ = this.update(cx, |view, cx| {
+                view.listening_context = context;
+                view.audio.control.set_activity(context.activity);
+                if view.open {
+                    cx.notify();
+                }
+            });
         })
         .detach();
     }
@@ -276,11 +341,25 @@ impl SoundscapeSlideover {
         self.audio.control.set_volume(state.volume);
         self.audio.control.set_energy(state.energy);
         self.audio.control.set_seed(state.seed);
-        self.audio.control.set_playing(state.playing);
+        let timing = state.session.as_ref().map(session_timing);
+        let bedside = state
+            .session
+            .as_ref()
+            .and_then(|session| BedsideFrame::at(session, wall_clock_ms()));
+        self.audio.control.set_bedside(bedside);
+        self.audio
+            .control
+            .set_session_progress(timing.map(|(progress, _)| progress));
+        self.audio
+            .control
+            .set_playing(state.playing && timing.is_none_or(|(_, remaining)| remaining > 0));
     }
 
     fn toggle(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let playing = self.current().map(|state| state.playing).unwrap_or(false);
+        if self.device.is_none() || self.session_write.contains("start") {
+            return;
+        }
+        let playing = self.audio.control.playing();
         self.set_playing(!playing, window, cx);
     }
 
@@ -288,10 +367,21 @@ impl SoundscapeSlideover {
     /// through the workspace too: two writers each with their own `last_write` guard could not see
     /// each other's write, so a poll could undo the one the other had just made.
     pub fn set_playing(&mut self, next: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if self.session_write.contains("start") {
+            return;
+        }
         // The transport answers on the keystroke: the conductor confirms afterwards.
         self.audio.control.set_playing(next);
         if let Some(state) = self.state.value.as_mut() {
             state.playing = next;
+            if let Some(session) = state.session.as_mut() {
+                let now = wall_clock_ms();
+                if next {
+                    session.running_since_ms.get_or_insert(now);
+                } else {
+                    session.pause_at(now);
+                }
+            }
         }
         self.last_write = Some(Instant::now());
         let repo = self.repo.clone();
@@ -314,6 +404,9 @@ impl SoundscapeSlideover {
 
     /// The one write path for a preset, for the same reason as [`Self::set_playing`].
     pub fn choose_preset(&mut self, preset: Preset, window: &mut Window, cx: &mut Context<Self>) {
+        if self.session_write.contains("start") {
+            return;
+        }
         self.audio.control.set_preset(preset);
         // A scape carries its own defaults, exactly as the dashboard's preset button does.
         let defaults = preset.scape().map(|scape| scape.defaults);
@@ -322,23 +415,13 @@ impl SoundscapeSlideover {
         }
         self.last_write = Some(Instant::now());
         let repo = self.repo.clone();
-        let key = preset.key().to_string();
-        let params = defaults;
         data::write(
             cx,
             window,
             self,
             &repo,
             data::Press::quiet(""),
-            move |shell| async move {
-                // The preset first: the conductor validates it, and a name it does not know must not
-                // take the parameters down with it.
-                let state = shell.set_soundscape_preset(&key).await?;
-                match params {
-                    Some(params) => shell.set_soundscape_params(params).await,
-                    None => Ok(state),
-                }
-            },
+            move |shell| async move { shell.select_soundscape_mode(preset).await },
             |view, updated, cx| {
                 if let Some(state) = updated {
                     view.state.value = Some(state);
@@ -442,26 +525,24 @@ impl SoundscapeSlideover {
         );
     }
 
-    fn start_session(
-        &mut self,
-        scenario: &'static str,
-        minutes: u64,
-        preset: Preset,
-        energy: f32,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let session = SoundscapeSession {
-            scenario: scenario.to_string(),
-            duration_ms: minutes * 60_000,
-            elapsed_ms: 0,
-            // The conductor counts the session down from this instant, so a started session has to
-            // carry the moment it started rather than asking it to begin counting later.
-            running_since_ms: Some(chrono::Utc::now().timestamp_millis().max(0) as u64),
-        };
-        self.audio.control.set_preset(preset);
-        self.audio.control.set_energy(energy);
-        self.audio.control.set_playing(true);
+    /// Start the last timed session from its original settings.
+    pub fn repeat_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.device.is_none() {
+            let message = self
+                .device_error
+                .as_deref()
+                .map(device_line)
+                .unwrap_or_else(|| "No sound output is available".into());
+            window.push_toast(Toast::new(message), cx);
+            return;
+        }
+        self.start_session(SessionStart::Repeat, window, cx);
+    }
+
+    fn start_session(&mut self, start: SessionStart, window: &mut Window, cx: &mut Context<Self>) {
+        if self.device.is_none() {
+            return;
+        }
         self.last_write = Some(Instant::now());
         let repo = self.repo.clone();
         data::write(
@@ -469,15 +550,28 @@ impl SoundscapeSlideover {
             window,
             self,
             &repo,
-            data::Press::quiet("Session started."),
+            data::Press::once(|view| &mut view.session_write, "start", ""),
             move |shell| async move {
-                shell.set_soundscape_preset(preset.key()).await?;
-                shell.set_soundscape_energy(energy).await?;
-                shell.set_soundscape_playing(true).await?;
-                shell.set_soundscape_session(Some(session)).await
+                match start {
+                    SessionStart::Scenario(scenario) => {
+                        shell.start_soundscape_scenario(scenario).await
+                    }
+                    SessionStart::Repeat => shell.repeat_soundscape_session().await,
+                    SessionStart::Bedside {
+                        options,
+                        back_to_sleep,
+                    } => shell.start_bedside(options, back_to_sleep).await,
+                }
             },
             |view, updated, cx| {
                 if let Some(state) = updated {
+                    view.push(&state);
+                    view.dark_room = state
+                        .session
+                        .as_ref()
+                        .and_then(|session| session.bedside)
+                        .map(|options| options.room);
+                    view.bedside_edit = None;
                     view.state.value = Some(state);
                 }
                 cx.notify();
@@ -486,6 +580,10 @@ impl SoundscapeSlideover {
     }
 
     fn clear_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let bedside = self
+            .current()
+            .and_then(|state| state.session.as_ref())
+            .is_some_and(|session| session.bedside.is_some());
         self.last_write = Some(Instant::now());
         let repo = self.repo.clone();
         data::write(
@@ -494,7 +592,13 @@ impl SoundscapeSlideover {
             self,
             &repo,
             data::Press::quiet("Session cleared."),
-            move |shell| async move { shell.set_soundscape_session(None).await },
+            move |shell| async move {
+                if bedside {
+                    shell.stop_bedside().await
+                } else {
+                    shell.set_soundscape_session(None).await
+                }
+            },
             |view, updated, cx| {
                 if let Some(state) = updated {
                     view.state.value = Some(state);
@@ -504,7 +608,8 @@ impl SoundscapeSlideover {
         );
     }
 
-    fn current(&self) -> Option<&SoundscapeState> {
+    /// Current playback and session details for the drawer and sidebar.
+    pub fn current(&self) -> Option<&SoundscapeState> {
         self.state.value.as_ref()
     }
 
@@ -518,8 +623,16 @@ impl SoundscapeSlideover {
 
     /// How far the panel has to sit from the window's right edge at a given amount of arrival: 0
     /// when it is open, its own width when it is fully away.
-    fn offset(slide: f32) -> f32 {
-        -(1. - slide.clamp(0., 1.)) * WIDTH
+    fn offset(slide: f32, width: f32) -> f32 {
+        -(1. - slide.clamp(0., 1.)) * width
+    }
+
+    fn resize(&mut self, width: f32, cx: &mut Context<Self>) {
+        let width = width.clamp(MIN_WIDTH, MAX_WIDTH);
+        if self.width != width {
+            self.width = width;
+            cx.notify();
+        }
     }
 
     /// Advance the field and the slide, and decide whether another frame is needed.
@@ -546,15 +659,19 @@ impl SoundscapeSlideover {
             }
         }
         let sliding = self.slide != target;
+        if !self.open && !sliding {
+            return false;
+        }
 
         let preset = self
             .current()
             .map(|state| state.preset())
             .unwrap_or_else(|| self.audio.visual.preset());
-        let moving = self
-            .field
-            .borrow_mut()
-            .advance(&self.audio.visual, preset, dt);
+        let moving = self.dark_room.is_none()
+            && self
+                .field
+                .borrow_mut()
+                .advance(&self.audio.visual, preset, dt);
         if (moving || sliding) && !reduce_motion {
             window.request_animation_frame();
             return true;
@@ -573,79 +690,70 @@ impl Render for SoundscapeSlideover {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = ThemeContext::of(window, cx).palette;
         self.adopt();
+        if self
+            .current()
+            .is_some_and(|state| state.preset() != Preset::Sleep)
+        {
+            self.dark_room = None;
+        }
         self.animate(window, cx);
         if std::mem::take(&mut self.refocus) {
+            self.previous_focus = window.focused(cx).filter(|focus| focus != &self.focus);
             window.focus(&self.focus, cx);
+        } else if !self.open {
+            if let Some(previous) = self.previous_focus.take() {
+                if self.focus.contains_focused(window, cx) {
+                    window.focus(&previous, cx);
+                }
+            }
         }
 
         let state = self.current();
-        let playing = state.map(|state| state.playing).unwrap_or(false);
+        let playing = self.audio.control.playing();
+        let dark_room = self.dark_room;
         let preset = state
             .map(|state| state.preset())
             .unwrap_or_else(|| self.audio.visual.preset());
-        // The line names the preset the operator chose. The synth's own report lags it by a bar
-        // while playing, and never moves at all when no device is rendering.
-        let playback = soundscape::Playback {
-            preset,
-            ..soundscape::Playback::read(&self.audio.visual, playing)
-        };
-
-        // Fully away and not wanted: draw nothing at all. The view stays alive because the audio
-        // does, and the next `set_open` brings it back on the next frame.
         if !self.open && self.slide <= 0. {
             return div().into_any_element();
         }
 
-        // A floor under the field: with the mixer open the controls took all but 60 points of it,
-        // and the preset label hung over the field's top edge. Past the floor the controls scroll.
+        let field_height = FIELD_HEIGHT + (self.width - WIDTH).max(0.) * 0.2;
         let field = div()
-            .flex_1()
-            .min_h(px(FIELD_MIN))
-            .relative()
-            // Paused, the field is a still wash of the preset's colours; dimmed, it reads as
-            // "nothing is sounding" instead of as a picture that stopped.
-            .child(
-                div()
-                    .size_full()
-                    .when(!playing, |field| field.opacity(0.45))
-                    .child(viz::frame(viz::canvas(
-                        self.field.clone(),
-                        self.audio.visual.clone(),
-                    ))),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .left(px(12.))
-                    .bottom(px(10.))
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(rgb(palette.text))
-                            .child(preset.label()),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(playback.describe()),
-                    ),
-            );
+            .h(px(field_height))
+            .flex_none()
+            .rounded(px(10.))
+            .overflow_hidden()
+            .when(!playing, |field| field.opacity(0.62))
+            .child(viz::frame(viz::canvas(
+                self.field.clone(),
+                self.audio.visual.clone(),
+            )));
 
         div()
+            .on_children_prepainted({
+                let measured_width = self.measured_width.clone();
+                move |children, _, _| {
+                    if let Some(header) = children.first() {
+                        measured_width.set(f32::from(header.size.width) + 1.);
+                    }
+                }
+            })
             .key_context("Soundscape")
             .track_focus(&self.focus)
             .absolute()
             .top_0()
             .bottom_0()
-            .right(px(SoundscapeSlideover::offset(self.slide)))
-            .w(px(WIDTH))
+            .right(px(Self::offset(self.slide, self.width)))
+            .w(px(self.width))
+            .max_w(gpui_kit::relative(0.9))
             .flex()
             .flex_col()
-            .bg(rgba(palette.panel()))
+            .bg(if dark_room.is_some() {
+                rgb(0x090b0f)
+            } else {
+                rgba(palette.panel())
+            })
             .border_l_1()
             .border_color(rgba(palette.border))
             // A page on white and a panel on near-white are one rectangle without this: the shadow
@@ -670,21 +778,77 @@ impl Render for SoundscapeSlideover {
                 view.mix_open = !view.mix_open;
                 cx.notify();
             }))
-            .child(self.header(palette, cx))
-            .child(field)
-            .child(
-                div()
-                    .id("soundscape-controls")
-                    .flex_shrink(1.)
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .child(self.controls(window, cx, palette, playing, preset)),
-            )
+            .on_action(cx.listener(|view, _: &WidenDrawer, _, cx| {
+                view.resize(view.measured_width.get() + KEY_RESIZE_STEP, cx);
+            }))
+            .on_action(cx.listener(|view, _: &NarrowDrawer, _, cx| {
+                view.resize(view.measured_width.get() - KEY_RESIZE_STEP, cx);
+            }))
+            .when_some(dark_room, |drawer, room| {
+                drawer.child(self.dark_player(room, playing, cx))
+            })
+            .when(dark_room.is_none(), |drawer| {
+                drawer.child(self.header(palette, cx)).child(
+                    div()
+                        .id("soundscape-controls")
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(14.))
+                                .px(px(16.))
+                                .pb(px(16.))
+                                .child(field)
+                                .child(self.controls(cx, palette, playing, preset)),
+                        ),
+                )
+            })
+            .child(self.resize_grip(palette, cx))
             .into_any_element()
     }
 }
 
 impl SoundscapeSlideover {
+    fn resize_grip(&self, palette: Palette, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("soundscape-resize")
+            .debug_selector(|| "soundscape-resize".into())
+            .absolute()
+            .left_0()
+            .top_0()
+            .bottom_0()
+            .w(px(8.))
+            .cursor_col_resize()
+            .hover(move |style| style.bg(rgba(crate::theme::tint(palette.accent, 0x26))))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|view, event: &MouseDownEvent, _, cx| {
+                    if event.click_count == 2 {
+                        view.resize_start = None;
+                        view.resize(WIDTH, cx);
+                    } else {
+                        view.resize_start =
+                            Some((f32::from(event.position.x), view.measured_width.get()));
+                    }
+                    cx.stop_propagation();
+                }),
+            )
+            .on_drag(ResizeDrawer, |_, _, _, cx| cx.new(|_| gpui_kit::EmptyView))
+            .on_drag_move(
+                cx.listener(|view, event: &DragMoveEvent<ResizeDrawer>, _, cx| {
+                    if let Some((start_x, initial_width)) = view.resize_start {
+                        view.resize(
+                            initial_width + start_x - f32::from(event.event.position.x),
+                            cx,
+                        );
+                    }
+                }),
+            )
+    }
+
     /// The top of the panel: what this is, what it is playing through, and the way out.
     fn header(&self, palette: Palette, cx: &mut Context<Self>) -> gpui_kit::Div {
         let conductor_down = self.state.error.is_some();
@@ -728,20 +892,17 @@ impl SoundscapeSlideover {
                             }),
                     ),
             )
-            .child(icon_button(
-                "soundscape-close",
-                "×",
-                palette,
-                cx,
-                |view, _, cx| view.set_open(false, cx),
-            ))
+            .child(
+                quiet_button("soundscape-close", "Close", cx, |view, _, cx| {
+                    view.set_open(false, cx)
+                })
+                .shortcut("escape"),
+            )
     }
 
-    /// The strip under the field: transport, presets, the two always-visible values, then the mixer
-    /// folded behind one disclosure, then the session.
+    /// Playback controls, timed sessions, and the disclosed mix.
     fn controls(
         &self,
-        _window: &mut Window,
         cx: &mut Context<Self>,
         palette: Palette,
         playing: bool,
@@ -752,128 +913,262 @@ impl SoundscapeSlideover {
         let energy = state.map(|state| state.energy).unwrap_or(0.7);
         let layers = state.map(|state| state.layers).unwrap_or_default();
         let params = state.map(|state| state.params).unwrap_or_default();
-        let conductor_down = self.state.error.is_some();
-        // Only a playing synth waits for the bar: a paused one takes the preset at once, and one
-        // with no device never reports it at all.
         let pending = playing && self.audio.visual.preset() != preset;
+        let session = state.and_then(|state| state.session.as_ref());
+        let status = if pending {
+            "Changing soundscape".to_owned()
+        } else if playing && preset.scape().is_some() {
+            super::controls::title_case(self.audio.visual.phase().label())
+        } else if playing {
+            "Playing".to_owned()
+        } else {
+            "Paused".to_owned()
+        };
 
-        let mut strip = div()
-            .flex_none()
+        let mut strip = div().flex().flex_col().gap(px(16.));
+        let now_playing = div()
             .flex()
             .flex_col()
-            .gap_2()
-            .px(px(14.))
-            .py(px(12.))
-            .bg(rgba(palette.surface))
-            .border_t_1()
-            .border_color(rgba(palette.border));
+            .gap_3()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_3()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .text_size(px(28.))
+                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                                    .text_color(rgb(palette.text))
+                                    .child(preset.label()),
+                            )
+                            .child(div().text_sm().text_color(rgb(palette.muted)).child(status)),
+                    )
+                    .child(
+                        Button::new(
+                            "soundscape-transport",
+                            if playing { "Pause" } else { "Play" },
+                        )
+                        .variant(ButtonVariant::Primary)
+                        .icon(if playing {
+                            IconName::Pause
+                        } else {
+                            IconName::Play
+                        })
+                        .disabled(self.device.is_none() || self.session_write.contains("start"))
+                        .on_click(cx.listener(|view, _, window, cx| view.toggle(window, cx))),
+                    ),
+            )
+            .when_some(session, |player, session| {
+                let (progress, remaining_ms) = session_timing(session);
+                let minutes = remaining_ms.div_ceil(60_000);
+                let label = Scenario::label_for(&session.scenario);
+                player.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_2()
+                        .child(
+                            div()
+                                .flex()
+                                .justify_between()
+                                .items_center()
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(rgb(palette.text))
+                                        .child(format!("{label} · {minutes} min left")),
+                                )
+                                .child(quiet_button(
+                                    "session-clear",
+                                    if session.bedside.is_some() {
+                                        "Stop session"
+                                    } else {
+                                        "Remove timer"
+                                    },
+                                    cx,
+                                    |view, window, cx| {
+                                        view.clear_session(window, cx);
+                                    },
+                                )),
+                        )
+                        .child(ProgressBar::new(
+                            "soundscape-session-progress",
+                            (progress * 100.).floor() / 100.,
+                        )),
+                )
+            })
+            .child(self.bar(
+                "volume",
+                "Volume",
+                volume,
+                Knob::Volume,
+                palette.accent,
+                palette,
+                cx,
+                |view, value, window, cx| view.set_volume(value, window, cx),
+            ));
+        strip = strip.child(now_playing);
 
+        let modes = [Preset::Focus, Preset::Relax, Preset::Sleep]
+            .into_iter()
+            .fold(
+                ToggleGroup::new("soundscape-modes").selected([preset.key()]),
+                |control, mode| control.item(ToggleItem::new(mode.key()).label(mode.label())),
+            );
         strip = strip.child(
             div()
                 .flex()
-                .items_center()
+                .flex_col()
                 .gap_2()
-                .child(transport(playing, palette, cx))
-                .child(div().flex_1())
-                .child(icon_button(
-                    "soundscape-next",
-                    "next",
-                    palette,
-                    cx,
-                    |view, window, cx| view.next_preset(window, cx),
+                .pt_3()
+                .border_t_1()
+                .border_color(rgba(palette.border))
+                .child(
+                    modes.on_change(cx.listener(|view, keys: &[SharedString], window, cx| {
+                        if let Some(preset) =
+                            keys.first().and_then(|key| Preset::from_key(key.as_ref()))
+                        {
+                            view.choose_preset(preset, window, cx);
+                        }
+                    })),
+                )
+                .child(div().flex().gap_1().children(
+                    [Preset::Ambient, Preset::Lofi, Preset::Edm].map(|candidate| {
+                        Button::new(candidate.key(), candidate.label())
+                            .size(ControlSize::Sm)
+                            .variant(if preset == candidate {
+                                ButtonVariant::Subtle
+                            } else {
+                                ButtonVariant::Ghost
+                            })
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                view.choose_preset(candidate, window, cx);
+                            }))
+                    }),
                 )),
         );
 
-        strip = strip.child(
-            div()
-                .flex()
-                .flex_wrap()
-                .gap_1()
-                .children(
-                    PRESETS
-                        .map(|candidate| preset_chip(candidate, candidate == preset, palette, cx)),
-                )
-                // Under the chips rather than among them: a label in the row pushed the sixth
-                // preset onto a second line on its own.
-                .when(pending, |element| {
-                    // The synth changes on the next bar, so the panel saying one thing and the ears
-                    // another for half a second is worth naming.
-                    element.child(
+        if preset == Preset::Sleep {
+            let bedside = session.and_then(|session| session.bedside);
+            if session.is_none() {
+                strip = strip.child(self.bedside_controls(palette, cx));
+            } else if let Some(options) = bedside {
+                strip = strip.child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .child(self.back_to_sleep(options, cx))
+                        .child(quiet_button(
+                            "bedside-dim-again",
+                            "Dim player",
+                            cx,
+                            move |view, _, cx| {
+                                view.dark_room = Some(options.room);
+                                cx.notify();
+                            },
+                        )),
+                );
+            }
+        }
+
+        if session.is_none() {
+            let suggestion = self.listening_context;
+            strip = strip.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .pt_3()
+                    .border_t_1()
+                    .border_color(rgba(palette.border))
+                    .child(
                         div()
-                            .px_1()
+                            .text_sm()
+                            .text_color(rgb(palette.text))
+                            .child("Timed sessions"),
+                    )
+                    .child(
+                        div()
                             .text_xs()
-                            .text_color(rgb(palette.amber))
-                            .child("on the next bar"),
+                            .text_color(rgb(palette.muted))
+                            .child(format!(
+                                "{} · try {}",
+                                suggestion.reason, suggestion.scenario.label
+                            )),
                     )
-                }),
-        );
+                    .child(
+                        div()
+                            .grid()
+                            .grid_cols(2)
+                            .gap_2()
+                            .children(Scenario::ALL.map(|scenario| {
+                                Button::new(
+                                    scenario.key,
+                                    format!("{} · {} min", scenario.label, scenario.minutes),
+                                )
+                                .size(ControlSize::Sm)
+                                .full_width()
+                                .variant(if scenario.key == suggestion.scenario.key {
+                                    ButtonVariant::Subtle
+                                } else {
+                                    ButtonVariant::Secondary
+                                })
+                                .disabled(
+                                    self.device.is_none() || self.session_write.contains("start"),
+                                )
+                                .on_click(cx.listener(
+                                    move |view, _, window, cx| {
+                                        view.start_session(
+                                            SessionStart::Scenario(scenario),
+                                            window,
+                                            cx,
+                                        );
+                                    },
+                                ))
+                            })),
+                    ),
+            );
+        }
 
+        let change_adapt = cx.listener(|view, on: &bool, _, cx| {
+            view.audio.control.set_adapt(*on);
+            cx.notify();
+        });
         strip = strip.child(
             div()
-                .flex()
-                .gap_3()
-                .child(
-                    self.bar(
-                        "volume",
-                        "volume",
-                        volume,
-                        Knob::Volume,
-                        palette.accent,
-                        palette,
-                        cx,
-                        |view, value, window, cx| view.set_volume(value, window, cx),
-                    )
-                    .flex_1(),
-                )
-                .child(
-                    self.bar(
-                        "energy",
-                        "energy",
-                        energy,
-                        Knob::Energy,
-                        palette.amber,
-                        palette,
-                        cx,
-                        |view, value, window, cx| view.set_energy(value, window, cx),
-                    )
-                    .flex_1(),
-                ),
-        );
-
-        // The disclosure. Twelve more values do not belong on screen at once in a column this
-        // narrow, and the six presets already cover the common change.
-        strip = strip.child(
-            div()
-                .id("soundscape-mix-toggle")
                 .flex()
                 .items_center()
+                .justify_between()
                 .gap_2()
-                .cursor_pointer()
-                .rounded(px(5.))
-                .when(self.mix_open, |element| element.bg(rgba(palette.raised)))
-                .px(px(6.))
-                .py(px(4.))
-                .on_click(cx.listener(|view, _, _, cx| {
-                    view.mix_open = !view.mix_open;
-                    cx.notify();
-                }))
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(if self.mix_open {
-                            "mix  ▾"
-                        } else {
-                            "mix  ▸"
-                        }),
-                )
-                .child(div().flex_1())
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child("6 layers · 6 scene values"),
-                ),
+                .pt_3()
+                .border_t_1()
+                .border_color(rgba(palette.border))
+                .when(preset.scape().is_some(), |strip| {
+                    strip.child(
+                        Switch::new("soundscape-adaptive-mix", self.audio.control.adapt())
+                            .label("Adaptive mix")
+                            .on_change(move |on, window, cx| change_adapt(&on, window, cx)),
+                    )
+                })
+                .child(quiet_button(
+                    "soundscape-mix-toggle",
+                    if self.mix_open {
+                        "Hide mixer"
+                    } else {
+                        "Show mixer"
+                    },
+                    cx,
+                    |view, _, cx| {
+                        view.mix_open = !view.mix_open;
+                        cx.notify();
+                    },
+                )),
         );
 
         if self.mix_open {
@@ -881,6 +1176,9 @@ impl SoundscapeSlideover {
             // the panel and made the whole strip taller than the window.
             let mut layers_bars: Vec<gpui_kit::Stateful<gpui_kit::Div>> = LayerName::ALL
                 .iter()
+                .filter(|&&layer| {
+                    layer != LayerName::Drums || !matches!(preset, Preset::Relax | Preset::Sleep)
+                })
                 .map(|layer| {
                     let layer = *layer;
                     self.bar(
@@ -897,6 +1195,9 @@ impl SoundscapeSlideover {
                 .collect();
             let mut scene_bars: Vec<gpui_kit::Stateful<gpui_kit::Div>> = ParamName::ALL
                 .iter()
+                .filter(|&&name| {
+                    name != ParamName::Pulse || !matches!(preset, Preset::Relax | Preset::Sleep)
+                })
                 .map(|name| {
                     let name = *name;
                     self.bar(
@@ -912,120 +1213,29 @@ impl SoundscapeSlideover {
                 })
                 .collect();
             strip = strip
-                .child(section("layers", palette, columns(&mut layers_bars)))
-                .child(section("scene", palette, columns(&mut scene_bars)));
+                .child(self.bar(
+                    "energy",
+                    "Energy",
+                    energy,
+                    Knob::Energy,
+                    palette.amber,
+                    palette,
+                    cx,
+                    |view, value, window, cx| view.set_energy(value, window, cx),
+                ))
+                .child(section("Layers", palette, columns(&mut layers_bars)))
+                .child(section("Scene", palette, columns(&mut scene_bars)))
+                .when_some(state.map(|state| state.seed), |strip, seed| {
+                    strip.child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!("Seed {}", soundscape::format_seed(seed))),
+                    )
+                });
         }
 
-        let session = state.and_then(|state| state.session.clone());
-        strip = strip.child(
-            div()
-                .grid()
-                .grid_cols(2)
-                .gap_1()
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .children(match session {
-                    Some(session) => {
-                        // The conductor stores elapsed time as a checkpoint plus the moment the
-                        // session started; a panel that showed only the checkpoint would always say
-                        // "50 min left" and never count down.
-                        let running = session
-                            .running_since_ms
-                            .map(|started| {
-                                let now = chrono::Utc::now().timestamp_millis().max(0) as u64;
-                                now.saturating_sub(started)
-                            })
-                            .unwrap_or(0);
-                        let remaining = session
-                            .duration_ms
-                            .saturating_sub(session.elapsed_ms.saturating_add(running))
-                            / 60_000;
-                        vec![
-                            div()
-                                .text_color(rgb(palette.text))
-                                .child(format!("{} · {remaining} min left", session.scenario))
-                                .into_any_element(),
-                            icon_button(
-                                "session-clear",
-                                "clear",
-                                palette,
-                                cx,
-                                |view, window, cx| view.clear_session(window, cx),
-                            ),
-                        ]
-                    }
-                    None => vec![
-                        quick(
-                            "deep-work",
-                            "deep focus · 50 min",
-                            palette,
-                            cx,
-                            |view, window, cx| {
-                                view.start_session("deep-work", 50, Preset::Focus, 0.72, window, cx)
-                            },
-                        ),
-                        quick(
-                            "reading",
-                            "reading · 25 min",
-                            palette,
-                            cx,
-                            |view, window, cx| {
-                                view.start_session("reading", 25, Preset::Focus, 0.42, window, cx)
-                            },
-                        ),
-                        quick(
-                            "reset",
-                            "reset · 10 min",
-                            palette,
-                            cx,
-                            |view, window, cx| {
-                                view.start_session("reset", 10, Preset::Relax, 0.38, window, cx)
-                            },
-                        ),
-                        quick(
-                            "wind-down",
-                            "wind down · 45 min",
-                            palette,
-                            cx,
-                            |view, window, cx| {
-                                view.start_session("wind-down", 45, Preset::Sleep, 0.24, window, cx)
-                            },
-                        ),
-                    ],
-                }),
-        );
-
-        // The seed, read off the screen rather than typed: it is what makes a session replayable.
-        strip = strip.child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .when_some(state.map(|state| state.seed), |element, seed| {
-                    element.child(format!("seed {}", soundscape::format_seed(seed)))
-                })
-                .when(conductor_down, |element| {
-                    element.child(
-                        div()
-                            .text_color(rgb(palette.amber))
-                            .child("playing the last known state"),
-                    )
-                }),
-        );
-
-        strip.child(
-            div()
-                .flex()
-                .gap_3()
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child("space play/pause")
-                .child("⇧⌘N next preset")
-                .child("m mix")
-                .child("esc close"),
-        )
+        strip
     }
 
     /// One bar: the row is the control, and a press anywhere on the track sets the value from the x
@@ -1180,6 +1390,9 @@ impl SoundscapeSlideover {
 #[derive(Clone, Copy)]
 struct DragKnob(Knob);
 
+#[derive(Clone, Copy)]
+struct ResizeDrawer;
+
 impl Render for DragKnob {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div().size_0()
@@ -1213,99 +1426,32 @@ fn section(label: &'static str, palette: Palette, child: gpui_kit::Div) -> gpui_
         .child(child)
 }
 
-/// The play/pause button.
-fn transport(playing: bool, palette: Palette, cx: &mut Context<SoundscapeSlideover>) -> AnyElement {
-    div()
-        .id("soundscape-transport")
-        .flex_none()
-        .w(px(88.))
-        .h(px(30.))
-        .rounded(px(15.))
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_xs()
-        .cursor_pointer()
-        .bg(if playing {
-            rgb(palette.accent)
-        } else {
-            rgba(palette.raised)
-        })
-        .text_color(rgb(if playing { 0xffffff } else { palette.text }))
-        .hover(move |style| style.text_color(rgb(palette.text)))
-        .on_click(cx.listener(|view, _, window, cx| view.toggle(window, cx)))
-        .child(if playing { "Pause" } else { "Play" })
-        .into_any_element()
+fn session_timing(session: &SoundscapeSession) -> (f32, u64) {
+    let remaining = session.remaining_at(wall_clock_ms());
+    let elapsed = session.duration_ms.saturating_sub(remaining);
+    (
+        elapsed as f32 / session.duration_ms.max(1) as f32,
+        remaining,
+    )
 }
 
-/// One preset chip.
-fn preset_chip(
-    preset: Preset,
-    chosen: bool,
-    palette: Palette,
-    cx: &mut Context<SoundscapeSlideover>,
-) -> AnyElement {
-    div()
-        .id(SharedString::from(format!("preset-{}", preset.key())))
-        .px_2()
-        .py(px(4.))
-        .rounded(px(6.))
-        .text_xs()
-        .cursor_pointer()
-        .bg(rgba(if chosen {
-            tint(palette.accent, 0x2a)
-        } else {
-            palette.raised
-        }))
-        .text_color(rgb(if chosen {
-            palette.accent
-        } else {
-            palette.muted
-        }))
-        .hover(move |style| style.text_color(rgb(palette.text)))
-        .on_click(cx.listener(move |view, _, window, cx| view.choose_preset(preset, window, cx)))
-        .child(preset.key())
-        .into_any_element()
+fn wall_clock_ms() -> u64 {
+    Utc::now().timestamp_millis().max(0) as u64
 }
 
-/// A small text button: `clear`, `next`, `×`.
-fn icon_button<F>(
+fn quiet_button<F>(
     id: &'static str,
     label: &'static str,
-    palette: Palette,
     cx: &mut Context<SoundscapeSlideover>,
     apply: F,
-) -> AnyElement
+) -> Button
 where
     F: Fn(&mut SoundscapeSlideover, &mut Window, &mut Context<SoundscapeSlideover>) + 'static,
 {
-    div()
-        .id(SharedString::from(id.to_string()))
-        .px_2()
-        .py(px(3.))
-        .rounded(px(5.))
-        .text_xs()
-        .cursor_pointer()
-        .bg(rgba(palette.raised))
-        .text_color(rgb(palette.muted))
-        .hover(move |style| style.text_color(rgb(palette.text)))
+    Button::new(id, label)
+        .size(ControlSize::Sm)
+        .variant(ButtonVariant::Ghost)
         .on_click(cx.listener(move |view, _, window, cx| apply(view, window, cx)))
-        .child(label)
-        .into_any_element()
-}
-
-/// One of the timed scenarios.
-fn quick<F>(
-    id: &'static str,
-    label: &'static str,
-    palette: Palette,
-    cx: &mut Context<SoundscapeSlideover>,
-    apply: F,
-) -> AnyElement
-where
-    F: Fn(&mut SoundscapeSlideover, &mut Window, &mut Context<SoundscapeSlideover>) + 'static,
-{
-    icon_button(id, label, palette, cx, apply)
 }
 
 /// The drag payload needs to carry the knob it belongs to; the write it applies comes from the
@@ -1313,12 +1459,14 @@ where
 impl SoundscapeSlideover {
     /// Bindings the panel carries. Registered once at launch, because a key binding belongs to the
     /// app and the context it names ("Soundscape") is only carried by the panel's root.
-    pub fn keys() -> [gpui_kit::KeyBinding; 4] {
+    pub fn keys() -> [gpui_kit::KeyBinding; 6] {
         [
             gpui_kit::KeyBinding::new("space", ToggleTransport, Some("Soundscape")),
             gpui_kit::KeyBinding::new("shift-cmd-n", NextPreset, Some("Soundscape")),
             gpui_kit::KeyBinding::new("escape", CloseDrawer, Some("Soundscape")),
             gpui_kit::KeyBinding::new("m", ToggleMix, Some("Soundscape")),
+            gpui_kit::KeyBinding::new("alt-left", WidenDrawer, Some("Soundscape")),
+            gpui_kit::KeyBinding::new("alt-right", NarrowDrawer, Some("Soundscape")),
         ]
     }
 }
@@ -1335,6 +1483,135 @@ fn device_line(error: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn clicking_the_dark_bedside_surface_reveals_controls(cx: &mut gpui_kit::TestAppContext) {
+        let (player, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui_kit::size(px(900.), px(740.))),
+            |_, cx| {
+                let mut player = SoundscapeSlideover::new_with_handles(
+                    Repo::new(Err(shell::ShellError::NotSetUp)),
+                    Arc::new(soundscape::Control::new()),
+                    Arc::new(Visual::new()),
+                    Some("Test output".into()),
+                    None,
+                    cx,
+                );
+                player.state.value = Some(SoundscapeState {
+                    preset: Preset::Sleep.key().into(),
+                    ..SoundscapeState::default()
+                });
+                player.open = true;
+                player.slide = 1.;
+                player.dark_room = Some(SleepRoom::Shore);
+                player
+            },
+        );
+        let surface = cx
+            .debug_bounds("bedside-dark-surface")
+            .expect("dark surface");
+        cx.simulate_click(
+            gpui_kit::point(surface.center().x, surface.origin.y + px(40.)),
+            Default::default(),
+        );
+        cx.run_until_parked();
+        assert!(player.read_with(cx, |player, _| player.dark_room.is_none()));
+    }
+
+    #[gpui::test]
+    fn the_drawer_resizes_from_its_edge_and_closes_with_escape(cx: &mut gpui_kit::TestAppContext) {
+        cx.update(|cx| cx.bind_keys(SoundscapeSlideover::keys()));
+        let (player, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui_kit::size(px(900.), px(740.))),
+            |_, cx| {
+                let mut player = SoundscapeSlideover::new_with_handles(
+                    Repo::new(Err(shell::ShellError::NotSetUp)),
+                    Arc::new(soundscape::Control::new()),
+                    Arc::new(Visual::new()),
+                    None,
+                    None,
+                    cx,
+                );
+                player.open = true;
+                player.slide = 1.;
+                player.refocus = true;
+                player
+            },
+        );
+        let left_edge = cx
+            .debug_bounds("soundscape-resize")
+            .expect("resize grip")
+            .center();
+        cx.simulate_mouse_down(left_edge, MouseButton::Left, Default::default());
+        for offset in [16., 80.] {
+            cx.simulate_mouse_move(
+                gpui_kit::point(left_edge.x - px(offset), left_edge.y),
+                MouseButton::Left,
+                Default::default(),
+            );
+        }
+        cx.simulate_mouse_up(
+            gpui_kit::point(left_edge.x - px(80.), left_edge.y),
+            MouseButton::Left,
+            Default::default(),
+        );
+        cx.run_until_parked();
+        assert_eq!(player.read_with(cx, |player, _| player.width), WIDTH + 80.);
+        cx.simulate_keystrokes("alt-right");
+        assert_eq!(
+            player.read_with(cx, |player, _| player.width),
+            WIDTH + 80. - KEY_RESIZE_STEP
+        );
+        cx.simulate_keystrokes("escape");
+        assert!(!player.read_with(cx, |player, _| player.is_open()));
+    }
+
+    #[gpui::test]
+    fn session_progress_renders_and_adaptation_keeps_the_preset(cx: &mut gpui_kit::TestAppContext) {
+        let (player, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui_kit::size(px(800.), px(740.))),
+            |_, cx| {
+                let mut player = SoundscapeSlideover::new_with_handles(
+                    Repo::new(Err(shell::ShellError::NotSetUp)),
+                    Arc::new(soundscape::Control::new()),
+                    Arc::new(Visual::new()),
+                    Some("Test output".into()),
+                    None,
+                    cx,
+                );
+                player.state.value = Some(SoundscapeState {
+                    preset: Preset::Focus.key().into(),
+                    session: Some(SoundscapeSession {
+                        scenario: Scenario::DEEP_WORK.key.into(),
+                        duration_ms: 3_000_000,
+                        elapsed_ms: 1_500_000,
+                        running_since_ms: None,
+                        bedside: None,
+                        deadline_ms: None,
+                    }),
+                    ..SoundscapeState::default()
+                });
+                player.open = true;
+                player.slide = 1.;
+                player
+            },
+        );
+        assert!(cx.debug_bounds("progress-fill-0").is_some());
+
+        let toggle = cx
+            .debug_bounds("switch-label")
+            .expect("adaptive mix switch");
+        cx.simulate_click(toggle.center(), gpui_kit::Modifiers::none());
+        cx.run_until_parked();
+        player.read_with(cx, |player, _| {
+            assert!(player.audio.control.adapt());
+            assert_eq!(player.audio.control.preset(), Preset::Focus);
+            assert_eq!(player.audio.control.session_progress(), Some(0.5));
+        });
+    }
 
     #[test]
     fn a_disabled_device_reads_as_a_sentence() {
@@ -1388,15 +1665,15 @@ mod tests {
     /// motion is one number and the two ends are the two states.
     #[test]
     fn the_panel_slides_from_off_the_edge_to_flush() {
-        assert_eq!(SoundscapeSlideover::offset(0.), -WIDTH);
-        assert_eq!(SoundscapeSlideover::offset(1.), 0.);
+        assert_eq!(SoundscapeSlideover::offset(0., WIDTH), -WIDTH);
+        assert_eq!(SoundscapeSlideover::offset(1., WIDTH), 0.);
         assert!(
-            SoundscapeSlideover::offset(0.5) < 0.,
+            SoundscapeSlideover::offset(0.5, WIDTH) < 0.,
             "halfway is still outside"
         );
         // Clamped, so a bad value cannot push the panel over the page it sits on.
-        assert_eq!(SoundscapeSlideover::offset(2.), 0.);
-        assert_eq!(SoundscapeSlideover::offset(-1.), -WIDTH);
+        assert_eq!(SoundscapeSlideover::offset(2., WIDTH), 0.);
+        assert_eq!(SoundscapeSlideover::offset(-1., WIDTH), -WIDTH);
     }
 
     /// The panel has to be narrower than the window it slides over, or there is no page left to
@@ -1404,6 +1681,6 @@ mod tests {
     #[test]
     fn the_panel_leaves_the_page_most_of_the_window() {
         const { assert!(WIDTH < 760., "the window's own minimum width") };
-        assert_eq!(SoundscapeSlideover::keys().len(), 4);
+        assert_eq!(SoundscapeSlideover::keys().len(), 6);
     }
 }

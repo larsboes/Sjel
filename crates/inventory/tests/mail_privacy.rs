@@ -1,11 +1,11 @@
+mod support;
+
 use axum::{
     body::Body,
     http::{Request, StatusCode},
     Router,
 };
 use serde_json::{json, Value};
-use sjel_inventory::api::{build_router, AppState};
-use std::sync::Arc;
 use tower::ServiceExt;
 
 async fn send(router: &Router, method: &str, path: &str, value: Value) -> (StatusCode, Value) {
@@ -32,10 +32,7 @@ async fn c2_proposals_are_reviewable_and_matchable_but_cannot_create_items() {
     let path =
         std::env::temp_dir().join(format!("inventory-mail-privacy-{}.db", std::process::id()));
     let _ = std::fs::remove_file(&path);
-    let router = build_router(Arc::new(AppState {
-        device_store: devices::store::DevicesStore::open(&path).unwrap(),
-        database: path.clone(),
-    }));
+    let router = support::owner_router(&path).await;
     let body = json!({"source_id":"message","line_id":"one","event":"delivered","title":"Private title","evidence":"delivered","data_class":"c2"});
     let (_, proposal) = send(&router, "POST", "/api/mail-proposals", body.clone()).await;
     let decision = format!("/api/mail-proposals/{}/decision", proposal["id"]);
@@ -111,10 +108,7 @@ async fn withdraw_purges_one_threads_unapproved_proposals() {
     let path =
         std::env::temp_dir().join(format!("inventory-mail-withdraw-{}.db", std::process::id()));
     let _ = std::fs::remove_file(&path);
-    let router = build_router(Arc::new(AppState {
-        device_store: devices::store::DevicesStore::open(&path).unwrap(),
-        database: path.clone(),
-    }));
+    let router = support::owner_router(&path).await;
     let stage = |source: &str, line: &str| json!({"source_id":source,"line_id":line,"event":"delivered","title":format!("Lamp {line}"),"evidence":"delivered","data_class":"c1"});
     let mut ids = Vec::new();
     for (source, line) in [

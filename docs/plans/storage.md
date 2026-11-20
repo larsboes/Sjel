@@ -6,7 +6,7 @@ system, not an already-completed split.
 
 ## Decisions
 
-- Move to one selected engine and one database per capability/agent only after measurement.
+- Move to one database per capability. Use Turso WAL for the Inventory pilot.
 - Capabilities own writes and cross-owner reads. No whole-file phone replication bypasses owners.
 - Private configuration stays in the overlay; personal data belongs outside Git repositories.
 - Knowledge prose stays in the learning vault; Projects owns project prose; typed facts stay in owners.
@@ -51,7 +51,6 @@ Pending local writes are protected from pull. Captures remain create-only.
 
 ## 4. Full migration
 
-- [Measure one database engine](../tasks/storage-engine.md).
 - [Remove unused replica infrastructure](../tasks/storage-remove-replica.md).
 - [Route reads through owners](../tasks/storage-owner-reads.md).
 - [Split capability databases](../tasks/storage-files.md).

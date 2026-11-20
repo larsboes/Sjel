@@ -23,6 +23,15 @@ ID. A connection matches an existing person by exact name when only one unlinked
 name. LinkedIn never overwrites a value that another source holds, such as a company you entered.
 The export lists only your first-degree connections, so it cannot show who your connections know.
 
+## People graph
+
+`GET /api/graph` serves people and the operator as nodes and their exact links as edges. An
+`introduced` edge runs from the person who made the introduction to the person introduced, and
+the operator adds it through `POST /api/edges`. A `conversation` edge links two people who shared
+a LinkedIn group conversation, with its latest day. A shared company is a node value, not an
+edge, because it is a coincidence and not a reference (`docs/capabilities/links.md`). Edges go
+with their entity on delete and move to the kept entity on merge.
+
 ## Run
 
 The service is managed through `tools/service-runner.sh` and its `service.toml` manifest. The live HTTP contract is available at `GET /routes`.

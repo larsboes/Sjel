@@ -2,8 +2,7 @@
 //!
 //! The finder ranks what the app already holds (pages, projects, tasks, notes) on every keystroke;
 //! this answers for everything else, from the one shared database (`sjel_config::database_path`)
-//! the way [`super::now`] reads it: read-only, one query per source, no call to a capability
-//! process. A capability that is down still has its rows found.
+//! for legacy sources. Inventory supplies its results through its own search route.
 //!
 //! Every query word must appear in a source's text (`LIKE`, bound as a parameter, wildcards
 //! escaped), and each source returns at most [`PER_SOURCE`] rows. A hit carries a `sjel://` link,
@@ -69,16 +68,6 @@ const SOURCES: &[Source] = &[
         haystack: "coalesce(extracted_title, '') || ' ' || filename || ' ' || coalesce(category, '') || ' ' || coalesce(project, '')",
         order: "imported_at DESC",
         link: |_| "sjel://documents".into(),
-    },
-    Source {
-        kind: "item",
-        table: "inventory_item",
-        id: "id",
-        title: "label",
-        detail: "coalesce(category, kind)",
-        haystack: "label || ' ' || coalesce(category, '') || ' ' || coalesce(notes, '')",
-        order: "length(label)",
-        link: |_| "sjel://inventory".into(),
     },
     Source {
         kind: "subscription",
@@ -202,15 +191,70 @@ pub(crate) struct SearchQuery {
     q: String,
 }
 
+async fn inventory_hits(query: &str) -> Vec<SearchHit> {
+    #[derive(Deserialize)]
+    struct Hits {
+        hits: Vec<SearchHit>,
+    }
+
+    async fn fetch(query: &str) -> Option<Hits> {
+        let url = registry()
+            .await
+            .ok()?
+            .into_iter()
+            .find(|service| service.name == "inventory" && !service.is_external())?
+            .probe_url("/api/search")?;
+        static CLIENT: OnceLock<Option<reqwest::Client>> = OnceLock::new();
+        CLIENT
+            .get_or_init(|| {
+                reqwest::Client::builder()
+                    .no_proxy()
+                    .redirect(reqwest::redirect::Policy::none())
+                    .build()
+                    .ok()
+            })
+            .as_ref()?
+            .get(url)
+            .query(&[("q", query)])
+            .timeout(Duration::from_millis(500))
+            .send()
+            .await
+            .ok()?
+            .error_for_status()
+            .ok()?
+            .json()
+            .await
+            .ok()
+    }
+
+    fetch(query)
+        .await
+        .map_or_else(Vec::new, |response| response.hits)
+}
+
 pub(crate) async fn search_handler(
     axum::extract::Query(query): axum::extract::Query<SearchQuery>,
 ) -> Json<Value> {
     // A query is a few words; a longer one is not a search and is cut rather than run.
     let text: String = query.q.chars().take(200).collect();
+    if text.split_whitespace().next().is_none() {
+        return Json(json!({ "hits": [] }));
+    }
     let db_path = sjel_config::database_path();
-    let hits = tokio::task::spawn_blocking(move || search(&db_path, &text))
-        .await
-        .unwrap_or_default();
+    let local_query = text.clone();
+    let (local, inventory) = tokio::join!(
+        tokio::task::spawn_blocking(move || search(&db_path, &local_query)),
+        inventory_hits(&text),
+    );
+    let mut hits = local.unwrap_or_default();
+    let inventory_position = hits
+        .iter()
+        .position(|hit| matches!(hit.kind.as_str(), "subscription" | "trip" | "mail"))
+        .unwrap_or(hits.len());
+    hits.splice(
+        inventory_position..inventory_position,
+        inventory.into_iter().take(PER_SOURCE),
+    );
     Json(json!({ "hits": hits }))
 }
 

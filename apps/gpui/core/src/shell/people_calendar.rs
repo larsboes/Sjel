@@ -636,6 +636,44 @@ impl Shell {
         .map(drop)
     }
 
+    /// People, their companies and their exact links (`GET /entities/api/graph`). C2: names.
+    pub async fn people_graph(&self) -> ShellResult<entities_api::PeopleGraph> {
+        let path = proxied(entities_api::PROXY_PREFIX, entities_api::ROUTE_GRAPH);
+        self.json(Method::GET, &path, None, 15).await
+    }
+
+    /// Links two people (`POST /entities/api/edges`): `introduced` runs from `a` to `b`.
+    pub async fn people_link(
+        &self,
+        a: &str,
+        b: &str,
+        kind: &str,
+        note: Option<&str>,
+    ) -> ShellResult<()> {
+        let body = serde_json::json!({ "a": a, "b": b, "kind": kind, "note": note });
+        self.send(
+            Method::POST,
+            &proxied(entities_api::PROXY_PREFIX, entities_api::ROUTE_EDGES),
+            Some(body),
+            10,
+        )
+        .await
+        .map(drop)
+    }
+
+    /// Removes one link (`POST /entities/api/edges/remove`).
+    pub async fn people_unlink(&self, a: &str, b: &str, kind: &str) -> ShellResult<()> {
+        let body = serde_json::json!({ "a": a, "b": b, "kind": kind });
+        self.send(
+            Method::POST,
+            &proxied(entities_api::PROXY_PREFIX, entities_api::ROUTE_EDGES_REMOVE),
+            Some(body),
+            10,
+        )
+        .await
+        .map(drop)
+    }
+
     /// Where each person is on `day` (`GET /entities/api/located?day=`). C2: names.
     pub async fn people_located(
         &self,

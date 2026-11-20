@@ -3,6 +3,8 @@
 //! The cases are constructed. `k-vitrine` is the core: a layout meeting every clearance rule that
 //! can never happen, because the piece is 10 cm wider than the entrance door.
 
+mod support;
+
 use interior::delivery::{delivery, through_the_door, DoorFit};
 use interior::model::Model;
 use std::sync::Once;
@@ -11,7 +13,7 @@ const FLAT: &str = "muster";
 
 fn model() -> Model {
     fixture_overlay();
-    Model::load(FLAT).unwrap_or_else(|e| panic!("{FLAT}: {e}"))
+    support::load_model(FLAT).unwrap_or_else(|e| panic!("{FLAT}: {e}"))
 }
 
 fn fixture_overlay() {

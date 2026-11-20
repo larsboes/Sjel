@@ -552,15 +552,28 @@ pub fn PeopleScreen() -> impl IntoElement {
                 Register::People => s.people.len(),
                 Register::Places => s.places.len(),
             });
-            crate::nsh_ui::pill_tab(
-                format!("{name} {count}"),
-                register.get() == side,
-                move || {
+            button()
+                .min_h(px(44.))
+                .px_3()
+                .py_2()
+                .bg(move || {
+                    let theme = nsh_base::theme();
+                    if register.get() == side {
+                        theme.muted
+                    } else {
+                        theme.background
+                    }
+                })
+                .on_press(move || {
                     register.set(side);
                     query.set(String::new());
-                },
-            )
-            .into_element()
+                })
+                .child(
+                    text(format!("{name} {count}"))
+                        .text_sm()
+                        .number_of_lines(1u32),
+                )
+                .into_element()
         })
     };
     let list = move || {

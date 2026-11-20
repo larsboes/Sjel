@@ -148,11 +148,17 @@ fn step_scape(
     let brightness = arrangement.eff(ParamName::Brightness);
     let pulse = arrangement.eff(ParamName::Pulse);
     let pace = arrangement.eff(ParamName::Pace);
+    let (chord_span, melody_spacing, melody_chance, register) = match arrangement.preset {
+        Preset::Focus => (32, 2, 0.44, 12),
+        Preset::Relax => (64, 8, 0.36, 12),
+        Preset::Sleep => (128, 32, 0.20, 0),
+        _ => return,
+    };
 
-    if step.is_multiple_of(32) || sequence.chord.is_none() {
+    if step.is_multiple_of(chord_span) || sequence.chord.is_none() {
         // After a preset change the degree is already chosen for common tones with the outgoing
         // chord, so the first change of a new scene must not walk away from it.
-        scape_chord_change(arrangement, sequence, voices, !sequence.hold_degree, events);
+        scape_chord_change(arrangement, sequence, voices, chord_span, events);
         sequence.hold_degree = false;
     }
     let chord = match sequence.chord {
@@ -160,22 +166,31 @@ fn step_scape(
         None => return,
     };
 
-    if layers.drums > 0. && pulse > 0.1 && step.is_multiple_of(8) {
-        // Higher top of the pitch drop with more pulse: a pulse change reads as a change in
-        // attack rather than in level.
-        kick(
-            voices,
-            65. + 50. * pulse,
-            36.,
-            0.45 + 0.5 * (1. - pace),
-            (0.14 + 0.34 * pulse) * layers.drums,
-            0.,
-            events,
+    if arrangement.preset == Preset::Focus && layers.drums > 0. && step.is_multiple_of(8) {
+        voices.start(
+            VoiceSpec::new(
+                Wave::Sine,
+                36,
+                Env::Decay {
+                    attack: 0.035,
+                    total: 0.26,
+                },
+                0.16 * pulse * layers.drums,
+            )
+            .on(Bus::Dry),
         );
+        events.kicks += 1;
     }
 
-    if layers.melody > 0. && step.is_multiple_of(2) && sequence.rng.chance(density * 0.5) {
-        let octave = if sequence.rng.chance(0.45) { 24 } else { 12 };
+    if layers.melody > 0.
+        && step.is_multiple_of(melody_spacing)
+        && sequence.rng.chance(density * melody_chance)
+    {
+        let octave = if arrangement.preset == Preset::Focus && sequence.rng.chance(0.28) {
+            register + 12
+        } else {
+            register
+        };
         let index = sequence.rng.below(3);
         let midi = chord[index] + octave;
         let jitter = sequence.rng.signed() * 0.16;
@@ -196,7 +211,11 @@ fn step_scape(
             events,
         );
     }
-    if layers.melody > 0. && step % 16 == 8 && sequence.rng.chance(0.18 * brightness) {
+    if arrangement.preset == Preset::Focus
+        && layers.melody > 0.
+        && step % 16 == 8
+        && sequence.rng.chance(0.12 * brightness)
+    {
         let midi = chord[0] + 36;
         pluck(
             voices,
@@ -216,16 +235,20 @@ fn scape_chord_change(
     arrangement: &mut Arrangement,
     sequence: &mut Sequence,
     voices: &mut Voices,
-    walk: bool,
+    chord_span: u32,
     events: &mut Events,
 ) {
     let Some(scape) = arrangement.preset.scape() else {
         return;
     };
     let length = scape.degrees();
-    if walk {
-        let choices = [-2, -1, 1, 2];
-        let by = choices[sequence.rng.below(4)];
+    if !sequence.hold_degree {
+        let choices: &[i32] = match arrangement.preset {
+            Preset::Focus => &[-1, 1, 1, 2],
+            Preset::Relax => &[-1, 0, 1, 1],
+            _ => &[-1, 0, 0, 1],
+        };
+        let by = choices[sequence.rng.below(choices.len())];
         sequence.degree = (sequence.degree + by + length * 8) % length;
     }
     let chord = arrangement.scape_triad(sequence.degree);
@@ -235,16 +258,22 @@ fn scape_chord_change(
     let pace = arrangement.eff(ParamName::Pace);
     let spb = arrangement.spb();
     let layers = arrangement.mix();
+    let duration = spb * chord_span as f32 / 4.;
+    let (register, attack, release, cutoff) = match arrangement.preset {
+        Preset::Focus => (12, 1. + 2.5 * (1. - pace), 3., 2100.),
+        Preset::Relax => (12, 4.5, 5.5, 1250.),
+        _ => (0, 7., 8., 750.),
+    };
 
     if layers.pads > 0. {
         pad(
             voices,
-            [chord[0] + 12, chord[1] + 12, chord[2] + 12],
-            spb * 8. + 2.,
+            chord.map(|note| note + register),
+            duration + release * 0.6,
             0.05 * layers.pads,
-            350. + 2200. * brightness,
-            1. + 2.5 * (1. - pace),
-            3.,
+            280. + cutoff * brightness,
+            attack,
+            release,
         );
         events.chords += 1;
     }
@@ -252,7 +281,7 @@ fn scape_chord_change(
         sub(
             voices,
             chord[0] - 12,
-            spb * 8. + 2.,
+            duration + 2.,
             (0.1 + 0.1 * (1. - brightness)) * layers.bass,
             2.5,
         );

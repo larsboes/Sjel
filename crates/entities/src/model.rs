@@ -10,8 +10,9 @@ use serde::Serialize;
 use serde_json::Value;
 
 pub use entities_api::{
-    builtin_fields, check_field, check_key, check_one_of, check_value, is_day, FieldDef,
-    DATA_CLASSES, FACT_PREDICATES, FIELD_TYPES, KINDS, SOURCES,
+    builtin_fields, check_field, check_key, check_one_of, check_value, edge_is_directed, is_day,
+    EntityEdge, FieldDef, GraphNode, PeopleGraph, DATA_CLASSES, EDGE_KINDS, FACT_PREDICATES,
+    FIELD_TYPES, KINDS, SOURCES,
 };
 
 /// One stored value and where it came from.

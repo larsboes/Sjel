@@ -1,5 +1,7 @@
 //! The purchase order against the sample inventory.
 
+mod support;
+
 // ---------------------------------------------------------------- the order
 
 /// The order needs the sample inventory, not just invented bookings: it sorts rows.
@@ -18,7 +20,7 @@ fn model() -> interior::model::Model {
         sjel_inventory::import::inventory(&store, &fixture.join("data/interior/inventory"))
             .expect("the sample inventory imports");
     });
-    interior::model::Model::load("muster").expect("muster")
+    support::load_model("muster").expect("muster")
 }
 
 /// Urgency beats price, and a layout beats an idea. The fixture makes the stages contradict

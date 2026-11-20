@@ -1,5 +1,7 @@
 //! Contact editing, creation, fact attachment, and field declaration forms.
 use gpui_kit::component::scroll::ScrollableElement;
+use gpui_kit::component::searchable_list::{SearchableListItem, SearchableVec};
+use gpui_kit::component::select::{Select, SelectState};
 use gpui_kit::{
     div, point, prelude::*, px, rgba, AnyElement, Context, Entity, Focusable, FontWeight,
     SharedString, Subscription, Window,
@@ -25,6 +27,7 @@ pub(super) enum FormKind {
     Edit(String),
     /// A dated fact on the person with this id.
     Fact(String),
+    Introduction(String),
     /// A field, so the next person can carry it.
     Field,
 }
@@ -36,6 +39,7 @@ pub(crate) struct Form {
     pub(super) fields: Vec<(String, String, Entity<TextInput>)>,
     /// The name input, for the two person forms.
     pub(super) name: Option<Entity<TextInput>>,
+    introducer: Option<Entity<SelectState<SearchableVec<Introducer>>>>,
     /// The chosen predicate for a fact, and the chosen type for a field.
     pub(super) choice: String,
     pub(super) error: Option<SharedString>,
@@ -53,12 +57,45 @@ impl Form {
     }
 }
 
+#[derive(Clone)]
+struct Introducer {
+    id: String,
+    label: SharedString,
+    aliases: String,
+}
+
+impl SearchableListItem for Introducer {
+    type Value = String;
+
+    fn title(&self) -> SharedString {
+        self.label.clone()
+    }
+
+    fn value(&self) -> &String {
+        &self.id
+    }
+
+    fn matches(&self, query: &str) -> bool {
+        let query = query.trim().to_lowercase();
+        self.label.to_lowercase().contains(&query) || self.aliases.to_lowercase().contains(&query)
+    }
+}
+
 pub(super) enum Work {
     Create(Value),
     Update(String, Value),
     Remove(String),
     AddFact(String, Value),
     RemoveFact(String, String),
+    Introduce {
+        from: String,
+        to: String,
+        note: Option<String>,
+    },
+    UnlinkIntroduction {
+        from: String,
+        to: String,
+    },
     DeclareField(Value),
     Merge {
         keep: String,
@@ -73,6 +110,7 @@ pub(super) enum Saved {
     Removed,
     Fields,
     Pair,
+    Links,
 }
 
 /// The field types the registry accepts, in the order a form offers them.
@@ -124,6 +162,7 @@ impl PeoplePage {
         };
 
         let mut name = None;
+        let mut introducer = None;
         let mut fields = Vec::new();
         let mut choice = String::new();
         match &kind {
@@ -187,6 +226,33 @@ impl PeoplePage {
                     input(String::new(), "Optional", window, cx),
                 ));
             }
+            FormKind::Introduction(id) => {
+                self.sync_derived();
+                let mut choices: Vec<_> = self
+                    .derived
+                    .parsed
+                    .iter()
+                    .filter(|person| &person.id != id)
+                    .map(|person| Introducer {
+                        id: person.id.clone(),
+                        label: match &person.company {
+                            Some(company) => format!("{} · {company}", person.name).into(),
+                            None => person.name.clone().into(),
+                        },
+                        aliases: person.value("aliases"),
+                    })
+                    .collect();
+                choices.sort_by_cached_key(|person| person.label.to_lowercase());
+                introducer = Some(cx.new(|cx| {
+                    SelectState::new(SearchableVec::from(choices), None, window, cx)
+                        .searchable(true)
+                }));
+                fields.push((
+                    "note".into(),
+                    "Context".into(),
+                    input(String::new(), "Optional", window, cx),
+                ));
+            }
             FormKind::Field => {
                 choice = "text".to_owned();
                 fields.push((
@@ -206,7 +272,9 @@ impl PeoplePage {
                 ));
             }
         }
-        if let Some(first) = name
+        if let Some(picker) = &introducer {
+            picker.update(cx, |picker, cx| picker.focus(window, cx));
+        } else if let Some(first) = name
             .clone()
             .or_else(|| fields.first().map(|(_, _, i)| i.clone()))
         {
@@ -216,6 +284,7 @@ impl PeoplePage {
             kind,
             fields,
             name,
+            introducer,
             choice,
             error: None,
             saving: false,
@@ -247,6 +316,10 @@ impl PeoplePage {
         let from = form.value("from", cx);
         let to = form.value("to", cx);
         let note = form.value("note", cx);
+        let introducer = form
+            .introducer
+            .as_ref()
+            .and_then(|picker| picker.read(cx).selected_value().cloned());
         let field_key = form.value("key", cx);
         let field_label = form.value("label", cx);
         let field_options = form.value("options", cx);
@@ -301,6 +374,13 @@ impl PeoplePage {
             }
             .body()
             .map(|body| Work::AddFact(id, body)),
+            FormKind::Introduction(to) => introducer
+                .map(|from| Work::Introduce {
+                    from,
+                    to,
+                    note: (!note.trim().is_empty()).then(|| note.trim().to_owned()),
+                })
+                .ok_or_else(|| "Choose the person who made the introduction.".to_owned()),
             FormKind::Field => FieldDecl {
                 key: field_key,
                 label: field_label,
@@ -350,6 +430,7 @@ impl PeoplePage {
             FormKind::New => "New person",
             FormKind::Edit(_) => "Edit person",
             FormKind::Fact(_) => "Add place fact",
+            FormKind::Introduction(_) => "Record introduction",
             FormKind::Field => "Declare field",
         };
         card = card.child(
@@ -378,6 +459,18 @@ impl PeoplePage {
         let mut form_body = div().flex().flex_col().gap_3().flex_none().w_full();
         if let Some(name) = &form.name {
             form_body = form_body.child(Input::new(name).size(ControlSize::Sm));
+        }
+        if let Some(picker) = &form.introducer {
+            form_body = form_body.child(
+                FormField::new("people-introducer-field", "Introduced by").child(
+                    Select::new(picker)
+                        .id("people-introducer")
+                        .placeholder("Choose a person")
+                        .accessibility_label("Introduced by")
+                        .search_placeholder("Search names or aliases…")
+                        .disabled(form.saving),
+                ),
+            );
         }
         for (key, label, input) in &form.fields {
             form_body = form_body.child(

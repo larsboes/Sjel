@@ -15,6 +15,9 @@ path = "src/main.rs"
 name = "sjel_inventory"
 path = "src/lib.rs"
 
+[features]
+turso-wal = ["dep:tempfile", "dep:turso"]
+
 [dependencies]
 # Pflicht, kein Komfort: doctors "Server bind policy" weist jede Capability zurueck, die sich
 # einen eigenen Listener baut.
@@ -36,6 +39,8 @@ sjel-http = { path = "../sjel-http" }
 devices = { package = "sjel-devices", path = "../devices" }
 inventory-api = { path = "../inventory-api" }
 rusqlite.workspace = true
+tempfile = { version = "3", optional = true }
+turso = { version = "=0.8.3", default-features = false, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 schemars.workspace = true
@@ -43,10 +48,11 @@ toml.workspace = true
 # Not `full`: these are the drivers this crate reaches for, verified with a lone
 # `cargo check -p <crate> --all-targets`, which is the only build where a missing
 # tokio feature is visible (a workspace build unifies them away).
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs", "sync"] }
 axum.workspace = true
 
 [dev-dependencies]
+ring = "0.17"
 # `ServiceExt::oneshot`, damit `revision_tests` den verdrahteten Router ohne Listener und
 # ohne Port fahren kann — dasselbe Muster wie in `crates/interior` und `sjel-status`.
 tower = { workspace = true, features = ["util"] }

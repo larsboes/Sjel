@@ -86,6 +86,10 @@ impl Reply {
 /// The `Send` bound is spelled out because the future runs on the app's HTTP runtime; an `async
 /// fn` in the trait would have implied nothing about it.
 pub trait Host {
+    fn paired_device_id(&self) -> Option<&str> {
+        None
+    }
+
     fn send(
         &self,
         method: &str,
@@ -95,6 +99,10 @@ pub trait Host {
 }
 
 impl Host for DeviceClient {
+    fn paired_device_id(&self) -> Option<&str> {
+        Some(&self.node().device_id)
+    }
+
     async fn send(&self, method: &str, path: &str, body: Option<&[u8]>) -> Result<Reply, String> {
         let method = match method {
             "GET" => reqwest::Method::GET,
@@ -110,6 +118,10 @@ impl Host for DeviceClient {
 
 /// A shared host is a host, so a view can hold one [`std::sync::Arc`] and hand it to a sync.
 impl<T: Host + Send + Sync> Host for std::sync::Arc<T> {
+    fn paired_device_id(&self) -> Option<&str> {
+        T::paired_device_id(self)
+    }
+
     async fn send(&self, method: &str, path: &str, body: Option<&[u8]>) -> Result<Reply, String> {
         T::send(self, method, path, body).await
     }
@@ -194,6 +206,7 @@ pub async fn run<H: Host>(store: &TursoStore, host: &H) -> Result<Report, String
         push(store, host, crate::store::DOMAIN_PROJECTS, &mut report).await?;
         push(store, host, crate::store::DOMAIN_CALENDAR, &mut report).await?;
         push(store, host, crate::store::DOMAIN_CAPTURES, &mut report).await?;
+        push(store, host, crate::store::DOMAIN_INVENTORY, &mut report).await?;
         pull(store, host, &mut report).await?;
         pull_calendar(store, host, &mut report).await?;
         pull_captures(store, host, &mut report).await?;
@@ -318,7 +331,53 @@ async fn replay<H: Host>(
         "capture_new" => capture_new(store, host, report, &mutation.path, &payload).await,
         "calendar_save" => calendar_save(store, host, report, &mutation.path, &payload).await,
         "calendar_delete" => calendar_delete(host, &mutation.path).await,
+        "inventory_create" => inventory_create(host, &mutation.payload).await,
         other => Err(format!("this app has no way to replay a {other}")),
+    }
+}
+
+async fn inventory_create<H: Host>(host: &H, payload: &str) -> Result<(), String> {
+    let envelope: inventory_api::sync::Envelope =
+        serde_json::from_str(payload).map_err(|error| error.to_string())?;
+    if host.paired_device_id() != Some(envelope.actor_device_id.as_str()) {
+        return Err("The Inventory write belongs to a different pairing".into());
+    }
+    let [mutation] = envelope.mutations.as_slice() else {
+        return Err("Queued Inventory create must carry exactly one operation".into());
+    };
+    let reply = host
+        .send(
+            "POST",
+            inventory_api::PROXY_ROUTE_SYNC,
+            Some(payload.as_bytes()),
+        )
+        .await?;
+    if !reply.ok() {
+        return Err(reply.refused());
+    }
+    let body = reply.json().ok_or("Invalid Inventory sync response")?;
+    let acknowledgements = body["acknowledgements"]
+        .as_array()
+        .ok_or("Missing Inventory acknowledgements")?;
+    let [ack] = acknowledgements.as_slice() else {
+        return Err("Expected one Inventory acknowledgement".into());
+    };
+    if ack["operation_id"].as_str() != Some(mutation.operation_id.as_str()) {
+        return Err("Inventory acknowledged a different operation".into());
+    }
+    match ack["status"].as_str() {
+        Some("accepted" | "duplicate")
+            if ack["revision"]
+                .as_str()
+                .and_then(|rev| rev.parse::<u64>().ok())
+                .is_some_and(|rev| rev > 0) =>
+        {
+            Ok(())
+        }
+        _ => Err(ack["error"]
+            .as_str()
+            .unwrap_or("Inventory did not acknowledge the queued write")
+            .into()),
     }
 }
 
@@ -1108,6 +1167,58 @@ mod tests {
     use std::sync::Mutex;
 
     #[test]
+    fn inventory_replay_keeps_the_operation_until_the_owner_acknowledges_it() {
+        use crate::store::DOMAIN_INVENTORY;
+        use inventory_api::{InventoryState, NewInventoryItem, PROXY_ROUTE_SYNC};
+
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let store = TursoStore::in_memory().await.unwrap();
+                let item = NewInventoryItem {
+                    id: "fixture-lamp".into(),
+                    label: "Lamp".into(),
+                    kind: "gear".into(),
+                    state: InventoryState::Wanted,
+                    note: String::new(),
+                    price_cents: None,
+                    category: None,
+                    link: None,
+                };
+                store.queue_inventory_create("phone", "node_mac", &item).await.unwrap();
+                let host = Fake::default();
+
+                let mut report = Report::default();
+                push(&store, &host, DOMAIN_INVENTORY, &mut report).await.unwrap();
+                assert_eq!(report.pushed, 0);
+                assert_eq!(store.pending_in(Some(DOMAIN_INVENTORY)).await.unwrap().len(), 1);
+                let first = host.bodies_to(PROXY_ROUTE_SYNC).pop().unwrap();
+                let operation = &first["mutations"][0]["operation_id"];
+
+                host.on("POST", PROXY_ROUTE_SYNC, 200, json!({
+                    "acknowledgements": [{"operation_id":"other","status":"accepted","revision":"1"}]
+                }));
+                push(&store, &host, DOMAIN_INVENTORY, &mut Report::default()).await.unwrap();
+                assert_eq!(store.pending_in(Some(DOMAIN_INVENTORY)).await.unwrap().len(), 1);
+
+                host.on("POST", PROXY_ROUTE_SYNC, 200, json!({
+                    "acknowledgements": [{"operation_id":operation,"status":"duplicate","revision":"1"}]
+                }));
+                let mut report = Report::default();
+                push(&store, &host, DOMAIN_INVENTORY, &mut report).await.unwrap();
+                assert_eq!(report.pushed, 1);
+                assert!(store.pending_in(Some(DOMAIN_INVENTORY)).await.unwrap().is_empty());
+                assert_eq!(host.bodies_to(PROXY_ROUTE_SYNC), vec![first.clone(), first.clone(), first]);
+                store.queue_inventory_create("old-pairing", "node_mac", &item).await.unwrap();
+                push(&store, &host, DOMAIN_INVENTORY, &mut Report::default()).await.unwrap();
+                assert_eq!(host.bodies_to(PROXY_ROUTE_SYNC).len(), 3);
+                assert_eq!(store.pending_in(Some(DOMAIN_INVENTORY)).await.unwrap().len(), 1);
+            });
+    }
+
+    #[test]
     fn registry_replica_keeps_owner_metadata_and_refuses_unsynced_edits() {
         use crate::record::registry::replica;
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -1709,6 +1820,10 @@ mod tests {
     }
 
     impl Host for Fake {
+        fn paired_device_id(&self) -> Option<&str> {
+            Some("phone")
+        }
+
         async fn send(
             &self,
             method: &str,

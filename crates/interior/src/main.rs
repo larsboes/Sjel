@@ -153,15 +153,14 @@ fn write_layout(model: &Model, name: &str, layout: &Layout, note: &str) -> std::
     std::fs::write(model.layouts_dir().join(format!("{name}.toml")), s)
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let Some(cmd) = argv.first().map(String::as_str) else {
         usage()
     };
 
     if cmd == "serve" {
-        interior_serve().await;
+        interior_serve();
         return;
     }
 
@@ -488,6 +487,7 @@ async fn main() {
     }
 }
 
+#[tokio::main]
 async fn interior_serve() {
     // The port comes from service.toml as SJEL_PORT; 8092 is the predecessor's port, so old
     // bookmarks still work.
@@ -966,10 +966,7 @@ fn cmd_declarations(model: &Model, argv: &[String]) -> i32 {
 /// Which need first, and when it is affordable.
 fn cmd_purchase_order(model: &Model, argv: &[String]) -> i32 {
     // The order runs without a balance too: it is an order, and the timeline is the extra.
-    let balance = interior::store::Store::open(&sjel_config::database_path())
-        .ok()
-        .and_then(|s| s.borrow_connection().ok())
-        .and_then(|conn| interior::budget::monthly_balance(&conn).ok().flatten());
+    let balance = interior::budget::monthly_balance();
     let r = match interior::budget::purchase_order(model, balance) {
         Ok(r) => r,
         Err(e) => {

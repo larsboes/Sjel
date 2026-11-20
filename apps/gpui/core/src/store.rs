@@ -167,6 +167,8 @@ pub const DOMAIN_CALENDAR: &str = "calendar";
 /// Captures typed on this phone. Its own domain because its replay is its own: a capture has no
 /// path and no record, it is one `POST` to the comms capability.
 pub const DOMAIN_CAPTURES: &str = "captures";
+/// Signed Inventory writes through the owner.
+pub const DOMAIN_INVENTORY: &str = "inventory";
 /// The id a capture made on this phone carries until the Mac assigns one.
 pub const LOCAL_CAPTURE_ID_PREFIX: &str = "capture:local:";
 /// The key a change feed's cursor is kept under, per domain.
@@ -533,6 +535,53 @@ impl TursoStore {
         self.queue_mutation(DOMAIN_PROJECTS, path, "delete_record", &payload)
             .await?;
         Ok(())
+    }
+
+    /// Persist an Inventory addition before trying to send it to the paired owner.
+    pub async fn queue_inventory_create(
+        &self,
+        device_id: &str,
+        target_node_id: &str,
+        item: &inventory_api::NewInventoryItem,
+    ) -> StoreResult<()> {
+        use inventory_api::sync::{Envelope, Mutation};
+
+        let operation_id = device_auth::new_nonce().map_err(StoreError::Json)?;
+        let now = chrono::Utc::now().timestamp();
+        let fields = serde_json::to_value(item).map_err(|e| StoreError::Json(e.to_string()))?;
+        let serde_json::Value::Object(fields) = fields else {
+            return Err(StoreError::Json(
+                "Inventory create requires an object".into(),
+            ));
+        };
+        let envelope = Envelope {
+            protocol_version: "sjel-sync/v1".into(),
+            envelope_id: operation_id.clone(),
+            origin_node_id: device_id.into(),
+            target_node_id: target_node_id.into(),
+            actor_device_id: device_id.into(),
+            cursor: None,
+            mutations: vec![Mutation {
+                operation_id,
+                entity_type: "interior.item".into(),
+                entity_id: item.id.clone(),
+                action: "create".into(),
+                base_revision: None,
+                fields,
+                actor_device_id: device_id.into(),
+                created_at: now,
+            }],
+            sent_at: now,
+        };
+        let payload =
+            serde_json::to_string(&envelope).map_err(|e| StoreError::Json(e.to_string()))?;
+        self.queue_mutation(
+            DOMAIN_INVENTORY,
+            &format!("inventory:{}", item.id),
+            "inventory_create",
+            &payload,
+        )
+        .await
     }
 
     /// Records an offline mutation to replay once connectivity to host is restored.

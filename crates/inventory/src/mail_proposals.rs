@@ -25,25 +25,25 @@ use inventory_api::mail_evidence::PurchaseEvent;
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Decision {
-    version: i64,
-    action: String,
-    title: Option<String>,
-    item_id: Option<String>,
-    expected_item_revision: Option<i64>,
-    expected_state_id: Option<i64>,
+    pub(crate) version: i64,
+    pub(crate) action: String,
+    pub(crate) title: Option<String>,
+    pub(crate) item_id: Option<String>,
+    pub(crate) expected_item_revision: Option<i64>,
+    pub(crate) expected_state_id: Option<i64>,
 }
 
 #[derive(Serialize)]
-struct Proposal {
-    id: i64,
+pub(crate) struct Proposal {
+    pub(crate) id: i64,
     #[serde(flatten)]
-    stage: Stage,
-    version: i64,
-    decision: Option<String>,
-    item_id: Option<String>,
-    approved_title: Option<String>,
-    matched_item_revision: Option<i64>,
-    matched_state_id: Option<i64>,
+    pub(crate) stage: Stage,
+    pub(crate) version: i64,
+    pub(crate) decision: Option<String>,
+    pub(crate) item_id: Option<String>,
+    pub(crate) approved_title: Option<String>,
+    pub(crate) matched_item_revision: Option<i64>,
+    pub(crate) matched_state_id: Option<i64>,
 }
 
 fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proposal> {
@@ -77,7 +77,7 @@ fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proposal> {
         matched_state_id: row.get(13)?,
     })
 }
-const COLUMNS: &str = "id, source_id, line_id, event, title, evidence, data_class, order_ref, version, decision, item_id, approved_title, matched_item_revision, matched_state_id, claim, extraction_version";
+pub(crate) const COLUMNS: &str = "id, source_id, line_id, event, title, evidence, data_class, order_ref, version, decision, item_id, approved_title, matched_item_revision, matched_state_id, claim, extraction_version";
 
 fn bounded(s: &str, max: usize) -> bool {
     !s.trim().is_empty() && s.len() <= max && !s.contains('\0')
@@ -112,11 +112,11 @@ pub async fn stage(
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Withdraw {
-    source_prefix: String,
+    pub(crate) source_prefix: String,
 }
 
 /// One mail thread's prefix, `mail:v1:<thread>:`, so a withdrawal never spans threads.
-fn thread_prefix(prefix: &str) -> bool {
+pub(crate) fn thread_prefix(prefix: &str) -> bool {
     prefix
         .strip_prefix("mail:v1:")
         .and_then(|rest| rest.strip_suffix(':'))
@@ -178,11 +178,7 @@ pub async fn snapshot(
     Ok(Json(serde_json::to_value(snapshot).map_err(internal)?))
 }
 
-pub async fn decide(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-    Json(body): Json<Decision>,
-) -> Result<Json<serde_json::Value>, Error> {
+pub(crate) fn validate_decision(body: &Decision) -> Result<(), Error> {
     if !matches!(body.action.as_str(), "approve" | "reject" | "match") || body.version < 1 {
         return Err(invalid("invalid action or version"));
     }
@@ -210,6 +206,27 @@ pub async fn decide(
     {
         return Err(invalid("approve requires explicit title and item_id"));
     }
+    Ok(())
+}
+
+pub(crate) fn validate_approval(stage: &Stage) -> Result<(), Error> {
+    if stage.data_class == "c2" {
+        return Err(conflict(
+            "cannot create an inventory item from a c2 proposal: items do not preserve data class",
+        ));
+    }
+    if stage.event != PurchaseEvent::Delivered {
+        return Err(conflict("only delivery can create an item"));
+    }
+    Ok(())
+}
+
+pub async fn decide(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Json(body): Json<Decision>,
+) -> Result<Json<serde_json::Value>, Error> {
+    validate_decision(&body)?;
     let store = Store::open(&state.database).map_err(internal)?;
     let mut conn = store.borrow_connection().map_err(internal)?;
     let tx = sjel_store::write_transaction(&mut conn).map_err(internal)?;
@@ -247,12 +264,7 @@ pub async fn decide(
         }
     }
     if body.action == "approve" {
-        if p.stage.data_class == "c2" {
-            return Err(conflict("cannot create an inventory item from a c2 proposal: items do not preserve data class"));
-        }
-        if p.stage.event != PurchaseEvent::Delivered {
-            return Err(conflict("only delivery can create an item"));
-        }
+        validate_approval(&p.stage)?;
         let title = body.title.as_deref().unwrap_or_default();
         let item_id = body.item_id.as_deref().unwrap_or_default();
         let duplicate: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM inventory_item WHERE id=?1 OR lower(trim(label))=lower(trim(?2))) OR EXISTS(SELECT 1 FROM inventory_mail_proposal WHERE decision IN ('approve','match') AND order_ref IS NOT NULL AND order_ref=?3 AND line_id=?4)", params![item_id, title, p.stage.order_ref, p.stage.line_id], |r| r.get(0)).map_err(internal)?;

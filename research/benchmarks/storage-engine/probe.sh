@@ -70,4 +70,14 @@ probe_recovery() {
 
 probe_recovery wal "BEGIN IMMEDIATE"
 probe_recovery mvcc "BEGIN CONCURRENT"
+
+printf "\nTurso MVCC snapshot from an open connection:\n"
+printf "%s\n" "PRAGMA journal_mode=mvcc;" "CREATE TABLE witness (id INTEGER PRIMARY KEY);" \
+    "INSERT INTO witness VALUES (1);" "VACUUM INTO '\''/work/snapshot.db'\'';" \
+    "INSERT INTO witness VALUES (2);" > /work/snapshot.sql
+/tursodb --quiet --vfs syscall --output-mode list /work/snapshot-source.db < /work/snapshot.sql
+check="SELECT count(*), max(id) FROM witness;"
+test "$(/tursodb --quiet --vfs syscall --output-mode list /work/snapshot.db "$check")" = "1|1"
+test "$(/tursodb --quiet --vfs syscall --output-mode list /work/snapshot-source.db "$check")" = "2|2"
+echo "MVCC snapshot retained the first commit and excluded the later commit."
 '

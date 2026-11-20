@@ -6,11 +6,22 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::time::Duration;
 
+pub mod bedside;
+use bedside::{BedsideOptions, SleepEnding, BACK_TO_SLEEP, BEDSIDE};
+
 /// The six presets the conductor knows, in canonical order.
 pub const PRESETS: [&str; 6] = ["edm", "ambient", "lofi", "focus", "relax", "sleep"];
 
-/// The five timed session scenario names.
-pub const SCENARIOS: [&str; 5] = ["deep-work", "reading", "reset", "wind-down", "timer"];
+/// Known timed session scenario names.
+pub const SCENARIOS: [&str; 7] = [
+    "deep-work",
+    "reading",
+    "reset",
+    "wind-down",
+    "timer",
+    BEDSIDE,
+    BACK_TO_SLEEP,
+];
 
 /// Maximum duration for a timed focus session (8 hours).
 pub const MAX_SESSION_MS: u64 = 8 * 60 * 60 * 1000;
@@ -438,25 +449,77 @@ pub struct SoundscapeSession {
     pub elapsed_ms: u64,
     #[serde(default)]
     pub running_since_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bedside: Option<BedsideOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deadline_ms: Option<u64>,
 }
 
 pub type Session = SoundscapeSession;
 
+/// Initial settings for the most recently started timed session.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SoundscapeSessionRecipe {
+    pub scenario: String,
+    pub duration_ms: u64,
+    pub preset: Preset,
+    pub params: SoundscapeParams,
+    pub energy: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bedside: Option<BedsideOptions>,
+}
+
+impl SoundscapeSessionRecipe {
+    /// Start a fresh timer from the recipe.
+    pub fn timer(&self) -> SoundscapeSession {
+        SoundscapeSession {
+            scenario: self.scenario.clone(),
+            duration_ms: self.duration_ms,
+            elapsed_ms: 0,
+            running_since_ms: None,
+            bedside: self.bedside,
+            deadline_ms: None,
+        }
+    }
+}
+
 impl SoundscapeSession {
     pub fn remaining_at(&self, now: u64) -> u64 {
+        let remaining = self.duration_ms.saturating_sub(self.elapsed_at(now));
+        self.deadline_ms.map_or(remaining, |deadline| {
+            remaining.min(deadline.saturating_sub(now))
+        })
+    }
+
+    /// Anchor the morning ending to the clock when a session starts.
+    pub fn anchor_morning(&mut self, now: u64) {
+        self.deadline_ms = (self.scenario == BEDSIDE
+            && self
+                .bedside
+                .is_some_and(|options| options.ending == SleepEnding::UntilMorning))
+        .then(|| now.saturating_add(self.duration_ms));
+    }
+
+    /// Elapsed playback time, including the current run if the session is playing.
+    pub fn elapsed_at(&self, now: u64) -> u64 {
         let running = self
             .running_since_ms
             .map(|started| now.saturating_sub(started))
             .unwrap_or(0);
-        self.duration_ms
-            .saturating_sub(self.elapsed_ms.saturating_add(running))
+        self.elapsed_ms
+            .saturating_add(running)
+            .min(self.duration_ms)
     }
 
     pub fn is_valid(&self, now: u64) -> bool {
-        SCENARIOS.contains(&self.scenario.as_str())
-            && self.duration_ms > 0
-            && self.duration_ms <= MAX_SESSION_MS
-            && self.elapsed_ms <= self.duration_ms
+        self.bedside.map_or_else(
+            || {
+                SCENARIOS.contains(&self.scenario.as_str())
+                    && !matches!(self.scenario.as_str(), BEDSIDE | BACK_TO_SLEEP)
+                    && (1..=MAX_SESSION_MS).contains(&self.duration_ms)
+            },
+            |options| options.accepts_duration(&self.scenario, self.duration_ms),
+        ) && self.elapsed_ms <= self.duration_ms
             && self
                 .running_since_ms
                 .is_none_or(|started| started <= now.saturating_add(60_000))
@@ -497,6 +560,12 @@ pub struct SoundscapeState {
     pub seed: u32,
     #[serde(default)]
     pub session: Option<SoundscapeSession>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_session: Option<SoundscapeSessionRecipe>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bedside_options: Option<BedsideOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bedside_volume: Option<f32>,
 }
 
 pub type Scape = SoundscapeState;
@@ -512,11 +581,26 @@ impl Default for SoundscapeState {
             layers: SoundscapeLayers::default(),
             seed: 0,
             session: None,
+            last_session: None,
+            bedside_options: None,
+            bedside_volume: None,
         }
     }
 }
 
 impl SoundscapeState {
+    /// Save the current timer and its starting sound settings for a future repeat.
+    pub fn remember_session(&mut self, session: &SoundscapeSession) {
+        self.last_session = Some(SoundscapeSessionRecipe {
+            scenario: session.scenario.clone(),
+            duration_ms: session.duration_ms,
+            preset: self.preset(),
+            params: self.params,
+            energy: self.energy,
+            bedside: session.bedside,
+        });
+    }
+
     pub fn preset(&self) -> Preset {
         Preset::from_key(&self.preset).unwrap_or(Preset::Edm)
     }
@@ -552,6 +636,9 @@ pub struct SoundscapePatch {
     pub energy: Option<f32>,
     #[serde(default, deserialize_with = "deserialize_session_patch")]
     pub session: Option<Option<SoundscapeSession>>,
+    #[serde(default)]
+    pub repeat_last_session: bool,
+    pub repeat_morning_duration_ms: Option<u64>,
     pub origin: Option<String>,
 }
 

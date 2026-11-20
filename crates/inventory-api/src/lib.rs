@@ -8,12 +8,17 @@ use serde::{Deserialize, Serialize};
 pub mod aliases;
 pub mod mail_evidence;
 pub mod resolution;
+pub mod sync;
 
 // ============================================================================
 // Route Constants
 // ============================================================================
 
+pub const ROUTE_SYNC: &str = "/api/sync";
+pub const PROXY_ROUTE_SYNC: &str = "/inventory/api/sync";
+
 pub const ROUTE_INVENTORY: &str = "/api/inventory";
+pub const ROUTE_IMPORT_OVERLAY: &str = "/api/import/overlay";
 pub const ROUTE_ITEM_REFS: &str = "/api/item-refs/{reference}";
 pub const ROUTE_MAIL_PROPOSALS: &str = "/api/mail-proposals";
 pub const ROUTE_MAIL_PROPOSAL_DECISION: &str = "/api/mail-proposals/{id}/decision";
@@ -26,14 +31,17 @@ pub const ROUTE_WISHLIST: &str = "/api/wishlist";
 pub const ROUTE_WISH_GROUPS: &str = "/api/wish-groups";
 pub const ROUTE_WISH_GROUP_BY_ID: &str = "/api/wish-groups/{id}";
 pub const ROUTE_WISH_GROUP_ITEMS: &str = "/api/wish-groups/{id}/items";
+pub const ROUTE_WISH_GROUP_ALTERNATIVES: &str = "/api/wish-groups/{id}/alternatives";
 pub const ROUTE_WISH_GROUP_NEEDS: &str = "/api/wish-groups/{id}/needs";
 pub const ROUTE_ITEM_SPECS: &str = "/api/items/{id}/specs";
 pub const ROUTE_ITEM_PRICES: &str = "/api/items/{id}/prices";
 pub const ROUTE_WISH_COMPARISON: &str = "/api/wish-comparison";
 
 /// Every route constant above. The server test checks each one against its manifest.
-pub const ALL_ROUTES: [&str; 17] = [
+pub const ALL_ROUTES: [&str; 20] = [
+    ROUTE_SYNC,
     ROUTE_INVENTORY,
+    ROUTE_IMPORT_OVERLAY,
     ROUTE_ITEM_REFS,
     ROUTE_MAIL_PROPOSALS,
     ROUTE_MAIL_PROPOSAL_DECISION,
@@ -46,6 +54,7 @@ pub const ALL_ROUTES: [&str; 17] = [
     ROUTE_WISH_GROUPS,
     ROUTE_WISH_GROUP_BY_ID,
     ROUTE_WISH_GROUP_ITEMS,
+    ROUTE_WISH_GROUP_ALTERNATIVES,
     ROUTE_WISH_GROUP_NEEDS,
     ROUTE_ITEM_SPECS,
     ROUTE_ITEM_PRICES,
@@ -54,6 +63,12 @@ pub const ALL_ROUTES: [&str; 17] = [
 
 /// The path prefix under which the status proxy serves these routes.
 pub const PROXY_PREFIX: &str = "/inventory";
+
+#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct ImportOverlayRequest {
+    #[serde(default)]
+    pub force: bool,
+}
 
 // ============================================================================
 // Enums
@@ -524,6 +539,11 @@ pub struct SetWishGroupItemsRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct SetAlternativesRequest {
+    pub alternatives: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct SetSpecsRequest {
     pub specs: Vec<Spec>,
 }
@@ -541,4 +561,10 @@ pub struct RecordPriceRequest {
     pub configuration: String,
     #[serde(default)]
     pub observed_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PriceRecorded {
+    pub added: bool,
+    pub alert: bool,
 }

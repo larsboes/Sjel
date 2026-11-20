@@ -3,8 +3,9 @@
 //! everywhere. The bound is coarse on purpose: it catches a fallback to the linear scan (67.7 ms
 //! against 2.7 ms with the heap, measured 2026-08-30 on another plan), not a few percent.
 
+mod support;
+
 use interior::clearance::check_layout;
-use interior::model::Model;
 
 #[test]
 fn a_layout_check_costs_a_few_milliseconds() {
@@ -15,7 +16,7 @@ fn a_layout_check_costs_a_few_milliseconds() {
     std::env::set_var("SJEL_DB_PATH", &db);
     let store = sjel_inventory::store::Store::open(&db).unwrap();
     sjel_inventory::import::inventory(&store, &fixture.join("data/interior/inventory")).unwrap();
-    let model = Model::load("muster").unwrap();
+    let model = support::load_model("muster").unwrap();
     let layout = model.load_layout("a-frei").unwrap();
 
     check_layout(&model, &layout).unwrap(); // warm up

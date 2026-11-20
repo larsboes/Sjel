@@ -8,6 +8,8 @@
 //! No recorded results here: every claim below was designed into the sample layouts (a wardrobe
 //! in the approach zone, a bed through the wall), not read off after the code produced it.
 
+mod support;
+
 use interior::clearance::{check_layout, kind_of, CheckResult, Kind, Severity};
 use interior::model::{default_flat, flats, footprint, Model, PlacedItem, Route};
 use std::sync::Once;
@@ -25,7 +27,7 @@ fn model() -> Model {
 
 fn model_of(flat: &str) -> Model {
     fixture_overlay();
-    Model::load(flat).unwrap_or_else(|e| panic!("{flat}: {e}"))
+    support::load_model(flat).unwrap_or_else(|e| panic!("{flat}: {e}"))
 }
 
 /// Once per test binary, since `set_var` would race the other test threads. `SJEL_INTERIOR_FLAT`

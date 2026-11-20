@@ -11,19 +11,11 @@
 //! no later one is: the alert means "the limit was reached", not "the price moved".
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
 
 use super::{Error, Item, Store};
 
+pub use inventory_api::PriceRecorded as Recorded;
 pub use inventory_api::{Candidate, GroupComparison, PriceObservation as Observation, Spec};
-
-/// What recording an observation did.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct Recorded {
-    /// False when this wish already has an observation from this source on this day.
-    pub added: bool,
-    pub alert: bool,
-}
 
 /// The tables, created next to the item tables. Idempotent.
 pub(super) fn migrate(conn: &Connection, prefix: &str) -> Result<(), Error> {
@@ -382,7 +374,7 @@ impl Store {
 
 /// `YYYY-MM-DD`, optionally followed by a time. Only the shape is checked: the day is what the
 /// idempotence key uses.
-fn check_date(at: &str) -> Result<(), Error> {
+pub(crate) fn check_date(at: &str) -> Result<(), Error> {
     let b = at.as_bytes();
     let shape = b.len() >= 10
         && b[..4].iter().all(u8::is_ascii_digit)

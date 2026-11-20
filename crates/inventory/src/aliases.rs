@@ -17,7 +17,7 @@ use crate::{
 };
 
 type HttpError = (StatusCode, String);
-const COLUMNS: &str = "id, namespace, value, kind, item_id, reviewed_item_revision, reviewed_state_id, source_ref, data_class, version, reviewed_at, revoked_at";
+pub(crate) const COLUMNS: &str = "id, namespace, value, kind, item_id, reviewed_item_revision, reviewed_state_id, source_ref, data_class, version, reviewed_at, revoked_at";
 
 fn internal(e: impl std::fmt::Display) -> HttpError {
     (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
@@ -25,7 +25,7 @@ fn internal(e: impl std::fmt::Display) -> HttpError {
 fn invalid(e: impl ToString) -> HttpError {
     (StatusCode::BAD_REQUEST, e.to_string())
 }
-fn conflict() -> HttpError {
+pub(crate) fn conflict() -> HttpError {
     (
         StatusCode::CONFLICT,
         "alias or reviewed item/state changed".into(),
@@ -63,10 +63,7 @@ fn read_alias(row: &rusqlite::Row<'_>) -> rusqlite::Result<ItemAlias> {
     })
 }
 
-pub(crate) async fn review(
-    State(state): State<Arc<AppState>>,
-    Json(body): Json<AliasReview>,
-) -> Result<Json<ItemAlias>, HttpError> {
+pub(crate) fn validate_review(body: &AliasReview) -> Result<String, HttpError> {
     body.key.validate().map_err(invalid)?;
     let item_id = identity::decode_item_ref(&body.reference).map_err(invalid)?;
     if body.expected_item_revision < 1
@@ -79,6 +76,14 @@ pub(crate) async fn review(
     {
         return Err(invalid("invalid review snapshot, provenance or data class"));
     }
+    Ok(item_id)
+}
+
+pub(crate) async fn review(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AliasReview>,
+) -> Result<Json<ItemAlias>, HttpError> {
+    let item_id = validate_review(&body)?;
     let store = Store::open(&state.database).map_err(internal)?;
     let mut conn = store.borrow_connection().map_err(internal)?;
     let tx = sjel_store::write_transaction(&mut conn).map_err(internal)?;

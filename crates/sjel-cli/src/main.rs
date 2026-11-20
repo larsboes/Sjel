@@ -30,6 +30,7 @@ mod help;
 mod host_watch;
 mod inference_keys;
 mod intake;
+mod loop_hook;
 mod maintenance;
 mod mirror;
 mod model_check;
@@ -158,6 +159,7 @@ fn main() -> ExitCode {
             return packs::run(command, rest)
         }
         "pack-drift-hook" => return pack_hook::run(),
+        "loop-hook" => return loop_hook::run(),
         "self" => return self_model::run(rest),
         "updates" => return updates::run(rest),
         "inference-keys" => return inference_keys::run(rest),

@@ -39,7 +39,7 @@ const HELP: &str = "tools/harnesses — Packs across every agent harness at once
   status [<pack>] [--json]              one matrix: every Pack skill x every harness
   drift [<pack>] [--diff]               per-file detail for anything that drifted
   maintain [--check]                   refresh existing clean units on maintained harnesses
-  sync <pack>|--all                     one-way Sjel -> harness (installed harnesses only)
+  sync <pack>|--all [--unit <key>]       refresh one Pack or one existing owned unit
   use <profile> [--harness <id>]        activate a profile on every installed harness (or one)
   apply [--harness <id>]                activate the profile profiles.toml [harness_profile] binds to each harness
   promote <skill> --pack <p> [--from h] bring a harness-level skill Sjel does not own into a Pack
@@ -105,6 +105,15 @@ fn sync(registry: &Registry, args: &[String]) -> Result<(), String> {
     let positional = positional(args);
     let pack = positional.get(1).map(String::as_str);
     let all = has(args, "all");
+    let unit = flag(args, "unit");
+    if has(args, "unit")
+        && (pack.is_none() || all || unit.is_none_or(|key| key.is_empty() || key.starts_with("--")))
+    {
+        return Err("--unit requires one pack and a unit key".to_owned());
+    }
+    if positional.len() > 2 {
+        return Err("sync accepts one pack; use --unit to select an existing unit".to_owned());
+    }
     if pack.is_some() && all {
         return Err("tools/harnesses sync: give a pack or --all, not both".to_owned());
     }
@@ -137,7 +146,13 @@ fn sync(registry: &Registry, args: &[String]) -> Result<(), String> {
         let config = &harness.config;
         let known: Vec<String> = engine::read_state(config)?.packs.keys().cloned().collect();
         for target in mutate::sync_targets(pack, all, &known) {
-            match mutate::sync_pack(config, &target) {
+            let result = match unit {
+                Some(key) => {
+                    mutate::refresh_units(config, &target, &BTreeSet::from([key.to_owned()]))
+                }
+                None => mutate::sync_pack(config, &target),
+            };
+            match result {
                 Ok(lines) => lines.iter().for_each(|l| println!("  {l}")),
                 Err(e) => {
                     println!("  ✗ {target}: {e}");
@@ -465,7 +480,7 @@ fn positional(args: &[String]) -> Vec<String> {
         if arg.starts_with("--") {
             continue;
         }
-        if i > 0 && (args[i - 1] == "--harness" || args[i - 1] == "--pack") {
+        if i > 0 && matches!(args[i - 1].as_str(), "--harness" | "--pack" | "--unit") {
             continue;
         }
         out.push(arg.clone());
@@ -1166,6 +1181,72 @@ packs = []
             ])),
             vec!["promote", "trim", "claude"]
         );
+    }
+
+    #[test]
+    fn unit_sync_preserves_sibling_files_and_ledger_records() {
+        let root = std::env::temp_dir().join(format!("sjel-unit-sync-{}", std::process::id()));
+        let source = root.join("Packs/demo/skills");
+        for name in ["alpha", "beta"] {
+            fs::create_dir_all(source.join(name)).unwrap();
+            fs::write(
+                source.join(name).join("SKILL.md"),
+                format!("---\nname: {name}\ndescription: test\n---\n\ninitial\n"),
+            )
+            .unwrap();
+        }
+        fs::write(
+            root.join("Packs/demo/pack.toml"),
+            "name = 'demo'\ndescription = 'test'\nskills = ['alpha', 'beta']\n",
+        )
+        .unwrap();
+        let mut registry = Registry::new(&root);
+        registry.harnesses.retain(|h| h.id == "claude");
+        let harness = &mut registry.harnesses[0];
+        harness.marker = root.clone();
+        harness.config.pack_roots = None;
+        harness.config.destination = root.join("dest");
+        harness.config.state_file = root.join("ledger.json");
+        mutate::deploy_pack(&harness.config, "demo", None).unwrap();
+        let config = harness.config.clone();
+        let before = engine::read_state(&config).unwrap();
+        let beta = fs::read(config.destination.join("beta/SKILL.md")).unwrap();
+        for name in ["alpha", "beta"] {
+            fs::write(
+                source.join(name).join("SKILL.md"),
+                format!("---\nname: {name}\ndescription: test\n---\n\nchanged\n"),
+            )
+            .unwrap();
+        }
+        sync(
+            &registry,
+            &args(&["sync", "demo", "--unit", "alpha", "--harness", "claude"]),
+        )
+        .unwrap();
+        assert!(
+            fs::read_to_string(config.destination.join("alpha/SKILL.md"))
+                .unwrap()
+                .contains("changed")
+        );
+        assert_eq!(
+            fs::read(config.destination.join("beta/SKILL.md")).unwrap(),
+            beta
+        );
+        let after = engine::read_state(&config).unwrap();
+        assert_eq!(
+            serde_json::to_value(&before.packs["demo"].skills["beta"]).unwrap(),
+            serde_json::to_value(&after.packs["demo"].skills["beta"]).unwrap()
+        );
+        assert_eq!(before.profile, after.profile);
+        for invalid in [
+            vec!["sync", "--all", "--unit", "alpha"],
+            vec!["sync", "demo", "--unit"],
+            vec!["sync", "demo", "--unit", "--harness", "claude"],
+            vec!["sync", "demo", "--unit", "missing"],
+        ] {
+            assert!(sync(&registry, &args(&invalid)).is_err(), "{invalid:?}");
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

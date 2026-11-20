@@ -21,7 +21,7 @@
  * of hanging — the model should fall back to asking in plain text.
  *
  * RPC clients opt into cards through `PI_QUESTIONS_CLIENT=HOST_PROTOCOL`.
- * Ask uses an abortable input dialog; the host owns idle deferral and draft capture.
+ * Ask uses an abortable input dialog with no timeout or pending queue.
  */
 
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
@@ -310,36 +310,28 @@ interface AskDraft {
 	note?: string;
 }
 
-const ASK_IDLE_MS = 60_000;
-const DEFER_INSTRUCTION = "Continue independent work only. Do not assume a recommendation, treat deferral as denial, or re-ask unresolved decisions until the user returns. Use /decisions to resume; returning does not execute anything automatically. The queue is in memory: reset/reload loses it, but the original transcript remains.";
-
 interface AskResult {
 	topic: string;
 	answers: AskAnswer[];
 	cancelled: boolean;
-	deferred?: boolean;
-	deferReason?: "idle" | "aborted" | "disposed";
 	unresolvedIds?: string[];
 	draft?: AskDraft;
 }
 
-/** The host resets the idle deadline on activity and returns drafts before closing a card. */
+/** The host returns submitted answers when the dialog completes or is cancelled. */
 async function askFromHost(
 	ctx: ExtensionContext,
-	params: { topic: string; questions: AskQuestion[]; answers: AskAnswer[]; draft?: AskDraft; idleMs: number },
+	params: { topic: string; questions: AskQuestion[]; answers: AskAnswer[] },
 	signal?: AbortSignal,
 ): Promise<AskResult> {
 	const empty: AskResult = {
 		topic: params.topic, answers: params.answers, cancelled: true,
-		deferred: true, deferReason: "aborted", draft: params.draft,
 	};
 	const raw = await ctx.ui.input(`${HOST_PROTOCOL} ask`, JSON.stringify(params), { signal });
 	if (raw === undefined) return empty;
 	try {
 		const parsed = JSON.parse(raw) as AskResult;
 		if (!parsed || !Array.isArray(parsed.answers) || typeof parsed.cancelled !== "boolean") return empty;
-		if (parsed.deferred !== undefined && typeof parsed.deferred !== "boolean") return empty;
-		if (parsed.deferred && parsed.deferReason !== "idle" && parsed.deferReason !== "aborted") return empty;
 		const seen = new Set<string>();
 		const answers = [...params.answers];
 		for (const answer of parsed.answers) {
@@ -372,7 +364,7 @@ async function askFromHost(
 			if (!Number.isInteger(draft.optionIndex) || draft.optionIndex < -1 || draft.optionIndex >= question.options.length) return empty;
 			if ((draft.freeText !== undefined && typeof draft.freeText !== "string") || (draft.note !== undefined && typeof draft.note !== "string")) return empty;
 		}
-		return { topic: params.topic, answers, cancelled: parsed.cancelled, deferred: parsed.deferred, deferReason: parsed.deferred ? parsed.deferReason : undefined, draft };
+		return { topic: params.topic, answers, cancelled: parsed.cancelled, draft };
 	} catch { /* A malformed host reply leaves decisions unresolved. */ }
 	return empty;
 }
@@ -431,12 +423,10 @@ async function runAsk(
 	params: { topic: string; questions: AskQuestion[] },
 	ctx: ExtensionContext,
 	signal?: AbortSignal,
-	previous?: AskResult,
-	deferredOnly = false,
 ): Promise<{ content: { type: "text"; text: string }[]; details: AskResult }> {
 	const { topic } = params;
-	const completed = previous?.answers.filter((a) => !a.skipped) ?? [];
-	const questions = params.questions.filter((q) => !completed.some((a) => a.id === q.id));
+	const completed: AskAnswer[] = [];
+	const questions = params.questions;
 	const empty: AskResult = { topic, answers: [], cancelled: true };
 
 	if (ctx.mode !== "tui" && !hostRenders(ctx)) {
@@ -461,11 +451,10 @@ async function runAsk(
 		}
 	}
 
-	const result: AskResult = signal?.aborted || deferredOnly
-		? { topic, answers: completed, cancelled: false, deferred: true,
-			deferReason: signal?.aborted ? "aborted" : previous?.deferReason ?? "idle", draft: previous?.draft }
+	const result: AskResult = signal?.aborted
+		? { topic, answers: [], cancelled: true }
 		: hostRenders(ctx)
-			? await askFromHost(ctx, { topic, questions, answers: completed, draft: previous?.draft, idleMs: ASK_IDLE_MS }, signal)
+			? await askFromHost(ctx, { topic, questions, answers: [] }, signal)
 		: await ctx.ui.custom<AskResult>((tui, theme, _kb, done) => {
 		let qIndex = 0;
 		let optionIndex = questions[0].recommendedIndex ?? 0;
@@ -475,38 +464,15 @@ async function runAsk(
 		const editor = new Editor(tui, editorTheme(theme));
 		const win = new BodyWindow();
 		let settled = false;
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		function cleanup() {
-			clearTimeout(timer);
-			signal?.removeEventListener("abort", onAbort);
-		}
-		function finish(cancelled: boolean, deferReason?: AskResult["deferReason"]) {
+		function finish(cancelled: boolean) {
 			if (settled) return;
 			settled = true;
-			cleanup();
-			done({
-				topic, answers, cancelled, deferred: deferReason !== undefined, deferReason,
-				draft: deferReason || cancelled ? {
-					id: questions[qIndex].id, phase, optionIndex, text: editor.getText(),
-				} : undefined,
-			});
+			signal?.removeEventListener("abort", onAbort);
+			done({ topic, answers, cancelled });
 		}
-		function onAbort() { finish(false, "aborted"); }
-		function resetIdle() {
-			clearTimeout(timer);
-			if (!settled) timer = setTimeout(() => finish(false, "idle"), ASK_IDLE_MS);
-		}
-		function restoreDraft() {
-			const draft = previous?.draft;
-			if (draft?.id !== questions[qIndex].id) return;
-			phase = draft.phase;
-			optionIndex = draft.optionIndex;
-			editor.setText(draft.text);
-		}
-		restoreDraft();
+		function onAbort() { finish(true); }
 		signal?.addEventListener("abort", onAbort, { once: true });
 		if (signal?.aborted) onAbort();
-		else resetIdle();
 
 		function refresh() {
 			cache.clear();
@@ -560,7 +526,6 @@ async function runAsk(
 			if (qIndex < questions.length - 1) {
 				qIndex++;
 				optionIndex = questions[qIndex].recommendedIndex ?? 0;
-				restoreDraft();
 				win.reset();
 				refresh();
 				return;
@@ -592,7 +557,6 @@ async function runAsk(
 
 		function handleInput(data: string) {
 			if (settled) return;
-			resetIdle();
 			// Both editor phases route keystrokes to the editor. Missing `free` here was a real bug: the
 			// typed answer was parsed as option keys instead, and `o` then Enter landed back in the note
 			// phase with nothing recorded.
@@ -725,7 +689,7 @@ async function runAsk(
 			}
 
 			const foot: string[] = [];
-			addPrefixed(foot, w, " ", theme.fg("dim", hint + " · defer after 60 sec idle · /decisions resumes"));
+			addPrefixed(foot, w, " ", theme.fg("dim", hint));
 			const view = win.cut(body, widgetRows(tui) - head.length - foot.length - 1);
 			head[0] = topRule(w, view, theme);
 			const lines = [...head, ...view.lines, ...foot, theme.fg("accent", "─".repeat(w))];
@@ -745,7 +709,7 @@ async function runAsk(
 				cache.clear();
 			},
 			handleInput,
-			dispose: () => finish(false, "disposed"),
+			dispose: () => finish(true),
 		};
 	});
 
@@ -753,9 +717,7 @@ async function runAsk(
 	const answered = result.answers.filter((a) => !a.skipped);
 	const overruled = result.answers.filter((a) => a.followedRecommendation === false).length;
 	const freeText = result.answers.filter((a) => a.freeText).length;
-	const header = result.deferred
-		? `DEFERRED (${result.deferReason}): ${answered.length}/${params.questions.length} answered. No unanswered decision was accepted or denied.`
-		: result.cancelled
+	const header = result.cancelled
 		? `Decision round stopped early: ${answered.length}/${params.questions.length} answered.`
 		: `Decision round complete: ${answered.length}/${params.questions.length} answered${
 				overruled > 0 ? `, ${overruled} overruled your recommendation` : ""
@@ -783,7 +745,7 @@ async function runAsk(
 	if (result.unresolvedIds.length > 0) {
 		report.push(`Unresolved IDs: ${result.unresolvedIds.join(", ")}`);
 		if (result.draft) report.push(`Unsubmitted draft (not a decision): ${JSON.stringify(result.draft)}`);
-		report.push(DEFER_INSTRUCTION);
+		report.push("No unanswered question was accepted or denied. Continue only independent work; record blocking planning gaps in the owning plan. There is no pending queue.");
 	}
 	return { content: [{ type: "text" as const, text: report.join("\n") }], details: result };
 }
@@ -1767,40 +1729,6 @@ async function runNarrow(
 /* ────────────────────────────── registration ────────────────────────────── */
 
 export default function questions(pi: ExtensionAPI) {
-	type PendingRound = { params: { topic: string; questions: AskQuestion[] }; result: Awaited<ReturnType<typeof runAsk>> };
-	const pending = new Map<string, PendingRound>();
-	let resuming = false;
-	function roundKey(params: PendingRound["params"]) {
-		return params.topic;
-	}
-	function remember(params: PendingRound["params"], result: PendingRound["result"], ctx: ExtensionContext) {
-		const key = roundKey(params);
-		if (result.details.unresolvedIds?.length) pending.set(key, { params, result });
-		else pending.delete(key);
-		const count = [...pending.values()].reduce((n, round) => n + (round.result.details.unresolvedIds?.length ?? 0), 0);
-		ctx.ui.setStatus("questions-pending", count ? `${count} decisions pending · /decisions · in memory (reset/reload loses queue)` : undefined);
-	}
-	pi.registerCommand("decisions", {
-		description: "Resume pending ask rounds (in memory; reset/reload loses queue, transcript remains)",
-		handler: async (_args, ctx) => {
-			if (resuming) return;
-			if (pending.size === 0) {
-				ctx.ui.notify("No pending decisions in this extension instance. Reset/reload loses the queue; the original transcript remains.", "info");
-				return;
-			}
-			resuming = true;
-			try {
-				for (const round of [...pending.values()]) {
-					const result = await runAsk(round.params, ctx, ctx.signal, round.result.details);
-					remember(round.params, result, ctx);
-					pi.sendMessage({ customType: "decisions", content: result.content, details: result.details, display: true }, { triggerTurn: false });
-					if (result.details.deferred || result.details.cancelled) break;
-				}
-			} finally {
-				resuming = false;
-			}
-		},
-	});
 	pi.registerTool({
 		name: "ask",
 		executionMode: "sequential",
@@ -1811,43 +1739,12 @@ export default function questions(pi: ExtensionAPI) {
 		promptGuidelines: [
 			"Use ask when a fork belongs to the user and not to you: 2-4 mutually exclusive options, a one-line consequence each, your recommendation marked and given first, and a preview when the choice has shape. The user can attach a note to each decision — those notes are their reasoning, so carry them into whatever you write next.",
 			"Use ask never for what you can measure yourself, and never for a question whose answer changes nothing: decide those, say you decided, and move on.",
-			"Ask defers unresolved decisions after 60 seconds idle, never accepts a default on timeout. Continue independent work and do not re-ask or assume unresolved decisions until the user returns; /decisions resumes pending rounds without automatic execution.",
+			"Follow the approved plan without re-confirming settled choices or routine implementation. Ask only when a missing user decision changes scope, consequences or acceptance criteria. Cancelled or skipped questions grant nothing; record blocking gaps in the owning plan. No timeout or pending queue.",
 		],
 		parameters: AskParams,
 
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			const round = params as { topic: string; questions: AskQuestion[] };
-			const ids = new Set<string>();
-			for (const q of round.questions) {
-				if (ids.has(q.id)) throw new Error(`ask: duplicate question id "${q.id}"`);
-				ids.add(q.id);
-			}
-			const existing = pending.get(roundKey(round));
-			let active = round;
-			let previous = existing?.result.details;
-			const revised: string[] = [];
-			if (existing) {
-				const merged = new Map(existing.params.questions.map((q) => [q.id, q]));
-				let unchanged = true;
-				for (const q of round.questions) {
-					const old = merged.get(q.id);
-					if (JSON.stringify(old) !== JSON.stringify(q)) {
-						unchanged = false;
-						if (old) revised.push(q.id);
-					}
-					merged.set(q.id, q);
-				}
-				if (existing.result.details.deferred && unchanged) return existing.result;
-				active = { topic: round.topic, questions: [...merged.values()] };
-				previous = { ...existing.result.details,
-					answers: existing.result.details.answers.filter((a) => !revised.includes(a.id)),
-					draft: revised.includes(existing.result.details.draft?.id ?? "") ? undefined : existing.result.details.draft,
-				};
-			}
-			const result = await runAsk(active, ctx, signal, previous, existing?.result.details.deferred);
-			if (revised.length) result.content.push({ type: "text", text: `Revised question definitions: ${revised.join(", ")}. Earlier answers or drafts for those IDs no longer apply; a new user decision is required.` });
-			if (result.details.unresolvedIds) remember(active, result, ctx);
-			return result;
+			return runAsk(params as { topic: string; questions: AskQuestion[] }, ctx, signal);
 		},
 
 		renderCall(args, theme, _context) {
@@ -1869,9 +1766,8 @@ export default function questions(pi: ExtensionAPI) {
 			const total = details.unresolvedIds ? answered + details.unresolvedIds.length : details.answers.length;
 			let text = theme.fg("success", `◆ ${answered}/${total} decided`);
 			if (overruled > 0) text += theme.fg("warning", ` · ${overruled} overruled your recommendation`);
-			if (details.deferred) text += theme.fg("warning", ` (DEFERRED: ${details.deferReason})`);
-			else if (details.cancelled) text += theme.fg("warning", " (stopped early)");
-			if (details.unresolvedIds?.length) text += theme.fg("warning", `\n  Unresolved: ${details.unresolvedIds.join(", ")} · /decisions`);
+			if (details.cancelled) text += theme.fg("warning", " (stopped early)");
+			if (details.unresolvedIds?.length) text += theme.fg("warning", `\n  Unresolved: ${details.unresolvedIds.join(", ")}`);
 			if (details.draft) text += theme.fg("dim", `\n  Unsubmitted draft: ${JSON.stringify(details.draft)}`);
 			for (const a of details.answers) {
 				const label = a.skipped

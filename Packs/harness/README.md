@@ -8,7 +8,7 @@ to operate Sjel itself.
 
 - **`sjel`** operates and changes the Sjel repository: capability discovery, service and feed
   operations, architecture placement, focused change. It carries the `sjel` CLI
-  (`help`, `search`, `doctor`, `context`, `storage`, `gates`, `test`, `cargo`, `capability`,
+  (`help`, `search`, `doctor`, `context`, `storage`, `work`, `gates`, `test`, `cargo`, `capability`,
   `pack`) and the rules for working in this repo — where a change belongs, what to read before
   making it, and which verification is proportionate to it. Merged into this Pack 2026-09-17;
   see the note at the end of this section.
@@ -49,6 +49,7 @@ tools/harnesses list                     # which harnesses exist, and which are 
 tools/harnesses status [<pack>]          # one matrix: every Pack skill x every harness
 tools/harnesses drift [<pack>] [--diff]  # per-file detail, with the diff
 tools/harnesses sync <pack>|--all        # one-way Sjel -> harness
+tools/harnesses sync <pack> --unit <key> --harness <id>  # refresh only one owned unit
 tools/harnesses apply [--harness <id>]   # activate each harness's bound profile
 tools/harnesses promote <skill> --pack <p>   # a harness skill Sjel does not own
 tools/harnesses accept <pack> <skill>        # an edit to a skill Sjel already owns
@@ -95,7 +96,6 @@ components in their approved host; they do not turn stored reference snapshots i
 approved runtime components. Retained store snapshots are reference material. The tooling enforcement gap and
 remaining migration work are tracked in [`docs/plans/packs.md`](../../docs/plans/packs.md).
 
-### Upstream adoption
 ### Pack source and attribution
 
 Each Pack keeps its harness-neutral manifest in `pack.toml` and its workflows under `skills/`.
@@ -111,6 +111,7 @@ record the canonical upstream, reviewed revision or content digest, license, ado
 material left upstream. Keep required license and NOTICE texts with the Pack. Preserve lineage
 comments where edits would obscure the source.
 
+### Upstream adoption
 
 The [ownership rule](../../CONTRIBUTING.md#owned-agent-components) separates locally maintained
 behavior from reviewed native dependencies. Check the supported native route before rebuilding
@@ -367,6 +368,18 @@ SJEL_CLM_ENABLE=1 SJEL_SYSTEMONE_BACKEND=ollama pi -e ./Packs/harness/extensions
 For CLM, `/clm-probe` checks that `/health` reports a working encoder, the `clm-latest` head and no mock mode. Ollama has no such route. For Ollama the probe reads `/api/tags` and checks that the model is pulled. Then the probe asks one synthetic question. Accuracy on Sjel-shaped decisions is measured separately in [`research/benchmarks/decisions/`](../../research/benchmarks/decisions/README.md). Only **after** a real service passes that probe can Pi scripts call `models.getModelOfType("classifier", "sjel-clm", "clm-latest")` (or `"sjel-ollama", "nimble"`) and `models.classify(...)` (enable codemode with `--tools read,bash,edit,write,codemode` for a one-off session). A passing synthetic probe checks the wire contract, **not** decision quality: compare labeled Sjel routes against the current keyword baseline before activating any product route. `tools/pi-clm-classifier.test.ts` checks the adapter against synthetic responses without claiming a model was run.
 
 The CLM v0.1 release is Apache-2.0 (checkpoint and code, <https://huggingface.co/Contrastive-LM/CLM-v0.1-8B>); it needs the matching Qwen3-8B last-token pooling encoder plus its trained heads. An Ollama `/api/embed` cosine of Qwen3-8B vectors is **not CLM**. The reference `contrastive-lm` package currently installs vLLM, and its documented serving recipe targets an NVIDIA GPU. vllm-metal documents experimental LAST pooling on macOS, but that is not yet an end-to-end validation of this checkpoint. On this Mac the service and Qwen3-8B are not installed; with 35 GiB free, no model download or background service was started. Keep this extension off until an exact encoder/head match and labeled accuracy are measured. Hosted Jev through Pi's built-in `typesafe/jev-latest` is the next, separate step after local validation; it needs credentials and Sjel's egress approval before personal data is sent.
+
+### Rex status (Pi extension)
+
+`extensions/rex-status.ts` reports Pi's state to the [Rex](https://www.superlogical.com/rex)
+terminal as program status ([OSC 7501](https://www.superlogical.com/rex/docs/build/program-status.md)):
+`idle` at start, `working` during a run, `blocked` during a prompt (`permission` for a confirm,
+`question` otherwise), `done` when the run settles. Claude Code reports to Rex without help; Pi
+does not. At session start the extension also writes
+`${XDG_STATE_HOME:-~/.local/state}/rex-agents/<block>.json` with the Pi session ID and folder,
+which a Rex "Resume Agents" action reads after a server restart. Outside Rex (no `REX_BLOCK`)
+and outside the TUI it does nothing. Rex is on trial (`upstreams.toml`, `[rex]`).
+`bun test tools/pi-rex-status.test.ts` covers the encoding, the gating and the record.
 
 ### Accordion (reference only)
 

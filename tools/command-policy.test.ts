@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, 
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { classify, classifyWrite, resolvePath, type Scope } from "../Packs/security/extensions/command-policy/classify.ts";
-import commandPolicy, { APPROVAL_TIMEOUT_MS } from "../Packs/security/extensions/command-policy/index.ts";
+import commandPolicy from "../Packs/security/extensions/command-policy/index.ts";
 import { scopedCommand, scopedWrite } from "../Packs/security/extensions/command-policy/scoped.ts";
 import { heavyCommand, powerDeferral } from "../Packs/security/extensions/command-policy/power.ts";
 import { loadMarkdownRoots, scopedMarkdownWrite } from "../Packs/security/extensions/command-policy/config.ts";
@@ -324,7 +324,7 @@ describe("persistent machine-local Markdown scopes", () => {
   });
 });
 
-describe("permission deferral and scope lifecycle", () => {
+describe("immediate permissions and scope lifecycle", () => {
   function setup() {
     const handlers = new Map<string, (...args: any[]) => any>();
     const commands = new Map<string, { handler: (...args: any[]) => any }>();
@@ -335,10 +335,10 @@ describe("permission deferral and scope lifecycle", () => {
       sendMessage: (message: unknown) => messages.push(message),
     } as never);
     const choices: (string | undefined)[] = [];
-    const prompts: { options: string[]; timeout: number }[] = [];
+    const prompts: { options: string[]; timeout?: number }[] = [];
     const notifications: string[] = [];
     const c = { cwd: homedir(), hasUI: true, ui: {
-      select: async (_title: string, options: string[], opts: { timeout: number }) => {
+      select: async (_title: string, options: string[], opts: { timeout?: number }) => {
         prompts.push({ options, timeout: opts.timeout });
         return choices.shift();
       },
@@ -346,54 +346,36 @@ describe("permission deferral and scope lifecycle", () => {
     } };
     return { call: handlers.get("tool_call")!, start: handlers.get("session_start")!, command: commands.get("permissions")!.handler, choices, prompts, notifications, messages, c };
   }
-  test("unanswered or explicitly deferred calls do not execute or re-prompt", async () => {
+  test("cancellation stores no action, has no timeout or defer option, and grants nothing", async () => {
     const h = setup();
     const event = { toolName: "bash", input: { command: "git push origin main" } };
-    const r = await h.call(event, h.c);
-    expect(r.block).toBe(true);
-    expect(r.reason).toContain("NOT denied or approved");
-    expect(r.reason).toContain("independent work");
-    expect(h.prompts[0].timeout).toBe(APPROVAL_TIMEOUT_MS);
-    await h.call(event, h.c);
-    expect(h.prompts).toHaveLength(1);
-    h.choices.push("1. A2: git push origin main", "Allow next exact call once");
+    const result = await h.call(event, h.c);
+    expect(result.block).toBe(true);
+    expect(result.reason).toContain("approval cancelled");
+    expect(result.reason).toContain("No pending action is stored");
+    expect(h.prompts[0].timeout).toBeUndefined();
+    expect(h.prompts[0].options).not.toContain("Defer");
     await h.command("pending", h.c);
-    expect(h.messages).toHaveLength(1);
+    expect(h.prompts).toHaveLength(1);
+    expect(h.messages).toEqual([]);
+    expect(h.notifications.at(-1)).not.toContain("deferred");
+    h.choices.push("Allow once");
     expect(await h.call(event, h.c)).toBeUndefined();
     expect((await h.call(event, h.c)).block).toBe(true);
+    expect(h.prompts).toHaveLength(3);
   });
-  test("an abort grants nothing and does not invent a pending decision", async () => {
+
+  test("an abort grants nothing", async () => {
     const h = setup();
     const controller = new AbortController();
     controller.abort();
     h.choices.push("Allow this exact call for this session");
     const event = { toolName: "bash", input: { command: "git push" } };
     expect((await h.call(event, { ...h.c, signal: controller.signal })).reason).toContain("aborted");
-    await h.command("pending", h.c);
-    expect(h.notifications.at(-1)).toContain("No deferred");
     expect((await h.call(event, h.c)).block).toBe(true);
+    expect(h.messages).toEqual([]);
   });
-  test("pending approval cannot grant after an abort or session transition", async () => {
-    for (const mode of ["abort", "session"]) {
-      const h = setup();
-      const event = { toolName: "bash", input: { command: "git push" } };
-      await h.call(event, h.c);
-      const controller = new AbortController();
-      const c = { ...h.c, signal: controller.signal, ui: { ...h.c.ui,
-        select: async (_title: string, options: string[]) => {
-          if (options.includes("Allow next exact call once")) {
-            if (mode === "abort") controller.abort();
-            else h.start({}, h.c);
-            return "Allow next exact call once";
-          }
-          return options[0];
-        },
-      } };
-      await h.command("pending", c);
-      expect(h.messages).toHaveLength(0);
-      expect((await h.call(event, h.c)).block).toBe(true);
-    }
-  });
+
   test("an outstanding old-session dialog cannot repopulate grants", async () => {
     const h = setup();
     let resolve!: (choice: string) => void;
@@ -404,37 +386,41 @@ describe("permission deferral and scope lifecycle", () => {
     expect((await call).block).toBe(true);
     expect((await h.call(event, h.c)).block).toBe(true);
   });
-  test("off invalidates outstanding normal and pending approvals", async () => {
+
+  test("off invalidates outstanding approvals", async () => {
     const h = setup();
     let resolve!: (choice: string) => void;
     const event = { toolName: "bash", input: { command: "git push" } };
     const call = h.call(event, { ...h.c, ui: { ...h.c.ui, select: () => new Promise<string>((done) => { resolve = done; }) } });
-    resolve("Allow this exact call for this session");
     await h.command("off", h.c);
+    resolve("Allow this exact call for this session");
     expect((await call).block).toBe(true);
-    await h.call(event, h.c);
-    const c = { ...h.c, ui: { ...h.c.ui, select: async (_title: string, options: string[]) => {
-      if (options.includes("Allow next exact call once")) {
-        await h.command("off", h.c);
-        return "Allow next exact call once";
-      }
-      return options[0];
-    } } };
-    await h.command("pending", c);
-    expect(h.messages).toHaveLength(0);
     expect((await h.call(event, h.c)).block).toBe(true);
   });
-  test("an exact deferred retry is also bound to its working directory", async () => {
+
+  test("session approval is bound to the exact call and working directory", async () => {
+    const h = setup();
+    const event = { toolName: "bash", input: { command: "git push" } };
+    h.c.cwd = join(homedir(), "task-a");
+    h.choices.push("Allow this exact call for this session");
+    expect(await h.call(event, h.c)).toBeUndefined();
+    expect(await h.call(event, h.c)).toBeUndefined();
+    expect(h.prompts).toHaveLength(1);
+    expect((await h.call(event, { ...h.c, cwd: join(homedir(), "task-b") })).block).toBe(true);
+    h.start({}, h.c);
+    expect((await h.call(event, h.c)).block).toBe(true);
+  });
+
+  test("Block rules allow only the current call, never a session grant", async () => {
     const h = setup();
     const event = { toolName: "bash", input: { command: "rm -rf victim" } };
-    h.c.cwd = join(homedir(), "task-a");
-    await h.call(event, h.c);
-    h.choices.push("1. B1: rm -rf victim", "Allow next exact call once");
-    await h.command("pending", h.c);
-    expect((await h.call(event, { ...h.c, cwd: join(homedir(), "task-b") })).block).toBe(true);
+    h.choices.push("Allow once");
     expect(await h.call(event, h.c)).toBeUndefined();
+    expect(h.prompts[0].options).toEqual(["Deny", "Allow once"]);
+    expect((await h.call(event, h.c)).block).toBe(true);
   });
-  test("an explicit denial is distinct from deferral", async () => {
+
+  test("an explicit denial is not approval or cancellation", async () => {
     const h = setup();
     h.choices.push("Deny");
     expect((await h.call({ toolName: "bash", input: { command: "git push" } }, h.c)).reason).toContain("user denied");

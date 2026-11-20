@@ -1,0 +1,12 @@
+#!/bin/bash
+# tools/loop-hook — the Claude Code PostToolUse hook that reports repeated tool calls.
+# The hook is crates/sjel-cli/src/loop_hook.rs. It runs after every tool call, so this launcher
+# never builds: it runs the existing sjel-cli binary, and does nothing when there is none or the
+# binary predates the loop-hook subcommand. Any other launcher (sjel, tools/work) rebuilds it.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+bin="${SJEL_CLI_BIN:-${CARGO_TARGET_DIR:-$root/target}/release/sjel-cli}"
+[ -x "$bin" ] || exit 0
+exec "$bin" loop-hook 2>/dev/null

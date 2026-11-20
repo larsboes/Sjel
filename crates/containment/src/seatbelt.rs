@@ -160,9 +160,11 @@ const TRUSTED_HOME_DENY: &[&str] = &[
 /// The trusted ring's profile: everything is allowed except the listed paths, which are neither
 /// read nor written. The overlay's `data/` and `secrets/` are among them, so personal data
 /// reaches the run only through the Sjel gate (`docs/plans/containment.md`, C1).
+/// MCP discovery metadata is readable, but not writable.
 #[derive(Debug, Clone, Default)]
 pub struct TrustedProfile {
     pub denied: Vec<PathBuf>,
+    discovery_overlay: Option<PathBuf>,
 }
 
 impl TrustedProfile {
@@ -176,7 +178,9 @@ impl TrustedProfile {
             denied.push(overlay.join("data"));
             denied.push(overlay.join("secrets"));
         }
-        Self::default().with_denied_paths(denied)
+        let mut profile = Self::default().with_denied_paths(denied);
+        profile.discovery_overlay = overlay.map(Path::to_path_buf);
+        profile
     }
 
     /// Deny one more path, by its resolved location as well when it is a link.
@@ -196,10 +200,20 @@ impl TrustedProfile {
     pub fn render(&self) -> String {
         let mut out = String::from("(version 1)\n(allow default)\n");
         for path in &self.denied {
-            out.push_str(&format!(
-                "(deny file-read* file-write* (subpath {}))\n",
-                quoted(path)
-            ));
+            out.push_str(&format!("(deny file-write* (subpath {}))\n", quoted(path)));
+            let discovery = self.discovery_overlay.as_ref().filter(|overlay| {
+                path == &overlay.join("data") || path == &canonical(&overlay.join("data"))
+            });
+            if discovery.is_some() {
+                out.push_str(&format!(
+                    "(deny file-read* (require-all (subpath {}) (require-not (literal {})) (require-not (subpath {}))))\n",
+                    quoted(path),
+                    quoted(&path.join("agent-modes.json")),
+                    quoted(&path.join("agent-gates")),
+                ));
+            } else {
+                out.push_str(&format!("(deny file-read* (subpath {}))\n", quoted(path)));
+            }
         }
         out
     }

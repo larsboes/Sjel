@@ -14,6 +14,7 @@ differ from Pi's tool-call interception and `vault_exec`; it is not a Pi extensi
 | `extensions/command-policy/` | **pi** | Classifies shell commands and direct writes, adds machine-local autonomy for routine work, and supplies live permission context. Consequential exceptions retain approval cards. The runtime profile still controls local builds (P1). The shared baseline lives in [`docs/plans/agent.md` §3](../../docs/plans/agent.md); Pi-specific grants and limits are below. Not a sandbox. |
 | `extensions/inference-keys/` | **pi** | Supplies provider API keys from the macOS login keychain, falling back to the Bitwarden/Vaultwarden vault, instead of from environment variables or `auth.json`. The key is handed to pi by a command and never enters the conversation. The pi entry stays in TypeScript; its credential gateway, unlock flow, and keychain migration are implemented in the shared Rust CLI. See its [README](extensions/inference-keys/README.md). |
 | `skills/secrets-guard/` | **Claude Code** | Skill teaching the safe credential workflow (env-sourcing, never read/echo secrets, hand off secret creation to `tools/setup-secret.sh`) — the counterpart to Sjel's deny policy in the user-level Claude Code settings (`tools/templates/claude-code/settings.base.json`, applied by `sjel claude`). Deploy with `tools/packs.sh link security`. |
+| `skills/threat-model/` | **Claude Code** | Maps which assets hold which data class, walks one compromise at a time (exposure, reach, detection, response) and keeps a risk register. All output stays in `<overlay>/data/security/threat-model/`. |
 
 ## Pi session permissions
 
@@ -91,19 +92,20 @@ roots or all network egress. Neither context nor postflight checks can undo a di
 
 ### Controls and exceptional approvals
 
-`/permissions` shows active roots and exceptional pending decisions. `/permissions off` clears
+`/permissions` shows active roots. `/permissions off` clears
 session grants and suppresses all persistent grants until reload or session change.
 `/permissions auto <directory>` retains the narrower legacy grant: direct writes, simple
 `cp -n` (optionally `-p`) to an explicit file, `mkdir` (optionally `-p`) and flag-free `touch`.
 It grants no dependency, publishing, process-control or recursive-cleanup permission.
 
-Only consequential exceptions need approval cards. Cards defer after 60 seconds; dismissal,
-**Defer** and timeout execute nothing. `/permissions pending` can approve one exact retry in
-its original working directory, never execute the stored action. An unchanged pending call
-does not reopen its card. Without a UI, Ask and Block refuse immediately. The agent continues
+Only consequential exceptions need approval cards. Cards wait for explicit approval, denial
+or cancellation, without an idle timeout, deferred queue or retry tokens. **Allow once** applies
+only to the current call. Ask rules also support an exact-call grant bound to the working
+directory and session; Block rules never gain a session grant. Cancellation executes nothing
+and stores no action. Without a UI, Ask and Block refuse immediately. The agent continues
 independent approved work and never treats silence as consent.
-Session grants, observations and pending cards clear on reload or session change. Persistent
-roots load again from machine config. Original tool calls remain in the session transcript.
+Session grants and observations clear on reload or session change. Persistent roots load again
+from machine config. Original tool calls remain in the session transcript.
 
 Verification: `bun test tools/command-policy*.test.ts tools/pack-extensions.test.ts` covers
 the shared baseline, relaxed policy, lifecycle and installed Pi types.

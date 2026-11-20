@@ -61,6 +61,9 @@ already trusts produces numbers the user already believes.
 **What you are hunting for:** the gap between what the document claims and what is on disk. That
 gap is the deliverable. In practice it is where every genuinely surprising finding comes from.
 
+When the notes are a plan or a design, also look for what they leave out. Read
+`references/depth-passes.md` and run the passes before the first question round.
+
 ## Asking questions well
 
 The full craft is in `references/question-craft.md`. The short version:
@@ -173,6 +176,7 @@ Every question in this document is answered. What follows is work, not undecided
   failures and the check that would have caught each
 - `references/document-shape.md` — decision records, open-question indexes, supersession tables,
   and handovers
+- `references/depth-passes.md` — angle-by-angle passes that find the requirements the notes omit
 
 ## Scripts
 

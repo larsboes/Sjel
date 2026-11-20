@@ -1,6 +1,6 @@
 ---
 name: web-research
-description: Routes public web research and prepares Google AI Studio prompts, then retrieves the matching Sjel Clipper answer when the user says done, clipped or saved during an active research handoff. Use for public product comparisons, fact checks, AI Studio or Gemini prompts, and reading their saved answers. Do not use for code investigation, exporting private records or saving research into the vault. Use interceptor-research for a wide investigation performed by the agent.
+description: Routes public web research and prepares Google AI Studio prompts, then retrieves the matching Sjel Clipper answer when the user says done, clipped or saved during an active research handoff. Use for public product comparisons, fact checks, checking a study or article for bias, AI Studio or Gemini prompts, and reading their saved answers. Do not use for code investigation, exporting private records or saving research into the vault. Use interceptor-research for a wide investigation performed by the agent.
 ---
 
 # Web research
@@ -31,6 +31,9 @@ reads the saved clip.
 | An answer verified by Google Search, or the user asks for an AI Studio prompt | The AI Studio route below |
 
 If the user does not say, use the first route and offer the AI Studio route at the end.
+
+When the user asks whether a study, article or claim holds up, read
+[references/source-check.md](references/source-check.md) and follow it on top of the route.
 
 ## The AI Studio route
 

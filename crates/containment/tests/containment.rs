@@ -65,6 +65,19 @@ fn seatbelt_profile_contains_deny_default_and_project_paths() {
 }
 
 #[test]
+fn trusted_profile_exempts_only_read_only_mcp_discovery_metadata() {
+    let overlay = std::path::Path::new("/sjel-test-overlay");
+    let profile = sjel_containment::TrustedProfile::new(None, Some(overlay)).render();
+    assert!(profile.contains("(deny file-write* (subpath \"/sjel-test-overlay/data\"))"));
+    assert!(
+        profile.contains("(require-not (literal \"/sjel-test-overlay/data/agent-modes.json\"))")
+    );
+    assert!(profile.contains("(require-not (subpath \"/sjel-test-overlay/data/agent-gates\"))"));
+    assert!(profile.contains("(deny file-read* (subpath \"/sjel-test-overlay/secrets\"))"));
+    assert!(profile.contains("(deny file-write* (subpath \"/sjel-test-overlay/secrets\"))"));
+}
+
+#[test]
 fn environment_sanitization_removes_sensitive_secrets() {
     let mut vars = HashMap::new();
     vars.insert("PATH".into(), "/usr/bin".into());
@@ -515,6 +528,7 @@ fn a_trusted_run_keeps_the_machine_but_not_personal_data_or_credentials() {
         home.join(".ssh"),
         home.join(".claude"),
         overlay.join("data/sjel"),
+        overlay.join("data/agent-gates"),
         overlay.join("secrets"),
         overlay.join("config"),
         project.clone(),
@@ -526,6 +540,11 @@ fn a_trusted_run_keeps_the_machine_but_not_personal_data_or_credentials() {
         (home.join(".ssh/id_ed25519"), "key-secret"),
         (home.join(".claude/settings.json"), "{}"),
         (overlay.join("data/sjel/sjel.db"), "db-secret"),
+        (overlay.join("data/agent-modes.json"), "modes-readable"),
+        (
+            overlay.join("data/agent-gates/calendar.json"),
+            "gate-readable",
+        ),
         (overlay.join("secrets/token"), "token-secret"),
         (overlay.join("config/machine.toml"), "cfg"),
         (other.join("notes.txt"), "elsewhere-ok"),
@@ -543,6 +562,10 @@ fn a_trusted_run_keeps_the_machine_but_not_personal_data_or_credentials() {
          cat '{o}/secrets/token' 2>/dev/null || echo secrets-denied; \
          cat '{h}/.ssh/id_ed25519' 2>/dev/null || echo ssh-denied; \
          echo x > '{o}/data/sjel/new' 2>/dev/null || echo data-write-denied; \
+         cat '{o}/data/agent-modes.json'; echo; \
+         cat '{o}/data/agent-gates/calendar.json'; echo; \
+         echo x > '{o}/data/agent-modes.json' 2>/dev/null || echo modes-write-denied; \
+         echo x > '{o}/data/agent-gates/new.json' 2>/dev/null || echo gates-write-denied; \
          cat '{o}/config/machine.toml'; echo; cat '{h}/.claude/settings.json'; echo; \
          cat '{e}/notes.txt'; echo; echo w > '{e}/written' && echo write-ok; \
          echo agent=$SJEL_AGENT; echo name=$SJEL_AGENT_NAME",
@@ -561,12 +584,21 @@ fn a_trusted_run_keeps_the_machine_but_not_personal_data_or_credentials() {
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "{stdout}\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(stdout.contains("ring=Trusted"), "{stdout}");
     for expected in [
         "data-denied",
         "secrets-denied",
         "ssh-denied",
         "data-write-denied",
+        "modes-readable",
+        "gate-readable",
+        "modes-write-denied",
+        "gates-write-denied",
         "cfg",
         "{}",
         "elsewhere-ok",

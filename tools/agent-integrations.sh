@@ -19,6 +19,7 @@
 #   tools/agent-integrations.sh status --json                     machine-readable status for tooling
 #   tools/agent-integrations.sh status --machine                  key/value-ish status, one line per harness
 #   tools/agent-integrations.sh install <upstream> <harness>...   e.g. install interceptor claude
+#   tools/agent-integrations.sh install superlogical [<harness>...]  Rex Community MCP
 #   tools/agent-integrations.sh install --all-configured          every configured harness x every upstream
 #   tools/agent-integrations.sh update [<upstream>...]            each upstream's native update tooling
 #   integration detection states: missing / runnable / configured / stale / integrated
@@ -297,6 +298,54 @@ configured_harnesses() {
   done
 }
 
+install_superlogical() {
+  local name=superlogical url=https://www.superlogical.com/rex/community-mcp
+  local harness existing failed=0
+  if [ "$#" -eq 0 ]; then
+    set -- claude opencode pi copilot antigravity codex
+  fi
+  for harness in "$@"; do
+    case "$harness" in
+      claude|opencode|pi|copilot|antigravity|codex) ;;
+      *) echo "superlogical: unsupported harness '$harness'" >&2; return 1 ;;
+    esac
+  done
+  for harness in "$@"; do
+    echo "$name -> $harness"
+    case "$harness" in
+      claude)
+        existing="$(claude mcp get "$name" 2>/dev/null)" || existing=""
+        if [[ "$existing" == *"Scope: User config"* && "$existing" == *"URL: $url"$'\n'* ]]; then
+          echo "$name is already configured"
+        else
+          claude mcp add --scope user --transport http "$name" "$url" || failed=1
+        fi
+        ;;
+      opencode)
+        opencode mcp add --global --url "$url" "$name" || failed=1
+        ;;
+      pi)
+        # Use the managed executable for configuration without starting a contained agent.
+        "${PI_BIN:-$HOME/.pi/agent/bin/pi}" mcp add "$name" --url "$url" || failed=1
+        ;;
+      copilot)
+        copilot mcp add --transport http "$name" "$url" || failed=1
+        ;;
+      antigravity)
+        agy mcp add --type http "$name" "$url" || failed=1
+        ;;
+      codex)
+        if codex mcp get "$name" --json 2>/dev/null | jq -e --arg url "$url" '.transport.url == $url and .enabled' >/dev/null; then
+          echo "$name is already configured"
+        else
+          codex mcp add "$name" --url "$url" || failed=1
+        fi
+        ;;
+    esac
+  done
+  return "$failed"
+}
+
 cmd_list() {
   echo "Agent-harness integrations shipped by adopted upstreams:"
   echo
@@ -313,10 +362,17 @@ cmd_list() {
   echo "  accordion    Pi context-window management — https://github.com/a-Fig/Accordion"
   echo "               tools/agent-integrations.sh install accordion pi"
   echo "               delegates to: pi install npm:@a-fig/accordion; updates: pi update"
+  echo "  superlogical Rex Community MCP — https://www.superlogical.com/rex/docs/beta/community-mcp"
+  echo "               tools/agent-integrations.sh install superlogical [<harness>...]"
 }
 
 cmd_install() {
   local upstream="" targets=""
+  if [ "${1:-}" = "superlogical" ]; then
+    shift
+    install_superlogical "$@"
+    return
+  fi
   if [ "${1:-}" = "accordion" ]; then
     if [ "$#" -ne 2 ] || [ "$2" != "pi" ]; then
       echo "usage: agent-integrations.sh install accordion pi" >&2

@@ -468,19 +468,19 @@ describe('inline decision bridge', () => {
     expect(f.view.dialogs.size).toBe(0);
   });
 
-  test('idle preserves the unsubmitted draft and offers explicit sidebar resumption', async () => {
+  test('decision cards wait until explicitly cancelled and offer no queue resumption', async () => {
     const f = await fixture();
     await start(f);
-    const pending = f.view.uiRequest(request({ idleMs: 5 }));
+    const pending = f.view.uiRequest(request());
     const free = f.view.streamEl.querySelector('textarea');
     free.value = 'Only the next step';
-    free.dispatchEvent(new Event('input', { bubbles: true }));
-    await pending;
-    const result = JSON.parse(f.replies[0].value);
-    expect(result).toMatchObject({ cancelled: false, deferred: true, deferReason: 'idle', answers: [], draft: { freeText: 'Only the next step' } });
-    button(f.view.streamEl, 'Resume decisions').click();
     await flush();
-    expect(f.calls.filter((c) => c.type === 'prompt').at(-1).message).toBe('/decisions');
+    expect(f.replies).toHaveLength(0);
+    button(f.view.streamEl, 'Stop').click();
+    await pending;
+    expect(JSON.parse(f.replies[0].value)).toMatchObject({ cancelled: true, answers: [] });
+    expect([...f.view.streamEl.querySelectorAll('button')].some((b) => b.textContent === 'Resume decisions')).toBe(false);
+    expect(f.calls.some((c) => c.type === 'prompt' && c.message === '/decisions')).toBe(false);
   });
 
   for (const end of ['Stop', 'Finish', 'close']) test(`${end} returns the ask draft before abort or process shutdown`, async () => {
@@ -503,7 +503,7 @@ describe('inline decision bridge', () => {
     await pending;
     stale.call(next, new Event('click'));
     expect(f.replies).toHaveLength(1);
-    expect(JSON.parse(f.replies[0].value)).toMatchObject({ cancelled: true, deferred: true, answers: [], draft: { freeText: 'Unsubmitted' } });
+    expect(JSON.parse(f.replies[0].value)).toMatchObject({ cancelled: true, answers: [], draft: { freeText: 'Unsubmitted' } });
     expect(f.view.dialogs.size).toBe(0);
     expect(f.view.streamEl.querySelectorAll('.pi-learn-card-archive')).toHaveLength(0);
   });

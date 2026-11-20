@@ -28,7 +28,7 @@ export interface AskDraft {
 }
 export interface AskResult {
   topic: string; answers: AskAnswer[]; cancelled: boolean;
-  deferred?: boolean; deferReason?: 'idle' | 'aborted'; draft?: AskDraft;
+  draft?: AskDraft;
 }
 interface QuizReview { id: string; prompt: string; chosen: string; correct: string; accepted: boolean; reason: string }
 interface ReviewOutcome { id: string; accepted: boolean; note: string | null }
@@ -372,7 +372,7 @@ export function reviewCard(
 
 export function askCard(
   parent: HTMLElement,
-  params: { topic: string; questions: AskQuestion[]; idleMs?: number; answers?: AskAnswer[]; draft?: AskDraft },
+  params: { topic: string; questions: AskQuestion[]; answers?: AskAnswer[]; draft?: AskDraft },
   md: RenderMarkdown,
   signal?: AbortSignal,
 ): Promise<AskResult> {
@@ -383,29 +383,11 @@ export function askCard(
   const { card, body, setCount } = shell(parent, 'decide', topic, total);
 
   return new Promise((resolve) => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let idle = false;
     let snapshot: (() => AskDraft) | undefined;
-    const first = questions[0];
-    if (first) snapshot = () => params.draft?.id === first.id ? { ...params.draft } : {
-      id: first.id, phase: 'options', optionIndex: first.recommendedIndex ?? -1, text: '', freeText: '', note: '',
-    };
-    const activityEvents = ['keydown', 'input', 'pointerdown', 'focusin'] as const;
-    const resetIdle = () => {
-      if (session.done) return;
-      clearTimeout(timer);
-      timer = setTimeout(() => { idle = true; session.finish(false); }, params.idleMs ?? 60000);
-    };
     const session = interaction(card, signal, (cancelled) => {
-      clearTimeout(timer);
-      activityEvents.forEach((event) => card.removeEventListener(event, resetIdle, true));
-      const deferred = idle || cancelled;
-      summarize(card, `${answers.length}/${total} decided${idle ? ' · deferred' : cancelled ? ' · stopped early' : ''}`);
-      resolve({ topic, answers, cancelled, ...(deferred ? {
-        deferred: true, deferReason: idle ? 'idle' : 'aborted', draft: snapshot?.(),
-      } : {}) });
+      summarize(card, `${answers.length}/${total} decided${cancelled ? ' · stopped early' : ''}`);
+      resolve({ topic, answers, cancelled, ...(cancelled ? { draft: snapshot?.() } : {}) });
     });
-    activityEvents.forEach((event) => card.addEventListener(event, resetIdle, true));
     const show = (i: number) => {
       if (session.done) return;
       if (i >= questions.length) { snapshot = undefined; return session.finish(false); }
@@ -516,9 +498,6 @@ export function askCard(
       else card.focus({ preventScroll: true });
     };
     if (signal?.aborted) session.finish(true);
-    else {
-      show(0);
-      resetIdle();
-    }
+    else show(0);
   });
 }

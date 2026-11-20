@@ -1012,15 +1012,7 @@ export class LearnView extends ItemView {
                 : Promise.resolve(null);
         const completion = response.then((result) => {
           this.replyDialog(e.id, dialog!, result === null ? { cancelled: true } : { value: JSON.stringify(result) });
-          if (result && 'deferred' in result && result.deferred && !this.disposed && !this.stopping && !this.closing) {
-            const resume = slot.createEl('button', { cls: 'pi-learn-btn', text: 'Resume decisions' });
-            resume.onclick = async () => {
-              if (this.disposed || this.stopping || this.closing || this.pi !== pi) return;
-              if (this.streaming) return this.notice('Wait for the current reply, then resume decisions.');
-              resume.disabled = true;
-              if (!(await this.prompt('/decisions', 'Resume decisions'))) resume.disabled = false;
-            };
-          }
+
         });
         if (widget === 'ask') dialog!.response = completion;
         await completion;

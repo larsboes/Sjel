@@ -1,6 +1,6 @@
 ---
 name: ui-craftsmanship
-description: Guides design, layout, styling and visual review of Sjel interfaces across web and native clients. Covers data-shaped layouts, progressive disclosure, complete UI states, cross-capability joins, coherent cross-device experiences, speed, anti-vibe-coding tells and mechanical sympathy. Use when designing or reviewing a page, table, panel or component, when planning a shared Mac and iPhone experience, or when auditing an interface for generic AI or SaaS design tells. Do not use for backend Rust APIs, non-visual scripts, prose writing or version-specific GPUI implementation; use gpui for the latter.
+description: Design, redesign, and review Sjel screens and components on web, macOS, and iOS. Use when improving layout, hierarchy, density, or interaction states, adapting a screenshot or design reference, or reviewing a UI that feels generic or hard to scan. Do not use for GPUI implementation questions. Use the gpui skill for those.
 allowed-tools: Read, Write, Edit, Bash
 ---
 
@@ -9,9 +9,8 @@ allowed-tools: Read, Write, Edit, Bash
 Sjel is a workstation that one person reads many times a day. A good view answers the reader's
 question at a glance, keeps every other action one step away, and never makes the reader wait.
 
-The rules below are written in terms of intent, not a framework. They apply to the GPUI app on
-the Mac and the iPhone and to the public site in `website/`. For GPUI implementation details, use
-the `gpui` skill.
+The rules apply to the native apps on macOS and iOS and the public site in `website/`.
+For GPUI implementation details, use the `gpui` skill.
 
 Source for rules 1–3: Kole Jain, "The 3 dashboard UI flaws that give away you've never built
 one" (https://www.youtube.com/watch?v=Ksx9C2-3yMo), adapted to Sjel. Rule 4 and the tip rule
@@ -109,6 +108,10 @@ Speed is a feature of the design, not a later optimisation.
   virtualize.
 
 ## Workflow
+
+For a redesign or a task based on a screenshot, start with
+[Design upgrades](references/design-upgrades.md). Use it to identify what to change before
+applying the design checks below.
 
 1. **Name the view's question.** A view answers one question ("what needs me today", "where did
    the money go"). The answer goes first. Everything else moves down the ladder.

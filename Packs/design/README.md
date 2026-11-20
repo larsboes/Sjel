@@ -3,6 +3,7 @@
 UI craftsmanship, dense operational interface design, anti-vibe-coding doctrine, typography, and mechanical sympathy across Sjel's web and native interfaces.
 
 - **`ui-craftsmanship`**: Guides interface design across capability surfaces and native clients (GPUI on macOS, NSH on iOS). It keeps shared product concepts coherent across devices while adapting interaction patterns to each platform.
+- [Design upgrades](skills/ui-craftsmanship/references/design-upgrades.md) turns visual references into changes to hierarchy, actions, and layout.
 
 ## Activation
 

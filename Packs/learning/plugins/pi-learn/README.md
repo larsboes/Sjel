@@ -12,10 +12,9 @@ write. It runs on macOS, Linux and Windows.
   `[[links]]` render inside the chat through the plugins that already handle them in notes.
 - Renders `quiz` and `ask` as inline cards. It sets `PI_QUESTIONS_CLIENT=pi-questions/v1`.
   `Packs/knowledge/extensions/questions.ts` sends JSON through an `editor` dialog for quizzes
-  and an abortable `input` dialog for decisions. Decision cards defer after 60 seconds without
-  activity, preserving completed answers and unsubmitted text without accepting a recommendation.
-  **Resume decisions** invokes `/decisions` in the same sitting; answering does not start a model
-  turn or execute a pending action. Card results retain answer, thinking, confidence, note and contest.
+  and an abortable `input` dialog for decisions. Decision cards wait for an answer or explicit
+  cancellation, without an idle timeout, pending queue or resume command. Card results retain
+  answer, thinking, confidence, note and contest. Cancellation grants nothing.
 - Holds Teach, Practice and Curate as persistent modes. **Continue** restores the latest saved
   conversation for the selected track and mode, or starts one when none exists. **New session**
   starts fresh with one click; **History** searches saved learning conversations. Enter in an
@@ -58,8 +57,8 @@ its own model and thinking level. Open a note and choose Curate, or select Curat
 Pi saves conversations in its native session directory. `Packs/learning/extensions/sessions.ts`
 uses Pi's session discovery to return metadata for the current vault, including older Learn
 sittings. Continue switches to a saved session and restores its messages without a model call;
-answered cards appear as read-only receipts. Live, unsubmitted card inputs and the in-memory
-pending-decision queue do not survive a process restart. The vault remains the record of learning
+answered cards appear as read-only receipts. Live, unsubmitted card inputs do not survive a
+process restart. No pending-decision queue is kept. The vault remains the record of learning
 progress; New session starts at the path graph's `current` node rather than assuming mastery.
 The session planner accepts a path or new topic, optional outcome and minutes, and mode.
 Blank minutes impose no time budget and no setup question. Planning starts no model conversation. Starting a sitting uses the single current graph node, otherwise the first open

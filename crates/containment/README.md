@@ -16,8 +16,12 @@ sjel-contain <harness-bin> --provider <name> --project <dir> [-- <harness-args..
 The ring and the admitted hosts come from the provider's entry in `providers.toml` (`ring`,
 `hosts`), read through `sjel_inference::ReviewedProvidersList`.
 
-A `trusted` provider runs the harness directly. Every other provider runs under
-`sandbox-exec` in dev mode: `SJEL_STATUS_URL` names the demo node (`sjel demo up`),
+A `trusted` provider runs under an allow-default Seatbelt profile that denies overlay data,
+secrets and selected home credentials. MCP may read `data/agent-modes.json` and
+`data/agent-gates/`; writes to both remain denied. Profile changes require a new harness
+process; reloading extensions cannot change an inherited sandbox.
+
+Every other provider runs under `sandbox-exec` in dev mode: `SJEL_STATUS_URL` names the demo node (`sjel demo up`),
 `SJEL_ENV=dev`, and `SJEL_DEMO_TOKEN` carries the demo node's throwaway token, sent as
 `X-Sjel-Token`. The overlay and the Keychain are closed, so no live token is reachable.
 

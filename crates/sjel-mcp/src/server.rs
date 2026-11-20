@@ -298,7 +298,10 @@ fn session_id() -> &'static str {
 /// cannot read; this copy only decides which tools are offered, and the gate decides the rest.
 fn modes() -> Result<BTreeMap<String, Mode>, String> {
     let file = overlay()?.join("data/agent-modes.json");
-    if !file.exists() {
+    if !file
+        .try_exists()
+        .map_err(|error| format!("cannot inspect {}: {error}", file.display()))?
+    {
         return Ok(BTreeMap::new());
     }
     let text = fs::read_to_string(&file).map_err(|error| error.to_string())?;
@@ -320,7 +323,10 @@ fn modes() -> Result<BTreeMap<String, Mode>, String> {
 /// machines; the set is what matters, so a sorted read is the one reproducibility this port adds.
 fn gates() -> Result<Vec<Gate>, String> {
     let dir = overlay()?.join("data/agent-gates");
-    if !dir.exists() {
+    if !dir
+        .try_exists()
+        .map_err(|error| format!("cannot inspect {}: {error}", dir.display()))?
+    {
         return Ok(Vec::new());
     }
     let mut files: Vec<PathBuf> = fs::read_dir(&dir)
@@ -351,8 +357,7 @@ fn bases() -> Result<BTreeMap<String, String>, String> {
         .arg("registry")
         .output()
         .map_err(|error| format!("could not run {}: {error}", script.display()))?;
-    let raw = String::from_utf8_lossy(&output.stdout);
-    let entries: Vec<Value> = serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+    let entries = registry_entries(&output)?;
     let mut bases = BTreeMap::new();
     for entry in entries {
         let Some(name) = entry.get("name").and_then(Value::as_str) else {
@@ -371,6 +376,18 @@ fn bases() -> Result<BTreeMap<String, String>, String> {
         }
     }
     Ok(bases)
+}
+
+fn registry_entries(output: &std::process::Output) -> Result<Vec<Value>, String> {
+    if !output.status.success() {
+        return Err(format!(
+            "capability registry failed ({}): {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    serde_json::from_slice(&output.stdout)
+        .map_err(|error| format!("capability registry returned invalid JSON: {error}"))
 }
 
 /// One request to a capability, carrying the agent's identity.
@@ -503,6 +520,37 @@ fn call(tool: &Tool, base: &str, args: &Map<String, Value>) -> Result<String, St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registry_failure_preserves_the_cause_instead_of_parsing_empty_stdout() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let output = std::process::Output {
+            status: std::process::ExitStatus::from_raw(256),
+            stdout: Vec::new(),
+            stderr: b"required capability is missing\n".to_vec(),
+        };
+        let error = registry_entries(&output).unwrap_err();
+        assert!(error.contains("capability registry failed"));
+        assert!(error.contains("required capability is missing"));
+        assert!(!error.contains("EOF"));
+    }
+
+    #[test]
+    fn registry_success_requires_a_json_array() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let mut output = std::process::Output {
+            status: std::process::ExitStatus::from_raw(0),
+            stdout: br#"[{"name":"calendar"}]"#.to_vec(),
+            stderr: Vec::new(),
+        };
+        assert_eq!(registry_entries(&output).unwrap()[0]["name"], "calendar");
+        output.stdout.clear();
+        assert!(registry_entries(&output)
+            .unwrap_err()
+            .starts_with("capability registry returned invalid JSON:"));
+    }
 
     #[test]
     fn an_authorization_line_is_stripped_whatever_its_case() {

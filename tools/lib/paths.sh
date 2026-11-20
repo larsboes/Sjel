@@ -20,6 +20,11 @@
 _lib="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SJEL_ROOT="$(cd "$_lib/../.." && pwd)"
 export SJEL_ROOT
+# Release binaries live in the checkout, where service manifests run them
+# (`target/release/<bin>`). Launchers build here whatever CARGO_TARGET_DIR says, so each
+# binary exists once.
+SJEL_RELEASE_TARGET="$SJEL_ROOT/target"
+export SJEL_RELEASE_TARGET
 source "$_lib/toml.sh"
 
 # A launchd job starts with PATH=/usr/bin:/bin:/usr/sbin:/sbin. A script that runs a package

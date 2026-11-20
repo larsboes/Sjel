@@ -7,6 +7,6 @@
 set -u
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
-bin="${SJEL_CLI_BIN:-${CARGO_TARGET_DIR:-$root/target}/release/sjel-cli}"
+bin="${SJEL_CLI_BIN:-$root/target/release/sjel-cli}"
 [ -x "$bin" ] || exit 0
 exec "$bin" loop-hook 2>/dev/null

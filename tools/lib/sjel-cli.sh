@@ -36,7 +36,7 @@ sjel_cli_exec() {
       echo "$sub: no sjel-cli crate found and SJEL_CLI_BIN is unset" >&2
       exit 2
     fi
-    bin="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-cli"
+    bin="${SJEL_RELEASE_TARGET:-$SJEL_ROOT/target}/release/sjel-cli"
     if [ ! -x "$bin" ] || [ -n "$(find "$crate/src" "$crate/Cargo.toml" -newer "$bin" -print -quit 2>/dev/null)" ]; then
       # A stale binary that still runs beats no answer. Daemons call these launchers too: the
       # launchd watchdogs run tools/service-runner.sh, sjel-status runs tools/capability.sh.
@@ -71,7 +71,7 @@ sjel_cli_exec() {
           fi
         else
           echo "$sub: building sjel-cli (release)..." >&2
-          if ! cargo build --locked --release -p sjel-cli --manifest-path "$crate/../../Cargo.toml" >&2; then
+          if ! CARGO_TARGET_DIR="${SJEL_RELEASE_TARGET:-$SJEL_ROOT/target}" cargo build --locked --release -p sjel-cli --manifest-path "$crate/../../Cargo.toml" >&2; then
             [ -x "$bin" ] || exit 2
             echo "$sub: the sjel-cli build failed — running the existing, older binary" >&2
           fi

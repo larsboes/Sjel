@@ -8,13 +8,13 @@ _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 source "$_dir/../../tools/lib/paths.sh"
 export SJEL_ROOT SJEL_PERSONAL_ROOT
 
-BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/cv-cli"
+BIN="$SJEL_RELEASE_TARGET/release/cv-cli"
 
 # Rebuild when the binary is missing or older than its sources, so an edit never runs stale.
 # Build output goes to stderr so `cv status --json | jq` still works.
 if [ ! -x "$BIN" ] || [ -n "$(find "$_dir/src" "$_dir/Cargo.toml" -newer "$BIN" 2>/dev/null | head -1)" ]; then
   echo "cv: building cv-cli…" >&2
-  (cd "$SJEL_ROOT" && cargo build --locked --release --bin cv-cli) >&2
+  (cd "$SJEL_ROOT" && CARGO_TARGET_DIR="$SJEL_RELEASE_TARGET" cargo build --locked --release --bin cv-cli) >&2
 fi
 
 exec "$BIN" "$@"

@@ -22,7 +22,7 @@ if [ -n "${SJEL_STORAGE_BIN:-}" ]; then
   exec "$SJEL_STORAGE_BIN" "$@"
 fi
 
-BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-storage"
+BIN="$SJEL_RELEASE_TARGET/release/sjel-storage"
 if [ -f "$SJEL_ROOT/distribution.json" ]; then
   BIN="$SJEL_ROOT/target/release/sjel-storage"
   [ -x "$BIN" ] || { echo "storage: packaged binary is missing; repair the installation" >&2; exit 2; }
@@ -42,7 +42,7 @@ elif [ -n "$(find "$_crate/src" "$_crate/Cargo.toml" -newer "$BIN" -print -quit 
 fi
 if [ -n "$_stale" ]; then
   echo "storage: building sjel-storage (release)..." >&2
-  cargo build --locked --release -p sjel-storage --manifest-path "$SJEL_ROOT/Cargo.toml" >&2 || exit 2
+  CARGO_TARGET_DIR="$SJEL_RELEASE_TARGET" cargo build --locked --release -p sjel-storage --manifest-path "$SJEL_ROOT/Cargo.toml" >&2 || exit 2
 fi
 
 exec "$BIN" "$@"

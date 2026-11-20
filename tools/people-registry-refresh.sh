@@ -22,7 +22,7 @@ source "$TOOLS_DIR/lib/paths.sh"
 
 # Use the same binary as the owner so the names job can reach its local socket.
 BIN="$SJEL_ROOT/target/release/entities-server"
-[ -x "$BIN" ] || BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/entities-server"
+[ -x "$BIN" ] || BIN="$SJEL_RELEASE_TARGET/release/entities-server"
 [ -x "$BIN" ] || { echo "entities-server not built: tools/service-runner.sh restart entities" >&2; exit 1; }
 
 OUT_DIR="$SJEL_PERSONAL_ROOT/data/vault"

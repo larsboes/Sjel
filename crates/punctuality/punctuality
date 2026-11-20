@@ -9,17 +9,14 @@ _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=../../tools/lib/paths.sh
 source "$_dir/../../tools/lib/paths.sh"
 
-# The workspace target dir, which is where cargo puts every member's binaries. Same path
-# shape service.toml's `command` uses for punctuality-server. CARGO_TARGET_DIR is honoured
-# because a relocated target dir is how build output is kept out of the checkout; see
-# tools/storage/storage, which has done this since it replaced the TypeScript.
-BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/punctuality-cli"
+# The release tree service manifests run from (SJEL_RELEASE_TARGET in tools/lib/paths.sh).
+BIN="$SJEL_RELEASE_TARGET/release/punctuality-cli"
 
 # Build on first use rather than making a clone's first run a confusing "not found".
 # Build output goes to stderr so `punctuality stations bonn | cut -f1` still works.
 if [ ! -x "$BIN" ]; then
   echo "punctuality: building (first run)…" >&2
-  (cd "$SJEL_ROOT" && cargo build --locked --release -p sjel-punctuality --no-default-features --features turso-wal --bin punctuality-cli) >&2
+  (cd "$SJEL_ROOT" && CARGO_TARGET_DIR="$SJEL_RELEASE_TARGET" cargo build --locked --release -p sjel-punctuality --no-default-features --features turso-wal --bin punctuality-cli) >&2
 fi
 
 exec "$BIN" "$@"

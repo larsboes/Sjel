@@ -13,11 +13,11 @@ _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 . "$_here/../lib/paths.sh"
 export SJEL_ROOT
 
-BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-contain"
+BIN="$SJEL_RELEASE_TARGET/release/sjel-contain"
 _crate="$SJEL_ROOT/crates/containment"
 if [ ! -x "$BIN" ] || [ -n "$(find "$_crate/src" "$_crate/Cargo.toml" "$SJEL_ROOT/crates/inference/src" -newer "$BIN" -print -quit 2>/dev/null)" ]; then
   echo "contain: building sjel-contain (release)..." >&2
-  cargo build --locked --release -p sjel-containment --manifest-path "$SJEL_ROOT/Cargo.toml" >&2 || exit 2
+  CARGO_TARGET_DIR="$SJEL_RELEASE_TARGET" cargo build --locked --release -p sjel-containment --manifest-path "$SJEL_ROOT/Cargo.toml" >&2 || exit 2
 fi
 
 exec "$BIN" "$@"

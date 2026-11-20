@@ -2,18 +2,6 @@ use super::*;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// A calendar entry formatted with the field names `Today.swift` and dashboard Home expect.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NowCalendarEntry {
-    pub id: String,
-    pub title: String,
-    pub starts_at: String,
-    pub ends_at: String,
-    pub all_day: bool,
-    pub commitment: String,
-    pub location: Option<String>,
-}
-
 /// Active or upcoming trip for the traveler context.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NowTripInfo {
@@ -29,68 +17,6 @@ fn now_epoch_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
-}
-
-fn query_calendar(
-    db_path: &Path,
-) -> Option<(
-    Option<NowCalendarEntry>,
-    Option<NowCalendarEntry>,
-    Vec<NowCalendarEntry>,
-)> {
-    let pool = sjel_store::open_pool(db_path, "calendar", |_| Ok(())).ok()?;
-    let conn = pool.get().ok()?;
-
-    let table_exists: bool = conn
-        .query_row(
-            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='calendar_entries'",
-            [],
-            |row| Ok(row.get::<_, i64>(0)? > 0),
-        )
-        .unwrap_or(false);
-    if !table_exists {
-        return None;
-    }
-
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, title, starts_at, ends_at, all_day, commitment, location
-               FROM calendar_entries
-              WHERE (ends_at >= datetime('now', 'localtime') OR starts_at >= datetime('now', 'localtime'))
-                AND starts_at <= datetime('now', 'localtime', '+2 days')
-              ORDER BY all_day DESC, starts_at ASC
-              LIMIT 20",
-        )
-        .ok()?;
-
-    let rows = stmt
-        .query_map([], |row| {
-            Ok(NowCalendarEntry {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                starts_at: row.get(2)?,
-                ends_at: row.get(3)?,
-                all_day: row.get::<_, i64>(4)? != 0,
-                commitment: row.get(5)?,
-                location: row.get(6)?,
-            })
-        })
-        .ok()?;
-
-    let entries: Vec<NowCalendarEntry> = rows.filter_map(Result::ok).collect();
-
-    let now_str: String = conn
-        .query_row("SELECT datetime('now', 'localtime')", [], |row| row.get(0))
-        .unwrap_or_default();
-
-    let current = entries
-        .iter()
-        .find(|e| e.starts_at <= now_str && e.ends_at > now_str)
-        .cloned();
-
-    let next = entries.iter().find(|e| e.starts_at > now_str).cloned();
-
-    Some((current, next, entries))
 }
 
 fn query_trips(db_path: &Path) -> Option<(Option<NowTripInfo>, Option<NowTripInfo>)> {
@@ -177,8 +103,17 @@ pub(crate) async fn now_handler() -> Result<Json<Value>, (StatusCode, Json<Value
     };
 
     // 3. Calendar Ahead & Current
-    let (current_event, next_event, calendar_ahead) =
-        query_calendar(&db_path).unwrap_or((None, None, Vec::new()));
+    let calendar = match registry().await {
+        Ok(services) => super::search::owner_get::<calendar_api::NowEntries>(
+            &services,
+            "calendar",
+            calendar_api::ROUTE_NOW,
+            &[],
+        )
+        .await
+        .unwrap_or_default(),
+        Err(_) => calendar_api::NowEntries::default(),
+    };
 
     // 4. Trips
     let (active_trip, next_trip) = query_trips(&db_path).unwrap_or((None, None));
@@ -198,9 +133,9 @@ pub(crate) async fn now_handler() -> Result<Json<Value>, (StatusCode, Json<Value
         "timestamp_epoch": now_epoch_secs(),
         "healthy": healthy,
         "unhealthy_services": unhealthy_services,
-        "current_event": current_event,
-        "next_event": next_event,
-        "calendar_ahead": calendar_ahead,
+        "current_event": calendar.current,
+        "next_event": calendar.next,
+        "calendar_ahead": calendar.ahead,
         "active_trip": active_trip,
         "next_trip": next_trip,
         "pending_approvals_count": pending_approvals_count,

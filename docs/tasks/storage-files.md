@@ -96,11 +96,19 @@ supplied the nine-table export. Both the first scheduled Turso archive and the a
 after resuming the jobs restored with matching contents. Finder and the phone mirror
 rebuild passed against the live Turso owner.
 
+The Calendar rehearsal extracted six owner tables from a receipt-backed shared-store restore,
+including 125 entries, 49 tombstones, and nine trip links. The native owner served the classified
+feed and accepted an isolated write. Search, Now, incremental changes, and delete tombstones
+passed over HTTP. The protected snapshot contained the acknowledged write and passed SQLite
+integrity and foreign-key checks. Calendar and Entities passed 247 native tests. The SQLite
+control, status service, and phone mirror tests also passed.
+
 ## Remaining migration gates
 
 - Verify a successful signed request from a paired client against the live Inventory owner.
 - Verify a refresh on a paired iPhone.
-- Move Finder and the Now view to Calendar owner reads and replace its phone mirror table copy.
+- Deploy the Calendar owner readers, verify a fresh shared-store receipt while Calendar is held,
+  then switch the live owner and restore its first Turso backup.
   [Route reads through owners](storage-owner-reads.md).
 - Keep Documents on its current search implementation until a replacement passes prefix,
   diacritic, status and pagination parity. The [engine measurements](storage-engine.md) record

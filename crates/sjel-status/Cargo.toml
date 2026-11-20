@@ -18,6 +18,7 @@ path = "src/main.rs"
 # manifest schema refuses one), so the machine's always-on status surface publishes its
 # rows — the same shape /backups already has with tools/backup.sh's receipts.
 status-api = { path = "../status-api" }
+calendar-api = { path = "../calendar-api" }
 entities-api = { path = "../entities-api" }
 sjel-config = { path = "../sjel-config" }
 sjel-credentials = { path = "../sjel-credentials" }

@@ -11,6 +11,8 @@ use serde_json::Value;
 // ============================================================================
 
 pub const ROUTE_ENTRIES: &str = "/api/entries";
+pub const ROUTE_SEARCH: &str = "/api/search";
+pub const ROUTE_NOW: &str = "/api/now";
 pub const ROUTE_ENTRY_CHANGES: &str = "/api/entries/changes";
 pub const ROUTE_ENTRY_BY_ID: &str = "/api/entries/{id}";
 pub const ROUTE_ENTRY_EXTERNAL: &str = "/api/entries/external";
@@ -37,8 +39,10 @@ pub const ROUTE_LINKS: &str = "/api/links";
 pub const ROUTE_CONTENT_ITEM: &str = "/api/content/{source}/{id}";
 
 /// Every route constant above. The server test checks each one against its manifest.
-pub const ALL_ROUTES: [&str; 25] = [
+pub const ALL_ROUTES: [&str; 27] = [
     ROUTE_ENTRIES,
+    ROUTE_SEARCH,
+    ROUTE_NOW,
     ROUTE_ENTRY_CHANGES,
     ROUTE_ENTRY_BY_ID,
     ROUTE_ENTRY_EXTERNAL,
@@ -64,6 +68,33 @@ pub const ALL_ROUTES: [&str; 25] = [
     ROUTE_LINKS,
     ROUTE_CONTENT_ITEM,
 ];
+
+/// The calendar fields shown in Finder.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SearchHit {
+    pub title: String,
+    pub detail: String,
+}
+
+/// A calendar entry in the status view.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct NowEntry {
+    pub id: String,
+    pub title: String,
+    pub starts_at: String,
+    pub ends_at: String,
+    pub all_day: bool,
+    pub commitment: String,
+    pub location: Option<String>,
+}
+
+/// Current and upcoming entries from one Calendar read.
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct NowEntries {
+    pub current: Option<NowEntry>,
+    pub next: Option<NowEntry>,
+    pub ahead: Vec<NowEntry>,
+}
 
 /// The path prefix under which the status proxy serves these routes.
 pub const PROXY_PREFIX: &str = "/calendar";

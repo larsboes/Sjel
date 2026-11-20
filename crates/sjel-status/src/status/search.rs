@@ -2,7 +2,7 @@
 //!
 //! The finder ranks what the app already holds (pages, projects, tasks, notes) on every keystroke;
 //! this answers for everything else, from the one shared database (`sjel_config::database_path`)
-//! for legacy sources. Entities and Inventory supply their own results.
+//! for legacy sources. Calendar, Entities and Inventory supply their own results.
 //!
 //! Every query word must appear in a source's text (`LIKE`, bound as a parameter, wildcards
 //! escaped), and each source returns at most [`PER_SOURCE`] rows. A hit carries a `sjel://` link,
@@ -38,17 +38,6 @@ struct Source {
 }
 
 const SOURCES: &[Source] = &[
-    Source {
-        kind: "event",
-        table: "calendar_entries",
-        id: "id",
-        title: "title",
-        detail: "substr(starts_at, 1, 16) || coalesce(' · ' || location, '')",
-        haystack: "title || ' ' || coalesce(location, '')",
-        // Nearest to now first, ahead or behind: the event you mean is rarely the oldest.
-        order: "abs(julianday(starts_at) - julianday('now'))",
-        link: |_| "sjel://calendar".into(),
-    },
     Source {
         kind: "document",
         table: "documents_items",
@@ -186,11 +175,11 @@ struct InventoryHits {
     hits: Vec<SearchHit>,
 }
 
-async fn owner_search<T: serde::de::DeserializeOwned>(
+pub(super) async fn owner_get<T: serde::de::DeserializeOwned>(
     services: &[Service],
     name: &str,
     path: &str,
-    query: &str,
+    query: &[(&str, &str)],
 ) -> Option<T> {
     let service = services
         .iter()
@@ -208,7 +197,7 @@ async fn owner_search<T: serde::de::DeserializeOwned>(
         .as_ref()?;
     let mut request = client
         .get(format!("http://127.0.0.1:{port}{path}"))
-        .query(&[("q", query)])
+        .query(query)
         .timeout(Duration::from_millis(500));
     if let Some(bearer) = sjel_server::InboundAuth::from_deployment().bearer_header() {
         request = request.header(reqwest::header::AUTHORIZATION, bearer);
@@ -224,18 +213,25 @@ async fn owner_search<T: serde::de::DeserializeOwned>(
         .ok()
 }
 
-async fn owner_hits(query: &str) -> (Vec<SearchHit>, Vec<SearchHit>) {
+async fn owner_hits(query: &str) -> (Vec<SearchHit>, Vec<SearchHit>, Vec<SearchHit>) {
     let Ok(services) = registry().await else {
-        return (Vec::new(), Vec::new());
+        return (Vec::new(), Vec::new(), Vec::new());
     };
-    let (entities, inventory) = tokio::join!(
-        owner_search::<entities_api::EntitySearchResponse>(
+    let parameters = [("q", query)];
+    let (calendar, entities, inventory) = tokio::join!(
+        owner_get::<Vec<calendar_api::SearchHit>>(
+            &services,
+            "calendar",
+            calendar_api::ROUTE_SEARCH,
+            &parameters
+        ),
+        owner_get::<entities_api::EntitySearchResponse>(
             &services,
             "entities",
             entities_api::ROUTE_SEARCH,
-            query,
+            &parameters,
         ),
-        owner_search::<InventoryHits>(&services, "inventory", "/api/search", query),
+        owner_get::<InventoryHits>(&services, "inventory", "/api/search", &parameters),
     );
     let entities = entities
         .into_iter()
@@ -249,7 +245,18 @@ async fn owner_hits(query: &str) -> (Vec<SearchHit>, Vec<SearchHit>) {
         })
         .collect();
     let inventory = inventory.map_or_else(Vec::new, |response| response.hits);
-    (entities, inventory)
+    let calendar = calendar
+        .unwrap_or_default()
+        .into_iter()
+        .take(PER_SOURCE)
+        .map(|entry| SearchHit {
+            kind: "event".into(),
+            title: entry.title,
+            detail: entry.detail,
+            link: "sjel://calendar".into(),
+        })
+        .collect();
+    (calendar, entities, inventory)
 }
 
 pub(crate) async fn search_handler(
@@ -262,13 +269,13 @@ pub(crate) async fn search_handler(
     }
     let db_path = sjel_config::database_path();
     let local_query = text.clone();
-    let (local, (entities, inventory)) = tokio::join!(
+    let (local, (calendar, entities, inventory)) = tokio::join!(
         tokio::task::spawn_blocking(move || search(&db_path, &local_query)),
         owner_hits(&text),
     );
-    let mut hits = local.unwrap_or_default();
-    let entities_position = hits.iter().take_while(|hit| hit.kind == "event").count();
-    hits.splice(entities_position..entities_position, entities);
+    let mut hits = calendar;
+    hits.extend(entities);
+    hits.extend(local.unwrap_or_default());
     let inventory_position = hits
         .iter()
         .position(|hit| matches!(hit.kind.as_str(), "subscription" | "trip" | "mail"))

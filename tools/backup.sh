@@ -131,6 +131,9 @@ case "$SNAPSHOT_OWNER:$CAP:$SQLITE_ONLINE_REL" in
   entities:entities-wal-backup:data/entities/snapshots/entities.db)
     SNAPSHOT_BIN="${SJEL_ENTITIES_BIN:-$SJEL_ROOT/target/release/entities-server}"
     SNAPSHOT_LABEL=Entities ;;
+  calendar:calendar-wal-backup:data/calendar/snapshots/calendar.db)
+    SNAPSHOT_BIN="${SJEL_CALENDAR_BIN:-$SJEL_ROOT/target/release/calendar-server}"
+    SNAPSHOT_LABEL=Calendar ;;
   *) echo "backup.sh: owner snapshots require the registered owner and archive path" >&2; exit 1 ;;
 esac
 if [ -n "$SOURCE_FLAG" ] && { [ -n "$SQLITE_REL" ] || [ -n "$SQLITE_ONLINE_REL" ]; }; then

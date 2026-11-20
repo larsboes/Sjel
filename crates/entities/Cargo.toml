@@ -18,7 +18,7 @@ path = "src/server.rs"
 [features]
 default = ["sqlite"]
 sqlite = ["dep:rusqlite", "dep:sjel-store"]
-turso-wal = ["dep:futures-executor", "dep:tempfile", "dep:turso"]
+turso-wal = ["dep:sjel-native-wal"]
 
 [dependencies]
 civil-date = { path = "../civil-date" }
@@ -29,6 +29,7 @@ sjel-http = { path = "../sjel-http" }
 # The wikilink parser the vault link checker uses, for counting Journal links (journal.rs).
 markdown-root = { path = "../markdown-root" }
 sjel-server = { path = "../sjel-server" }
+sjel-native-wal = { path = "../sjel-native-wal", optional = true }
 sjel-store = { path = "../sjel-store", optional = true }
 route-manifest = { path = "../route-manifest" }
 # The name key and the resolve body, shared with trips and places (docs/capabilities/links.md D8).
@@ -36,9 +37,6 @@ sjel-links = { path = "../links" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 rusqlite = { workspace = true, optional = true }
-futures-executor = { version = "0.3", optional = true }
-tempfile = { version = "3", optional = true }
-turso = { version = "=0.8.3", default-features = false, optional = true }
 # Blocking, inside spawn_blocking, like crates/trips: the geocode call to places
 # runs beside the store write it feeds.
 reqwest = { workspace = true, features = ["blocking", "json", "form", "query"] }

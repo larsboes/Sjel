@@ -464,12 +464,7 @@ impl Repo {
         shell.notes().await
     }
 
-    /// Read calendar entries from wherever this device keeps them.
-    ///
-    /// On the phone that is the replica, read through [`TursoStore::calendar_between`], so the day
-    /// window has one owner and the id, kind, place and notes come with every row: a page that can
-    /// change an entry needs to name it. On the Mac the local database is read with the same window
-    /// and the same columns. Either way the shell answers when the database does not.
+    /// Read from the phone replica or the Mac's Calendar owner.
     pub async fn fetch_calendar(&self, from: &str, to: &str) -> ShellResult<Vec<CalendarEntry>> {
         if let Some(replica) = &self.replica {
             return replica
@@ -478,50 +473,20 @@ impl Repo {
                 .await
                 .map_err(store_error);
         }
-        if let Some(conn) = self.connection().await {
-            // `[from, to)`, with the bare `to` date so all-day and timed entries end alike, and
-            // all-day first, which is the order the list reads in.
-            let from_bound = format!("{from}T00:00:00");
-            let query =
-                "SELECT id, kind, commitment, title, starts_at, ends_at, all_day, location, \
-                         notes, source FROM calendar_entries \
-                         WHERE starts_at < ?1 AND ends_at > ?2 \
-                         ORDER BY all_day DESC, starts_at ASC";
-            if let Ok(mut rows) = conn
-                .query(query, libsql::params![to.to_owned(), from_bound])
-                .await
-            {
-                let mut list = Vec::new();
-                while let Ok(Some(row)) = rows.next().await {
-                    list.push(CalendarEntry {
-                        id: row.get(0).unwrap_or_default(),
-                        kind: row.get(1).unwrap_or_else(|_| "event".into()),
-                        commitment: row.get(2).unwrap_or_else(|_| "possible".into()),
-                        title: row.get(3).unwrap_or_default(),
-                        starts_at: row.get(4).unwrap_or_default(),
-                        ends_at: row.get(5).unwrap_or_default(),
-                        all_day: row.get::<i64>(6).unwrap_or(0) != 0,
-                        location: row.get(7).ok(),
-                        notes: row.get(8).ok(),
-                        source: row.get(9).unwrap_or_else(|_| "manual".into()),
-                    });
-                }
-                return Ok(list);
-            }
-        }
         let shell = self.fallback()?;
-        shell.calendar(from, to).await
+        let mut entries = shell.calendar(from, to).await?;
+        entries.sort_by_key(|entry| !entry.all_day);
+        Ok(entries)
     }
 
-    /// True once the calendar can be answered from here: the replica, once its change feed has
-    /// been read ([`TursoStore::has_calendar`]), or this Mac's own database, which is always there.
+    /// True once the replica has pulled entries or the Mac has a shell configured.
     ///
     /// A page reads the Mac's read-only copy until this answers true, because a replica that has
     /// never pulled holds no entries and would draw an empty month beside a readable one.
     pub async fn has_calendar(&self) -> bool {
         match &self.replica {
             Some(replica) => replica.store.has_calendar().await.unwrap_or(false),
-            None => self.has_direct_db(),
+            None => self.shell().is_ok(),
         }
     }
 

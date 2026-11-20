@@ -1,14 +1,19 @@
-//! Persistence under the table prefix `calendar` in the one shared SQLite file
-//! (PRD Q45), same pattern as trips/scouting/transit. Instants stay TEXT (naive
-//! local, lexicographically ordered — see README's time model) and structured
-//! fields stay JSON text, so nothing here needed a column type SQLite lacks.
+//! Calendar persistence and owner queries.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
+#[cfg(feature = "turso-wal")]
+use engine::{params, params_from_iter, Connection, OptionalExtension, Row, Transaction};
+#[cfg(not(feature = "turso-wal"))]
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row, Transaction};
 use serde_json::Value;
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal as engine;
+#[cfg(not(feature = "turso-wal"))]
+use sjel_store as engine;
+#[cfg(not(feature = "turso-wal"))]
 use sjel_store::QueryAll;
 
 use crate::correlate;
@@ -19,6 +24,11 @@ use crate::model::{
     UpdateContext, UpdateEntry, UpdateRhythm,
 };
 use crate::rhythm;
+
+#[cfg(feature = "turso-wal")]
+use engine::Result as DatabaseResult;
+#[cfg(not(feature = "turso-wal"))]
+use rusqlite::Result as DatabaseResult;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 static LAST_STAMP: AtomicU64 = AtomicU64::new(0);
@@ -87,11 +97,7 @@ fn validate_prefix(prefix: &str) -> StoreResult<()> {
 }
 
 pub struct CalendarStore {
-    /// Shared with every other store in this process on the same file, so
-    /// opening one is a checkout rather than an open.
-    pool: sjel_store::Pool,
-    /// Prefixes this capability's tables in the one shared file (PRD Q45):
-    /// `calendar` here means `calendar_entries` and its four siblings.
+    pool: engine::Pool,
     prefix: String,
 }
 
@@ -104,7 +110,7 @@ impl CalendarStore {
         validate_prefix(prefix)?;
         // A pool checkout, and the migration runs once per process per (file,
         // prefix) rather than once per open -- libs/sjel-store/README.md has why.
-        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
+        let pool = engine::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -113,12 +119,21 @@ impl CalendarStore {
         })
     }
 
+    /// Write a closed, consistent snapshot from the running owner.
+    ///
+    /// # Errors
+    /// Returns an error if the database or snapshot destination is unavailable.
+    #[cfg(feature = "turso-wal")]
+    pub fn snapshot(&self, database: &Path, target: &Path) -> StoreResult<()> {
+        engine::snapshot(&self.conn()?, database, target)
+    }
+
     /// A connection from the shared pool, for the duration of one statement.
     ///
     /// A `Result` where this used to be `self.conn.lock().unwrap()`: that unwrap
     /// could only fail on a poisoned mutex, whereas a checkout can genuinely fail
     /// when the file is unreachable or every connection is busy.
-    fn conn(&self) -> StoreResult<sjel_store::PooledClient> {
+    fn conn(&self) -> StoreResult<engine::PooledClient> {
         Ok(self.pool.get()?)
     }
 
@@ -128,11 +143,11 @@ impl CalendarStore {
     /// real query would, which is what the readiness surface promises its caller (#126).
     pub fn ping(&self) -> StoreResult<()> {
         let conn = self.conn()?;
-        conn.query_row("SELECT 1", [], |row| row.get::<_, i64>(0))?;
+        conn.query_row("SELECT 1", params![], |row| row.get::<_, i64>(0))?;
         Ok(())
     }
 
-    /// The current shape of the five tables, not the history that produced them.
+    /// The current shape of the Calendar tables.
     ///
     /// The `ALTER TABLE ... ADD COLUMN commitment` and the DROP/ADD CONSTRAINT pair
     /// that widened its CHECK are gone: SQLite has neither form, and both are already
@@ -237,7 +252,7 @@ impl CalendarStore {
                 &format!(
                     "SELECT 1 FROM pragma_table_info('{prefix}_entries') WHERE name = 'attendees'"
                 ),
-                [],
+                params![],
                 |_| Ok(()),
             )
             .optional()?
@@ -247,13 +262,91 @@ impl CalendarStore {
                 &format!(
                     "ALTER TABLE {prefix}_entries ADD COLUMN attendees TEXT NOT NULL DEFAULT '[]'"
                 ),
-                [],
+                params![],
             )?;
         }
         Ok(())
     }
 
     // ---- entries ----------------------------------------------------------
+
+    /// Find entries whose title or location contains every search word.
+    ///
+    /// # Errors
+    /// Returns an error when the database query fails.
+    pub fn search(&self, query: &str) -> StoreResult<Vec<calendar_api::SearchHit>> {
+        let text: String = query.chars().take(200).collect();
+        let words: Vec<_> = text
+            .split_whitespace()
+            .take(6)
+            .map(str::to_lowercase)
+            .collect();
+        if words.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = (1..=words.len())
+            .map(|index| {
+                format!("instr(lower(title || ' ' || coalesce(location,'')), ?{index}) > 0")
+            })
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        let p = &self.prefix;
+        Ok(self.conn()?.query_all(
+            &format!(
+                "SELECT title, substr(starts_at,1,16) || coalesce(' · ' || location,'')
+                      FROM {p}_entries WHERE {filter}
+                      ORDER BY abs(julianday(starts_at) - julianday('now')), id LIMIT 5"
+            ),
+            params_from_iter(words.iter().map(String::as_str)),
+            |row| {
+                Ok(calendar_api::SearchHit {
+                    title: row.get(0)?,
+                    detail: row.get(1)?,
+                })
+            },
+        )?)
+    }
+
+    /// Read the current and upcoming entries for the status view.
+    ///
+    /// # Errors
+    /// Returns an error when the database query fails.
+    pub fn now(&self) -> StoreResult<calendar_api::NowEntries> {
+        let p = &self.prefix;
+        let conn = self.conn()?;
+        let now: String = conn.query_row(
+            "SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime')",
+            params![],
+            |row| row.get(0),
+        )?;
+        let ahead: Vec<calendar_api::NowEntry> = conn.query_all(
+            &format!("SELECT id, title, starts_at, ends_at, all_day, commitment, location
+                      FROM {p}_entries
+                      WHERE replace(ends_at, ' ', 'T') >= ?1
+                        AND replace(starts_at, ' ', 'T') <= strftime('%Y-%m-%dT%H:%M:%S', ?1, '+2 days')
+                      ORDER BY all_day DESC, replace(starts_at, ' ', 'T'), id LIMIT 20"),
+            params![now.as_str()],
+            |row| Ok(calendar_api::NowEntry {
+                id: row.get(0)?, title: row.get(1)?, starts_at: row.get(2)?, ends_at: row.get(3)?,
+                all_day: row.get::<_, i64>(4)? != 0, commitment: row.get(5)?, location: row.get(6)?,
+            }),
+        )?;
+        let current = ahead
+            .iter()
+            .find(|entry| {
+                entry.starts_at.replace(' ', "T") <= now && entry.ends_at.replace(' ', "T") > now
+            })
+            .cloned();
+        let next = ahead
+            .iter()
+            .find(|entry| entry.starts_at.replace(' ', "T") > now)
+            .cloned();
+        Ok(calendar_api::NowEntries {
+            current,
+            next,
+            ahead,
+        })
+    }
 
     /// Calendar entries explicitly associated with one trip plan.
     ///
@@ -289,7 +382,7 @@ impl CalendarStore {
                      ORDER BY starts_at",
                     prefix = self.prefix
                 ),
-                params![&to_boundary, &from_boundary],
+                params![to_boundary.as_str(), from_boundary.as_str()],
                 entry_from_row,
             )?);
         }
@@ -305,7 +398,11 @@ impl CalendarStore {
                  ORDER BY starts_at",
                 prefix = self.prefix
             ),
-            params![&to_boundary, &from_boundary, &serde_json::to_string(kinds)?],
+            params![
+                to_boundary.as_str(),
+                from_boundary.as_str(),
+                serde_json::to_string(kinds)?
+            ],
             entry_from_row,
         )?)
     }
@@ -325,7 +422,12 @@ impl CalendarStore {
                  ORDER BY starts_at",
                 prefix = self.prefix
             ),
-            params![&to_boundary, &from_boundary, google::SOURCE, "possible"],
+            params![
+                to_boundary.as_str(),
+                from_boundary.as_str(),
+                google::SOURCE,
+                "possible"
+            ],
             entry_from_row,
         )?)
     }
@@ -345,7 +447,12 @@ impl CalendarStore {
                  ORDER BY starts_at",
                 prefix = self.prefix
             ),
-            params![&to_boundary, &from_boundary, "possible", google::SOURCE],
+            params![
+                to_boundary.as_str(),
+                from_boundary.as_str(),
+                "possible",
+                google::SOURCE
+            ],
             entry_from_row,
         )?;
         if proposals.is_empty() {
@@ -364,7 +471,7 @@ impl CalendarStore {
                  WHERE starts_at < ?1 AND ends_at > ?2 AND commitment <> ?3",
                 prefix = self.prefix
             ),
-            params![&to_boundary, &from_boundary, "possible"],
+            params![to_boundary.as_str(), from_boundary.as_str(), "possible"],
             entry_from_row,
         )?;
         Ok(correlate::without_already_adopted(proposals, &adopted)?)
@@ -387,7 +494,7 @@ impl CalendarStore {
                     "SELECT * FROM {prefix}_entries WHERE source = ?1 AND external_id = ?2",
                     prefix = self.prefix
                 ),
-                params![&source, &external_id],
+                params![source, external_id],
                 entry_from_row,
             )
             .optional()?)
@@ -401,7 +508,7 @@ impl CalendarStore {
                     "SELECT * FROM {prefix}_entries WHERE id = ?1",
                     prefix = self.prefix
                 ),
-                params![&id],
+                params![id],
                 entry_from_row,
             )
             .optional()?)
@@ -421,21 +528,21 @@ impl CalendarStore {
                 prefix = self.prefix
             ),
             params![
-                &entry.id,
-                &entry.kind,
-                &entry.title,
-                &entry.starts_at,
-                &entry.ends_at,
+                entry.id.as_str(),
+                entry.kind.as_str(),
+                entry.title.as_str(),
+                entry.starts_at.as_str(),
+                entry.ends_at.as_str(),
                 entry.all_day as i32,
-                &entry.location,
-                &entry.notes,
-                &serde_json::to_string(&entry.attendees)?,
-                &entry.source,
-                &entry.external_id,
-                &entry.rhythm_id,
-                &serde_json::to_string(&entry.payload)?,
-                &entry.created_at,
-                &entry.updated_at,
+                entry.location.as_deref(),
+                entry.notes.as_deref(),
+                serde_json::to_string(&entry.attendees)?,
+                entry.source.as_str(),
+                entry.external_id.as_deref(),
+                entry.rhythm_id.as_deref(),
+                serde_json::to_string(&entry.payload)?,
+                entry.created_at.as_str(),
+                entry.updated_at.as_str(),
                 entry.commitment.as_str(),
             ],
         )?;
@@ -486,21 +593,21 @@ impl CalendarStore {
                 prefix = self.prefix
             ),
             params![
-                &entry.id,
-                &entry.kind,
-                &entry.title,
-                &entry.starts_at,
-                &entry.ends_at,
+                entry.id.as_str(),
+                entry.kind.as_str(),
+                entry.title.as_str(),
+                entry.starts_at.as_str(),
+                entry.ends_at.as_str(),
                 entry.all_day as i32,
-                &entry.location,
-                &entry.notes,
-                &serde_json::to_string(&entry.attendees)?,
-                &entry.source,
-                &entry.external_id,
-                &entry.rhythm_id,
-                &serde_json::to_string(&entry.payload)?,
-                &entry.created_at,
-                &entry.updated_at,
+                entry.location.as_deref(),
+                entry.notes.as_deref(),
+                serde_json::to_string(&entry.attendees)?,
+                entry.source.as_str(),
+                entry.external_id.as_deref(),
+                entry.rhythm_id.as_deref(),
+                serde_json::to_string(&entry.payload)?,
+                entry.created_at.as_str(),
+                entry.updated_at.as_str(),
                 entry.commitment.as_str(),
             ],
             entry_from_row,
@@ -556,18 +663,18 @@ impl CalendarStore {
                 prefix = self.prefix
             ),
             params![
-                &entry.id,
-                &entry.kind,
-                &entry.title,
-                &entry.starts_at,
-                &entry.ends_at,
+                entry.id.as_str(),
+                entry.kind.as_str(),
+                entry.title.as_str(),
+                entry.starts_at.as_str(),
+                entry.ends_at.as_str(),
                 entry.all_day as i32,
-                &entry.location,
-                &entry.notes,
-                &entry.rhythm_id,
-                &entry.updated_at,
+                entry.location.as_deref(),
+                entry.notes.as_deref(),
+                entry.rhythm_id.as_deref(),
+                entry.updated_at.as_str(),
                 entry.commitment.as_str(),
-                &serde_json::to_string(&entry.attendees)?,
+                serde_json::to_string(&entry.attendees)?,
             ],
         )?;
         Ok(Some(entry))
@@ -608,13 +715,13 @@ impl CalendarStore {
 
     pub fn delete_entry(&self, id: &str) -> StoreResult<bool> {
         let mut conn = self.conn()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
+        let tx = engine::write_transaction(&mut conn)?;
         let count = tx.execute(
             &format!(
                 "DELETE FROM {prefix}_entries WHERE id = ?1",
                 prefix = self.prefix
             ),
-            params![&id],
+            params![id],
         )?;
         if count > 0 {
             tx.execute(
@@ -624,7 +731,7 @@ impl CalendarStore {
                      ON CONFLICT (entry_id) DO UPDATE SET deleted_at = excluded.deleted_at",
                     prefix = self.prefix
                 ),
-                params![&id, &now_text()],
+                params![id, now_text()],
             )?;
         }
         tx.commit()?;
@@ -702,7 +809,7 @@ impl CalendarStore {
                  ORDER BY valid_from, title",
                 prefix = self.prefix
             ),
-            params![&to, &from],
+            params![to, from],
             context_from_row,
         )?)
     }
@@ -715,7 +822,7 @@ impl CalendarStore {
                     "SELECT * FROM {prefix}_contexts WHERE id = ?1",
                     prefix = self.prefix
                 ),
-                params![&id],
+                params![id],
                 context_from_row,
             )
             .optional()?)
@@ -733,15 +840,15 @@ impl CalendarStore {
                 prefix = self.prefix
             ),
             params![
-                &context.id,
-                &context.kind,
-                &context.title,
-                &context.details,
-                &context.valid_from,
-                &context.valid_until,
-                &context.source,
-                &context.created_at,
-                &context.updated_at,
+                context.id.as_str(),
+                context.kind.as_str(),
+                context.title.as_str(),
+                context.details.as_str(),
+                context.valid_from.as_str(),
+                context.valid_until.as_str(),
+                context.source.as_str(),
+                context.created_at.as_str(),
+                context.updated_at.as_str(),
             ],
         )?;
         Ok(context)
@@ -777,13 +884,13 @@ impl CalendarStore {
                 prefix = self.prefix
             ),
             params![
-                &context.id,
-                &context.kind,
-                &context.title,
-                &context.details,
-                &context.valid_from,
-                &context.valid_until,
-                &context.updated_at,
+                context.id.as_str(),
+                context.kind.as_str(),
+                context.title.as_str(),
+                context.details.as_str(),
+                context.valid_from.as_str(),
+                context.valid_until.as_str(),
+                context.updated_at.as_str(),
             ],
         )?;
         Ok(Some(context))
@@ -796,7 +903,7 @@ impl CalendarStore {
                 "DELETE FROM {prefix}_contexts WHERE id = ?1",
                 prefix = self.prefix
             ),
-            params![&id],
+            params![id],
         )?;
         Ok(count > 0)
     }
@@ -836,7 +943,7 @@ impl CalendarStore {
                  RETURNING *",
                 prefix = self.prefix
             ),
-            params![&entry.id, calendar_id.trim(), &now_text()],
+            params![entry.id.as_str(), calendar_id.trim(), now_text()],
             export_from_row,
         )?)
     }
@@ -848,7 +955,7 @@ impl CalendarStore {
                 "DELETE FROM {prefix}_google_exports WHERE entry_id = ?1",
                 prefix = self.prefix
             ),
-            params![&entry_id],
+            params![entry_id],
         )?;
         Ok(count > 0)
     }
@@ -862,7 +969,7 @@ impl CalendarStore {
                     "SELECT plan_id FROM {prefix}_trip_materializations WHERE entry_id = ?1",
                     prefix = self.prefix
                 ),
-                params![&entry_id],
+                params![entry_id],
                 |row| row.get(0),
             )
             .optional()?)
@@ -884,7 +991,7 @@ impl CalendarStore {
                      VALUES (?1,?2,?3) ON CONFLICT (entry_id) DO NOTHING",
                     prefix = self.prefix
                 ),
-                params![entry_id, &plan_id, &now],
+                params![entry_id.as_str(), plan_id, now.as_str()],
             )?;
         }
         Ok(())
@@ -899,7 +1006,7 @@ impl CalendarStore {
                 "DELETE FROM {prefix}_trip_materializations WHERE plan_id = ?1",
                 prefix = self.prefix
             ),
-            params![&plan_id],
+            params![plan_id],
         )? as u64)
     }
 
@@ -910,7 +1017,7 @@ impl CalendarStore {
                 "SELECT * FROM {prefix}_google_exports ORDER BY created_at",
                 prefix = self.prefix
             ),
-            [],
+            params![],
             export_from_row,
         )?)
     }
@@ -937,7 +1044,7 @@ impl CalendarStore {
                  ORDER BY e.starts_at",
                 prefix = self.prefix
             ),
-            [],
+            params![],
             |row| {
                 let optin = ExportOptIn {
                     entry_id: row.get("x_entry_id")?,
@@ -966,7 +1073,7 @@ impl CalendarStore {
                      SET google_event_id = ?2, pushed_at = ?3 WHERE entry_id = ?1 RETURNING *",
                     prefix = self.prefix
                 ),
-                params![&entry_id, &google_event_id, &now_text()],
+                params![entry_id, google_event_id, now_text()],
                 export_from_row,
             )
             .optional()?)
@@ -981,7 +1088,7 @@ impl CalendarStore {
                 "SELECT * FROM {prefix}_rhythms ORDER BY valid_from",
                 prefix = self.prefix
             ),
-            [],
+            params![],
             rhythm_from_row,
         )?)
     }
@@ -994,7 +1101,7 @@ impl CalendarStore {
                     "SELECT * FROM {prefix}_rhythms WHERE id = ?1",
                     prefix = self.prefix
                 ),
-                params![&id],
+                params![id],
                 rhythm_from_row,
             )
             .optional()?)
@@ -1019,7 +1126,7 @@ impl CalendarStore {
             updated_at: now_text(),
         };
         let mut conn = self.conn()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
+        let tx = engine::write_transaction(&mut conn)?;
         tx.execute(
             &format!(
                 "INSERT INTO {prefix}_rhythms \
@@ -1029,18 +1136,18 @@ impl CalendarStore {
                 prefix = self.prefix
             ),
             params![
-                &rhythm.id,
-                &rhythm.kind,
-                &rhythm.title,
-                &rhythm.location,
-                &rhythm.byweekday.join(","),
-                &rhythm.start_time,
-                &rhythm.end_time,
-                &rhythm.valid_from,
-                &rhythm.valid_until,
+                rhythm.id.as_str(),
+                rhythm.kind.as_str(),
+                rhythm.title.as_str(),
+                rhythm.location.as_deref(),
+                rhythm.byweekday.join(","),
+                rhythm.start_time.as_deref(),
+                rhythm.end_time.as_deref(),
+                rhythm.valid_from.as_str(),
+                rhythm.valid_until.as_str(),
                 rhythm.active as i32,
-                &rhythm.created_at,
-                &rhythm.updated_at,
+                rhythm.created_at.as_str(),
+                rhythm.updated_at.as_str(),
             ],
         )?;
         let created = insert_instances(&tx, &self.prefix, &rhythm)?;
@@ -1099,7 +1206,7 @@ impl CalendarStore {
         )?;
         rhythm.updated_at = now_text();
         let mut conn = self.conn()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
+        let tx = engine::write_transaction(&mut conn)?;
         tx.execute(
             &format!(
                 "UPDATE {prefix}_rhythms SET kind=?2, title=?3, location=?4, byweekday=?5, \
@@ -1108,17 +1215,17 @@ impl CalendarStore {
                 prefix = self.prefix
             ),
             params![
-                &rhythm.id,
-                &rhythm.kind,
-                &rhythm.title,
-                &rhythm.location,
-                &rhythm.byweekday.join(","),
-                &rhythm.start_time,
-                &rhythm.end_time,
-                &rhythm.valid_from,
-                &rhythm.valid_until,
+                rhythm.id.as_str(),
+                rhythm.kind.as_str(),
+                rhythm.title.as_str(),
+                rhythm.location.as_deref(),
+                rhythm.byweekday.join(","),
+                rhythm.start_time.as_deref(),
+                rhythm.end_time.as_deref(),
+                rhythm.valid_from.as_str(),
+                rhythm.valid_until.as_str(),
                 rhythm.active as i32,
-                &rhythm.updated_at,
+                rhythm.updated_at.as_str(),
             ],
         )?;
         let created = if rhythm.active {
@@ -1137,7 +1244,7 @@ impl CalendarStore {
     /// ordinary manual-looking entries.
     pub fn delete_rhythm(&self, id: &str, delete_instances: bool) -> StoreResult<bool> {
         let mut conn = self.conn()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
+        let tx = engine::write_transaction(&mut conn)?;
         if delete_instances {
             delete_future_instances(&tx, &self.prefix, id)?;
         }
@@ -1146,7 +1253,7 @@ impl CalendarStore {
                 "DELETE FROM {prefix}_rhythms WHERE id = ?1",
                 prefix = self.prefix
             ),
-            params![&id],
+            params![id],
         )?;
         tx.commit()?;
         Ok(count > 0)
@@ -1162,7 +1269,7 @@ impl CalendarStore {
             None => return Ok(None),
         };
         let mut conn = self.conn()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
+        let tx = engine::write_transaction(&mut conn)?;
         let created = insert_instances(&tx, &self.prefix, &rhythm)?;
         tx.commit()?;
         Ok(Some(created))
@@ -1180,7 +1287,7 @@ fn delete_future_instances(tx: &Transaction, prefix: &str, rhythm_id: &str) -> S
              ON CONFLICT (entry_id) DO UPDATE SET deleted_at = excluded.deleted_at",
             prefix = prefix
         ),
-        params![&rhythm_id, &today, &stamp],
+        params![rhythm_id, today.as_str(), stamp.as_str()],
     )?;
     Ok(tx.execute(
         &format!(
@@ -1188,7 +1295,7 @@ fn delete_future_instances(tx: &Transaction, prefix: &str, rhythm_id: &str) -> S
              WHERE rhythm_id = ?1 AND substr(starts_at, 1, 10) >= ?2",
             prefix = prefix
         ),
-        params![&rhythm_id, &today],
+        params![rhythm_id, today.as_str()],
     )?)
 }
 
@@ -1206,20 +1313,20 @@ fn insert_instances(tx: &Transaction, prefix: &str, rhythm: &Rhythm) -> StoreRes
                 prefix = prefix
             ),
             params![
-                &generated_id("cal:entry"),
-                &instance.kind,
-                &instance.title,
-                &instance.starts_at,
-                &instance.ends_at,
+                generated_id("cal:entry"),
+                instance.kind.as_str(),
+                instance.title.as_str(),
+                instance.starts_at.as_str(),
+                instance.ends_at.as_str(),
                 instance.all_day as i32,
-                &instance.location,
-                &instance.notes,
-                &instance.source,
-                &instance.external_id,
-                &instance.rhythm_id,
-                &serde_json::to_string(&instance.payload)?,
-                &now,
-                &now,
+                instance.location.as_deref(),
+                instance.notes.as_deref(),
+                instance.source.as_str(),
+                instance.external_id.as_deref(),
+                instance.rhythm_id.as_deref(),
+                serde_json::to_string(&instance.payload)?,
+                now.as_str(),
+                now.as_str(),
             ],
         )?;
     }
@@ -1307,7 +1414,7 @@ fn context_from_input(input: &NewContext) -> Context {
 /// Columns are read by name, not by index: every caller here is a `SELECT *` or a
 /// `RETURNING *`, so the order is the table's and a column added in the middle of
 /// `CREATE TABLE` would silently re-number a positional read.
-fn entry_from_row(row: &Row) -> rusqlite::Result<Entry> {
+fn entry_from_row(row: &Row) -> DatabaseResult<Entry> {
     let payload: String = row.get("payload")?;
     let attendees_raw: Option<String> = row.get("attendees").ok();
     let attendees: Vec<String> = attendees_raw
@@ -1337,7 +1444,7 @@ fn entry_from_row(row: &Row) -> rusqlite::Result<Entry> {
     })
 }
 
-fn context_from_row(row: &Row) -> rusqlite::Result<Context> {
+fn context_from_row(row: &Row) -> DatabaseResult<Context> {
     Ok(Context {
         id: row.get("id")?,
         kind: row.get("kind")?,
@@ -1351,7 +1458,7 @@ fn context_from_row(row: &Row) -> rusqlite::Result<Context> {
     })
 }
 
-fn export_from_row(row: &Row) -> rusqlite::Result<ExportOptIn> {
+fn export_from_row(row: &Row) -> DatabaseResult<ExportOptIn> {
     Ok(ExportOptIn {
         entry_id: row.get("entry_id")?,
         google_calendar_id: row.get("google_calendar_id")?,
@@ -1361,7 +1468,7 @@ fn export_from_row(row: &Row) -> rusqlite::Result<ExportOptIn> {
     })
 }
 
-fn rhythm_from_row(row: &Row) -> rusqlite::Result<Rhythm> {
+fn rhythm_from_row(row: &Row) -> DatabaseResult<Rhythm> {
     let byweekday: String = row.get("byweekday")?;
     Ok(Rhythm {
         id: row.get("id")?,

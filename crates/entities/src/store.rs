@@ -135,40 +135,11 @@ impl EntitiesStore {
         database_path: &Path,
         directory: &Path,
     ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-        std::fs::create_dir_all(directory)?;
-        let target = directory.canonicalize()?.join("entities.db");
-        let database_path = database_path.canonicalize()?;
-        if target == database_path
-            || target
-                .canonicalize()
-                .is_ok_and(|file| file == database_path)
-        {
-            return Err("Entities snapshot overlaps the owner database".into());
-        }
-        let stage = tempfile::tempdir_in(directory)?;
-        let file = stage.path().join("entities.db");
-        let path = file
-            .to_str()
-            .ok_or("Entities snapshot path must be UTF-8")?;
-        let delimiter = if !path.contains('\'') {
-            '\''
-        } else if !path.contains('"') {
-            '"'
-        } else {
-            return Err("Entities snapshot path contains both quote characters".into());
-        };
-        self.conn()
-            .map_err(|error| error.to_string())?
-            .execute(&format!("VACUUM INTO {delimiter}{path}{delimiter}"), ())?;
-        if std::fs::metadata(&file)?.len() == 0
-            || std::fs::metadata(file.with_extension("db-wal")).is_ok_and(|wal| wal.len() != 0)
-        {
-            return Err("Entities did not produce a closed snapshot".into());
-        }
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600))?;
-        std::fs::rename(&file, target)?;
-        Ok(())
+        engine::snapshot(
+            &self.conn().map_err(|error| error.to_string())?,
+            database_path,
+            &directory.join("entities.db"),
+        )
     }
 
     fn migrate(

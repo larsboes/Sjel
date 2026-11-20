@@ -188,7 +188,10 @@ impl Config {
     /// pass while the defect they race on stayed exactly where it was.
     fn from_file(file: FileConfig) -> Self {
         Self {
-            database_path: database_path(),
+            database_path: sjel_config::env_var("SJEL_CALENDAR_DB_PATH")
+                .ok()
+                .filter(|path| !path.trim().is_empty())
+                .map_or_else(database_path, |path| expand_tilde(&path)),
             port: resolve_port(Some("SJEL_CALENDAR_PORT"), file.port, 8087),
             // Deployment declaration first, capability override second — one
             // implementation in sjel_config so calendar and scouting cannot drift.

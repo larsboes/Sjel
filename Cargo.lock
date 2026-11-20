@@ -5529,6 +5529,7 @@ dependencies = [
  "sjel-credentials",
  "sjel-http",
  "sjel-links",
+ "sjel-native-wal",
  "sjel-server",
  "sjel-store",
  "tokio",
@@ -5558,6 +5559,7 @@ name = "sjel-cli"
 version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
+ "calendar-api",
  "chrono",
  "civil-date",
  "distribution-api",
@@ -5725,7 +5727,6 @@ dependencies = [
  "axum",
  "civil-date",
  "entities-api",
- "futures-executor",
  "markdown-root",
  "reqwest",
  "route-manifest",
@@ -5737,11 +5738,10 @@ dependencies = [
  "sjel-credentials",
  "sjel-http",
  "sjel-links",
+ "sjel-native-wal",
  "sjel-server",
  "sjel-store",
- "tempfile",
  "tokio",
- "turso",
 ]
 
 [[package]]
@@ -5931,6 +5931,16 @@ dependencies = [
  "sjel-store",
  "tokio",
  "tower",
+]
+
+[[package]]
+name = "sjel-native-wal"
+version = "0.1.0"
+dependencies = [
+ "futures-executor",
+ "tempfile",
+ "turso",
+ "turso_sdk_kit",
 ]
 
 [[package]]
@@ -6126,6 +6136,7 @@ name = "sjel-status"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "calendar-api",
  "entities-api",
  "futures-util",
  "reqwest",

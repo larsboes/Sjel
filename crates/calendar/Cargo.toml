@@ -19,6 +19,11 @@ path = "src/server.rs"
 name = "calendar"
 path = "src/main.rs"
 
+[features]
+default = ["sqlite"]
+sqlite = ["dep:rusqlite", "dep:sjel-store"]
+turso-wal = ["dep:sjel-native-wal"]
+
 [dependencies]
 calendar-api = { path = "../calendar-api" }
 schemars.workspace = true
@@ -31,7 +36,8 @@ sjel-http = { path = "../sjel-http" }
 sjel-config = { path = "../sjel-config" }
 sjel-credentials = { path = "../sjel-credentials" }
 sjel-server = { path = "../sjel-server" }
-sjel-store = { path = "../sjel-store" }
+sjel-store = { path = "../sjel-store", optional = true }
+sjel-native-wal = { path = "../sjel-native-wal", optional = true }
 content-item = { path = "../content-item" }
 markdown-root = { path = "../markdown-root" }
 route-manifest = { path = "../route-manifest" }
@@ -42,7 +48,7 @@ serde_json.workspace = true
 # The database, after PRD Q45 retired Postgres. Bundled so the deployment does not
 # depend on whichever SQLite the host ships; upstreams.toml [rusqlite] has the
 # measurement that settled it.
-rusqlite.workspace = true
+rusqlite = { workspace = true, optional = true }
 # Not `full`: these are the drivers this crate reaches for, verified with a lone
 # `cargo check -p <crate> --all-targets`, which is the only build where a missing
 # tokio feature is visible (a workspace build unifies them away).

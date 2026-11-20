@@ -1,0 +1,17 @@
+[package]
+name = "sjel-native-wal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Native Turso WAL connections for Sjel owners with blocking stores"
+publish = false
+
+[dependencies]
+futures-executor = "0.3"
+tempfile = "3"
+turso = { version = "=0.8.3", default-features = false }
+turso_sdk_kit = { version = "=0.8.3", default-features = false }
+
+[lints]
+workspace = true

@@ -6,8 +6,8 @@
 //! route R1. It moves no data between files, changes no capability, and closes off none of the
 //! larger routes.
 //!
-//! Shared tables are copied in one read transaction. Entities supplies its offline projection
-//! separately. The built file is renamed into place after integrity verification.
+//! Shared tables are copied in one read transaction. Calendar and Entities supply their
+//! projections through their APIs. The built file is renamed after integrity verification.
 //!
 //! [`research/offline-on-the-phone.md`]: ../../../research/offline-on-the-phone.md
 
@@ -17,13 +17,13 @@ use std::process::ExitCode;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
-/// Shared-store sources for the phone mirror. Entities contributes its owner projection.
-const PHONE_SET: &[&str] = &[
-    "projects_records",
-    "calendar_entries",
-    "calendar_rhythms",
-    "places_places",
-];
+/// Shared-store sources for the phone mirror.
+const PHONE_SET: &[&str] = &["projects_records", "places_places"];
+
+struct PhoneExport {
+    people: Vec<entities_api::OfflinePerson>,
+    calendar: Vec<calendar_api::CalendarEntry>,
+}
 
 const HELP: &str = "\
 sjel mirror — a read-only copy of this machine's data, for a device that is not here.
@@ -222,7 +222,7 @@ fn build(tables: Option<&[String]>, out: Option<&Path>, phone: bool) -> Result<M
     if out.is_some() {
         refuse_phone_directory(dir)?;
     }
-    let people = phone.then(offline_people).transpose()?;
+    let export = phone.then(phone_export).transpose()?;
     // Built beside the destination, then renamed: a device fetching during a rebuild gets the
     // previous copy whole or the new one whole, never half of each.
     let staging = tempfile::tempdir_in(dir)
@@ -230,11 +230,15 @@ fn build(tables: Option<&[String]>, out: Option<&Path>, phone: bool) -> Result<M
     let staged = staging.path().join("mirror.db");
 
     let mut wanted = names_to_copy(&source, tables)?;
-    let checks = copy_tables(&source, &staged, &wanted, people.as_deref())?;
-    if let Some(people) = people {
+    let checks = copy_tables(&source, &staged, &wanted, export.as_ref())?;
+    if let Some(export) = export {
         wanted.push(Table {
             name: "entities_entities".into(),
-            rows: people.len() as u64,
+            rows: export.people.len() as u64,
+        });
+        wanted.push(Table {
+            name: "calendar_entries".into(),
+            rows: export.calendar.len() as u64,
         });
     }
     if checks.integrity != "ok" {
@@ -297,31 +301,66 @@ fn refuse_phone_directory(dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn offline_people() -> Result<Vec<entities_api::OfflinePerson>, String> {
+fn phone_export() -> Result<PhoneExport, String> {
+    #[derive(Deserialize)]
+    struct CalendarFeed {
+        upserted: Vec<ClassifiedEntry>,
+    }
+    #[derive(Deserialize)]
+    struct ClassifiedEntry {
+        #[serde(flatten)]
+        entry: calendar_api::CalendarEntry,
+        data_class: String,
+    }
     let root = std::env::var_os("SJEL_ROOT").ok_or("SJEL_ROOT is unset")?;
-    let owner = crate::capability::registry(Path::new(&root))?
-        .into_iter()
-        .find(|row| row.name == "entities" && row.scope != "external")
-        .ok_or("offline People requires a local Entities owner")?;
-    let port = owner
-        .port
-        .parse::<u16>()
-        .map_err(|_| "Entities has no valid local port")?;
-    let url = format!(
-        "http://127.0.0.1:{port}{}",
-        entities_api::ROUTE_OFFLINE_PEOPLE
-    );
+    let services = crate::capability::registry(Path::new(&root))?;
     let client = reqwest::blocking::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(std::time::Duration::from_secs(5))
         .build()
-        .map_err(|e| format!("cannot prepare Entities request: {e}"))?;
+        .map_err(|e| format!("cannot prepare owner request: {e}"))?;
+    let people = owner_projection(
+        &client,
+        &services,
+        "entities",
+        entities_api::ROUTE_OFFLINE_PEOPLE,
+    )?;
+    let calendar: CalendarFeed = owner_projection(
+        &client,
+        &services,
+        "calendar",
+        calendar_api::ROUTE_ENTRY_CHANGES,
+    )?;
+    let calendar = calendar
+        .upserted
+        .into_iter()
+        .filter(|row| matches!(row.data_class.as_str(), "c0" | "c1"))
+        .map(|row| row.entry)
+        .collect();
+    Ok(PhoneExport { people, calendar })
+}
+
+fn owner_projection<T: serde::de::DeserializeOwned>(
+    client: &reqwest::blocking::Client,
+    services: &[crate::capability::Row],
+    name: &str,
+    route: &str,
+) -> Result<T, String> {
+    let owner = services
+        .iter()
+        .find(|row| row.name == name && row.scope != "external")
+        .ok_or_else(|| format!("phone mirror requires a local {name} owner"))?;
+    let port = owner
+        .port
+        .parse::<u16>()
+        .map_err(|_| format!("{name} has no valid local port"))?;
+    let url = format!("http://127.0.0.1:{port}{route}");
     sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
         .send()
         .and_then(reqwest::blocking::Response::error_for_status)
         .and_then(reqwest::blocking::Response::json)
-        .map_err(|e| format!("cannot fetch the offline People projection: {e}"))
+        .map_err(|e| format!("cannot fetch the offline {name} projection: {e}"))
 }
 
 /// Which tables to copy, and how many rows each holds.
@@ -385,7 +424,7 @@ fn copy_tables(
     source: &Path,
     target: &Path,
     tables: &[Table],
-    people: Option<&[entities_api::OfflinePerson]>,
+    export: Option<&PhoneExport>,
 ) -> Result<Checks, String> {
     // A copy is built fresh: an existing file would answer "table already exists" on the first
     // `CREATE TABLE`, and half-copying into a stale file is the failure this refuses.
@@ -452,8 +491,11 @@ fn copy_tables(
                 }
             }
         }
-        if let Some(people) = people {
-            write_people(&conn, people).map_err(|e| format!("cannot write offline People: {e}"))?;
+        if let Some(export) = export {
+            write_people(&conn, &export.people)
+                .map_err(|e| format!("cannot write offline People: {e}"))?;
+            write_calendar(&conn, &export.calendar)
+                .map_err(|e| format!("cannot write offline Calendar: {e}"))?;
         }
         Ok(())
     })();
@@ -500,6 +542,37 @@ fn write_people(
     )?;
     for person in people {
         insert.execute(rusqlite::params![person.id, person.label, person.revision])?;
+    }
+    Ok(())
+}
+
+fn write_calendar(
+    conn: &rusqlite::Connection,
+    entries: &[calendar_api::CalendarEntry],
+) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE calendar_entries (
+            id TEXT PRIMARY KEY, kind TEXT NOT NULL, commitment TEXT NOT NULL, title TEXT NOT NULL,
+            starts_at TEXT NOT NULL, ends_at TEXT NOT NULL, all_day INTEGER NOT NULL,
+            location TEXT, notes TEXT, source TEXT NOT NULL
+         );
+         CREATE INDEX idx_calendar_entries_starts ON calendar_entries(starts_at);",
+    )?;
+    let mut insert = conn
+        .prepare("INSERT INTO calendar_entries VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)")?;
+    for entry in entries {
+        insert.execute(rusqlite::params![
+            entry.id,
+            entry.kind,
+            entry.commitment,
+            entry.title,
+            entry.starts_at,
+            entry.ends_at,
+            entry.all_day,
+            entry.location,
+            entry.notes,
+            entry.source,
+        ])?;
     }
     Ok(())
 }
@@ -614,7 +687,7 @@ mod tests {
 
     /// Every table when none is named, which is what `--all` asks for.
     #[test]
-    fn the_phone_copy_uses_the_owner_projection_and_ignores_stale_entities_tables() {
+    fn the_phone_copy_uses_owner_projections_and_ignores_stale_tables() {
         let dir = scratch("phone-people");
         let source = seeded(&dir);
         let target = dir.join("mirror.db");
@@ -623,17 +696,28 @@ mod tests {
             .execute_batch(
                 "CREATE TABLE entities_entities (name TEXT);
                             INSERT INTO entities_entities VALUES ('Private source name');
-                            CREATE TABLE entities_facts (note TEXT);",
+                            CREATE TABLE entities_facts (note TEXT);
+                            CREATE TABLE calendar_entries (title TEXT);
+                            INSERT INTO calendar_entries VALUES ('Stale entry');
+                            CREATE TABLE calendar_rhythms (title TEXT);",
             )
             .unwrap();
         let tables = names_to_copy(&source, Some(&["projects_records".to_owned()])).unwrap();
-        let people = [entities_api::OfflinePerson {
+        let people = vec![entities_api::OfflinePerson {
             id: "ent-fixture".into(),
             label: "Shareable label".into(),
             revision: 2,
         }];
+        let export = PhoneExport {
+            people,
+            calendar: vec![calendar_api::CalendarEntry {
+                id: "cal-fixture".into(),
+                title: "Owner entry".into(),
+                ..Default::default()
+            }],
+        };
         assert_eq!(
-            copy_tables(&source, &target, &tables, Some(&people))
+            copy_tables(&source, &target, &tables, Some(&export))
                 .unwrap()
                 .integrity,
             "ok"
@@ -643,8 +727,12 @@ mod tests {
             .query_row("SELECT name FROM entities_entities", [], |row| row.get(0))
             .unwrap();
         assert_eq!(label, "Shareable label");
+        let title: String = db
+            .query_row("SELECT title FROM calendar_entries", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(title, "Owner entry");
         let private_tables: i64 = db.query_row(
-            "SELECT count(*) FROM sqlite_schema WHERE name IN ('entities_values', 'entities_facts')",
+            "SELECT count(*) FROM sqlite_schema WHERE name IN ('entities_values', 'entities_facts', 'calendar_rhythms')",
             [],
             |row| row.get(0),
         ).unwrap();

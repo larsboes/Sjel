@@ -53,6 +53,8 @@ const ROUTES: &[route_manifest::Route] = &[
         "Readiness: liveness plus a reachable database.",
     ),
     r("GET", "/routes", "This manifest."),
+    r("GET", calendar_api::ROUTE_SEARCH, "Search calendar titles and locations with ?q=."),
+    r("GET", calendar_api::ROUTE_NOW, "Read current and upcoming calendar entries."),
     r(
         "GET",
         "/api/links",
@@ -290,6 +292,47 @@ struct EntriesQuery {
     to: String,
     /// Optional CSV kind filter: ?kind=busy,event
     kind: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct SearchQuery {
+    #[serde(default)]
+    q: String,
+}
+
+async fn search_entries(
+    State(state): State<AppState>,
+    Query(query): Query<SearchQuery>,
+) -> ApiResponse {
+    match tokio::task::spawn_blocking(move || {
+        CalendarStore::open(&state.database_path)
+            .and_then(|store| store.search(&query.q))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Ok(hits)) => response(StatusCode::OK, hits),
+        _ => response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            json!({"error":"Calendar search failed"}),
+        ),
+    }
+}
+
+async fn now_entries(State(state): State<AppState>) -> ApiResponse {
+    match tokio::task::spawn_blocking(move || {
+        CalendarStore::open(&state.database_path)
+            .and_then(|store| store.now())
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Ok(now)) => response(StatusCode::OK, now),
+        _ => response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            json!({"error":"Calendar status read failed"}),
+        ),
+    }
 }
 
 /// Google drafts are source-owned imports still at `possible`, not entries of
@@ -1879,14 +1922,58 @@ async fn markdown_import_selected(
     }
 }
 
+#[cfg(feature = "turso-wal")]
+#[path = "snapshot_job.rs"]
+mod snapshot_job;
+
+#[cfg(feature = "turso-wal")]
+fn fatal(error: impl std::fmt::Display) -> ! {
+    eprintln!("calendar: {error}");
+    std::process::exit(1);
+}
+
 #[tokio::main]
 async fn main() {
+    #[cfg(feature = "turso-wal")]
+    match std::env::args().nth(1).as_deref() {
+        Some("snapshot") if std::env::args().len() == 2 => {
+            snapshot_job::submit()
+                .await
+                .unwrap_or_else(|error| fatal(error));
+            return;
+        }
+        Some(_) => fatal("usage: calendar-server [snapshot]"),
+        None if sjel_config::env_var("SJEL_CALENDAR_DB_PATH")
+            .map_or(true, |path| path.trim().is_empty()) =>
+        {
+            fatal("Turso requires SJEL_CALENDAR_DB_PATH to name the separate owner file");
+        }
+        None => {}
+    }
     let config = Config::load();
     let port = config.port;
     let state = AppState {
         database_path: Arc::new(config.database_path.clone()),
         config: Arc::new(config),
     };
+    #[cfg(feature = "turso-wal")]
+    {
+        let path = Arc::clone(&state.database_path);
+        tokio::task::spawn_blocking(move || {
+            CalendarStore::open(&path)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .unwrap_or_else(|error| fatal(error))
+        .unwrap_or_else(|error| fatal(error));
+        let snapshot = snapshot_job::serve(Arc::clone(&state.database_path));
+        tokio::join!(
+            sjel_server::serve_local("calendar", port, build_router(state)),
+            snapshot
+        );
+    }
+    #[cfg(not(feature = "turso-wal"))]
     sjel_server::serve_local("calendar", port, build_router(state)).await;
 }
 
@@ -1914,6 +2001,8 @@ fn build_router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/ready", get(ready))
         .route("/routes", get(routes))
+        .route(calendar_api::ROUTE_SEARCH, get(search_entries))
+        .route(calendar_api::ROUTE_NOW, get(now_entries))
         .route("/api/links", get(links))
         .route("/api/entries", get(list_entries).post(create_entry))
         .route("/api/entries/changes", get(entry_changes))

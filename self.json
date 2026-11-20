@@ -3581,7 +3581,7 @@
   "upstreams": [
     {
       "name": "a2ui",
-      "verdict": "watch"
+      "verdict": "adapt"
     },
     {
       "name": "academic-researcher",
@@ -3849,7 +3849,7 @@
     },
     {
       "name": "json-render",
-      "verdict": "watch"
+      "verdict": "reject"
     },
     {
       "name": "kitinerary",

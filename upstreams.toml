@@ -1011,19 +1011,17 @@ why = "Sjel's Tauri dashboard retired in d9c77aae. A web view suits generated HT
 
 [a2ui]
 url = "https://github.com/a2ui-project/a2ui"
-verdict = "watch"
+verdict = "adapt"
 license = "Apache-2.0"
 summary = "Open format in which an agent streams UI as data that a client renders from a trusted component catalog"
-why = "Same shape as Sjel's planned generated views (docs/plans/gpui.md, Generated views): data validated against a catalog, no agent code. It has no Rust renderer, so Sjel builds its own; read 2026-11-09."
-revisit = "Compare its schema with OpenUI Lang 1.0 (open-intelligent-ui) as the view document format when the generated-views work in docs/plans/gpui.md starts."
+why = "Selected on 2026-11-20 as the shape of Sjel view documents (docs/tasks/gpui-view-format.md): a subset with catalog components and a separate data model. It has no Rust renderer, so Sjel writes the GPUI renderer and a Rust validator against the Projects registry."
 
 [json-render]
 url = "https://github.com/vercel-labs/json-render"
-verdict = "watch"
+verdict = "reject"
 license = "Apache-2.0"
 summary = "JSON view specification validated against a registered component catalog, with React and Svelte renderers"
-why = "research/svelte-adaptive-ui.md ranks it first among the view-document formats it compared, and research/json-render-audit.md reviewed release 0.22.0. It ships no Rust renderer, so only its document format and validation rules can apply to GPUI; read 2026-11-15."
-revisit = "Compare its specification with A2UI and OpenUI Lang under the adoption gate in research/svelte-adaptive-ui.md when docs/tasks/gpui-view-format.md starts."
+why = "Not selected as the view format on 2026-11-20 (docs/tasks/gpui-view-format.md). Its value is the TypeScript renderer and Zod validation, which a GPUI renderer cannot use; research/json-render-audit.md reviewed release 0.22.0."
 
 [svelte]
 url = "https://github.com/sveltejs/svelte"

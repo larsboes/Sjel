@@ -2,6 +2,5 @@
 kind     = "process"
 name     = "entities-google-sync"
 command  = ["target/release/entities-server", "sync-google"]
-build    = ["cargo", "build", "--locked", "--release", "--bin", "entities-server"]
 schedule = "12h"
 requires = ["entities"]

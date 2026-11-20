@@ -2,7 +2,7 @@
 kind           = "process"
 name           = "entities"
 command        = ["target/release/entities-server"]
-build          = ["cargo", "build", "--locked", "--release", "--bin", "entities-server"]
+build          = ["cargo", "build", "--locked", "--release", "-p", "sjel-entities", "--no-default-features", "--features", "turso-wal", "--bin", "entities-server"]
 port           = "8097"
 health_path    = "/health"
 ready_path     = "/ready"

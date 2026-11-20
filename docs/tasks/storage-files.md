@@ -90,13 +90,16 @@ The live gateway rebuilds the phone mirror from the Entities offline projection.
 matched the published digest, and a range response matched the requested bytes. The Entities
 watchdog keeps the endpoint available to both the mirror and Finder.
 
+The live Entities owner uses its own Turso WAL file. The name registry, Journal, and Google
+Contacts jobs run through the private owner socket. A receipt-backed shared-store restore
+supplied the nine-table export. Both the first scheduled Turso archive and the archive
+after resuming the jobs restored with matching contents. Finder and the phone mirror
+rebuild passed against the live Turso owner.
+
 ## Remaining migration gates
 
 - Verify a successful signed request from a paired client against the live Inventory owner.
 - Verify a refresh on a paired iPhone.
-- Move the Entities contact imports, Journal job, and name registry behind the single
-  owner process. Rehearse its Turso WAL adapter, scheduled backup, and rollback before
-  changing the live store.
 - Move Finder and the Now view to Calendar owner reads and replace its phone mirror table copy.
   [Route reads through owners](storage-owner-reads.md).
 - Keep Documents on its current search implementation until a replacement passes prefix,

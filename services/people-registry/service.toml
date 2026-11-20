@@ -2,6 +2,5 @@
 kind         = "process"
 name         = "people-registry"
 command      = ["tools/people-registry-refresh.sh"]
-build        = ["cargo", "build", "--locked", "--release", "--bin", "entities-server"]
-build_output = "target/release/entities-server"
 schedule     = "6h"
+requires     = ["entities"]

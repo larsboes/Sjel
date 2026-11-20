@@ -9,12 +9,15 @@ use gpui_kit::{div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, Entity
 use crate::ely::data_display::Tone;
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
 use crate::ely::theme::Density as ElyDensity;
-use crate::primitives::{filter_pill, row_for_density, status_pill};
+use crate::primitives::{filter_pill, key_bar, row_for_density, status_pill};
 use crate::tasks::{self, NoteSort, StatusFilter, TaskFilter, TaskSort, TASK_STATUSES};
 use crate::theme::{Density, Palette};
 use sjel_gpui_core::shell::{GlobalNote, GlobalTask, ProjectRecord};
 
-use super::{search_box, NoteKindFilter, ProjectSection, ProjectSort, Projects, ProjectsTab};
+use super::{
+    search_box, NoteKindFilter, ProjectSection, ProjectSort, Projects, ProjectsTab,
+    TaskFocusFilter,
+};
 
 fn ely_density(density: Density) -> ElyDensity {
     match density {
@@ -528,10 +531,55 @@ impl Projects {
             )
             .child(search_box(cols.search).child(Input::new(search_input).small()));
 
+        let focus_pills: Vec<AnyElement> = TaskFocusFilter::ALL
+            .into_iter()
+            .map(|focus| {
+                let n = tasks
+                    .iter()
+                    .filter(|t| focus.matches(t, tasks, &today))
+                    .count();
+                filter_pill(
+                    focus.label(),
+                    n,
+                    self.task_focus == focus,
+                    cx.listener(move |view, _, _, cx| {
+                        view.task_focus = focus;
+                        cx.notify();
+                    }),
+                )
+            })
+            .collect();
+        let due_chip = self.due_date_filter.as_ref().map(|date| {
+            let label = format!("Due: {date} ×");
+            crate::ely::buttons::Button::new("clear-due-date-filter", label)
+                .size(crate::ely::theme::ControlSize::Sm)
+                .variant(crate::ely::buttons::ButtonVariant::Primary)
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.due_date_filter = None;
+                    cx.notify();
+                }))
+                .into_any_element()
+        });
+
+        let focus_bar = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_2()
+            .mb_2()
+            .children(focus_pills)
+            .when_some(due_chip, |el, chip| el.child(chip));
+
         let query = self.search_query.as_str();
         let filtered: Vec<&GlobalTask> = tasks
             .iter()
             .filter(|t| self.global_status.matches(t.status()))
+            .filter(|t| self.task_focus.matches(t, tasks, &today))
+            .filter(|t| {
+                self.due_date_filter
+                    .as_deref()
+                    .is_none_or(|d| t.due.as_deref() == Some(d))
+            })
             .filter(|t| {
                 query.is_empty()
                     || t.title.to_lowercase().contains(query)
@@ -577,12 +625,19 @@ impl Projects {
                         [
                             Cell::Check(task.done),
                             title_cell(&task.title, task.summary.as_deref()),
-                            Cell::Tag(task.project.clone().into(), Tone::Accent),
+                            Cell::Tag(
+                                task.project.clone().into(),
+                                if closed { Tone::Neutral } else { Tone::Accent },
+                            ),
                             Cell::Tag(status.clone().into(), status_tone(&status)),
                             due_cell(task.due.as_deref(), closed, &today),
                             Cell::Tag(
                                 priority_label(task.priority).into(),
-                                priority_tone(task.priority),
+                                if closed {
+                                    Tone::Neutral
+                                } else {
+                                    priority_tone(task.priority)
+                                },
                             ),
                             Cell::Actions(vec!["due".into(), "project".into()]),
                         ],
@@ -713,8 +768,19 @@ impl Projects {
             .flex_col()
             .gap_1()
             .child(filter_bar)
+            .child(focus_bar)
             .children(self.inline_edit_bar(palette, cx))
             .child(table)
+            .when(cols.density != Density::Mobile, |el| {
+                el.child(key_bar(
+                    &[
+                        ("J / K", "Move"),
+                        ("Enter", "Open / Edit"),
+                        ("Esc", "Close panel"),
+                    ],
+                    palette,
+                ))
+            })
             .into_any_element()
     }
 

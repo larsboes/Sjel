@@ -43,7 +43,7 @@ boundaries. The [application README](../../apps/gpui/README.md) owns current int
 - [Accept Finance import and review](../tasks/gpui-finance-import.md).
 - [Accept native Discover workflows](../tasks/gpui-discover.md).
 - [Accept Inventory and wishlist mutations](../tasks/gpui-inventory-writes.md).
-- [Accept task and project controls](../tasks/gpui-project-tasks.md).
+- [Accept task and project controls](../tasks/gpui-project-tasks.md) ([Projects, Tasks, and Notes UI/UX overhaul](gpui-projects-ux.md)).
 - [Accept Feed jobs and classification changes](../tasks/gpui-feed-actions.md).
 
 <a id="notes-editor-live-preview-open"></a>

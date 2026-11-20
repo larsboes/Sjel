@@ -13,7 +13,7 @@ use crate::primitives::{due_badge, priority_pill};
 use crate::theme::{tint, Palette};
 use sjel_gpui_core::shell::GlobalTask;
 
-use super::{Projects, ProjectsTab};
+use super::{unblocked_by_task, Projects, ProjectsTab};
 
 /// Frontmatter keys the panel edits or derives, so the "Other fields" list leaves them out.
 const SHOWN_KEYS: [&str; 9] = [
@@ -233,6 +233,72 @@ impl Projects {
             })
             .collect();
 
+        let unblocks: Vec<AnyElement> = self
+            .all_tasks
+            .value
+            .as_deref()
+            .map(|all| {
+                unblocked_by_task(task, all)
+                    .into_iter()
+                    .map(|downstream| {
+                        let target = downstream.clone();
+                        let id = format!("panel-unblocks-{}", downstream.id);
+                        Button::new(SharedString::from(id))
+                            .small()
+                            .ghost()
+                            .label(downstream.title.clone())
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                view.select_task(&target, window, cx);
+                            }))
+                            .into_any_element()
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let related_notes: Vec<AnyElement> = self
+            .all_notes
+            .value
+            .as_deref()
+            .map(|notes| {
+                let title_lower = task.title.to_lowercase();
+                let summary_lower = task
+                    .summary
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_lowercase();
+                notes
+                    .iter()
+                    .filter(|n| {
+                        n.project == task.project
+                            || (!n.title.is_empty()
+                                && (title_lower.contains(&n.title.to_lowercase())
+                                    || summary_lower.contains(&n.title.to_lowercase())))
+                    })
+                    .take(4)
+                    .map(|note| {
+                        let note_path = note.path.clone();
+                        let id = format!("panel-related-note-{}", note.path);
+                        Button::new(SharedString::from(id))
+                            .small()
+                            .ghost()
+                            .label(note.title.clone())
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                view.task_panel = None;
+                                view.open_note(note_path.clone(), true, window, cx);
+                            }))
+                            .into_any_element()
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let is_pinned_next = task
+            .fields
+            .get("next")
+            .is_some_and(|v| v.eq_ignore_ascii_case("true"));
+        let next_path = task.id.clone();
+
         let (project, path) = (task.project.clone(), task.id.clone());
         div()
             .w(px(340.))
@@ -288,6 +354,28 @@ impl Projects {
             ))
             .child(field("Due", due))
             .children(texts)
+            .when(!unblocks.is_empty(), |panel| {
+                panel.child(field(
+                    "Unblocks",
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .gap_1()
+                        .children(unblocks)
+                        .into_any_element(),
+                ))
+            })
+            .when(!related_notes.is_empty(), |panel| {
+                panel.child(field(
+                    "Related notes",
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .gap_1()
+                        .children(related_notes)
+                        .into_any_element(),
+                ))
+            })
             .children(
                 task.summary
                     .clone()
@@ -308,15 +396,41 @@ impl Projects {
                 ))
             })
             .child(
-                Button::new("panel-open-note")
-                    .small()
-                    .ghost()
-                    .label("Open note")
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.task_panel = None;
-                        view.tab = ProjectsTab::Hubs;
-                        view.open_record(project.clone(), path.clone(), window, cx);
-                    })),
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        Button::new("panel-pin-next")
+                            .small()
+                            .ghost()
+                            .label(if is_pinned_next {
+                                "★ Pinned Next"
+                            } else {
+                                "☆ Pin Next"
+                            })
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                let next_val = if is_pinned_next { "" } else { "true" };
+                                view.set_task_property(
+                                    next_path.clone(),
+                                    "next",
+                                    next_val.to_string(),
+                                    window,
+                                    cx,
+                                );
+                            })),
+                    )
+                    .child(
+                        Button::new("panel-open-note")
+                            .small()
+                            .ghost()
+                            .label("Open note")
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                view.task_panel = None;
+                                view.tab = ProjectsTab::Hubs;
+                                view.open_record(project.clone(), path.clone(), window, cx);
+                            })),
+                    ),
             )
             .into_any_element()
     }

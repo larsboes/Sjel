@@ -28,8 +28,10 @@ use sjel_gpui_core::shell::{
 
 pub mod actions;
 mod board;
+mod charts;
 mod links;
 mod mail;
+mod review;
 mod tables;
 mod task_panel;
 
@@ -142,6 +144,21 @@ pub(super) fn search_box(width: Option<f32>) -> Div {
     }
 }
 
+/// Extracts unchecked markdown checklist items (`- [ ] ...` or `* [ ] ...`).
+fn extract_open_checklist_items(markdown: &str) -> Vec<String> {
+    markdown
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            let rest = trimmed
+                .strip_prefix("- [ ] ")
+                .or_else(|| trimmed.strip_prefix("* [ ] "))?;
+            let clean = rest.trim();
+            (!clean.is_empty()).then(|| clean.to_string())
+        })
+        .collect()
+}
+
 /// Extracts a clean preview snippet from markdown body text.
 fn extract_note_snippet(content: &str) -> Option<String> {
     let mut in_frontmatter = false;
@@ -182,6 +199,98 @@ pub enum NoteKindFilter {
     Notes,
 }
 
+/// Question-driven focus filter for the cross-project task table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskFocusFilter {
+    All,
+    NeedsMeToday,
+    Unblockers,
+    BlockedOnOthers,
+    Drifting,
+}
+
+impl TaskFocusFilter {
+    pub const ALL: [Self; 5] = [
+        Self::All,
+        Self::NeedsMeToday,
+        Self::Unblockers,
+        Self::BlockedOnOthers,
+        Self::Drifting,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::All => "All focus",
+            Self::NeedsMeToday => "Needs me today",
+            Self::Unblockers => "Unblockers",
+            Self::BlockedOnOthers => "Blocked on others",
+            Self::Drifting => "Drifting",
+        }
+    }
+
+    pub fn matches(self, task: &GlobalTask, all_tasks: &[GlobalTask], today: &str) -> bool {
+        let status = task.status();
+        let active = status != "done" && status != "cancelled";
+        match self {
+            Self::All => true,
+            Self::NeedsMeToday => {
+                active
+                    && task
+                        .due
+                        .as_deref()
+                        .is_some_and(|d| !d.is_empty() && d <= today)
+            }
+            Self::Unblockers => active && !unblocked_by_task(task, all_tasks).is_empty(),
+            Self::BlockedOnOthers => {
+                active
+                    && (status == "waiting"
+                        || status == "blocked"
+                        || task
+                            .fields
+                            .get("blocked_by")
+                            .is_some_and(|v| !v.trim().is_empty()))
+            }
+            Self::Drifting => {
+                active
+                    && task
+                        .due
+                        .as_deref()
+                        .is_some_and(|d| !d.is_empty() && d < today)
+            }
+        }
+    }
+}
+
+/// Active downstream tasks whose `blocked_by` references `task`.
+pub(super) fn unblocked_by_task<'a>(
+    task: &GlobalTask,
+    all_tasks: &'a [GlobalTask],
+) -> Vec<&'a GlobalTask> {
+    let needle_id = task.id.trim().to_lowercase();
+    let needle_title = task.title.trim().to_lowercase();
+    all_tasks
+        .iter()
+        .filter(|other| {
+            if other.id == task.id {
+                return false;
+            }
+            let status = other.status();
+            if status == "done" || status == "cancelled" {
+                return false;
+            }
+            let Some(raw) = other.fields.get("blocked_by") else {
+                return false;
+            };
+            raw.split(',').any(|part| {
+                let token = part.trim().to_lowercase();
+                !token.is_empty()
+                    && (token == needle_id
+                        || (!needle_title.is_empty() && token == needle_title))
+            })
+        })
+        .collect()
+}
+
 pub struct Projects {
     pub(super) repo: Repo,
     pub(super) density: Density,
@@ -196,6 +305,10 @@ pub struct Projects {
     pub task_filter: TaskFilter,
     /// The statuses the cross-project table shows.
     pub global_status: StatusFilter,
+    /// Question-driven focus filter on the cross-project task table.
+    pub task_focus: TaskFocusFilter,
+    /// Optional `YYYY-MM-DD` due-date filter set from charts or review bars.
+    pub due_date_filter: Option<String>,
     /// The cross-project table's sort column, and whether it ascends.
     pub task_sort: (TaskSort, bool),
     /// The cross-project notes table's sort column, and whether it ascends.
@@ -209,6 +322,7 @@ pub struct Projects {
     pub(super) status_edit: Option<String>,
     pub note_kind_filter: NoteKindFilter,
     pub show_archived: bool,
+    pub review_mode: bool,
     pub search_query: String,
     pub(super) search_input: Option<(Entity<InputState>, Subscription)>,
     pub notes_search_query: String,
@@ -275,6 +389,8 @@ impl Projects {
             task_view_mode: TaskViewMode::Table,
             task_filter: TaskFilter::Open,
             global_status: StatusFilter::Active,
+            task_focus: TaskFocusFilter::All,
+            due_date_filter: None,
             task_sort: (TaskSort::Default, true),
             note_sort: (NoteSort::Default, true),
             project_sort: (ProjectSort::Name, true),
@@ -283,6 +399,7 @@ impl Projects {
             status_edit: None,
             note_kind_filter: NoteKindFilter::All,
             show_archived: false,
+            review_mode: false,
             search_query: String::new(),
             search_input: None,
             notes_search_query: String::new(),
@@ -1622,6 +1739,97 @@ impl Projects {
         .detach();
     }
 
+    fn promote_checklist_strip(
+        &self,
+        project: &str,
+        editor: &Entity<NoteEditor>,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let items = extract_open_checklist_items(&editor.read(cx).base);
+        if items.is_empty() {
+            return None;
+        }
+        let buttons: Vec<AnyElement> = items
+            .into_iter()
+            .take(5)
+            .enumerate()
+            .map(|(ix, item)| {
+                let project_name = project.to_string();
+                let task_text = item.clone();
+                crate::ely::buttons::Button::new(
+                    SharedString::from(format!("promote-checklist-{ix}")),
+                    format!("+ {item}"),
+                )
+                .size(crate::ely::theme::ControlSize::Sm)
+                .variant(crate::ely::buttons::ButtonVariant::Ghost)
+                .on_click(cx.listener(move |view, _, window, cx| {
+                    view.create_task_from_text(
+                        project_name.clone(),
+                        task_text.clone(),
+                        window,
+                        cx,
+                    );
+                }))
+                .into_any_element()
+            })
+            .collect();
+
+        Some(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_2()
+                .px_3()
+                .py_1p5()
+                .rounded(px(6.))
+                .bg(rgba(palette.raised))
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(rgb(palette.muted))
+                        .child("Promote to task:"),
+                )
+                .children(buttons)
+                .into_any_element(),
+        )
+    }
+
+    pub(super) fn create_task_from_text(
+        &mut self,
+        project: String,
+        raw_title: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if raw_title.trim().is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let (title, due, priority) = tasks::parse_smart_task_input(raw_title.trim(), today);
+        if title.is_empty() {
+            return;
+        }
+        let repo = self.repo.clone();
+        data::write_repo(
+            cx,
+            window,
+            self,
+            &repo,
+            data::Press::quiet("Task added."),
+            move |s| async move {
+                s.add_task_with_details(&project, &title, due.as_deref(), priority)
+                    .await
+            },
+            |this, _, cx| {
+                this.refresh_records(cx);
+                this.load_projects(cx);
+            },
+        );
+    }
+
     fn new_task_field(
         &mut self,
         window: &mut Window,
@@ -1642,35 +1850,8 @@ impl Projects {
                 if raw_title.is_empty() {
                     return;
                 }
-                let today = chrono::Local::now().date_naive();
-                let (title, due, priority) = tasks::parse_smart_task_input(&raw_title, today);
-                if title.is_empty() {
-                    return;
-                }
                 input.update(cx, |input, cx| input.set_value("", window, cx));
-                let repo = view.repo.clone();
-                let due_clone = due.clone();
-                let priority_clone = priority;
-                data::write_repo(
-                    cx,
-                    window,
-                    view,
-                    &repo,
-                    data::Press::quiet("Task added."),
-                    move |s| async move {
-                        s.add_task_with_details(
-                            &project,
-                            &title,
-                            due_clone.as_deref(),
-                            priority_clone,
-                        )
-                        .await
-                    },
-                    |this, _, cx| {
-                        this.refresh_records(cx);
-                        this.load_projects(cx);
-                    },
-                );
+                view.create_task_from_text(project, raw_title, window, cx);
             }
         });
         self.new_task = Some((input.clone(), subscription));
@@ -2243,6 +2424,10 @@ impl Projects {
                                     .flex_col()
                                     .gap_3()
                                     .child(self.note_title(editor, palette, cx))
+                                    .when_some(
+                                        self.promote_checklist_strip(&project_name, editor, palette, cx),
+                                        |el, strip| el.child(strip),
+                                    )
                                     .child(div().flex_1().min_h_0().child(editor.clone())),
                             )
                             .into_any_element()
@@ -2336,52 +2521,130 @@ impl Projects {
                 },
                 ProjectSection::Notes => {
                     if let Some(editor) = &self.editor {
+                        let active_path = editor.read(cx).path.clone();
+                        let hub_path = format!("{project_name}/{project_name}.md");
+                        let rail = (self.density != Density::Mobile)
+                            .then(|| {
+                                records.value.as_deref().map(|list| {
+                                    let items: Vec<AnyElement> = list
+                                        .iter()
+                                        .filter(|rec| {
+                                            rec.kind != "task"
+                                                && rec.kind != "project"
+                                                && rec.path != hub_path
+                                        })
+                                        .map(|rec| {
+                                            let path = rec.path.clone();
+                                            let is_current = path == active_path;
+                                            div()
+                                                .id(SharedString::from(format!(
+                                                    "notes-rail-{}",
+                                                    rec.path
+                                                )))
+                                                .px_2()
+                                                .py_1p5()
+                                                .rounded(px(6.))
+                                                .cursor_pointer()
+                                                .text_xs()
+                                                .truncate()
+                                                .when(is_current, |el| {
+                                                    el.bg(rgba(tint(palette.accent, 0x26)))
+                                                        .text_color(rgb(palette.accent))
+                                                        .font_weight(FontWeight::SEMIBOLD)
+                                                })
+                                                .when(!is_current, |el| {
+                                                    el.text_color(rgb(palette.text))
+                                                        .hover(move |s| {
+                                                            s.bg(rgba(palette.raised))
+                                                        })
+                                                })
+                                                .on_click(cx.listener(
+                                                    move |view, _, window, cx| {
+                                                        view.open_note(
+                                                            path.clone(),
+                                                            false,
+                                                            window,
+                                                            cx,
+                                                        );
+                                                    },
+                                                ))
+                                                .child(rec.title.clone())
+                                                .into_any_element()
+                                        })
+                                        .collect();
+                                    div()
+                                        .w(px(220.))
+                                        .flex_none()
+                                        .flex()
+                                        .flex_col()
+                                        .gap_1()
+                                        .pr_3()
+                                        .border_r_1()
+                                        .border_color(rgba(palette.border))
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .text_color(rgb(palette.muted))
+                                                .mb_1()
+                                                .child("NOTES"),
+                                        )
+                                        .children(items)
+                                })
+                            })
+                            .flatten();
+
+                        let editor_pane = div()
+                            .flex_1()
+                            .min_w_0()
+                            .min_h_0()
+                            .flex()
+                            .flex_col()
+                            .gap_3()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(back_button(
+                                        format!("‹ {project_name} Notes"),
+                                        cx.listener(|view, _, _, cx| {
+                                            view.put_away_editor(cx);
+                                            cx.notify();
+                                        }),
+                                        palette,
+                                    ))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(palette.muted))
+                                            .child("/"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(rgb(palette.muted))
+                                            .child(editor.read(cx).title.clone()),
+                                    ),
+                            )
+                            .child(self.note_title(editor, palette, cx))
+                            .when_some(
+                                self.promote_checklist_strip(&project_name, editor, palette, cx),
+                                |el, strip| el.child(strip),
+                            )
+                            .child(div().flex_1().min_h_0().child(editor.clone()));
+
                         div()
                             .flex_1()
                             .min_h_0()
                             .flex()
-                            .flex_col()
+                            .gap_4()
                             .w_full()
-                            .max_w(px(840.))
-                            .mx_auto()
                             .pt_2()
                             .pb_6()
-                            .child(
-                                div()
-                                    .size_full()
-                                    .flex()
-                                    .flex_col()
-                                    .gap_3()
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap_2()
-                                            .child(back_button(
-                                                format!("‹ {project_name} Notes"),
-                                                cx.listener(|view, _, _, cx| {
-                                                    view.put_away_editor(cx);
-                                                    cx.notify();
-                                                }),
-                                                palette,
-                                            ))
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(rgb(palette.muted))
-                                                    .child("/"),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .font_weight(FontWeight::MEDIUM)
-                                                    .text_color(rgb(palette.muted))
-                                                    .child(editor.read(cx).title.clone()),
-                                            ),
-                                    )
-                                    .child(self.note_title(editor, palette, cx))
-                                    .child(div().flex_1().min_h_0().child(editor.clone())),
-                            )
+                            .when_some(rail, |el, r| el.child(r))
+                            .child(editor_pane)
                             .into_any_element()
                     } else {
                         match (&records.value, &records.error) {
@@ -2504,6 +2767,137 @@ impl Projects {
                 }
             };
 
+            let summary_strip = records.value.as_deref().map(|r| {
+                let mut open = 0usize;
+                let mut blocked = 0usize;
+                let mut done = 0usize;
+                let mut next_due: Option<&str> = None;
+                for rec in r.iter().filter(|rec| rec.kind == "task") {
+                    let status = tables::parse_frontmatter_status(&rec.content, rec.done);
+                    if status == "done" || status == "cancelled" {
+                        done += 1;
+                    } else {
+                        open += 1;
+                        if status == "blocked" || status == "waiting" {
+                            blocked += 1;
+                        }
+                        if let Some(d) = rec.due.as_deref().filter(|d| !d.is_empty()) {
+                            if next_due.is_none_or(|cur| d < cur) {
+                                next_due = Some(d);
+                            }
+                        }
+                    }
+                }
+                let total = open + done;
+                let ratio = if total > 0 {
+                    done as f32 / total as f32
+                } else {
+                    0.0
+                };
+                let mail_count = self.mail.value.as_ref().map(|m| m.len());
+                let links_count = self.links.value.as_ref().map(|l| l.len());
+                let next_due_label = next_due.map(str::to_string);
+
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .justify_between()
+                    .gap_3()
+                    .px_3()
+                    .py_2()
+                    .rounded(px(8.))
+                    .border_1()
+                    .border_color(rgba(palette.border))
+                    .bg(rgba(tint(palette.raised, 0x55)))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap_3()
+                            .child(
+                                div()
+                                    .w(px(110.))
+                                    .child(crate::primitives::progress_bar(ratio, palette.green, palette)),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.text))
+                                    .child(format!("{open} open · {done} done")),
+                            )
+                            .when(blocked > 0, |el| {
+                                el.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.amber))
+                                        .child(format!("{blocked} blocked")),
+                                )
+                            })
+                            .when_some(next_due_label, |el, due| {
+                                el.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(format!("Next due {due}")),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                crate::ely::buttons::Button::new(
+                                    "project-touch-mail",
+                                    match mail_count {
+                                        Some(n) if n > 0 => format!("Mail ({n})"),
+                                        _ => "Mail".to_string(),
+                                    },
+                                )
+                                .size(crate::ely::theme::ControlSize::Sm)
+                                .variant(crate::ely::buttons::ButtonVariant::Ghost)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.put_away_editor(cx);
+                                    view.project_section = ProjectSection::MailReview;
+                                    view.load_project_mail(false, cx);
+                                    cx.notify();
+                                })),
+                            )
+                            .child(
+                                crate::ely::buttons::Button::new(
+                                    "project-touch-inventory",
+                                    match links_count {
+                                        Some(n) if n > 0 => format!("Inventory ({n})"),
+                                        _ => "Inventory".to_string(),
+                                    },
+                                )
+                                .size(crate::ely::theme::ControlSize::Sm)
+                                .variant(crate::ely::buttons::ButtonVariant::Ghost)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.put_away_editor(cx);
+                                    view.project_section = ProjectSection::InventoryLinks;
+                                    cx.notify();
+                                })),
+                            )
+                            .child(
+                                crate::ely::buttons::Button::new(
+                                    "project-primary-add-task",
+                                    "+ Task",
+                                )
+                                .size(crate::ely::theme::ControlSize::Sm)
+                                .variant(crate::ely::buttons::ButtonVariant::Primary)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.put_away_editor(cx);
+                                    view.project_section = ProjectSection::Tasks;
+                                    cx.notify();
+                                })),
+                            ),
+                    )
+            });
+
             return div()
                 .id("records")
                 .size_full()
@@ -2514,8 +2908,13 @@ impl Projects {
                 .flex_col()
                 .gap_3()
                 .child(project_header)
+                .children(summary_strip)
                 .child(content)
                 .into_any_element();
+        }
+
+        if self.review_mode && self.project.is_none() {
+            return self.review_view(palette, cx);
         }
 
         // Top navigation tabs: rendered inside the page only when mounted standalone or on mobile
@@ -2590,6 +2989,7 @@ impl Projects {
                 (_, Some(error)) => note(error.to_string(), palette.red),
                 (None, None) => placeholder(320.),
                 (Some(tasks), None) => {
+                    let pressure = charts::tasks_pressure_charts(tasks, self.density, palette, cx);
                     let table = self.all_tasks_table(tasks, &search_input, palette, cx);
                     let selected = self.task_panel.as_ref().and_then(|panel| {
                         tasks
@@ -2597,7 +2997,7 @@ impl Projects {
                             .find(|t| t.id == panel.path)
                             .map(|task| (panel, task))
                     });
-                    match selected {
+                    let content = match selected {
                         // A phone has no room beside the table: the panel takes its place.
                         Some((panel, task)) if self.density == Density::Mobile => {
                             self.task_panel_view(panel, task, palette, cx)
@@ -2610,7 +3010,13 @@ impl Projects {
                             .child(self.task_panel_view(panel, task, palette, cx))
                             .into_any_element(),
                         None => table,
-                    }
+                    };
+                    div()
+                        .flex()
+                        .flex_col()
+                        .when_some(pressure, |el, strip| el.child(strip))
+                        .child(content)
+                        .into_any_element()
                 }
             };
             return div()
@@ -2675,6 +3081,15 @@ impl Projects {
                             }),
                     )
                     .child(
+                        crate::ely::buttons::Button::new("open-review-btn", "Guided Review")
+                            .size(crate::ely::theme::ControlSize::Sm)
+                            .variant(crate::ely::buttons::ButtonVariant::Ghost)
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.review_mode = true;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
                         div()
                             .id("new-project-btn")
                             .px_3()
@@ -2699,7 +3114,14 @@ impl Projects {
             (None, None) => placeholder(320.),
             (Some(_), None) => {
                 let filtered = self.filtered_projects();
-                self.hubs_table(&filtered, palette, cx)
+                let portfolio = charts::hubs_portfolio_charts(&filtered, self.density, palette, cx);
+                let table = self.hubs_table(&filtered, palette, cx);
+                div()
+                    .flex()
+                    .flex_col()
+                    .when_some(portfolio, |el, charts_row| el.child(charts_row))
+                    .child(table)
+                    .into_any_element()
             }
         };
 
@@ -3480,5 +3902,88 @@ mod tests {
         );
         assert_eq!(TaskSort::from_col_id("due"), Some(TaskSort::Due));
         assert_eq!(NoteSort::from_col_id("kind"), Some(NoteSort::Kind));
+    }
+
+    #[test]
+    fn task_focus_filters_and_unblocker_chain() {
+        let mut blocked_fields = std::collections::BTreeMap::new();
+        blocked_fields.insert("blocked_by".into(), "Root Task".into());
+        blocked_fields.insert("status".into(), "blocked".into());
+
+        let root = GlobalTask {
+            id: "P/root.md".into(),
+            kind: "task".into(),
+            title: "Root Task".into(),
+            done: false,
+            due: Some("2026-11-20".into()),
+            priority: 1,
+            summary: None,
+            project: "P".into(),
+            fields: Default::default(),
+        };
+        let downstream = GlobalTask {
+            id: "P/down.md".into(),
+            kind: "task".into(),
+            title: "Downstream".into(),
+            done: false,
+            due: Some("2026-11-18".into()),
+            priority: 2,
+            summary: None,
+            project: "P".into(),
+            fields: blocked_fields,
+        };
+        let all = vec![root.clone(), downstream.clone()];
+        let today = "2026-11-20";
+
+        assert_eq!(unblocked_by_task(&root, &all).len(), 1);
+        assert!(TaskFocusFilter::NeedsMeToday.matches(&root, &all, today));
+        assert!(TaskFocusFilter::Unblockers.matches(&root, &all, today));
+        assert!(!TaskFocusFilter::Drifting.matches(&root, &all, today));
+
+        assert!(TaskFocusFilter::BlockedOnOthers.matches(&downstream, &all, today));
+        assert!(TaskFocusFilter::Drifting.matches(&downstream, &all, today));
+        assert!(!TaskFocusFilter::Unblockers.matches(&downstream, &all, today));
+    }
+
+    #[test]
+    fn extract_open_checklist_items_parses_unchecked_only() {
+        let md = "# Notes\n- [ ] Book train\n- [x] Done item\n* [ ] Pack adapter\n- [ ]   \n";
+        assert_eq!(
+            extract_open_checklist_items(md),
+            vec!["Book train".to_string(), "Pack adapter".to_string()]
+        );
+    }
+
+    #[gpui::test]
+    fn guided_review_mode_mounts_and_exits(cx: &mut TestAppContext) {
+        crate::test_support::init(cx);
+        let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let found = slot.clone();
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|cx| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
+                projects.review_mode = true;
+                projects.all_tasks = Remote {
+                    value: Some(vec![GlobalTask {
+                        id: "P/1.md".into(),
+                        kind: "task".into(),
+                        title: "Overdue item".into(),
+                        done: false,
+                        due: Some("2026-01-01".into()),
+                        priority: 1,
+                        summary: None,
+                        project: "P".into(),
+                        fields: Default::default(),
+                    }]),
+                    ..Remote::default()
+                };
+                projects
+            });
+            found.replace(Some(view.clone()));
+            gpui_kit::component::Root::new(view, window, cx)
+        });
+        cx.run_until_parked();
+        let projects = slot.take().unwrap();
+        projects.read_with(cx, |p, _| assert!(p.review_mode));
     }
 }

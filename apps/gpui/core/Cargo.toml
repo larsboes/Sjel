@@ -31,7 +31,7 @@ serde_json.workspace = true
 sha2 = "0.11"
 # The matrix behind the pairing code on the Mac's Setup page. Default features are off because
 # both of them (`image`, `svg`) exist to write a file, and this page paints the modules itself.
-qrcode = { version = "0.14", default-features = false }
+qrcode = { version = "0.15", default-features = false }
 # `rt-multi-thread`: a token read through `/usr/bin/security` blocks its worker, so a second
 # worker keeps an unrelated request from waiting on it (src/shell.rs).
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "net", "sync"] }

@@ -14,10 +14,10 @@ use crate::nsh_ui::{
     snapshot, status_chip, surface_card,
 };
 
+pub use crate::phone_finance::connect;
 use crate::phone_finance::{
     format_signed_cents, load, review_candidate, snapshots, FinanceTab, Snapshot,
 };
-pub use crate::phone_finance::connect;
 
 fn overview_section(snap: &Snapshot) -> nsh_core::element::AnyElement {
     let summary = &snap.dashboard.summary;

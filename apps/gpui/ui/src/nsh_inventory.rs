@@ -12,8 +12,8 @@ use crate::nsh_ui::{
     caption, empty_state, heading, metric_tile, pill_tab, status_chip, surface_card,
 };
 
-use crate::phone_inventory::{format_item_price, load, snapshots, InventoryTab, Snapshot};
 pub use crate::phone_inventory::connect;
+use crate::phone_inventory::{format_item_price, load, snapshots, InventoryTab, Snapshot};
 
 fn wishlist_section(
     snap: &Snapshot,

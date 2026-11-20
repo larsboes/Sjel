@@ -9,3 +9,6 @@ description = "Typed API wire models and route constants for Sjel import"
 [dependencies]
 schemars = { workspace = true, features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
+
+[lints]
+workspace = true

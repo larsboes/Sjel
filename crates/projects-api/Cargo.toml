@@ -11,3 +11,6 @@ schemars = { workspace = true, features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
 route-manifest = { path = "../route-manifest" }
+
+[lints]
+workspace = true

@@ -10,3 +10,6 @@ publish = false
 [dependencies]
 schemars.workspace = true
 serde = { workspace = true, features = ["derive"] }
+
+[lints]
+workspace = true

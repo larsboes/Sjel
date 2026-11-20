@@ -54,6 +54,16 @@
       "kind": "lib"
     },
     {
+      "name": "calendar-wal-backup",
+      "kind": "capability",
+      "service": {
+        "kind": "data",
+        "requires": [
+          "calendar"
+        ]
+      }
+    },
+    {
       "name": "candidate-fingerprint",
       "kind": "lib"
     },
@@ -153,6 +163,16 @@
       "kind": "lib"
     },
     {
+      "name": "documents-wal-backup",
+      "kind": "capability",
+      "service": {
+        "kind": "data",
+        "requires": [
+          "documents"
+        ]
+      }
+    },
+    {
       "name": "entities",
       "kind": "capability",
       "service": {
@@ -182,6 +202,16 @@
         "kind": "process",
         "requires": [
           "projects",
+          "entities"
+        ]
+      }
+    },
+    {
+      "name": "entities-wal-backup",
+      "kind": "capability",
+      "service": {
+        "kind": "data",
+        "requires": [
           "entities"
         ]
       }
@@ -232,6 +262,16 @@
       }
     },
     {
+      "name": "finance-wal-backup",
+      "kind": "capability",
+      "service": {
+        "kind": "data",
+        "requires": [
+          "finance"
+        ]
+      }
+    },
+    {
       "name": "foundation-models",
       "kind": "capability",
       "service": {
@@ -247,6 +287,19 @@
     {
       "name": "harness",
       "kind": "pack"
+    },
+    {
+      "name": "health",
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [],
+        "port": "8109"
+      }
+    },
+    {
+      "name": "health-api",
+      "kind": "lib"
     },
     {
       "name": "host-net",
@@ -399,7 +452,9 @@
       "kind": "capability",
       "service": {
         "kind": "process",
-        "requires": []
+        "requires": [
+          "entities"
+        ]
       }
     },
     {
@@ -413,6 +468,20 @@
     },
     {
       "name": "places-api",
+      "kind": "lib"
+    },
+    {
+      "name": "places-wal-backup",
+      "kind": "capability",
+      "service": {
+        "kind": "data",
+        "requires": [
+          "places"
+        ]
+      }
+    },
+    {
+      "name": "posts",
       "kind": "lib"
     },
     {
@@ -454,6 +523,16 @@
       "kind": "capability",
       "service": {
         "kind": "process",
+        "requires": [
+          "punctuality"
+        ]
+      }
+    },
+    {
+      "name": "punctuality-wal-backup",
+      "kind": "capability",
+      "service": {
+        "kind": "data",
         "requires": [
           "punctuality"
         ]
@@ -521,6 +600,10 @@
       "kind": "lib"
     },
     {
+      "name": "sjel-native-wal",
+      "kind": "lib"
+    },
+    {
       "name": "sjel-server",
       "kind": "lib"
     },
@@ -557,6 +640,16 @@
     {
       "name": "software-api",
       "kind": "lib"
+    },
+    {
+      "name": "software-wal-backup",
+      "kind": "capability",
+      "service": {
+        "kind": "data",
+        "requires": [
+          "software"
+        ]
+      }
     },
     {
       "name": "soundscape",
@@ -651,6 +744,16 @@
     {
       "name": "transit-api",
       "kind": "lib"
+    },
+    {
+      "name": "transit-wal-backup",
+      "kind": "capability",
+      "service": {
+        "kind": "data",
+        "requires": [
+          "transit"
+        ]
+      }
     },
     {
       "name": "traveler",
@@ -967,6 +1070,16 @@
     {
       "from": "calendar",
       "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/calendar/Cargo.toml"
+      ]
+    },
+    {
+      "from": "calendar",
+      "to": "sjel-native-wal",
       "kinds": [
         "cargo-dep"
       ],
@@ -1356,6 +1469,16 @@
     },
     {
       "from": "documents",
+      "to": "sjel-native-wal",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/documents/Cargo.toml"
+      ]
+    },
+    {
+      "from": "documents",
       "to": "sjel-server",
       "kinds": [
         "cargo-dep"
@@ -1447,6 +1570,16 @@
     {
       "from": "entities",
       "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/entities/Cargo.toml"
+      ]
+    },
+    {
+      "from": "entities",
+      "to": "sjel-native-wal",
       "kinds": [
         "cargo-dep"
       ],
@@ -1576,6 +1709,16 @@
     },
     {
       "from": "finance",
+      "to": "sjel-native-wal",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/finance/Cargo.toml"
+      ]
+    },
+    {
+      "from": "finance",
       "to": "sjel-server",
       "kinds": [
         "cargo-dep"
@@ -1592,6 +1735,56 @@
       ],
       "evidence": [
         "crates/finance/Cargo.toml"
+      ]
+    },
+    {
+      "from": "health",
+      "to": "health-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/health/Cargo.toml"
+      ]
+    },
+    {
+      "from": "health",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/health/Cargo.toml"
+      ]
+    },
+    {
+      "from": "health",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/health/Cargo.toml"
+      ]
+    },
+    {
+      "from": "health",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/health/Cargo.toml"
+      ]
+    },
+    {
+      "from": "health",
+      "to": "sjel-turso",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/health/Cargo.toml"
       ]
     },
     {
@@ -1976,6 +2169,16 @@
     },
     {
       "from": "places",
+      "to": "calendar-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/places/Cargo.toml"
+      ]
+    },
+    {
+      "from": "places",
       "to": "candidate-fingerprint",
       "kinds": [
         "cargo-dep"
@@ -1996,6 +2199,16 @@
     },
     {
       "from": "places",
+      "to": "finance-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/places/Cargo.toml"
+      ]
+    },
+    {
+      "from": "places",
       "to": "links",
       "kinds": [
         "cargo-dep"
@@ -2006,7 +2219,27 @@
     },
     {
       "from": "places",
+      "to": "media-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/places/Cargo.toml"
+      ]
+    },
+    {
+      "from": "places",
       "to": "places-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/places/Cargo.toml"
+      ]
+    },
+    {
+      "from": "places",
+      "to": "punctuality-api",
       "kinds": [
         "cargo-dep"
       ],
@@ -2046,6 +2279,16 @@
     },
     {
       "from": "places",
+      "to": "sjel-native-wal",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/places/Cargo.toml"
+      ]
+    },
+    {
+      "from": "places",
       "to": "sjel-server",
       "kinds": [
         "cargo-dep"
@@ -2072,6 +2315,26 @@
       ],
       "evidence": [
         "crates/places-api/Cargo.toml"
+      ]
+    },
+    {
+      "from": "posts",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/posts/Cargo.toml"
+      ]
+    },
+    {
+      "from": "posts",
+      "to": "status-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/posts/Cargo.toml"
       ]
     },
     {
@@ -2217,6 +2480,16 @@
     {
       "from": "punctuality",
       "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/punctuality/Cargo.toml"
+      ]
+    },
+    {
+      "from": "punctuality",
+      "to": "sjel-native-wal",
       "kinds": [
         "cargo-dep"
       ],
@@ -2436,6 +2709,16 @@
     },
     {
       "from": "sjel-cli",
+      "to": "calendar-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
       "to": "civil-date",
       "kinds": [
         "cargo-dep"
@@ -2456,6 +2739,16 @@
     },
     {
       "from": "sjel-cli",
+      "to": "entities-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
       "to": "inference",
       "kinds": [
         "cargo-dep"
@@ -2467,6 +2760,16 @@
     {
       "from": "sjel-cli",
       "to": "libsql-auth",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "places-api",
       "kinds": [
         "cargo-dep"
       ],
@@ -2565,6 +2868,16 @@
       ]
     },
     {
+      "from": "sjel-cli",
+      "to": "status-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
       "from": "sjel-credentials",
       "to": "sjel-config",
       "kinds": [
@@ -2636,7 +2949,47 @@
     },
     {
       "from": "sjel-status",
+      "to": "calendar-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-status/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
       "to": "devices",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-status/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
+      "to": "documents-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-status/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
+      "to": "entities-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-status/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
+      "to": "finance-api",
       "kinds": [
         "cargo-dep"
       ],
@@ -2736,7 +3089,7 @@
     },
     {
       "from": "software",
-      "to": "sjel-server",
+      "to": "sjel-native-wal",
       "kinds": [
         "cargo-dep"
       ],
@@ -2746,7 +3099,7 @@
     },
     {
       "from": "software",
-      "to": "sjel-turso",
+      "to": "sjel-server",
       "kinds": [
         "cargo-dep"
       ],
@@ -2917,6 +3270,16 @@
     {
       "from": "transit",
       "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/transit/Cargo.toml"
+      ]
+    },
+    {
+      "from": "transit",
+      "to": "sjel-native-wal",
       "kinds": [
         "cargo-dep"
       ],
@@ -3601,6 +3964,10 @@
       "verdict": "adopt"
     },
     {
+      "name": "obsidian-roadmap",
+      "verdict": "inspiration"
+    },
+    {
       "name": "obsidian-web-clipper",
       "verdict": "adopt"
     },
@@ -3715,6 +4082,10 @@
     {
       "name": "research-paper-writing-skills",
       "verdict": "quarry"
+    },
+    {
+      "name": "rex",
+      "verdict": "evaluate"
     },
     {
       "name": "ripgrep",
@@ -3855,6 +4226,10 @@
     {
       "name": "vaultwarden",
       "verdict": "adopt"
+    },
+    {
+      "name": "vector-release-writing",
+      "verdict": "inspiration"
     },
     {
       "name": "vercel-labs-skills",

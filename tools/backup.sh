@@ -122,6 +122,14 @@ SQLITE_REL="$(toml_get backup_sqlite "$MANIFEST")"
 # connection IS on one host, which is the condition SQLite's WAL requires and the exact
 # one a virtiofs bind mount fails (the cold-copy block below carries that story).
 SQLITE_ONLINE_REL="$(toml_get backup_sqlite_online "$MANIFEST")"
+INVENTORY_SNAPSHOT="$(toml_get backup_inventory_snapshot "$MANIFEST")"
+if [ -n "$INVENTORY_SNAPSHOT" ]; then
+  if [ "$CAP" != inventory-wal-backup ] || [ "$INVENTORY_SNAPSHOT" != true ] ||
+     [ "$SQLITE_ONLINE_REL" != data/inventory/snapshots/inventory.db ]; then
+    echo "backup.sh: Inventory snapshots require the owner snapshot archive path" >&2
+    exit 1
+  fi
+fi
 if [ -n "$SOURCE_FLAG" ] && { [ -n "$SQLITE_REL" ] || [ -n "$SQLITE_ONLINE_REL" ]; }; then
   echo "backup.sh: --source-root does not apply to SQLite backup sources" >&2
   exit 1
@@ -277,7 +285,7 @@ if [ -n "$SQLITE_ONLINE_REL" ]; then
     case "$db_configured" in "~/"*) db_configured="$HOME/${db_configured#\~/}" ;; esac
     db_src="$db_configured"
   fi
-  [ -f "$db_src" ] || {
+  [ "$INVENTORY_SNAPSHOT" = true ] || [ -f "$db_src" ] || {
     echo "backup.sh: declared SQLite database is missing: $db_src" >&2; exit 1; }
   command -v sqlite3 >/dev/null 2>&1 || {
     echo "backup.sh: sqlite3 is required to take and verify a live SQLite backup" >&2; exit 1; }
@@ -567,6 +575,18 @@ fi
 # one host. A container behind virtiofs is not that; the capabilities reading this file
 # are, which is what makes the same command safe here and dangerous there.
 if [ -n "$SQLITE_ONLINE_REL" ]; then
+  if [ "$INVENTORY_SNAPSHOT" = true ]; then
+    echo "→ requesting a fresh Inventory owner snapshot"
+    previous="$(ls -di "$db_src" 2>/dev/null || true)"
+    inventory_bin="${SJEL_INVENTORY_BIN:-$SJEL_ROOT/target/release/inventory}"
+    "$inventory_bin" snapshot || {
+      echo "backup.sh: Inventory refused the snapshot — no archive written" >&2; exit 1; }
+    if [ ! -s "$db_src" ] || [ -L "$db_src" ] || [ -s "$db_src-wal" ] || \
+       [ "$(ls -di "$db_src")" = "$previous" ]; then
+      echo "backup.sh: Inventory did not replace the configured closed snapshot — no archive written" >&2
+      exit 1
+    fi
+  fi
   echo "→ live sqlite copy: $SQLITE_ONLINE_REL"
   db_dst="$STAGE/$SQLITE_ONLINE_REL"; mkdir -p "$(dirname "$db_dst")"
   rm -f "$db_dst" "$db_dst-wal" "$db_dst-shm"

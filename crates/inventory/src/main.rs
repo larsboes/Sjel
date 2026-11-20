@@ -40,6 +40,7 @@ fn usage() -> ! {
   price <id> <amount>            record a dated price [--source X] [--config Y] [--on DATE]
   prices refresh                 read each candidate's geizhals product page once (daily job)
   {import}                       inventory/*.toml into the tables (repeatable)
+  snapshot                       export a verified snapshot from the native owner
   {serve}                        HTTP API for the dashboard
 "#,
         t = bold("inventory"),
@@ -77,6 +78,11 @@ async fn main() {
         usage()
     };
 
+    #[cfg(feature = "turso-wal")]
+    if cmd == "serve-wal-preview" {
+        std::process::exit(serve_wal_preview(&argv).await);
+    }
+
     if cmd != "serve" && owner_url_needed() {
         eprintln!("Set SJEL_INVENTORY_URL to the service that owns the configured database.");
         std::process::exit(2);
@@ -84,10 +90,14 @@ async fn main() {
 
     let code = match cmd {
         "serve" => {
-            sjel_inventory::api::serve().await;
+            if let Err(error) = sjel_inventory::api::serve().await {
+                eprintln!("{}", red(&error.to_string()));
+                std::process::exit(2);
+            }
             return;
         }
         "import" => import(&argv).await,
+        "snapshot" if argv.len() == 1 => snapshot().await,
         "inventory" => show().await,
         "categories" => categories_show().await,
         "add" => add(&argv).await,
@@ -97,6 +107,26 @@ async fn main() {
         _ => usage(),
     };
     std::process::exit(code);
+}
+
+#[cfg(feature = "turso-wal")]
+async fn serve_wal_preview(argv: &[String]) -> i32 {
+    let (path, port, allow_writes) = match argv {
+        [_, path, port] => (path, port, false),
+        [_, path, port, flag] if flag == "--allow-writes" => (path, port, true),
+        _ => {
+            eprintln!(
+                "usage: inventory serve-wal-preview <owner copy> <loopback port> [--allow-writes]"
+            );
+            return 2;
+        }
+    };
+    let port = or_exit!(port.parse::<std::num::NonZeroU16>()).get();
+    or_exit!(
+        sjel_inventory::api::wal_preview::serve(std::path::Path::new(path), port, allow_writes)
+            .await
+    );
+    0
 }
 
 fn owner_url_needed() -> bool {
@@ -111,6 +141,15 @@ fn owner_url_needed() -> bool {
                 != sjel_config::overlay_data_dir("sjel").map(|dir| dir.join("sjel.db"))
     });
     owner_override || shared_override
+}
+
+async fn snapshot() -> i32 {
+    let result = or_exit!(
+        tokio::task::spawn_blocking(|| { client::snapshot().map_err(|error| error.to_string()) })
+            .await
+    );
+    or_exit!(result);
+    0
 }
 
 async fn import(argv: &[String]) -> i32 {
@@ -232,7 +271,9 @@ fn print_categories(rows: &Catalogue) -> Vec<(String, i64)> {
         }
         println!(
             "  {}",
-            dim("The field is free text, so nobody decided this. A PATCH on `category` cleans it up.")
+            dim(
+                "The field is free text, so nobody decided this. A PATCH on `category` cleans it up."
+            )
         );
     }
     println!();

@@ -64,6 +64,18 @@ pub fn record_price(id: &str, price: &RecordPriceRequest) -> Result<PriceRecorde
     Ok(serde_json::from_reader(response)?)
 }
 
+pub fn snapshot() -> Result<(), Error> {
+    request(
+        &inventory_url(),
+        crate::api::SNAPSHOT_ROUTE,
+        "inventory-snapshot",
+        Method::POST,
+        None,
+        None,
+    )?;
+    Ok(())
+}
+
 pub fn create_wish(item: Item) -> Result<(), Error> {
     let body = crate::api::NewItem {
         item,
@@ -179,6 +191,9 @@ fn request(
         url.set_path(path);
     }
     let mut request = client.request(method, url.clone());
+    if path == crate::api::SNAPSHOT_ROUTE {
+        request = request.timeout(Duration::from_secs(60));
+    }
     if let Some(body) = body {
         request = request
             .header("Content-Type", "application/json")
@@ -186,6 +201,12 @@ fn request(
     }
     let request = sjel_server::InboundAuth::with_loopback_auth(request, url.as_str());
     let response = request.send()?;
+    if path == crate::api::SNAPSHOT_ROUTE
+        && response.status().is_success()
+        && response.status().as_u16() != 204
+    {
+        return Err("Inventory did not acknowledge the snapshot".into());
+    }
     if !response.status().is_success() {
         let status = response.status();
         if status.is_client_error() {

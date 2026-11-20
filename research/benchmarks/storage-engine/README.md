@@ -164,9 +164,55 @@ From that connection, `VACUUM INTO` runs while a writer holds the next edit and 
 uncommitted. The closed snapshot contains revision 4. A separate restore after the writer commits
 and closes contains revision 5. SQLite checks both files for integrity and foreign keys and matches
 all ten owner tables and the sequence counters. This covers overlapping an open write in one
-process. The scheduled backup path still needs an owner-side snapshot and restore rehearsal.
+process.
 
-Switching the imported database to MVCC fails to insert Inventory history and price records. Turso
-reports missing backing tables for its converted `AUTOINCREMENT` sequences. A fresh MVCC table
-allocates IDs in increasing order after deletion, so the observed failure is in conversion. Full
-HTTP acceptance on Turso and recovery during concurrent live writes remain open.
+### Native Inventory service and backup packaging
+
+Build the Inventory binary with the `turso-wal` feature. Run the service rehearsal with
+`SJEL_TEST_NATIVE_PREVIEW=1` to compare the read-only preview with SQLite and run the
+native owner through the normal `serve` command. The rehearsal checks conditional writes,
+item and state history, imports, wishlist groups, prices, aliases and mail proposals. It
+backs up the running owner and verifies the acknowledged writes through the SQLite service
+after a receipt-backed restore.
+
+```sh
+sjel cargo build --offline --locked -p sjel-inventory --features turso-wal --bin inventory
+SJEL_TEST_NATIVE_PREVIEW=1 sh research/benchmarks/storage-engine/inventory-service-rollback.sh "$scratch/inventory/db/wal-restored.db" "$inventory_bin" "$scratch/service-parity"
+sh research/benchmarks/storage-engine/inventory-backup-rehearsal.sh "$scratch/native-inventory/online.db" "$scratch/backup-contract" "$inventory_bin"
+```
+
+The feature-gated signed sync test uses the normal signature and nonce middleware with an
+isolated Devices registry. It injects an operation receipt failure, retries with a new nonce,
+and checks the acknowledgement after native restart and SQLite recovery.
+
+```sh
+sjel cargo test --offline --locked -p sjel-inventory --features turso-wal signed_wal_sync_commits_once_and_restores_the_acknowledgement
+```
+
+For a manual signed sync rehearsal, set `SJEL_WAL_PREVIEW_DEVICE_DB` to a separate registry copy
+and start the editable preview. A preview without a registry has no signed sync route.
+
+For a cutover export, place Inventory in a maintenance hold and verify its configured port
+has stopped listening. Take a fresh shared-store backup and restore the archive through its receipt. Extract the ten owner tables and their sequences
+into a new WAL file without running the replay:
+
+```sh
+sh research/benchmarks/storage-engine/inventory-rehearsal.sh --extract-only "$restored_db" "$scratch/owner"
+```
+
+Use `$scratch/owner/inventory.db` as the cutover candidate. Keep the hold through the export and
+configuration switch so an acknowledged write cannot land in the old store after the backup.
+Keep the original database and the verified archive through acceptance.
+
+For an isolated native installation, set `SJEL_INVENTORY_ENGINE=turso-wal`,
+`SJEL_INVENTORY_DB_PATH` to the extracted owner file and `SJEL_DB_PATH` to a separate
+existing Devices registry. Set `SJEL_INVENTORY_SNAPSHOT_DIR` to the overlay's existing
+`data/inventory/snapshots` directory before starting `inventory serve`. The engine
+defaults to SQLite.
+
+Enable the `inventory-wal-backup` capability after the native owner starts. Set
+`SJEL_INVENTORY_URL` to the owner’s loopback URL for backup jobs. The job requests a
+fresh authenticated snapshot before packaging
+`data/inventory/snapshots/inventory.db`. A stale snapshot does not satisfy the job. The
+rehearsal uses the scheduler's backup command against a scratch local target and restores
+from the new receipt. The installed scheduler and configured target remain deployment checks.

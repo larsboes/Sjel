@@ -1,14 +1,12 @@
+mod support;
+
 use axum::{
     body::Body,
     http::{Request, StatusCode},
     Router,
 };
 use serde_json::{json, Value};
-use sjel_inventory::{
-    api::{build_router, AppState},
-    identity::encode_item_ref,
-};
-use std::sync::Arc;
+use sjel_inventory::identity::encode_item_ref;
 use tower::ServiceExt;
 
 async fn request(
@@ -44,12 +42,8 @@ async fn request(
 async fn typed_lookup_is_authenticated_canonical_and_reads_only_item_identity() {
     let path = std::env::temp_dir().join(format!("inventory-ref-{}.db", std::process::id()));
     let _ = std::fs::remove_file(&path);
-    let state = Arc::new(AppState {
-        device_store: devices::store::DevicesStore::open(&path).unwrap(),
-        database: path.clone(),
-    });
     let router = sjel_server::authenticated(
-        build_router(state),
+        support::owner_router(&path).await,
         sjel_server::InboundAuth::with_token(Some("test-token".into())).require_credential(),
     );
     let reference = encode_item_ref("a:é").unwrap();

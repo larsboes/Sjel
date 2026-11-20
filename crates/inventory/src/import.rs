@@ -191,6 +191,17 @@ pub struct Report {
     pub state_changes: usize,
 }
 
+impl Report {
+    pub(crate) fn record(&mut self, kind: Kind, state_changed: bool) {
+        self.state_changes += usize::from(state_changed);
+        match kind {
+            Kind::Piece => self.pieces += 1,
+            Kind::Slot => self.slots += 1,
+            Kind::Gear => self.gear += 1,
+        }
+    }
+}
+
 pub(crate) fn overlay_dir() -> Option<PathBuf> {
     let own = sjel_config::overlay_data_dir("inventory")?.join("inventory");
     if own.is_dir() {

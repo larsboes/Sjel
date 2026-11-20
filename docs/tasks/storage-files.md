@@ -60,12 +60,24 @@ A same-process Turso WAL snapshot ran while a second connection had an uncommitt
 write. SQLite verified the ten-table snapshot at revision 4 and the later shutdown restore at
 revision 5. The receipt for revision 5 appears only in the shutdown restore.
 
+The live Inventory deployment uses the Turso WAL owner and a separate file for the Devices
+registry. A receipt-backed shared-store restore supplied the ten-table export while Inventory
+was held. The original shared database remains available for recovery.
+
+The scheduled backup requested a fresh snapshot from the running Turso owner. An isolated
+restore verified the archive against its receipt and matched all ten Inventory tables and
+sequence counters. SQLite integrity and foreign-key checks passed. A Turso listener
+also reopened the restored database and served its catalogue.
+
+The live owner rejected unsigned sync. The signed sync test passed with an isolated Devices
+registry and verified retries, nonce replay rejection, and receipt recovery.
+
 ## Remaining migration gates
 
-- Run the owner API suite against a Turso WAL adapter. Roll back failed transactions explicitly
-  before reusing their connections. Turso 0.8.3 prepared statements can run before drop-triggered
-  rollback. Rehearse cutover and rollback with the adapter running, and register and restore the
-  owner backup before accepting live writes.
+- Verify a successful signed request from a paired client against the live Inventory owner.
+- Move Entities and Calendar consumers to owner reads before splitting their databases.
+  Finder still reads both from the shared store, the Now view reads Calendar there, and
+  the phone mirror copies tables from both. [Route reads through owners](storage-owner-reads.md).
 - Keep Documents on its current search implementation until a replacement passes prefix,
   diacritic, status and pagination parity. The [engine measurements](storage-engine.md) record
   the FTS and iOS results.

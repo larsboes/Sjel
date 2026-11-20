@@ -1,11 +1,11 @@
+mod support;
+
 use axum::{
     body::Body,
     http::{Request, StatusCode},
     Router,
 };
 use serde_json::{json, Value};
-use sjel_inventory::api::{build_router, AppState};
-use std::sync::Arc;
 use tower::ServiceExt;
 
 async fn send(
@@ -42,12 +42,8 @@ async fn send(
 async fn reviewed_mail_is_atomic_idempotent_and_conflict_guarded() {
     let path = std::env::temp_dir().join(format!("inventory-mail-{}.db", std::process::id()));
     let _ = std::fs::remove_file(&path);
-    let state = Arc::new(AppState {
-        device_store: devices::store::DevicesStore::open(&path).unwrap(),
-        database: path.clone(),
-    });
     let router = sjel_server::authenticated(
-        build_router(state),
+        support::owner_router(&path).await,
         sjel_server::InboundAuth::with_token(Some("test-token".into())).require_credential(),
     );
     let proposal = json!({"source_id":"msg-1","line_id":"line-1","event":"delivered","title":"Lamp","evidence":"delivered today","data_class":"c1","order_ref":"order-1"});
@@ -222,10 +218,7 @@ async fn delivery_provenance_survives_storage_and_conflicting_replays() {
         std::process::id()
     ));
     let _ = std::fs::remove_file(&path);
-    let router = build_router(Arc::new(AppState {
-        device_store: devices::store::DevicesStore::open(&path).unwrap(),
-        database: path.clone(),
-    }));
+    let router = support::owner_router(&path).await;
     let proposal = json!({
         "source_id":"mail:v1:thread:message", "line_id":"line", "event":"delivered",
         "title":"Blue mug", "evidence":"Blue mug", "data_class":"c1",
@@ -243,10 +236,7 @@ async fn delivery_provenance_survives_storage_and_conflicting_replays() {
     assert_eq!(staged["claim"], proposal["claim"]);
     assert_eq!(staged["extraction_version"], proposal["extraction_version"]);
     drop(router);
-    let router = build_router(Arc::new(AppState {
-        device_store: devices::store::DevicesStore::open(&path).unwrap(),
-        database: path.clone(),
-    }));
+    let router = support::owner_router(&path).await;
     let (_, listed) = send(&router, "GET", "/api/mail-proposals", Value::Null, false).await;
     assert_eq!(listed["proposals"][0], staged);
     assert_eq!(

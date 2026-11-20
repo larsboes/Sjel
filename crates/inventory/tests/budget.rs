@@ -1,4 +1,4 @@
-use sjel_inventory::budget::{MonthlyBalance, months_to_pay};
+use sjel_inventory::budget::{months_to_pay, MonthlyBalance};
 
 #[test]
 fn only_a_positive_balance_can_fund_wishes() {

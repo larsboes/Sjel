@@ -7,6 +7,7 @@ if [ "$#" -lt 3 ] || [ "$#" -gt 5 ]; then
     exit 2
 fi
 
+script_dir=$(cd "$(dirname "$0")" && pwd -P)
 source_db=$(cd "$(dirname "$1")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$1")")
 inventory=$(cd "$(dirname "$2")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$2")")
 test -x "$inventory"
@@ -81,7 +82,7 @@ start_service() {
     port=$(available_port)
     base="http://127.0.0.1:$port"
     env -i PATH="$PATH" SJEL_PERSONAL_ROOT="$work" SJEL_DB_PATH="$work/devices.db" \
-        SJEL_INVENTORY_DB_PATH="$work/owner.db" SJEL_PORT="$port" SJEL_FINANCE_URL="$finance_url" \
+        SJEL_INVENTORY_DB_PATH="$work/${2:-owner.db}" SJEL_PORT="$port" SJEL_FINANCE_URL="$finance_url" \
         "$inventory" serve > "$1.log" 2>&1 &
     pid=$!
     wait_for_service "$pid" "$base" "$1"
@@ -259,6 +260,202 @@ test "$(sqlite3 -readonly owner.db "SELECT alternatives FROM inventory_wish_grou
 echo 'The comparison CLI used the owner, preserved the first price on retry, and opened no local database.'
 echo 'Item creation rolled back a refused state and left an existing item unchanged on a duplicate request.'
 echo 'The owner rejected an unforced import, rolled back a failed forced import, and committed both rows on retry.'
+
+if [ "${SJEL_TEST_NATIVE_PREVIEW:-0}" = 1 ]; then
+    sqlite3 -bail owner.db '.backup native-owner.db'
+    native_sha=$(shasum -a 256 native-owner.db)
+    start_service sqlite-control
+    sqlite_url=$base
+    native_port=$(available_port)
+    native_url="http://127.0.0.1:$native_port"
+    env -i PATH="$PATH" SJEL_PERSONAL_ROOT="$work" SJEL_FINANCE_URL="$finance_url" \
+        "$inventory" serve-wal-preview "$work/native-owner.db" "$native_port" > native.log 2>&1 &
+    aux_pid=$!
+    wait_for_service "$aux_pid" "$native_url" native
+    reference="inv:$(printf '%s' "$item" | od -An -v -tx1 | tr -d '[:space:]')"
+    for path in /api/inventory '/api/search?q=Restored+service' "/api/item-refs/$reference" \
+        /api/wishlist /api/wish-groups /api/wish-comparison /api/mail-proposals /routes; do
+        request --fail "$sqlite_url$path" | jq -S . > sqlite-response.json
+        request --fail "$native_url$path" | jq -S . > native-response.json
+        cmp -s sqlite-response.json native-response.json
+    done
+    test "$(request --output /dev/null --write-out '%{http_code}' "$native_url/api/item-refs/inv:6d697373696e67")" = 404
+    test "$(request --output /dev/null --write-out '%{http_code}' -X POST "$native_url/api/inventory")" = 405
+    test "$(request --output /dev/null --write-out '%{http_code}' -X PATCH "$native_url/api/items/$item")" = 404
+    stop_auxiliary
+    stop_service
+    test "$(shasum -a 256 native-owner.db)" = "$native_sha"
+    echo 'The native WAL preview matched catalogue, search and reference responses and refused mutations.'
+
+    native_port=$(available_port)
+    native_url="http://127.0.0.1:$native_port"
+    snapshot_dir="$work/data/inventory/snapshots"
+    mkdir -p "$snapshot_dir"
+    env -i PATH="$PATH" SJEL_PERSONAL_ROOT="$work" SJEL_INVENTORY_ENGINE=turso-wal \
+        SJEL_INVENTORY_SNAPSHOT_DIR="$snapshot_dir" SJEL_DB_PATH="$work/devices.db" \
+        SJEL_INVENTORY_DB_PATH="$work/native-owner.db" SJEL_PORT="$native_port" \
+        SJEL_FINANCE_URL="$finance_url" "$inventory" serve > native-write.log 2>&1 &
+    aux_pid=$!
+    wait_for_service "$aux_pid" "$native_url" native-write
+    request --fail --dump-header native-edit.headers -X PATCH -H 'Content-Type: application/json' \
+        -H 'If-Match: "4"' --data '{"label":"Acknowledged native API edit"}' "$native_url/api/items/$item" |
+        jq -e '.revision == 5' >/dev/null
+    tr -d '\r' < native-edit.headers | grep -iqx 'etag: "5"'
+    test "$(request --output native-stale.json --write-out '%{http_code}' -X PATCH \
+        -H 'Content-Type: application/json' -H 'If-Match: "4"' \
+        --data '{"label":"Must not overwrite"}' "$native_url/api/items/$item")" = 409
+    jq -e '.current.item.revision == 5 and .current.item.label == "Acknowledged native API edit"' native-stale.json >/dev/null
+    test "$(request --output /dev/null --write-out '%{http_code}' -H 'Content-Type: application/json' \
+        --data '{"id":"refused-create","kind":"gear","label":"Refused native create","state":"owned"}' "$native_url/api/items")" = 500
+    test "$(request --output /dev/null --write-out '%{http_code}' "$native_url/api/item-refs/inv:726566757365642d637265617465")" = 404
+    request --fail -H 'Content-Type: application/json' \
+        --data '{"id":"native-item","kind":"gear","label":"Native item","state":"wanted"}' "$native_url/api/items" |
+        jq -e '.revision == 1 and .state == "wanted"' >/dev/null
+    test "$(request --output /dev/null --write-out '%{http_code}' -H 'Content-Type: application/json' \
+        --data '{"id":"native-item","kind":"gear","label":"Duplicate","state":"gone"}' "$native_url/api/items")" = 409
+    request --fail -X PUT -H 'Content-Type: application/json' -H 'If-Match: "1"' \
+        --data '{"id":"native-item","kind":"gear","label":"Native replacement","cost_max_cents":10000}' "$native_url/api/items/native-item" |
+        jq -e '.revision == 2' >/dev/null
+    request --fail -H 'Content-Type: application/json' \
+        --data '{"state":"owned","note":"Native state transition"}' "$native_url/api/items/native-item/state" |
+        jq -e '.state == "owned" and .changed' >/dev/null
+    request --fail -H 'Content-Type: application/json' \
+        --data '{"state":"owned"}' "$native_url/api/items/native-item/state" |
+        jq -e '.state == "owned" and .changed == false' >/dev/null
+    request --fail "$native_url/api/items/native-item/state" |
+        jq -e 'map(.state) == ["wanted", "owned"] and .[1].note == "Native state transition"' >/dev/null
+    sed -e 's/import-control/native-import-control/' -e 's/import-second/refused-create/' \
+        data/inventory/inventory/owned.toml > native-import.toml
+    mv native-import.toml data/inventory/inventory/owned.toml
+    test "$(request --output /dev/null --write-out '%{http_code}' -H 'Content-Type: application/json' \
+        --data '{"force":false}' "$native_url/api/import/overlay")" = 409
+    test "$(request --output /dev/null --write-out '%{http_code}' -H 'Content-Type: application/json' \
+        --data '{"force":true}' "$native_url/api/import/overlay")" = 500
+    native_import_ref="inv:$(printf '%s' native-import-control | od -An -v -tx1 | tr -d '[:space:]')"
+    test "$(request --output /dev/null --write-out '%{http_code}' "$native_url/api/item-refs/$native_import_ref")" = 404
+    sed 's/refused-create/native-import-second/' data/inventory/inventory/owned.toml > native-import-retry.toml
+    mv native-import-retry.toml data/inventory/inventory/owned.toml
+    request --fail -H 'Content-Type: application/json' --data '{"force":true}' "$native_url/api/import/overlay" |
+        jq -e '.pieces == 2 and .state_changes == 2' >/dev/null
+    request --fail -H 'Content-Type: application/json' \
+        --data '{"id":"native-group","title":"Native group","constraint_text":"Fixture","item_ids":["native-item"]}' \
+        "$native_url/api/wish-groups" | jq -e '.id == "native-group"' >/dev/null
+    test "$(request --output /dev/null --write-out '%{http_code}' -X PUT -H 'Content-Type: application/json' \
+        --data '{"item_ids":["missing-native-item"]}' "$native_url/api/wish-groups/native-group/items")" = 500
+    request --fail -X PUT -H 'Content-Type: application/json' --data '{"alternatives":true}' \
+        "$native_url/api/wish-groups/native-group/alternatives" >/dev/null
+    request --fail -X PUT -H 'Content-Type: application/json' --data '{"specs":[{"key":"weight","value":10,"unit":"g"}]}' \
+        "$native_url/api/items/native-item/specs" >/dev/null
+    request --fail -X PUT -H 'Content-Type: application/json' --data '{"needs":[{"key":"weight","value":15,"unit":"g"}]}' \
+        "$native_url/api/wish-groups/native-group/needs" >/dev/null
+    request --fail -H 'Content-Type: application/json' --data '{"price_cents":9000,"source":"fixture","observed_at":"2000-01-01"}' \
+        "$native_url/api/items/native-item/prices" | jq -e '.added and .alert' >/dev/null
+    request --fail -H 'Content-Type: application/json' --data '{"price_cents":8000,"source":"fixture","observed_at":"2000-01-01"}' \
+        "$native_url/api/items/native-item/prices" | jq -e '.added == false and .alert == false' >/dev/null
+    request --fail "$native_url/api/wish-comparison" |
+        jq -e 'any(.groups[]; .id == "native-group" and .needs[0].value == 15
+            and .candidates[0].id == "native-item" and .candidates[0].specs[0].value == 10
+            and .candidates[0].observations[0].price_cents == 9000)' >/dev/null
+    request --fail "$native_url/api/wish-comparison" | jq -S . > native-wish-comparison.json
+    request --fail "$native_url/api/wish-groups" | jq -S . > native-wish-groups.json
+    native_ref="inv:$(printf '%s' native-item | od -An -v -tx1 | tr -d '[:space:]')"
+    request --fail "$native_url/api/items/native-item/mail-match-snapshot" > native-match.json
+    alias_key='{"namespace":"fixture:serial","value":"observed-123","kind":"physical_item"}'
+    jq --arg reference "$native_ref" --argjson key "$alias_key" \
+        '{key:$key,reference:$reference,expected_item_revision:.item_revision,expected_state_id:.state_id,
+          source_ref:"fixture:review",data_class:"c1"}' native-match.json > native-review.json
+    alias_id=$(request --fail -H 'Content-Type: application/json' --data-binary @native-review.json \
+        "$native_url/api/item-aliases" | jq -er '.id')
+    test "$(request --fail -H 'Content-Type: application/json' --data-binary @native-review.json \
+        "$native_url/api/item-aliases" | jq -er '.id')" = "$alias_id"
+    request --fail -H 'Content-Type: application/json' --data "{\"alias\":$alias_key}" "$native_url/api/items/resolve" |
+        jq -e --arg id "$alias_id" '.status == "exact" and (.candidates[0].alias_id|tostring) == $id' >/dev/null
+    request --fail -H 'Content-Type: application/json' --data '{"title":"Native replacement"}' "$native_url/api/items/resolve" |
+        jq -e '.status == "ambiguous" and .candidates[0].item_id == "native-item"' >/dev/null
+    request --fail -H 'Content-Type: application/json' --data '{"version":1}' \
+        "$native_url/api/item-aliases/$alias_id/revoke" | jq -e '.version == 2 and .revoked_at != null' >/dev/null
+    request --fail -H 'Content-Type: application/json' --data "{\"alias\":$alias_key}" "$native_url/api/items/resolve" |
+        jq -e '.status == "unknown" and .total_candidates == 0' >/dev/null
+    private_proposal=$(request --fail -H 'Content-Type: application/json' \
+        --data '{"source_id":"mail:v1:fixture-private:one","line_id":"1","event":"delivered","title":"Fixture private parcel","evidence":"Fixture evidence","data_class":"c2"}' \
+        "$native_url/api/mail-proposals" | jq -er '.id')
+    test "$(request --output /dev/null --write-out '%{http_code}' -H 'Content-Type: application/json' \
+        --data '{"action":"approve","version":1,"title":"Refuse private create","item_id":"native-private-item"}' \
+        "$native_url/api/mail-proposals/$private_proposal/decision")" = 409
+    jq '{action:"match",version:1,item_id:.item_id,expected_item_revision:.item_revision,expected_state_id:.state_id}' \
+        native-match.json > native-mail-match.json
+    request --fail -H 'Content-Type: application/json' --data-binary @native-mail-match.json \
+        "$native_url/api/mail-proposals/$private_proposal/decision" |
+        jq -e '.decision == "match" and .item_id == "native-item"' >/dev/null
+    proposal=$(request --fail -H 'Content-Type: application/json' \
+        --data '{"source_id":"mail:v1:fixture-public:one","line_id":"1","event":"delivered","title":"Fixture public parcel","evidence":"Fixture evidence","data_class":"c1"}' \
+        "$native_url/api/mail-proposals" | jq -er '.id')
+    test "$(request --output /dev/null --write-out '%{http_code}' -H 'Content-Type: application/json' \
+        --data '{"action":"approve","version":1,"title":"Refuse atomic mail create","item_id":"refused-create"}' \
+        "$native_url/api/mail-proposals/$proposal/decision")" = 500
+    request --fail -H 'Content-Type: application/json' \
+        --data '{"action":"approve","version":1,"title":"Native mail item","item_id":"native-mail-item"}' \
+        "$native_url/api/mail-proposals/$proposal/decision" | jq -e '.decision == "approve" and .version == 2' >/dev/null
+    request --fail "$native_url/api/mail-proposals" | jq -S . > native-mail.json
+    request --fail "$native_url/api/item-refs/$native_ref/aliases" | jq -S . > native-aliases.json
+    tools="$script_dir/../../../tools"
+    case "$(uname -s)" in Darwin) os=macos ;; Linux) os=linux ;; *) exit 1 ;; esac
+    backup_cap=inventory-wal-backup
+    printf 'os = "%s"\ncontainer_runtime = "docker"\ncapabilities = ["inventory", "%s"]\n' \
+        "$os" "$backup_cap" > config/machine.toml
+    mkdir backup-target
+    cat > config/systems.local.toml <<TARGETS
+[rehearsal-target]
+kind = "local"
+path = "$work/backup-target"
+TARGETS
+    run_backup() {
+        env -i PATH="$PATH" HOME="$HOME" SJEL_PERSONAL_ROOT="$work" SJEL_OVERLAY_ROOT="$work" \
+            SJEL_INVENTORY_URL="$1" SJEL_INVENTORY_BIN="$inventory" \
+            "$tools/backup.sh" --target rehearsal-target "$backup_cap"
+    }
+    cp "$source_db" "$snapshot_dir/inventory.db"
+    start_service sqlite-during-backup
+    receipt="$work/backup/receipts/$backup_cap.json"
+    if run_backup "$base" > refused-native-backup.log 2>&1; then
+        echo 'Inventory backup accepted a stale snapshot after the owner refused to export.' >&2
+        exit 1
+    fi
+    grep -q 'Inventory refused the snapshot' refused-native-backup.log
+    test ! -e "$receipt"
+    stop_service
+    run_backup "$native_url" > native-backup.log
+    archive="$work/backup-target/$backup_cap/$(jq -er '.tarball' "$receipt")"
+    restored="$(dirname "$work")/native-restored"
+    env -i PATH="$PATH" HOME="$HOME" SJEL_PERSONAL_ROOT="$work" SJEL_OVERLAY_ROOT="$work" \
+        "$tools/restore.sh" "$backup_cap" "$archive" --receipt "$receipt" \
+        --destination "$restored" > native-restore.log
+    sh "$script_dir/inventory-backup-rehearsal.sh" "$snapshot_dir/inventory.db" \
+        "$work/native-backup" "$inventory" > native-backup-checks.log
+    stop_auxiliary
+    cp "$restored/data/inventory/snapshots/inventory.db" rollback-to-sqlite.db
+    start_service sqlite-after-native rollback-to-sqlite.db
+    check_item 5
+    request --fail "$base/api/inventory" |
+        jq -e --arg item "$item" 'any(.[]; .item.id == $item and .item.label == "Acknowledged native API edit")' >/dev/null
+    request --fail "$base/api/items/native-item/state" |
+        jq -e 'map(.state) == ["wanted", "owned"] and .[1].note == "Native state transition"' >/dev/null
+    request --fail "$base/api/item-refs/$native_import_ref" |
+        jq -e '.revision == 1 and .state == "owned"' >/dev/null
+    request --fail "$base/api/wish-comparison" | jq -S . > restored-wish-comparison.json
+    request --fail "$base/api/wish-groups" | jq -S . > restored-wish-groups.json
+    cmp -s native-wish-comparison.json restored-wish-comparison.json
+    cmp -s native-wish-groups.json restored-wish-groups.json
+    request --fail "$base/api/mail-proposals" | jq -S . > restored-mail.json
+    request --fail "$base/api/item-refs/$native_ref/aliases" | jq -S . > restored-aliases.json
+    cmp -s native-mail.json restored-mail.json
+    cmp -s native-aliases.json restored-aliases.json
+    stop_service
+    test "$(sqlite3 -readonly rollback-to-sqlite.db 'PRAGMA integrity_check')" = ok
+    test -z "$(sqlite3 -readonly rollback-to-sqlite.db 'PRAGMA foreign_key_check')"
+    echo 'The backup producer rejected a stale snapshot and restored a fresh native snapshot through its receipt.'
+    echo 'Native item, wishlist, alias and mail changes survived SQLite rollback.'
+fi
 
 test "$(shasum -a 256 "$source_db")" = "$source_sha"
 echo 'Inventory served the restored revision, kept the Turso receipt, rejected a stale edit, and retained the new revision after restart.'

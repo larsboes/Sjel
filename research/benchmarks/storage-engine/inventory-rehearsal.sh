@@ -2,19 +2,30 @@
 set -eu
 umask 077
 
-if [ "$#" -ne 3 ]; then
+usage() {
     echo 'usage: sh inventory-rehearsal.sh <restored database> <reviewed CLI> <new private scratch directory>' >&2
+    echo '       sh inventory-rehearsal.sh --extract-only <restored database> <new private scratch directory>' >&2
     exit 2
+}
+
+[ "$#" -eq 3 ] || usage
+extract_only=false
+if [ "$1" = --extract-only ]; then
+    extract_only=true
+    shift
+    output_dir=$2
+else
+    output_dir=$3
+    turso_cli=$(cd "$(dirname "$2")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$2")")
+    test "$(shasum -a 256 "$turso_cli" | awk '{print $1}')" = 764ddf8b552b7fa14c08abbc4d9e6d61934336f325e6b2210c81b24060217b09
 fi
 source_db=$(cd "$(dirname "$1")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$1")")
-turso_cli=$(cd "$(dirname "$2")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$2")")
 script_dir=$(cd "$(dirname "$0")" && pwd -P)
-test "$(shasum -a 256 "$turso_cli" | awk '{print $1}')" = 764ddf8b552b7fa14c08abbc4d9e6d61934336f325e6b2210c81b24060217b09
 test ! -s "$source_db-wal"
 source_sha=$(shasum -a 256 "$source_db")
 source_uri="file:$source_db?immutable=1"
-mkdir -m 700 "$3"
-cd "$3"
+mkdir -m 700 "$output_dir"
+cd "$output_dir"
 work=$(pwd -P)
 mkdir db
 
@@ -24,10 +35,24 @@ sqlite3 -bail db/before.db < inventory.sql
 sqlite3 -readonly "$source_uri" "SELECT 'INSERT INTO sqlite_sequence VALUES(' || quote(name) || ',' || seq || ');' FROM sqlite_sequence WHERE name GLOB 'inventory_*' ORDER BY name;" > sequence.sql
 { echo 'DELETE FROM sqlite_sequence;'; cat sequence.sql; } | sqlite3 -bail db/before.db
 sqlite3 -readonly db/before.db '.dump inventory_%' > extracted.sql
-cmp inventory.sql extracted.sql
+cmp -s inventory.sql extracted.sql
 test "$(sqlite3 db/before.db 'PRAGMA integrity_check')" = ok
 test -z "$(sqlite3 db/before.db 'PRAGMA foreign_key_check')"
-printf 'Owner-only extraction matched for %s tables.\n' "$(grep -c '^CREATE TABLE' extracted.sql)"
+table_count=$(grep -c '^CREATE TABLE' extracted.sql)
+test "$table_count" = 10
+test "$(sqlite3 -readonly db/before.db "SELECT 'INSERT INTO sqlite_sequence VALUES(' || quote(name) || ',' || seq || ');' FROM sqlite_sequence ORDER BY name;")" = "$(cat sequence.sql)"
+printf 'Owner-only extraction matched for %s tables.\n' "$table_count"
+
+if [ "$extract_only" = true ]; then
+    test "$(sqlite3 -bail db/before.db 'PRAGMA journal_mode=wal')" = wal
+    test ! -s db/before.db-wal
+    test "$(shasum -a 256 "$source_db")" = "$source_sha"
+    mv db/before.db inventory.db
+    rm inventory.sql extracted.sql sequence.sql
+    rmdir db
+    printf 'Verified WAL owner file: %s/inventory.db\n' "$work"
+    exit 0
+fi
 
 run_turso() {
     docker run --rm -i --pull never --network none --read-only --cap-drop ALL \

@@ -8,10 +8,14 @@ use serde::{Deserialize, Serialize};
 pub mod aliases;
 pub mod mail_evidence;
 pub mod resolution;
+pub mod sync;
 
 // ============================================================================
 // Route Constants
 // ============================================================================
+
+pub const ROUTE_SYNC: &str = "/api/sync";
+pub const PROXY_ROUTE_SYNC: &str = "/inventory/api/sync";
 
 pub const ROUTE_INVENTORY: &str = "/api/inventory";
 pub const ROUTE_IMPORT_OVERLAY: &str = "/api/import/overlay";
@@ -34,7 +38,8 @@ pub const ROUTE_ITEM_PRICES: &str = "/api/items/{id}/prices";
 pub const ROUTE_WISH_COMPARISON: &str = "/api/wish-comparison";
 
 /// Every route constant above. The server test checks each one against its manifest.
-pub const ALL_ROUTES: [&str; 19] = [
+pub const ALL_ROUTES: [&str; 20] = [
+    ROUTE_SYNC,
     ROUTE_INVENTORY,
     ROUTE_IMPORT_OVERLAY,
     ROUTE_ITEM_REFS,

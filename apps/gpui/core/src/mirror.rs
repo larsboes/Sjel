@@ -12,11 +12,8 @@
 //! which covers the projects domain today; a page that needs to write asks the replica, and a page
 //! that only needs to read can ask the copy.
 //!
-//! The table set is the Mac's decision, not this module's: the manifest names what it holds
-//! (`projects_records`, `calendar_entries`, `calendar_rhythms`, `entities_entities` with
-//! `entities_values`, and `places_places` with `places_person_places` today), and a read of a table
-//! the copy does not carry answers empty rather than failing, so a page can say which copy it drew
-//! instead of blanking.
+//! The manifest names the tables in the copy. A read of a table the copy does not carry returns
+//! empty rather than failing.
 
 use std::path::{Path, PathBuf};
 

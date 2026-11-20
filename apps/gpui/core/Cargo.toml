@@ -7,10 +7,7 @@ license = "AGPL-3.0-only"
 description = "What the Mac and iOS GPUI apps share: the data layer, destinations and the shell client"
 
 [features]
-# Marks a build whose tests must not reach this machine's real data. `Repo::local_db_path` answers
-# `None` when it is on. It exists because `cfg(test)` marks only the crate that declares the test:
-# the app's window tests would otherwise read this machine's `sjel.db` through the shared `Repo`.
-# The app enables it from its dev-dependencies.
+# Prevents tests in downstream app crates from reading local machine data.
 test-support = []
 
 [dependencies]

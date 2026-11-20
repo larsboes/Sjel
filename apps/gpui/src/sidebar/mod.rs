@@ -115,8 +115,7 @@ mod tests {
     #[test]
     fn the_storage_dot_names_the_read_path() {
         let palette = palette();
-        assert_eq!(storage(true, palette), ("libsql", palette.accent));
-        assert_eq!(storage(false, palette), ("http", palette.muted));
+        assert_eq!(storage(palette), ("http", palette.muted));
     }
 
     #[test]

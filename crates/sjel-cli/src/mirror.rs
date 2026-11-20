@@ -1,24 +1,13 @@
 //! `sjel mirror` — a read-only copy of this machine's data, for a device that is not here.
 //!
-//! The phone cannot hold an embedded replica of `sjel.db`: a replica's primary must own its
-//! database file, and this machine's file is opened directly by eighteen capability processes. So
-//! the first thing a phone can have is a **copy**, refreshed when asked — [`research/offline-on-the-phone.md`]
-//! route R1. It moves no data between files, changes no capability, and closes off none of the
-//! larger routes.
-//!
-//! Shared tables are copied in one read transaction. Calendar, Entities and Places supply their
-//! projections through their APIs. The built file is renamed after integrity verification.
-//!
-//! [`research/offline-on-the-phone.md`]: ../../../research/offline-on-the-phone.md
+//! The phone copy contains owner projections. Projects sync separately into the phone replica.
+//! Diagnostic builds can copy explicitly selected shared-store tables to a local file.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
-
-/// Shared-store sources for the phone mirror.
-const PHONE_SET: &[&str] = &["projects_records"];
 
 struct PhoneExport {
     people: Vec<entities_api::OfflinePerson>,
@@ -30,8 +19,8 @@ const HELP: &str = "\
 sjel mirror — a read-only copy of this machine's data, for a device that is not here.
 
   build [--all | --tables a,b,c] [--out <path>]
-      Build the copy. Defaults to the phone set (projects, calendar, contacts, places) at
-      <overlay>/data/mirror/phone-v1.db. The People list uses labels classified for offline use.
+      Build the phone copy (calendar, people, places) at <overlay>/data/mirror/phone-v1.db.
+      Projects use the phone's separate sync. People use labels classified for offline use.
       --all or --tables builds a local copy and requires --out outside the phone mirror directory.
 
   status [--json]
@@ -117,8 +106,7 @@ pub fn run(rest: &[String]) -> ExitCode {
                         .filter(|name| !name.is_empty())
                         .collect(),
                 ),
-                (None, true) => None,
-                (None, false) => Some(PHONE_SET.iter().map(|name| (*name).to_owned()).collect()),
+                (None, _) => None,
             };
             match build(wanted.as_deref(), out.as_deref(), phone) {
                 Ok(manifest) => {
@@ -202,15 +190,8 @@ pub fn manifest_path(database: &Path) -> PathBuf {
     database.with_file_name("manifest.json")
 }
 
-/// Build the copy. `None` means every table.
+/// Build the phone copy or a local diagnostic copy of selected shared tables.
 fn build(tables: Option<&[String]>, out: Option<&Path>, phone: bool) -> Result<Manifest, String> {
-    let source = sjel_config::database_path();
-    if !source.is_file() {
-        return Err(format!(
-            "{} is not a file, so there is nothing to copy",
-            source.display()
-        ));
-    }
     let target = match out {
         Some(path) => path.to_path_buf(),
         None => destination()?,
@@ -223,29 +204,31 @@ fn build(tables: Option<&[String]>, out: Option<&Path>, phone: bool) -> Result<M
     if out.is_some() {
         refuse_phone_directory(dir)?;
     }
-    let export = phone.then(phone_export).transpose()?;
     // Built beside the destination, then renamed: a device fetching during a rebuild gets the
     // previous copy whole or the new one whole, never half of each.
     let staging = tempfile::tempdir_in(dir)
         .map_err(|e| format!("cannot create the mirror staging directory: {e}"))?;
     let staged = staging.path().join("mirror.db");
 
-    let mut wanted = names_to_copy(&source, tables)?;
-    let checks = copy_tables(&source, &staged, &wanted, export.as_ref())?;
-    if let Some(export) = export {
-        wanted.push(Table {
-            name: "entities_entities".into(),
-            rows: export.people.len() as u64,
+    let (source, wanted, checks) = if phone {
+        let export = phone_export()?;
+        let checks = write_phone_copy(&staged, &export)?;
+        let tables = [
+            ("entities_entities", export.people.len()),
+            ("places_places", export.places.len()),
+            ("calendar_entries", export.calendar.len()),
+        ]
+        .map(|(name, rows)| Table {
+            name: name.into(),
+            rows: rows as u64,
         });
-        wanted.push(Table {
-            name: "places_places".into(),
-            rows: export.places.len() as u64,
-        });
-        wanted.push(Table {
-            name: "calendar_entries".into(),
-            rows: export.calendar.len() as u64,
-        });
-    }
+        ("owner projections".into(), tables.into(), checks)
+    } else {
+        let source = sjel_config::database_path();
+        let wanted = names_to_copy(&source, tables)?;
+        let checks = copy_tables(&source, &staged, &wanted)?;
+        (source.display().to_string(), wanted, checks)
+    };
     if checks.integrity != "ok" {
         return Err(format!(
             "the copy failed its own integrity check: {}",
@@ -265,7 +248,7 @@ fn build(tables: Option<&[String]>, out: Option<&Path>, phone: bool) -> Result<M
         built_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         integrity: checks.integrity.clone(),
         foreign_key_violations: checks.foreign_key_violations,
-        source: source.display().to_string(),
+        source,
         mode: if phone {
             status_api::PHONE_MIRROR_MODE
         } else if tables.is_some() {
@@ -451,40 +434,14 @@ struct Checks {
     foreign_key_violations: u64,
 }
 
-fn copy_tables(
-    source: &Path,
-    target: &Path,
-    tables: &[Table],
-    export: Option<&PhoneExport>,
-) -> Result<Checks, String> {
-    // A copy is built fresh: an existing file would answer "table already exists" on the first
-    // `CREATE TABLE`, and half-copying into a stale file is the failure this refuses.
-    let _ = std::fs::remove_file(target);
-    let _ = std::fs::remove_file(target.with_extension("db-wal"));
-    let _ = std::fs::remove_file(target.with_extension("db-shm"));
-    let conn = rusqlite::Connection::open(target)
-        .map_err(|e| format!("cannot create {}: {e}", target.display()))?;
-    // The source is attached to a connection whose main schema IS the copy, so the schema text
-    // read out of `sqlite_master` can be executed as-is: it lands in the copy, not in the source.
-    conn.execute(
-        &format!(
-            "ATTACH DATABASE '{}' AS src",
-            source.display().to_string().replace('\'', "''")
-        ),
-        [],
-    )
-    .map_err(|e| format!("cannot attach {}: {e}", source.display()))?;
+fn copy_tables(source: &Path, target: &Path, tables: &[Table]) -> Result<Checks, String> {
+    write_copy(target, |conn| {
+        conn.execute(
+            "ATTACH DATABASE ?1 AS src",
+            [source.to_string_lossy().as_ref()],
+        )
+        .map_err(|e| format!("cannot attach {}: {e}", source.display()))?;
 
-    // One transaction on both databases: every table is copied from the same moment, so the copy
-    // is consistent even while eighteen capabilities keep writing the source.
-    // A copy is a snapshot, not a live database being written: a selected subset breaks the
-    // references of tables it did not take, and refusing that would refuse the phone set. The
-    // checks below report what was broken instead of pretending nothing was.
-    conn.execute_batch("PRAGMA foreign_keys = OFF")
-        .map_err(|e| format!("cannot relax constraints on the copy: {e}"))?;
-    conn.execute_batch("BEGIN")
-        .map_err(|e| format!("cannot start a transaction: {e}"))?;
-    let outcome = (|| -> Result<(), String> {
         for table in tables {
             let sql: String = conn
                 .query_row(
@@ -522,16 +479,33 @@ fn copy_tables(
                 }
             }
         }
-        if let Some(export) = export {
-            write_people(&conn, &export.people)
-                .map_err(|e| format!("cannot write offline People: {e}"))?;
-            write_places(&conn, &export.places)
-                .map_err(|e| format!("cannot write offline Places: {e}"))?;
-            write_calendar(&conn, &export.calendar)
-                .map_err(|e| format!("cannot write offline Calendar: {e}"))?;
-        }
         Ok(())
-    })();
+    })
+}
+
+fn write_phone_copy(target: &Path, export: &PhoneExport) -> Result<Checks, String> {
+    write_copy(target, |conn| {
+        write_people(conn, &export.people)
+            .map_err(|e| format!("cannot write offline People: {e}"))?;
+        write_places(conn, &export.places)
+            .map_err(|e| format!("cannot write offline Places: {e}"))?;
+        write_calendar(conn, &export.calendar)
+            .map_err(|e| format!("cannot write offline Calendar: {e}"))
+    })
+}
+
+fn write_copy(
+    target: &Path,
+    write: impl FnOnce(&rusqlite::Connection) -> Result<(), String>,
+) -> Result<Checks, String> {
+    let _ = std::fs::remove_file(target);
+    let _ = std::fs::remove_file(target.with_extension("db-wal"));
+    let _ = std::fs::remove_file(target.with_extension("db-shm"));
+    let conn = rusqlite::Connection::open(target)
+        .map_err(|e| format!("cannot create {}: {e}", target.display()))?;
+    conn.execute_batch("PRAGMA foreign_keys = OFF; BEGIN")
+        .map_err(|e| format!("cannot start a copy transaction: {e}"))?;
+    let outcome = write(&conn);
     match outcome {
         Ok(()) => {
             conn.execute_batch("COMMIT")
@@ -723,7 +697,7 @@ mod tests {
         let tables = names_to_copy(&source, Some(&["projects_records".to_owned()])).unwrap();
         assert_eq!(tables.len(), 1);
         assert_eq!(tables[0].rows, 2);
-        let checks = copy_tables(&source, &target, &tables, None).unwrap();
+        let checks = copy_tables(&source, &target, &tables).unwrap();
         assert_eq!(checks.integrity, "ok");
 
         let copy = rusqlite::Connection::open(&target).unwrap();
@@ -751,24 +725,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Every table when none is named, which is what `--all` asks for.
     #[test]
-    fn the_phone_copy_uses_owner_projections_and_ignores_stale_tables() {
-        let dir = scratch("phone-people");
-        let source = seeded(&dir);
+    fn the_phone_copy_uses_only_owner_projections() {
+        let dir = scratch("phone");
         let target = dir.join("mirror.db");
-        rusqlite::Connection::open(&source)
-            .unwrap()
-            .execute_batch(
-                "CREATE TABLE entities_entities (name TEXT);
-                            INSERT INTO entities_entities VALUES ('Private source name');
-                            CREATE TABLE entities_facts (note TEXT);
-                            CREATE TABLE calendar_entries (title TEXT);
-                            INSERT INTO calendar_entries VALUES ('Stale entry');
-                            CREATE TABLE calendar_rhythms (title TEXT);",
-            )
-            .unwrap();
-        let tables = names_to_copy(&source, Some(&["projects_records".to_owned()])).unwrap();
         let people = vec![entities_api::OfflinePerson {
             id: "ent-fixture".into(),
             label: "Shareable label".into(),
@@ -791,12 +751,7 @@ mod tests {
                 ..Default::default()
             }],
         };
-        assert_eq!(
-            copy_tables(&source, &target, &tables, Some(&export))
-                .unwrap()
-                .integrity,
-            "ok"
-        );
+        assert_eq!(write_phone_copy(&target, &export).unwrap().integrity, "ok");
         let db = rusqlite::Connection::open(&target).unwrap();
         let label: String = db
             .query_row("SELECT name FROM entities_entities", [], |row| row.get(0))
@@ -811,7 +766,7 @@ mod tests {
             .unwrap();
         assert_eq!(place, "Owner place");
         let private_tables: i64 = db.query_row(
-            "SELECT count(*) FROM sqlite_schema WHERE name IN ('entities_values', 'entities_facts', 'calendar_rhythms')",
+            "SELECT count(*) FROM sqlite_schema WHERE name IN ('projects_records', 'entities_values', 'entities_facts', 'calendar_rhythms')",
             [],
             |row| row.get(0),
         ).unwrap();
@@ -827,7 +782,7 @@ mod tests {
         let tables = names_to_copy(&source, None).unwrap();
         let names: Vec<&str> = tables.iter().map(|t| t.name.as_str()).collect();
         assert_eq!(names, vec!["comms_feed_items", "projects_records"]);
-        let checks = copy_tables(&source, &target, &tables, None).unwrap();
+        let checks = copy_tables(&source, &target, &tables).unwrap();
         assert_eq!(checks.integrity, "ok");
         let copy = rusqlite::Connection::open(&target).unwrap();
         let rows: i64 = copy
@@ -855,7 +810,7 @@ mod tests {
         let source = seeded(&dir);
         let target = dir.join("mirror.db");
         let tables = names_to_copy(&source, None).unwrap();
-        let checks = copy_tables(&source, &target, &tables, None).unwrap();
+        let checks = copy_tables(&source, &target, &tables).unwrap();
         assert_eq!(checks.integrity, "ok");
         let first = sha256_of(&target).unwrap();
 
@@ -863,7 +818,7 @@ mod tests {
         conn.execute("INSERT INTO projects_records VALUES ('c', 'third')", [])
             .unwrap();
         let tables = names_to_copy(&source, None).unwrap();
-        let checks = copy_tables(&source, &target, &tables, None).unwrap();
+        let checks = copy_tables(&source, &target, &tables).unwrap();
         assert_eq!(checks.integrity, "ok");
         assert_ne!(first, sha256_of(&target).unwrap());
         let _ = std::fs::remove_dir_all(&dir);

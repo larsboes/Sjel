@@ -774,11 +774,6 @@ impl Workspace {
         self.repo.endpoint().into()
     }
 
-    /// True when a local database answers, which the sidebar shows as its read path.
-    pub fn has_direct_db(&self) -> bool {
-        self.repo.has_direct_db()
-    }
-
     /// Follows the shell's change stream. Until a frame arrives the timer keeps reading health
     /// and agent, and it keeps reading them when this shell has no stream to send.
     fn follow(&mut self, cx: &mut Context<Self>) {

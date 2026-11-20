@@ -72,15 +72,10 @@ pub(crate) async fn mirror_manifest_handler() -> Response {
     }
 }
 
-/// How long a rebuild may take before this route gives up. A build reads a 275 MB source and
-/// copies a chosen table set, which measured under a second on this machine
-/// (`research/offline-on-the-phone.md`), so this is the runaway bound rather than the expected
-/// time: the launcher in front of the CLI may also have to build the crate once.
+/// Rebuild deadline, including any CLI build the launcher needs.
 const REBUILD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 
-/// The argv this route runs. No request value reaches it — a device asks for a fresh copy, not
-/// for what the copy contains (`PHONE_SET` in `tools/sjel-cli/src/mirror.rs` decides that, and a
-/// second decision point here would be a second answer to one question).
+/// The CLI chooses the mirror's contents. No request value reaches these arguments.
 const REBUILD_ARGS: [&str; 2] = ["mirror", "build"];
 
 /// One build at a time. A second request while one runs is refused rather than queued: the device

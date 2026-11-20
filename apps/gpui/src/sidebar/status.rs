@@ -10,7 +10,7 @@ use sjel_gpui_ui::theme::Palette;
 /// The shell's own health, then the path the app reads it through.
 pub fn footer(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
     let (color, label) = status(&view.health, palette);
-    let (backend, backend_color) = storage(view.has_direct_db(), palette);
+    let (backend, backend_color) = storage(palette);
     div()
         .flex()
         .items_center()
@@ -70,10 +70,6 @@ pub fn status(health: &Remote<NodeHealth>, palette: Palette) -> (u32, SharedStri
 }
 
 /// The read path in use, and a dot that says which one it is.
-pub fn storage(direct_db: bool, palette: Palette) -> (&'static str, u32) {
-    if direct_db {
-        ("libsql", palette.accent)
-    } else {
-        ("http", palette.muted)
-    }
+pub fn storage(palette: Palette) -> (&'static str, u32) {
+    ("http", palette.muted)
 }

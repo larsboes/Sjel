@@ -18,12 +18,7 @@ pub(super) fn connection(
     cx: &mut Context<Workspace>,
 ) -> Vec<AnyElement> {
     let (status_color, status) = crate::sidebar::status(&view.health, palette);
-    let (read_path, read_color) = crate::sidebar::storage(view.has_direct_db(), palette);
-    let read_detail = if view.has_direct_db() {
-        "Reads the local database directly. Writes go through the shell."
-    } else {
-        "Reads and writes through the shell's HTTP API."
-    };
+    let (read_path, read_color) = crate::sidebar::storage(palette);
     let dev = sjel_gpui_core::environment::current().dev;
     let capabilities = view.health.value.as_ref().map_or_else(
         || "Unknown".to_owned(),
@@ -86,7 +81,7 @@ pub(super) fn connection(
                 ),
                 row(
                     "Read path",
-                    Some(read_detail),
+                    Some("Reads and writes through the shell's HTTP API."),
                     dot_value(read_path.into(), read_color),
                     palette,
                 ),

@@ -49,16 +49,6 @@ const SOURCES: &[Source] = &[
         link: |_| "sjel://documents".into(),
     },
     Source {
-        kind: "subscription",
-        table: "finance_subscriptions",
-        id: "id",
-        title: "name",
-        detail: "coalesce(category, '')",
-        haystack: "name || ' ' || coalesce(category, '')",
-        order: "name",
-        link: |_| "sjel://finance".into(),
-    },
-    Source {
         kind: "trip",
         table: "trips_plans",
         id: "id",
@@ -202,23 +192,31 @@ pub(super) async fn owner_get<T: serde::de::DeserializeOwned>(
     if let Some(bearer) = sjel_server::InboundAuth::from_deployment().bearer_header() {
         request = request.header(reqwest::header::AUTHORIZATION, bearer);
     }
-    request
-        .send()
-        .await
-        .ok()?
-        .error_for_status()
-        .ok()?
-        .json()
-        .await
-        .ok()
+    let mut upstream = request.try_clone()?.send().await;
+    if matches!(&upstream, Err(error) if error.is_connect())
+        && service.autostart == "false"
+        && super::lifecycle(service.name.clone(), "start")
+            .await
+            .is_ok()
+    {
+        upstream = request.send().await;
+    }
+    upstream.ok()?.error_for_status().ok()?.json().await.ok()
 }
 
-async fn owner_hits(query: &str) -> (Vec<SearchHit>, Vec<SearchHit>, Vec<SearchHit>) {
+async fn owner_hits(
+    query: &str,
+) -> (
+    Vec<SearchHit>,
+    Vec<SearchHit>,
+    Vec<SearchHit>,
+    Vec<SearchHit>,
+) {
     let Ok(services) = registry().await else {
-        return (Vec::new(), Vec::new(), Vec::new());
+        return (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     };
     let parameters = [("q", query)];
-    let (calendar, entities, inventory) = tokio::join!(
+    let (calendar, entities, inventory, subscriptions) = tokio::join!(
         owner_get::<Vec<calendar_api::SearchHit>>(
             &services,
             "calendar",
@@ -232,6 +230,12 @@ async fn owner_hits(query: &str) -> (Vec<SearchHit>, Vec<SearchHit>, Vec<SearchH
             &parameters,
         ),
         owner_get::<InventoryHits>(&services, "inventory", "/api/search", &parameters),
+        owner_get::<Vec<finance_api::SubscriptionSearchHit>>(
+            &services,
+            "finance",
+            finance_api::ROUTE_SUBSCRIPTION_SEARCH,
+            &parameters,
+        ),
     );
     let entities = entities
         .into_iter()
@@ -256,7 +260,18 @@ async fn owner_hits(query: &str) -> (Vec<SearchHit>, Vec<SearchHit>, Vec<SearchH
             link: "sjel://calendar".into(),
         })
         .collect();
-    (calendar, entities, inventory)
+    let subscriptions = subscriptions
+        .unwrap_or_default()
+        .into_iter()
+        .take(PER_SOURCE)
+        .map(|hit| SearchHit {
+            kind: "subscription".into(),
+            title: hit.title,
+            detail: hit.detail,
+            link: "sjel://finance".into(),
+        })
+        .collect();
+    (calendar, entities, inventory, subscriptions)
 }
 
 pub(crate) async fn search_handler(
@@ -269,7 +284,7 @@ pub(crate) async fn search_handler(
     }
     let db_path = sjel_config::database_path();
     let local_query = text.clone();
-    let (local, (calendar, entities, inventory)) = tokio::join!(
+    let (local, (calendar, entities, inventory, subscriptions)) = tokio::join!(
         tokio::task::spawn_blocking(move || search(&db_path, &local_query)),
         owner_hits(&text),
     );
@@ -278,11 +293,11 @@ pub(crate) async fn search_handler(
     hits.extend(local.unwrap_or_default());
     let inventory_position = hits
         .iter()
-        .position(|hit| matches!(hit.kind.as_str(), "subscription" | "trip" | "mail"))
+        .position(|hit| matches!(hit.kind.as_str(), "trip" | "mail"))
         .unwrap_or(hits.len());
     hits.splice(
         inventory_position..inventory_position,
-        inventory.into_iter().take(PER_SOURCE),
+        inventory.into_iter().take(PER_SOURCE).chain(subscriptions),
     );
     Json(json!({ "hits": hits }))
 }

@@ -50,3 +50,12 @@ against native Calendar, and the gateway rebuilt the phone mirror.
 Places resolves station names through Punctuality's exact EVA lookup. The lookup accepts
 padded and legacy unpadded codes. The isolated native owner matched the SQLite control
 for the name and the underlying punctuality histogram.
+
+The Places attendee backfill reads Calendar entries through the owner. Its proposal tests
+use the wire response, and the live owner returned 125 entries with attendee arrays.
+
+Finder requests Finance subscription names and categories through a five-result projection.
+It starts the enabled Finance service on demand after a refused connection and respects
+maintenance holds through the service runner. The live Finder returned a matching subscription
+after starting the stopped Finance owner. Places spending and enrichment still read Finance
+tables in the shared database.

@@ -20,6 +20,7 @@ path = "src/main.rs"
 status-api = { path = "../status-api" }
 calendar-api = { path = "../calendar-api" }
 entities-api = { path = "../entities-api" }
+finance-api = { path = "../finance-api" }
 sjel-config = { path = "../sjel-config" }
 sjel-credentials = { path = "../sjel-credentials" }
 sjel-runtime = { path = "../runtime" }

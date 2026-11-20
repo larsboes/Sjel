@@ -411,6 +411,45 @@ impl FinanceStore {
     /// Three queries rather than one join, because a join across two one-to-many
     /// series multiplies the rows and then has to be de-duplicated in memory
     /// anyway. Three ordered scans are simpler to read and simpler to be right.
+    /// Find subscriptions by name and category without loading their billing history.
+    ///
+    /// # Errors
+    /// Returns a database error if the search fails.
+    pub fn search_subscriptions(
+        &self,
+        query: &str,
+    ) -> Fallible<Vec<finance_api::SubscriptionSearchHit>> {
+        let query: String = query.chars().take(200).collect();
+        let words: Vec<_> = query
+            .split_whitespace()
+            .take(6)
+            .map(str::to_lowercase)
+            .collect();
+        if words.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = (1..=words.len())
+            .map(|index| {
+                format!("instr(lower(name || ' ' || coalesce(category,'')), ?{index}) > 0")
+            })
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        let prefix = &self.prefix;
+        Ok(self.conn()?.query_all(
+            &format!(
+                "SELECT name, coalesce(category, '') FROM {prefix}_subscriptions
+                 WHERE {filter} ORDER BY name, id LIMIT 5"
+            ),
+            rusqlite::params_from_iter(words.iter().map(String::as_str)),
+            |row| {
+                Ok(finance_api::SubscriptionSearchHit {
+                    title: row.get(0)?,
+                    detail: row.get(1)?,
+                })
+            },
+        )?)
+    }
+
     pub fn list(&self) -> Fallible<Vec<Subscription>> {
         let prefix = &self.prefix;
         let conn = self.conn()?;

@@ -83,6 +83,11 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/subscriptions/search",
+        "Bounded Finder matches in subscription names and categories.",
+    ),
+    r(
+        "GET",
         "/api/subscriptions",
         "Every subscription with its full price and state history.",
     ),
@@ -2019,6 +2024,29 @@ async fn ready(State(state): State<AppState>) -> ApiResponse {
     }
 }
 
+#[derive(Deserialize)]
+struct SubscriptionSearchQuery {
+    #[serde(default)]
+    q: String,
+}
+
+async fn search_subscriptions(
+    State(state): State<AppState>,
+    Query(query): Query<SubscriptionSearchQuery>,
+) -> ApiResponse {
+    match tokio::task::spawn_blocking(move || {
+        FinanceStore::open(&state.database_path)
+            .and_then(|store| store.search_subscriptions(&query.q))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Ok(hits)) => response(StatusCode::OK, hits),
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
+}
+
 async fn list_subscriptions(State(state): State<AppState>) -> ApiResponse {
     let database_path = state.database_path.clone();
     match tokio::task::spawn_blocking(move || {
@@ -2931,6 +2959,7 @@ fn build_router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/ready", get(ready))
         .route("/api/subscriptions", get(list_subscriptions))
+        .route("/api/subscriptions/search", get(search_subscriptions))
         .route("/api/subscriptions/burn", get(burn))
         .route("/api/subscriptions/{id}/price", post(append_price))
         .route("/api/subscriptions/{id}/state", post(append_state))
@@ -3308,7 +3337,9 @@ mod tests {
                 .unwrap();
             let response = router.clone().oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
-            let bytes = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+            let bytes = axum::body::to_bytes(response.into_body(), 4096)
+                .await
+                .unwrap();
             serde_json::from_slice::<Option<finance_api::MonthlyBalance>>(&bytes).unwrap()
         };
         assert_eq!(read().await, None);
@@ -3608,6 +3639,7 @@ mod origin_tests {
             ("GET", "/api/dashboard"),
             ("GET", "/api/portfolio"),
             ("GET", "/api/subscriptions"),
+            ("GET", "/api/subscriptions/search"),
             ("POST", "/api/ledger/rebuild"),
             ("POST", "/api/writeback"),
             ("POST", "/api/import/subscription-notes"),

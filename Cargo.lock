@@ -6142,6 +6142,7 @@ dependencies = [
  "axum",
  "calendar-api",
  "entities-api",
+ "finance-api",
  "futures-util",
  "reqwest",
  "ring",

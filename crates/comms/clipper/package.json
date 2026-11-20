@@ -12,10 +12,10 @@
     "check": "tsc --noEmit -p tsconfig.json --module es2020 && vitest run"
   },
   "devDependencies": {
-    "@types/chrome": "0.3.7",
+    "@types/chrome": "0.0.270",
     "@types/dompurify": "3.2.0",
     "@types/node": "25.9.9",
-    "@types/webextension-polyfill": "0.12.6",
+    "@types/webextension-polyfill": "0.12.1",
     "@types/webpack-env": "1.18.8",
     "copy-webpack-plugin": "^14.0.0",
     "css-loader": "^7.1.2",

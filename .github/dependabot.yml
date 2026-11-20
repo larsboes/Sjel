@@ -104,6 +104,11 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # Later versions break the clipper's message listeners and global `browser` type.
+      - dependency-name: "@types/chrome"
+        versions: [">=0.1.0"]
+      - dependency-name: "@types/webextension-polyfill"
+        versions: [">=0.12.2"]
     groups:
       bun:
         patterns: ["*"]

@@ -60,8 +60,8 @@ codesign --verify --strict "$bundle"
 osascript -e "tell application id \"$BUNDLE_ID\" to quit" >/dev/null 2>&1 || true
 sleep 0.5
 mkdir -p "$(dirname "$DEST")"
-rm -rf "$DEST"
-mv "$bundle" "$DEST"
+source "$APP_DIR/../../tools/lib/replace-directory.sh"
+sjel_replace_directory "$bundle" "$DEST"
 open "$DEST"
 echo "apps/mac/install: installed and started $DEST"
 echo "Turn on 'Open at login' in its menu to keep it there after a restart."

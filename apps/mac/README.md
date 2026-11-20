@@ -20,7 +20,8 @@ Per Sjel / Sjel doctrine and **Product Rule 4**:
   App** (the GPUI desktop app, `dev.sjel.desktop`, installed by
   `apps/gpui/install`), and **Open at login**. When the installed desktop app is behind the
   checkout, a **Sjel Desktop update** row offers **Update**. It compares the `SjelBuildCommit`
-  that `apps/gpui/install` writes into the bundle's Info.plist with `~/Developer/Sjel`.
+  that `apps/gpui/install` writes into the bundle's Info.plist with the recorded source
+  checkout. Update requires a descendant of the installed revision.
 - `SjelRelayTests`: Test suite verifying the falsifier:
   - `c2RecordInCloudKitStorageHasZeroReadableFieldsOrValues`: Asserts that stored `CKRecord.allKeys()` and all record values contain no C2 field names or values, and verifies full roundtrip decryption.
   - `tamperedCiphertextRefusesDecryption`: Asserts AEAD authentication rejects modified payloads.

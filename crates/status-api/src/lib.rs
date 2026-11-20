@@ -43,6 +43,8 @@ pub const ROUTE_STATUS_RUNTIME: &str = "/api/sjel-status/runtime";
 pub const ROUTE_STATUS_PACKS: &str = "/api/sjel-status/packs";
 pub const ROUTE_STATUS_CV: &str = "/api/sjel-status/cv";
 pub const ROUTE_STATUS_CREDENTIALS: &str = "/api/sjel-status/credentials";
+pub const PHONE_MIRROR_MODE: &str = "phone-v1";
+pub const PHONE_MIRROR_FILENAME: &str = "phone-v1.db";
 
 // --- Node & Capability Health ---
 

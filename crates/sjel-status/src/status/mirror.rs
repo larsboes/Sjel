@@ -5,8 +5,7 @@
 //! and size before spending the transfer, and the file is served by `ServeFile` so a range request
 //! resumes rather than restarts.
 //!
-//! Nothing here decides what the copy contains: the manifest's `path` is the copy's location, and
-//! this surface follows it rather than re-deriving the directory. One producer, one reader.
+//! The gateway serves only the default phone copy produced by the mirror builder.
 
 use axum::body::Body;
 use axum::extract::Request;
@@ -24,22 +23,15 @@ fn mirror_dir() -> Result<std::path::PathBuf, String> {
         .ok_or_else(|| "no overlay resolved, so this machine keeps no copy".to_owned())
 }
 
-/// The built copy's path, from its manifest.
-fn built_copy() -> Result<std::path::PathBuf, String> {
-    let manifest = mirror_dir()?.join("manifest.json");
-    let body = std::fs::read_to_string(&manifest).map_err(|e| {
-        format!(
-            "no copy has been built yet ({}: {e}) — run `sjel mirror build`",
-            manifest.display()
-        )
-    })?;
-    let value: serde_json::Value =
-        serde_json::from_str(&body).map_err(|e| format!("the manifest is unreadable: {e}"))?;
-    value
-        .get("path")
-        .and_then(|p| p.as_str())
-        .map(std::path::PathBuf::from)
-        .ok_or_else(|| "the manifest names no path".to_owned())
+fn phone_copy_path(
+    dir: &std::path::Path,
+    manifest: &serde_json::Value,
+) -> Option<std::path::PathBuf> {
+    let expected = dir.join(status_api::PHONE_MIRROR_FILENAME);
+    let path = manifest.get("path")?.as_str()?;
+    (manifest.get("mode")?.as_str()? == status_api::PHONE_MIRROR_MODE
+        && std::path::Path::new(path) == expected)
+        .then_some(expected)
 }
 
 /// The manifest as a value, or an error and the status that says which kind it is.
@@ -57,12 +49,19 @@ async fn read_manifest() -> Result<serde_json::Value, (StatusCode, String)> {
                 format!("cannot read the manifest: {error}"),
             ),
         })?;
-    serde_json::from_str(&body).map_err(|error| {
+    let manifest = serde_json::from_str(&body).map_err(|error| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("the manifest is unreadable: {error}"),
         )
-    })
+    })?;
+    if phone_copy_path(&dir, &manifest).is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            "the phone copy needs a rebuild".into(),
+        ));
+    }
+    Ok(manifest)
 }
 
 /// What the copy holds, when it was built and its digest — the cheap half of a fetch.
@@ -171,18 +170,29 @@ pub(crate) async fn mirror_rebuild_handler() -> Response {
 
 /// The copy itself, streamed with range support so a phone can resume.
 pub(crate) async fn mirror_file_handler(request: Request) -> Response {
-    let path = match built_copy() {
-        Ok(path) => path,
-        Err(message) => {
-            let status = if message.starts_with("no copy") {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::SERVICE_UNAVAILABLE
-            };
+    let manifest = match read_manifest().await {
+        Ok(manifest) => manifest,
+        Err((status, message)) => {
             return (status, Json(json!({ "error": message }))).into_response();
         }
     };
-    if !path.is_file() {
+    let path = match mirror_dir()
+        .ok()
+        .and_then(|dir| phone_copy_path(&dir, &manifest))
+    {
+        Some(path) => path,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "the phone copy needs a rebuild" })),
+            )
+                .into_response()
+        }
+    };
+    if !tokio::fs::symlink_metadata(&path)
+        .await
+        .is_ok_and(|meta| meta.is_file())
+    {
         return (
             StatusCode::NOT_FOUND,
             Json(json!({
@@ -222,6 +232,28 @@ mod tests {
     #[test]
     fn the_rebuild_runs_the_documented_verb() {
         assert_eq!(REBUILD_ARGS, ["mirror", "build"]);
+    }
+
+    #[test]
+    fn only_the_projected_phone_copy_can_be_served() {
+        let dir = std::path::Path::new("/overlay/mirror");
+        assert!(phone_copy_path(
+            dir,
+            &json!({"mode":"selected","path":"/overlay/mirror/mirror.db"})
+        )
+        .is_none());
+        assert!(phone_copy_path(
+            dir,
+            &json!({"mode":status_api::PHONE_MIRROR_MODE,"path":"/overlay/private.db"})
+        )
+        .is_none());
+        assert_eq!(
+            phone_copy_path(
+                dir,
+                &json!({"mode":status_api::PHONE_MIRROR_MODE,"path":"/overlay/mirror/phone-v1.db"})
+            ),
+            Some(dir.join("phone-v1.db"))
+        );
     }
 
     #[test]

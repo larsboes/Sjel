@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 
 pub const ROUTE_ENTITIES: &str = "/api/entities";
 pub const ROUTE_SEARCH: &str = "/api/search";
+pub const ROUTE_OFFLINE_PEOPLE: &str = "/api/offline-people";
 pub const ROUTE_ENTITY_BY_ID: &str = "/api/entities/{id}";
 pub const ROUTE_FIELDS: &str = "/api/fields";
 pub const ROUTE_DUPLICATES: &str = "/api/duplicates";
@@ -30,9 +31,10 @@ pub const ROUTE_ENTITY_FACTS: &str = "/api/entities/{id}/facts";
 pub const ROUTE_ENTITY_FACT_BY_ID: &str = "/api/entities/{id}/facts/{fact_id}";
 
 /// Every route constant above. The server test checks each one against its manifest.
-pub const ALL_ROUTES: [&str; 13] = [
+pub const ALL_ROUTES: [&str; 14] = [
     ROUTE_ENTITIES,
     ROUTE_SEARCH,
+    ROUTE_OFFLINE_PEOPLE,
     ROUTE_ENTITY_BY_ID,
     ROUTE_FIELDS,
     ROUTE_DUPLICATES,
@@ -185,6 +187,14 @@ pub struct EntitySearchResponse {
 pub struct EntityName {
     pub name: String,
     pub kind: String,
+}
+
+/// A person with a separately classified label for the offline mirror.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct OfflinePerson {
+    pub id: String,
+    pub label: String,
+    pub revision: u32,
 }
 
 /// One side of a probable duplicate (`/entities/api/duplicates`).

@@ -86,8 +86,9 @@ matched the Turso WAL commit, rollback and SQLite restore against the SQLite con
 ## Remaining migration gates
 
 - Verify a successful signed request from a paired client against the live Inventory owner.
-- Replace the phone mirror's direct Entities table reads with an owner export. Rehearse
-  Entities writes, backup and rollback on Turso WAL before changing the live store.
+- Deploy the Entities offline export and verify a refreshed phone mirror.
+- Rehearse the Entities owner adapter, scheduled backup, and rollback on Turso WAL before
+  changing the live store.
 - Move Finder and the Now view to Calendar owner reads and replace its phone mirror table copy.
   [Route reads through owners](storage-owner-reads.md).
 - Keep Documents on its current search implementation until a replacement passes prefix,

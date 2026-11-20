@@ -21,6 +21,9 @@ name = "sjel-desktop-launcher"
 path = "src/desktop_launcher.rs"
 
 [dependencies]
+entities-api = { path = "../entities-api" }
+status-api = { path = "../status-api" }
+tempfile = "3"
 # Already resolved in the workspace lock (tools/storage uses the same three), so this crate
 # adds no external crate.
 serde = { workspace = true, features = ["derive"] }

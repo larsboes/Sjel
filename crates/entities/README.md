@@ -37,6 +37,9 @@ with their entity on delete and move to the kept entity on merge.
 The server and its scheduled commands read `SJEL_ENTITIES_DB_PATH` when an owner database is
 configured. They use the shared store by default.
 
+Offline People uses a separate `offline_label` text field declared for people with data class
+`C0` or `C1`. Only people with a nonempty approved label enter the phone mirror.
+
 The service is managed through `tools/service-runner.sh` and its `service.toml` manifest. The live HTTP contract is available at `GET /routes`.
 
 ## Considered and declined

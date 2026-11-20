@@ -5561,6 +5561,7 @@ dependencies = [
  "chrono",
  "civil-date",
  "distribution-api",
+ "entities-api",
  "getrandom 0.4.3",
  "libsql-auth",
  "regex",
@@ -5583,6 +5584,8 @@ dependencies = [
  "sjel-server",
  "sjel-skill-metadata",
  "sjel-store",
+ "status-api",
+ "tempfile",
  "toml",
  "zeroize",
 ]

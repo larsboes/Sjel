@@ -476,6 +476,38 @@ impl EntitiesStore {
         rows.collect::<std::result::Result<_, _>>().map_err(db)
     }
 
+    /// Export people with an explicitly classified C0 or C1 `offline_label` text field.
+    ///
+    /// # Errors
+    /// Returns a store error if the projection cannot be read.
+    pub fn offline_people(&self) -> Result<Vec<entities_api::OfflinePerson>> {
+        let conn = self.conn()?;
+        let p = &self.prefix;
+        let mut statement = conn
+            .prepare(&format!(
+                "SELECT person.id, json_extract(value.value, '$'), person.revision
+                 FROM {p}_entities person
+                 JOIN {p}_values value ON value.entity_id = person.id
+                 JOIN {p}_fields field ON field.kind = person.kind AND field.key = value.key
+                 WHERE person.kind = 'person' AND field.key = 'offline_label'
+                   AND field.field_type = 'text' AND field.data_class IN ('C0', 'C1')
+                   AND json_type(value.value) = 'text'
+                   AND trim(json_extract(value.value, '$')) <> ''
+                 ORDER BY person.id"
+            ))
+            .map_err(db)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok(entities_api::OfflinePerson {
+                    id: row.get(0)?,
+                    label: row.get(1)?,
+                    revision: row.get(2)?,
+                })
+            })
+            .map_err(db)?;
+        rows.collect::<std::result::Result<_, _>>().map_err(db)
+    }
+
     fn check_source(source: &str) -> Result<()> {
         check_one_of("source", source, SOURCES).map_err(StoreError::Invalid)
     }
@@ -1148,6 +1180,57 @@ mod tests {
             .iter()
             .map(|(k, v)| (k.to_string(), v.clone()))
             .collect()
+    }
+
+    #[test]
+    fn offline_people_use_the_classified_label_without_private_fields() {
+        let (store, dir) = scratch("offline-people");
+        store
+            .declare_field(FieldDef {
+                kind: "person".into(),
+                key: "offline_label".into(),
+                label: "Offline label".into(),
+                field_type: "text".into(),
+                options: vec![],
+                data_class: "C1".into(),
+                builtin: false,
+            })
+            .unwrap();
+        let admitted = store
+            .create(
+                "person",
+                "Private name",
+                Some("Private note"),
+                &values(&[
+                    ("offline_label", json!("Shareable label")),
+                    ("emails", json!(["private@example.org"])),
+                ]),
+                "operator",
+            )
+            .unwrap();
+        store
+            .create(
+                "person",
+                "Other private name",
+                None,
+                &BTreeMap::new(),
+                "operator",
+            )
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(store.offline_people().unwrap()).unwrap(),
+            json!([{"id":admitted.id, "label":"Shareable label", "revision":1}])
+        );
+        store
+            .conn()
+            .unwrap()
+            .execute(
+                "UPDATE entities_fields SET data_class = 'C2' WHERE key = 'offline_label'",
+                [],
+            )
+            .unwrap();
+        assert!(store.offline_people().unwrap().is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

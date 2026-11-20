@@ -41,10 +41,8 @@ const MANIFEST_FILE: &str = "manifest.json";
 const ENTRIES: &str = "calendar_entries";
 /// The contact registry, and the values that make a person a contact card.
 const ENTITIES: &str = "entities_entities";
-const VALUES: &str = "entities_values";
 /// The places register and the links between a place and a person's name.
 const PLACES: &str = "places_places";
-const PERSON_PLACES: &str = "places_person_places";
 
 /// One table's contribution, as the Mac's manifest reports it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,7 +69,7 @@ pub struct Manifest {
     /// The database the copy was taken from.
     #[serde(default)]
     pub source: String,
-    /// `phone` or `all`.
+    /// Which builder produced the copy.
     #[serde(default)]
     pub mode: String,
     #[serde(default)]
@@ -149,8 +147,11 @@ pub struct PeopleCopy {
 impl PeopleCopy {
     /// Why the list is empty, in the copy's own terms: an older copy simply does not hold these.
     pub fn absence(&self, manifest: &Manifest) -> Option<String> {
-        if !manifest.holds(ENTITIES) {
-            return Some("This copy was built without the contact registry.".to_owned());
+        if manifest.mode != status_api::PHONE_MIRROR_MODE || !manifest.holds(ENTITIES) {
+            return Some("Refresh the copy to see approved offline People labels.".to_owned());
+        }
+        if self.people.is_empty() {
+            return Some("No People labels are approved for offline use.".to_owned());
         }
         None
     }
@@ -258,13 +259,11 @@ impl Mirror {
 
     /// The contacts and the places register, as one answer ([`PeopleCopy`]).
     ///
-    /// A copy the Mac built before these tables travelled answers empty lists rather than an error:
-    /// an older `sjel mirror build` is a real absence, and the page says which copy it drew. A copy
-    /// that holds the registry but not its values still answers the names, which is all an older
-    /// copy honestly knows.
+    /// Show contacts only from a copy built with the offline People projection.
     pub async fn people(&self) -> Result<PeopleCopy, String> {
         let mut copy = PeopleCopy::default();
-        let holds_entities = self.manifest.holds(ENTITIES);
+        let phone_projection = self.manifest.mode == status_api::PHONE_MIRROR_MODE;
+        let holds_entities = phone_projection && self.manifest.holds(ENTITIES);
         let holds_places = self.manifest.holds(PLACES);
         if !holds_entities && !holds_places {
             return Ok(copy);
@@ -278,47 +277,26 @@ impl Mirror {
             .map_err(|error| format!("Cannot read the copy: {error}"))?;
 
         if holds_entities {
-            // A left join, so somebody the operator added and has not filled in yet is still a row.
-            // Without `entities_values` there is nothing to join: the page draws names and says so.
-            let query = if self.manifest.holds(VALUES) {
-                "SELECT e.id, e.kind, e.name, e.note_ref, e.revision, v.key, v.value \
-                 FROM entities_entities e \
-                 LEFT JOIN entities_values v ON v.entity_id = e.id \
-                 WHERE e.kind = 'person' \
-                 ORDER BY e.name COLLATE NOCASE, v.key"
-            } else {
-                "SELECT e.id, e.kind, e.name, e.note_ref, e.revision, NULL, NULL \
-                 FROM entities_entities e \
-                 WHERE e.kind = 'person' \
-                 ORDER BY e.name COLLATE NOCASE"
-            };
             let mut rows = conn
-                .query(query, ())
+                .query(
+                    "SELECT id, name, revision FROM entities_entities
+                     WHERE kind = 'person' ORDER BY name COLLATE NOCASE, id",
+                    (),
+                )
                 .await
-                .map_err(|error| format!("Cannot read the copy's contacts: {error}"))?;
-            while let Ok(Some(row)) = rows.next().await {
-                let id: String = row.get(0).unwrap_or_default();
-                let key: Option<String> = row.get(5).ok();
-                let value: Option<String> = row.get(6).ok();
-                // One row per value, so a person is as many rows as they have values: the record is
-                // created when the id changes and every later row adds to it.
-                if copy.people.last().is_none_or(|record| record.id != id) {
-                    copy.people.push(EntityRecord {
-                        id: id.clone(),
-                        kind: row.get(1).unwrap_or_else(|_| "person".to_owned()),
-                        name: row.get(2).unwrap_or_default(),
-                        note_ref: row.get(3).ok(),
-                        revision: row.get::<i64>(4).unwrap_or(0).clamp(0, u32::MAX as i64) as u32,
-                        values: Default::default(),
-                        // The copy holds no facts table; the Mac serves them live.
-                        facts: Vec::new(),
-                    });
-                }
-                if let (Some(key), Some(value)) = (key, value) {
-                    if let Some(record) = copy.people.last_mut() {
-                        record.values.insert(key, json_value(&value));
-                    }
-                }
+                .map_err(|error| format!("Cannot read the copy's People labels: {error}"))?;
+            while let Some(row) = rows.next().await.map_err(|error| error.to_string())? {
+                copy.people.push(EntityRecord {
+                    id: row.get(0).map_err(|error| error.to_string())?,
+                    kind: "person".into(),
+                    name: row.get(1).map_err(|error| error.to_string())?,
+                    revision: row
+                        .get::<i64>(2)
+                        .map_err(|error| error.to_string())?
+                        .try_into()
+                        .map_err(|_| "Invalid offline People revision".to_owned())?,
+                    ..EntityRecord::default()
+                });
             }
         }
 
@@ -345,36 +323,9 @@ impl Mirror {
                     external_ref: None,
                 });
             }
-
-            // A dismissed row is not a link: the operator already said that place does not belong
-            // to that person, and the register never offers it again.
-            if self.manifest.holds(PERSON_PLACES) {
-                let mut rows = conn
-                    .query(
-                        "SELECT person, place_id, state FROM places_person_places \
-                         WHERE state <> 'dismissed' ORDER BY person COLLATE NOCASE, state",
-                        (),
-                    )
-                    .await
-                    .map_err(|error| format!("Cannot read the copy's person links: {error}"))?;
-                while let Ok(Some(row)) = rows.next().await {
-                    copy.links.push(PersonLink {
-                        person: row.get(0).unwrap_or_default(),
-                        place_id: row.get(1).unwrap_or_default(),
-                        state: row.get(2).unwrap_or_else(|_| "proposed".to_owned()),
-                    });
-                }
-            }
         }
         Ok(copy)
     }
-}
-
-/// One value as the registry stores it: the text of a JSON value (`crates/entities/src/store.rs`
-/// writes `value.to_string()`). A row that does not parse is kept as the text it is, so an
-/// unfamiliar value shows up in the card instead of vanishing from it.
-fn json_value(text: &str) -> serde_json::Value {
-    serde_json::from_str(text).unwrap_or_else(|_| serde_json::Value::String(text.to_owned()))
 }
 
 /// Fetches the Mac's manifest and, when its digest differs from the copy on disk, the copy too.
@@ -653,7 +604,7 @@ mod tests {
                     rows: 2,
                 },
                 TableCopy {
-                    name: VALUES.to_owned(),
+                    name: "entities_values".to_owned(),
                     rows: 3,
                 },
                 TableCopy {
@@ -661,7 +612,7 @@ mod tests {
                     rows: 2,
                 },
                 TableCopy {
-                    name: PERSON_PLACES.to_owned(),
+                    name: "places_person_places".to_owned(),
                     rows: 2,
                 },
             ];
@@ -681,27 +632,17 @@ mod tests {
                 .find(|record| record.name == "Ada Lovelace")
                 .expect("Ada");
             assert_eq!(ada.revision, 4);
-            assert_eq!(ada.note_ref.as_deref(), Some("Atlas/People/Ada.md"));
-            // The value is JSON text in the table and a value again here.
-            assert_eq!(ada.values["emails"], serde_json::json!(["ada@example.com"]));
+            assert!(ada.note_ref.is_none());
+            assert!(ada.values.is_empty());
+            assert!(copy.links.is_empty());
+            assert_eq!(copy.places.len(), 2);
 
-            let person = crate::people::Person::from_record(ada);
-            assert_eq!(person.initials, "AL");
-            assert_eq!(person.email.as_deref(), Some("ada@example.com"));
-            assert_eq!(person.phone.as_deref(), Some("+44 20 7946 0958"));
-            assert_eq!(person.company.as_deref(), Some("Analytical Engine Inc"));
-
-            // The dismissed link is not in the copy's answer at all.
-            assert_eq!(copy.links.len(), 1);
-            let places = crate::places::places_of(&copy.places, &copy.links, &person.name);
-            assert_eq!(
-                places
-                    .iter()
-                    .map(|place| place.name.as_str())
-                    .collect::<Vec<_>>(),
-                vec!["Konzerthaus"]
-            );
-            assert_eq!(places[0].where_line(), "Berlin, DE");
+            let mut legacy = mirror;
+            legacy.manifest.mode = "selected".into();
+            let old = legacy.people().await.expect("read the legacy copy");
+            assert!(old.people.is_empty());
+            assert!(old.links.is_empty());
+            assert_eq!(old.places.len(), 2);
         });
     }
 
@@ -741,7 +682,7 @@ mod tests {
             integrity: "ok".to_owned(),
             foreign_key_violations: 0,
             source: "/Users/someone/overlay/data/sjel/sjel.db".to_owned(),
-            mode: "phone".to_owned(),
+            mode: status_api::PHONE_MIRROR_MODE.to_owned(),
             tables: vec![
                 TableCopy {
                     name: "projects_records".to_owned(),

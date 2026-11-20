@@ -36,3 +36,7 @@ Inventory's remaining CLI reads, creation and overlay import also go through the
 Finder requests a bounded name and kind projection from Entities. The owner endpoint preserves
 the five-hit cap and matches every query word without returning field values or dated facts.
 The status service skips an unavailable owner while continuing to search its other sources.
+
+The phone mirror consumes the Entities offline projection. Only people with an explicitly
+classified C0 or C1 offline label are exported. The gateway refuses older copies and local
+diagnostic builds, and the phone ignores People data in legacy cached copies.

@@ -55,6 +55,11 @@ const ROUTES: &[route_manifest::Route] = &[
         entities_api::ROUTE_SEARCH,
         "Search entity names with ?q=.",
     ),
+    route_manifest::get(
+        "GET",
+        entities_api::ROUTE_OFFLINE_PEOPLE,
+        "Export people with explicitly classified C0 or C1 offline labels.",
+    ),
     route_manifest::Route {
         method: "POST",
         path: "/api/entities",
@@ -382,6 +387,11 @@ async fn search_names(
 ) -> Reply {
     let hits = blocking(&state, move |s| s.store.search_names(&query.q)).await?;
     Ok(to_json(entities_api::EntitySearchResponse { hits }))
+}
+
+async fn offline_people(State(state): State<Arc<AppState>>) -> Reply {
+    let people = blocking(&state, |s| s.store.offline_people()).await?;
+    Ok(to_json(people))
 }
 
 async fn create_entity(
@@ -757,6 +767,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/fields", get(list_fields).post(declare_field))
         .route("/api/entities", get(list_entities).post(create_entity))
         .route(entities_api::ROUTE_SEARCH, get(search_names))
+        .route(entities_api::ROUTE_OFFLINE_PEOPLE, get(offline_people))
         .route(
             "/api/entities/{id}",
             get(get_entity).patch(patch_entity).delete(delete_entity),

@@ -1,7 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use axum::{extract::State, http::StatusCode, Extension};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    routing::{post, MethodRouter},
+};
 use tokio::sync::Mutex;
 
 use super::{boom, Error, HttpError, WalPreview};
@@ -81,10 +85,9 @@ impl SnapshotDirectory {
     }
 }
 
-pub(super) async fn export(
-    State(store): State<Arc<WalPreview>>,
-    Extension(directory): Extension<Arc<SnapshotDirectory>>,
-) -> Result<StatusCode, HttpError> {
-    directory.take(&store).await.map_err(boom)?;
-    Ok(StatusCode::NO_CONTENT)
+pub(super) fn export(directory: Arc<SnapshotDirectory>) -> MethodRouter<Arc<WalPreview>> {
+    post(move |State(store): State<Arc<WalPreview>>| async move {
+        directory.take(&store).await.map_err(boom)?;
+        Ok::<_, HttpError>(StatusCode::NO_CONTENT)
+    })
 }

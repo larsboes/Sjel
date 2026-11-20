@@ -3,6 +3,7 @@ use axum::body::{to_bytes, Body};
 use axum::http::Request;
 use devices::auth;
 use devices::store::DevicesStore;
+use ring::rand::{SecureRandom, SystemRandom};
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use serde_json::{json, Value};
 use tower::ServiceExt;
@@ -13,11 +14,17 @@ const ITEM: &str = "signed-wal-fixture";
 const OPERATION: &str = "signed-wal-operation";
 const TOKEN: &str = "public-wal-sync-fixture";
 
+fn fresh_nonce() -> String {
+    let mut bytes = [0; 16];
+    SystemRandom::new().fill(&mut bytes).unwrap();
+    auth::hex(&bytes)
+}
+
 fn signed_request(
     key: &Ed25519KeyPair,
     device_id: &str,
     operation: &str,
-    nonce: u8,
+    nonce: &str,
     create: Option<&str>,
 ) -> Request<Body> {
     let now = std::time::SystemTime::now()
@@ -60,7 +67,7 @@ fn signed_request(
     let signature = auth::SignedRequest {
         device_id: device_id.into(),
         timestamp: now,
-        nonce: format!("{nonce:02x}").repeat(16),
+        nonce: nonce.into(),
         signature: Vec::new(),
     };
     let message = auth::signing_message(&signature, "POST", "/api/sync", &body);
@@ -144,9 +151,9 @@ async fn signed_wal_sync_commits_once_and_restores_the_acknowledgement() {
         .device
         .unwrap()
         .id;
-    let send = |operation, nonce| signed_request(&key, &id, operation, nonce, None);
+    let send = |operation| signed_request(&key, &id, operation, &fresh_nonce(), None);
     let send_create =
-        |operation, nonce| signed_request(&key, &id, operation, nonce, Some("new-item"));
+        |operation| signed_request(&key, &id, operation, &fresh_nonce(), Some("new-item"));
 
     let store = Arc::new(WalPreview::open(&native_path, true).await.unwrap());
     let api = router(Arc::clone(&store), Arc::clone(&devices));
@@ -160,15 +167,11 @@ async fn signed_wal_sync_commits_once_and_restores_the_acknowledgement() {
         )
         .await
         .unwrap();
-    let response = api.clone().oneshot(send(OPERATION, 1)).await.unwrap();
+    let response = api.clone().oneshot(send(OPERATION)).await.unwrap();
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(store.reference(ITEM).await.unwrap().unwrap().0, 1);
     assert_eq!(store.sync_receipt(OPERATION).await.unwrap(), None);
-    let response = api
-        .clone()
-        .oneshot(send_create("create-op", 5))
-        .await
-        .unwrap();
+    let response = api.clone().oneshot(send_create("create-op")).await.unwrap();
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     assert!(store.reference("new-item").await.unwrap().is_none());
     assert_eq!(store.sync_receipt("create-op").await.unwrap(), None);
@@ -180,25 +183,27 @@ async fn signed_wal_sync_commits_once_and_restores_the_acknowledgement() {
         .await
         .unwrap();
 
-    acknowledgement(&api, send(OPERATION, 2), "accepted", Some("2")).await;
-    let replayed_nonce = api.clone().oneshot(send(OPERATION, 2)).await.unwrap();
+    let nonce = fresh_nonce();
+    let request = || signed_request(&key, &id, OPERATION, &nonce, None);
+    acknowledgement(&api, request(), "accepted", Some("2")).await;
+    let replayed_nonce = api.clone().oneshot(request()).await.unwrap();
     assert_eq!(replayed_nonce.status(), StatusCode::UNAUTHORIZED);
-    acknowledgement(&api, send_create("create-op", 6), "accepted", Some("1")).await;
+    acknowledgement(&api, send_create("create-op"), "accepted", Some("1")).await;
     drop(api);
     drop(store);
 
     let store = Arc::new(WalPreview::open(&native_path, true).await.unwrap());
     let api = router(Arc::clone(&store), devices);
-    acknowledgement(&api, send(OPERATION, 3), "duplicate", Some("2")).await;
-    let stale = acknowledgement(&api, send("signed-wal-stale", 4), "conflict", Some("2")).await;
+    acknowledgement(&api, send(OPERATION), "duplicate", Some("2")).await;
+    let stale = acknowledgement(&api, send("signed-wal-stale"), "conflict", Some("2")).await;
     assert_eq!(
         stale["conflicts"][0]["canonical_fields"]["label"],
         "Acknowledged phone edit"
     );
     assert_eq!(store.sync_receipt("signed-wal-stale").await.unwrap(), None);
 
-    acknowledgement(&api, send_create("create-op", 7), "duplicate", Some("1")).await;
-    acknowledgement(&api, send_create("different-op", 8), "rejected", None).await;
+    acknowledgement(&api, send_create("create-op"), "duplicate", Some("1")).await;
+    acknowledgement(&api, send_create("different-op"), "rejected", None).await;
 
     let snapshot_path = directory.join("snapshot");
     std::fs::create_dir(&snapshot_path).unwrap();

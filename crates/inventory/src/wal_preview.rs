@@ -399,10 +399,7 @@ fn preview_router(
         }
     }
     if let Some(snapshot) = snapshot {
-        router = router.route(
-            super::SNAPSHOT_ROUTE,
-            axum::routing::post(snapshot::export).layer(axum::Extension(snapshot)),
-        );
+        router = router.route(super::SNAPSHOT_ROUTE, snapshot::export(snapshot));
     }
     router
         .layer(axum::middleware::from_fn_with_state(

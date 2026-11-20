@@ -3848,6 +3848,10 @@
       "verdict": "adopt"
     },
     {
+      "name": "json-render",
+      "verdict": "watch"
+    },
+    {
       "name": "kitinerary",
       "verdict": "adopt"
     },
@@ -4172,6 +4176,10 @@
       "verdict": "reject"
     },
     {
+      "name": "svelte",
+      "verdict": "reject"
+    },
+    {
       "name": "tabler-icons",
       "verdict": "adopt"
     },
@@ -4209,7 +4217,7 @@
     },
     {
       "name": "turso",
-      "verdict": "evaluate"
+      "verdict": "adopt"
     },
     {
       "name": "typst",

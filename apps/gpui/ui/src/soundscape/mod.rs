@@ -173,12 +173,14 @@ impl Soundscape {
                         .step(0.01)
                         .default_value(initial)
                 });
-                let sub = cx.subscribe(&state, move |view, _, event: &SliderEvent, cx| match event
-                {
-                    SliderEvent::Change(val) | SliderEvent::Release(val) => {
-                        view.set_layer(layer, val.start(), cx);
-                    }
-                });
+                let sub = cx.subscribe(
+                    &state,
+                    move |view, _, event: &SliderEvent, cx| match event {
+                        SliderEvent::Change(val) | SliderEvent::Release(val) => {
+                            view.set_layer(layer, val.start(), cx);
+                        }
+                    },
+                );
                 self.layer_sliders.push((layer, state));
                 self._slider_subs.push(sub);
             }
@@ -244,9 +246,10 @@ impl Render for Soundscape {
                                     .child("VOLUME"),
                             )
                             .child(
-                                div()
-                                    .text_xs()
-                                    .child(mono_num(format!("{:.0}%", volume * 100.), palette.muted)),
+                                div().text_xs().child(mono_num(
+                                    format!("{:.0}%", volume * 100.),
+                                    palette.muted,
+                                )),
                             ),
                     )
                     .when_some(self.volume_slider.as_ref(), |el, slider| {

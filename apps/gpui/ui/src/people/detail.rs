@@ -258,10 +258,7 @@ impl PeoplePage {
                                             .child(format!("{name_a} ↔ {name_b}")),
                                     )
                                     .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(rgb(palette.muted))
-                                            .child(why),
+                                        div().text_xs().text_color(rgb(palette.muted)).child(why),
                                     ),
                             )
                             .child(
@@ -565,31 +562,55 @@ pub(super) fn render_person_detail(
                     .text_color(rgb(palette.muted))
                     .child("CONTACT & IDENTITY"),
             )
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .gap_2()
-                    .children(contact_tiles),
-            )
+            .child(div().flex().flex_wrap().gap_2().children(contact_tiles))
     });
 
     // Card 2: Relationship & Cadence
     let mut rel_tiles: Vec<AnyElement> = Vec::new();
     if let Some(met_at) = person.values.get("met_at") {
-        rel_tiles.push(field_tile("HOW WE MET", met_at.clone(), src_of("met_at"), None, palette));
+        rel_tiles.push(field_tile(
+            "HOW WE MET",
+            met_at.clone(),
+            src_of("met_at"),
+            None,
+            palette,
+        ));
     }
     if let Some(connected) = person.values.get("connected_on") {
-        rel_tiles.push(field_tile("CONNECTED", connected.clone(), src_of("connected_on"), None, palette));
+        rel_tiles.push(field_tile(
+            "CONNECTED",
+            connected.clone(),
+            src_of("connected_on"),
+            None,
+            palette,
+        ));
     }
     if let Some(last) = person.values.get("last_contact") {
-        rel_tiles.push(field_tile("LAST CONTACT", last.clone(), src_of("last_contact"), None, palette));
+        rel_tiles.push(field_tile(
+            "LAST CONTACT",
+            last.clone(),
+            src_of("last_contact"),
+            None,
+            palette,
+        ));
     }
     if let Some(weeks) = person.values.get(sjel_gpui_core::people::FOLLOW_UP_WEEKS) {
-        rel_tiles.push(field_tile("CADENCE", format!("Every {weeks}w"), None, None, palette));
+        rel_tiles.push(field_tile(
+            "CADENCE",
+            format!("Every {weeks}w"),
+            None,
+            None,
+            palette,
+        ));
     }
     if let Some(due) = follow_up_due {
-        rel_tiles.push(field_tile("NEXT FOLLOW-UP", due.to_string(), None, None, palette));
+        rel_tiles.push(field_tile(
+            "NEXT FOLLOW-UP",
+            due.to_string(),
+            None,
+            None,
+            palette,
+        ));
     }
 
     let relationship_card = (!rel_tiles.is_empty()).then(|| {
@@ -620,49 +641,58 @@ pub(super) fn render_person_detail(
         .iter()
         .filter(|(k, _)| k != "aliases")
         .collect();
-    let extra_card = (!person.tags.is_empty() || !custom_rows.is_empty()).then(|| {
-        div()
-            .flex_none()
-            .w_full()
-            .p_4()
-            .rounded(px(8.))
-            .border_1()
-            .border_color(rgba(palette.border))
-            .bg(rgba(palette.surface))
-            .flex()
-            .flex_col()
-            .gap_3()
-            .child(
-                div()
-                    .text_xs()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(rgb(palette.muted))
-                    .child("TAGS & CUSTOM FIELDS"),
-            )
-            .when(!person.tags.is_empty(), |el| {
-                el.child(div().flex().flex_wrap().gap_1p5().children(person.tags.iter().map(|tag| {
+    let extra_card =
+        (!person.tags.is_empty() || !custom_rows.is_empty()).then(|| {
+            div()
+                .flex_none()
+                .w_full()
+                .p_4()
+                .rounded(px(8.))
+                .border_1()
+                .border_color(rgba(palette.border))
+                .bg(rgba(palette.surface))
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(
                     div()
-                        .px_2()
-                        .py_0p5()
-                        .rounded_full()
-                        .bg(rgba(tint(palette.accent, 0x18)))
                         .text_xs()
-                        .text_color(rgb(palette.accent))
-                        .child(tag.clone())
-                })))
-            })
-            .when(!custom_rows.is_empty(), |el| {
-                el.child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .gap_2()
-                        .children(custom_rows.into_iter().map(|(k, v)| {
-                            field_tile(&k.replace('_', " ").to_uppercase(), v.clone(), src_of(k), None, palette)
-                        })),
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(rgb(palette.muted))
+                        .child("TAGS & CUSTOM FIELDS"),
                 )
-            })
-    });
+                .when(!person.tags.is_empty(), |el| {
+                    el.child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .gap_1p5()
+                            .children(person.tags.iter().map(|tag| {
+                                div()
+                                    .px_2()
+                                    .py_0p5()
+                                    .rounded_full()
+                                    .bg(rgba(tint(palette.accent, 0x18)))
+                                    .text_xs()
+                                    .text_color(rgb(palette.accent))
+                                    .child(tag.clone())
+                            })),
+                    )
+                })
+                .when(!custom_rows.is_empty(), |el| {
+                    el.child(div().flex().flex_wrap().gap_2().children(
+                        custom_rows.into_iter().map(|(k, v)| {
+                            field_tile(
+                                &k.replace('_', " ").to_uppercase(),
+                                v.clone(),
+                                src_of(k),
+                                None,
+                                palette,
+                            )
+                        }),
+                    ))
+                })
+        });
 
     div()
         .id("person-detail-scroll")
@@ -765,17 +795,15 @@ fn field_tile(
     open_url: Option<String>,
     palette: Palette,
 ) -> AnyElement {
-    let source_pill = source
-        .filter(|s| *s != "operator")
-        .map(|s| {
-            div()
-                .px_1()
-                .rounded(px(3.))
-                .bg(rgba(palette.surface))
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(s.to_owned())
-        });
+    let source_pill = source.filter(|s| *s != "operator").map(|s| {
+        div()
+            .px_1()
+            .rounded(px(3.))
+            .bg(rgba(palette.surface))
+            .text_xs()
+            .text_color(rgb(palette.muted))
+            .child(s.to_owned())
+    });
     let value_el = if let Some(url) = open_url {
         div()
             .id(SharedString::from(format!("person-tile-{label}-{val}")))

@@ -12,6 +12,7 @@ use sjel_gpui_core::area::Area;
 
 use crate::route::Page;
 use crate::workspace::Workspace;
+use sjel_gpui_core::travel::{TravelRoute, TripSection};
 use sjel_gpui_ui::backup::BackupTab;
 use sjel_gpui_ui::calendar::View as CalendarView;
 use sjel_gpui_ui::feed::Tab as FeedTab;
@@ -23,7 +24,6 @@ use sjel_gpui_ui::research::ResearchTab;
 use sjel_gpui_ui::setup::SetupTab;
 use sjel_gpui_ui::sidebar::Seat;
 use sjel_gpui_ui::systems::SystemsTab;
-use sjel_gpui_core::travel::{TravelRoute, TripSection};
 use sjel_gpui_ui::theme::Palette;
 
 pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
@@ -33,8 +33,7 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
         .map(|elapsed| format!("checked {} ago", ago(elapsed)));
     let area = Area::of(view.page);
     let tabs = area.and_then(|area| tab_strip(area, view, palette, cx));
-    let scratch_open =
-        view.right_panel.is_open() && view.right_panel.seat() == Seat::Scratchpad;
+    let scratch_open = view.right_panel.is_open() && view.right_panel.seat() == Seat::Scratchpad;
     let scratch_count = view.scratchpad.read(cx).state.parse_targets().len();
     let scratch_label = if scratch_count > 0 {
         format!("Scratchpad ({scratch_count})")

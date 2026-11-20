@@ -311,11 +311,7 @@ impl FinancePage {
     }
 
     pub fn badge_counts(&self) -> (Option<usize>, Option<usize>, Option<usize>, Option<usize>) {
-        let tx_count = self
-            .dashboard
-            .value
-            .as_ref()
-            .map(|p| p.transactions.len());
+        let tx_count = self.dashboard.value.as_ref().map(|p| p.transactions.len());
         let subs_count = Some(self.subs_derived.active_count);
         let import_count = Some(
             self.import_derived.pending_indices.len() + self.import_derived.uncategorized.len(),
@@ -534,7 +530,11 @@ impl Render for FinancePage {
                     vec![
                         ("Overview", None, self.view == View::Overview),
                         ("Transactions", tx_count, self.view == View::Transactions),
-                        ("Subscriptions", subs_count, self.view == View::Subscriptions),
+                        (
+                            "Subscriptions",
+                            subs_count,
+                            self.view == View::Subscriptions,
+                        ),
                         (
                             "Import & Review",
                             import_count,

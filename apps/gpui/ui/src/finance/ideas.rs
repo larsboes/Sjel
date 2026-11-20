@@ -670,8 +670,9 @@ impl FinancePage {
                 return None;
             }
             let curr = price.currency.clone();
-            let mut chart = BulletChart::new(SharedString::from(format!("idea-levels-{}", idea.id)))
-                .format(move |val| format!("{val:.2} {curr}"));
+            let mut chart =
+                BulletChart::new(SharedString::from(format!("idea-levels-{}", idea.id)))
+                    .format(move |val| format!("{val:.2} {curr}"));
             for (trigger, level) in matching {
                 let ceiling = now.max(level) * 1.15;
                 chart = chart.bullet(

@@ -521,17 +521,13 @@ impl PeoplePage {
                 Some(src) if src != "operator" => format!("{label} · {src}"),
                 _ => label.clone(),
             };
-            let mut field_el = div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(
-                    FormField::new(
-                        SharedString::from(format!("people-field-{key}")),
-                        display_label,
-                    )
-                    .child(Input::new(input).size(ControlSize::Sm)),
-                );
+            let mut field_el = div().flex().flex_col().gap_1().child(
+                FormField::new(
+                    SharedString::from(format!("people-field-{key}")),
+                    display_label,
+                )
+                .child(Input::new(input).size(ControlSize::Sm)),
+            );
             if field_type == "enum" && !options.is_empty() {
                 field_el = field_el.child(div().flex().flex_wrap().gap_1().children(
                     options.iter().map(|opt| {
@@ -554,8 +550,15 @@ impl PeoplePage {
                     }),
                 ));
             } else if key == sjel_gpui_core::people::FOLLOW_UP_WEEKS {
-                field_el = field_el.child(div().flex().flex_wrap().gap_1().children(
-                    [("1", "1w"), ("2", "2w"), ("4", "1m"), ("12", "3m"), ("26", "6m")]
+                field_el = field_el.child(
+                    div().flex().flex_wrap().gap_1().children(
+                        [
+                            ("1", "1w"),
+                            ("2", "2w"),
+                            ("4", "1m"),
+                            ("12", "3m"),
+                            ("26", "6m"),
+                        ]
                         .into_iter()
                         .map(|(weeks, text)| {
                             let input_ref = input.clone();
@@ -574,7 +577,8 @@ impl PeoplePage {
                                 input_ref.update(cx, |state, cx| state.set_text(weeks, cx));
                             })
                         }),
-                ));
+                    ),
+                );
             }
             field_el.into_any_element()
         };

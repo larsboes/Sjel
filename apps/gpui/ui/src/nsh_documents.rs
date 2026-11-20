@@ -586,9 +586,15 @@ pub fn NshHostScreen() -> impl IntoElement {
                 .bg(move || nsh_base::theme().background)
                 .on_press(move || more_open.update(|v| *v = !*v))
                 .child(
-                    text(move || if more_open.get() { "Close menu" } else { "All areas" })
-                        .text_xs()
-                        .font_weight(FontWeight::MEDIUM),
+                    text(move || {
+                        if more_open.get() {
+                            "Close menu"
+                        } else {
+                            "All areas"
+                        }
+                    })
+                    .text_xs()
+                    .font_weight(FontWeight::MEDIUM),
                 )
                 .into_element();
             crate::nsh_ui::nav_bar(

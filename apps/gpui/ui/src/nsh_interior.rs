@@ -501,12 +501,16 @@ fn RevisionDetail() -> impl IntoElement {
                 .child(crate::nsh_ui::pill_tab("All sections", t == 0, move || {
                     detail_tab.set(0)
                 }))
-                .child(crate::nsh_ui::pill_tab("Scan & Review", t == 1, move || {
-                    detail_tab.set(1)
-                }))
-                .child(crate::nsh_ui::pill_tab("Room & Compare", t == 2, move || {
-                    detail_tab.set(2)
-                }))
+                .child(crate::nsh_ui::pill_tab(
+                    "Scan & Review",
+                    t == 1,
+                    move || detail_tab.set(1),
+                ))
+                .child(crate::nsh_ui::pill_tab(
+                    "Room & Compare",
+                    t == 2,
+                    move || detail_tab.set(2),
+                ))
                 .child(crate::nsh_ui::pill_tab("Placement", t == 3, move || {
                     detail_tab.set(3)
                 }))
@@ -569,11 +573,9 @@ fn RevisionDetail() -> impl IntoElement {
         (detail_tab.get() == 0 || detail_tab.get() == 1).then(|| review_card.clone().into_element())
     }));
 
-    let mut room_card = crate::nsh_ui::surface_card()
-        .px_3()
-        .py_2p5()
-        .gap_2()
-        .child(crate::nsh_ui::section_heading("OBSERVATIONS & ROOM HISTORY"));
+    let mut room_card = crate::nsh_ui::surface_card().px_3().py_2p5().gap_2().child(
+        crate::nsh_ui::section_heading("OBSERVATIONS & ROOM HISTORY"),
+    );
     for element in draft
         .room
         .surfaces
@@ -670,22 +672,23 @@ fn RevisionDetail() -> impl IntoElement {
             for row in snap.with(|s| s.inventory.clone()) {
                 let id = row.item.id.clone();
                 let active = item.get() == id;
-                choices = choices.child(crate::nsh_ui::pill_tab(row.item.label, active, move || {
-                    let placement = state()
-                        .snap
-                        .placements
-                        .iter()
-                        .find(|p| p.item_id == id)
-                        .cloned();
-                    expected.set(Some((
-                        id.clone(),
-                        placement.as_ref().map_or(0, |p| p.revision),
-                    )));
-                    x.set(placement.as_ref().map_or(0, |p| p.x).to_string());
-                    y.set(placement.as_ref().map_or(0, |p| p.y).to_string());
-                    rotation.set(placement.as_ref().map_or(0, |p| p.rot).to_string());
-                    item.set(id.clone());
-                }));
+                choices =
+                    choices.child(crate::nsh_ui::pill_tab(row.item.label, active, move || {
+                        let placement = state()
+                            .snap
+                            .placements
+                            .iter()
+                            .find(|p| p.item_id == id)
+                            .cloned();
+                        expected.set(Some((
+                            id.clone(),
+                            placement.as_ref().map_or(0, |p| p.revision),
+                        )));
+                        x.set(placement.as_ref().map_or(0, |p| p.x).to_string());
+                        y.set(placement.as_ref().map_or(0, |p| p.y).to_string());
+                        rotation.set(placement.as_ref().map_or(0, |p| p.rot).to_string());
+                        item.set(id.clone());
+                    }));
             }
             choices
         }))

@@ -403,183 +403,183 @@ impl FinancePage {
         let balance_snapshot = projection.and_then(|value| value.balance_snapshot.clone());
         let balances_count = balance_snapshot.as_ref().map_or(0, |s| s.balances.len());
         let tracked_net_worth = projection.and_then(|value| value.tracked_net_worth.clone());
-        let balance_panel = if let Some(snapshot) = balance_snapshot.as_ref() {
-            let mut rows = Vec::with_capacity(snapshot.balances.len());
-            for balance in &snapshot.balances {
-                let is_liability = balance.kind == shell::BalanceKind::Liability;
-                let signed = if is_liability {
-                    -balance.amount_cents
-                } else {
-                    balance.amount_cents
-                };
-                rows.push(Row::new(
-                    balance.id.clone(),
+        let balance_panel =
+            if let Some(snapshot) = balance_snapshot.as_ref() {
+                let mut rows = Vec::with_capacity(snapshot.balances.len());
+                for balance in &snapshot.balances {
+                    let is_liability = balance.kind == shell::BalanceKind::Liability;
+                    let signed = if is_liability {
+                        -balance.amount_cents
+                    } else {
+                        balance.amount_cents
+                    };
+                    rows.push(Row::new(
+                        balance.id.clone(),
+                        [
+                            Cell::Text(balance.label.clone().into()),
+                            Cell::Tag(
+                                if is_liability { "Liability" } else { "Asset" }.into(),
+                                if is_liability {
+                                    Tone::Danger
+                                } else {
+                                    Tone::Success
+                                },
+                            ),
+                            Cell::Figure(
+                                format_money(signed, &snapshot.currency).into(),
+                                signed as f64,
+                                if is_liability {
+                                    Tone::Danger
+                                } else {
+                                    Tone::Neutral
+                                },
+                            ),
+                        ],
+                    ));
+                }
+                let table = DataTable::new(
+                    "finance-manual-balances",
                     [
-                        Cell::Text(balance.label.clone().into()),
-                        Cell::Tag(
-                            if is_liability { "Liability" } else { "Asset" }.into(),
-                            if is_liability {
-                                Tone::Danger
-                            } else {
-                                Tone::Success
-                            },
-                        ),
-                        Cell::Figure(
-                            format_money(signed, &snapshot.currency).into(),
-                            signed as f64,
-                            if is_liability {
-                                Tone::Danger
-                            } else {
-                                Tone::Neutral
-                            },
-                        ),
+                        Column::new("account", "ACCOUNT"),
+                        Column::new("kind", "KIND").width(rems(8.)),
+                        Column::new("balance", "BALANCE").width(rems(9.)).end(),
                     ],
-                ));
-            }
-            let table = DataTable::new(
-                "finance-manual-balances",
-                [
-                    Column::new("account", "ACCOUNT"),
-                    Column::new("kind", "KIND").width(rems(8.)),
-                    Column::new("balance", "BALANCE").width(rems(9.)).end(),
-                ],
-            )
-            .label("Manual balances")
-            .rows(Rc::new(rows))
-            .density(Density::Comfortable)
-            .sorts([SortKey {
-                column: "balance".into(),
-                rising: false,
-            }]);
-            let assets_total: i64 = snapshot
-                .balances
-                .iter()
-                .filter(|b| b.kind == shell::BalanceKind::Asset)
-                .map(|b| b.amount_cents)
-                .sum();
-            let liabilities_total: i64 = snapshot
-                .balances
-                .iter()
-                .filter(|b| b.kind == shell::BalanceKind::Liability)
-                .map(|b| b.amount_cents)
-                .sum();
-            let balance_chart = (assets_total > 0 || liabilities_total > 0).then(|| {
-                let curr = snapshot.currency.clone();
-                let max_bar = (assets_total.max(liabilities_total).max(1)) as f64;
-                BulletChart::new("finance-balances-breakdown")
-                    .format(move |cents| format_money(cents.round() as i64, &curr))
-                    .bullet(
-                        Bullet::new("Assets", assets_total as f64, max_bar)
-                            .bands([max_bar * 0.5, max_bar * 0.85, max_bar]),
-                    )
-                    .bullet(
-                        Bullet::new("Liabilities", liabilities_total as f64, max_bar)
-                            .bands([max_bar * 0.5, max_bar * 0.85, max_bar]),
-                    )
-                    .w_full()
-            });
-            div()
-                .flex()
-                .flex_col()
-                .gap_3()
-                .p_4()
-                .rounded(px(8.))
-                .border_1()
-                .border_color(rgba(palette.border))
-                .bg(rgba(palette.surface))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .text_xs()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(rgb(palette.muted))
-                                .child("MANUAL BALANCES"),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_3()
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(rgb(palette.muted))
-                                        .child(format!(
+                )
+                .label("Manual balances")
+                .rows(Rc::new(rows))
+                .density(Density::Comfortable)
+                .sorts([SortKey {
+                    column: "balance".into(),
+                    rising: false,
+                }]);
+                let assets_total: i64 = snapshot
+                    .balances
+                    .iter()
+                    .filter(|b| b.kind == shell::BalanceKind::Asset)
+                    .map(|b| b.amount_cents)
+                    .sum();
+                let liabilities_total: i64 = snapshot
+                    .balances
+                    .iter()
+                    .filter(|b| b.kind == shell::BalanceKind::Liability)
+                    .map(|b| b.amount_cents)
+                    .sum();
+                let balance_chart =
+                    (assets_total > 0 || liabilities_total > 0).then(|| {
+                        let curr = snapshot.currency.clone();
+                        let max_bar = (assets_total.max(liabilities_total).max(1)) as f64;
+                        BulletChart::new("finance-balances-breakdown")
+                            .format(move |cents| format_money(cents.round() as i64, &curr))
+                            .bullet(Bullet::new("Assets", assets_total as f64, max_bar).bands([
+                                max_bar * 0.5,
+                                max_bar * 0.85,
+                                max_bar,
+                            ]))
+                            .bullet(
+                                Bullet::new("Liabilities", liabilities_total as f64, max_bar)
+                                    .bands([max_bar * 0.5, max_bar * 0.85, max_bar]),
+                            )
+                            .w_full()
+                    });
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .p_4()
+                    .rounded(px(8.))
+                    .border_1()
+                    .border_color(rgba(palette.border))
+                    .bg(rgba(palette.surface))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(palette.muted))
+                                    .child("MANUAL BALANCES"),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_3()
+                                    .child(div().text_xs().text_color(rgb(palette.muted)).child(
+                                        format!(
                                             "As of {} · {}",
                                             snapshot.as_of,
                                             match snapshot.coverage {
                                                 shell::BalanceCoverage::Complete => "complete",
                                                 shell::BalanceCoverage::Partial => "partial",
                                             }
-                                        )),
+                                        ),
+                                    ))
+                                    .child(
+                                        Button::new("finance-edit-balances", "Edit balances")
+                                            .size(ControlSize::Sm)
+                                            .variant(ButtonVariant::Ghost)
+                                            .on_click(cx.listener(|page, _, window, cx| {
+                                                page.open_balance_editor(window, cx)
+                                            })),
+                                    ),
+                            ),
+                    )
+                    .children(balance_chart)
+                    .child(table)
+                    .child(if let Some(net_worth) = tracked_net_worth.as_ref() {
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!(
+                                "Tracked net worth {} · {} · portfolio {}",
+                                format_exact_money(
+                                    &net_worth.value.mantissa,
+                                    net_worth.value.scale,
+                                    &net_worth.currency
                                 )
-                                .child(
-                                    Button::new("finance-edit-balances", "Edit balances")
-                                        .size(ControlSize::Sm)
-                                        .variant(ButtonVariant::Ghost)
-                                        .on_click(cx.listener(|page, _, window, cx| {
-                                            page.open_balance_editor(window, cx)
-                                        })),
-                                ),
-                        ),
-                )
-                .children(balance_chart)
-                .child(table)
-                .child(if let Some(net_worth) = tracked_net_worth.as_ref() {
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(format!(
-                            "Tracked net worth {} · {} · portfolio {}",
-                            format_exact_money(
-                                &net_worth.value.mantissa,
-                                net_worth.value.scale,
-                                &net_worth.currency
-                            )
-                            .unwrap_or_else(|| "—".into()),
-                            if net_worth.complete {
-                                "complete"
-                            } else {
-                                "incomplete"
-                            },
-                            if net_worth.portfolio_included {
-                                "included"
-                            } else {
-                                "not included"
-                            },
-                        ))
-                        .into_any_element()
-                } else {
-                    div().into_any_element()
-                })
-                .into_any_element()
-        } else {
-            div()
-                .p_4()
-                .rounded(px(8.))
-                .border_1()
-                .border_color(rgba(palette.border))
-                .bg(rgba(palette.surface))
-                .flex()
-                .items_center()
-                .justify_between()
-                .text_sm()
-                .text_color(rgb(palette.muted))
-                .child("No manual balance snapshot configured.")
-                .child(
-                    Button::new("finance-add-balances", "Add balances")
-                        .size(ControlSize::Sm)
-                        .variant(ButtonVariant::Ghost)
-                        .on_click(
-                            cx.listener(|page, _, window, cx| page.open_balance_editor(window, cx)),
-                        ),
-                )
-                .into_any_element()
-        };
+                                .unwrap_or_else(|| "—".into()),
+                                if net_worth.complete {
+                                    "complete"
+                                } else {
+                                    "incomplete"
+                                },
+                                if net_worth.portfolio_included {
+                                    "included"
+                                } else {
+                                    "not included"
+                                },
+                            ))
+                            .into_any_element()
+                    } else {
+                        div().into_any_element()
+                    })
+                    .into_any_element()
+            } else {
+                div()
+                    .p_4()
+                    .rounded(px(8.))
+                    .border_1()
+                    .border_color(rgba(palette.border))
+                    .bg(rgba(palette.surface))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .text_sm()
+                    .text_color(rgb(palette.muted))
+                    .child("No manual balance snapshot configured.")
+                    .child(
+                        Button::new("finance-add-balances", "Add balances")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
+                            .on_click(cx.listener(|page, _, window, cx| {
+                                page.open_balance_editor(window, cx)
+                            })),
+                    )
+                    .into_any_element()
+            };
 
         let balance_editor = if self.balance_editor_open {
             let entity = cx.entity();
@@ -647,9 +647,9 @@ impl FinancePage {
                 Button::new("finance-overview-edit-balances-top", "Manual Balances")
                     .size(ControlSize::Sm)
                     .variant(ButtonVariant::Ghost)
-                    .on_click(cx.listener(|page, _, window, cx| {
-                        page.open_balance_editor(window, cx)
-                    })),
+                    .on_click(
+                        cx.listener(|page, _, window, cx| page.open_balance_editor(window, cx)),
+                    ),
             );
 
         let section_body = if cfg!(test) {
@@ -712,18 +712,14 @@ impl FinancePage {
             .when(cfg!(test), |el| el.child(section_nav))
             .when(!cfg!(test), |el| {
                 el.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_end()
-                        .child(
-                            Button::new("finance-overview-edit-balances-top", "Manual Balances")
-                                .size(ControlSize::Sm)
-                                .variant(ButtonVariant::Ghost)
-                                .on_click(cx.listener(|page, _, window, cx| {
-                                    page.open_balance_editor(window, cx)
-                                })),
-                        ),
+                    div().flex().items_center().justify_end().child(
+                        Button::new("finance-overview-edit-balances-top", "Manual Balances")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
+                            .on_click(cx.listener(|page, _, window, cx| {
+                                page.open_balance_editor(window, cx)
+                            })),
+                    ),
                 )
             })
             .child(section_body)
@@ -1029,9 +1025,7 @@ fn render_trend(
         let net_curr = currency.to_owned();
         LineChart::new(
             "finance-monthly-net-line",
-            observed
-                .iter()
-                .map(|point| month_name(&point.month, "%b")),
+            observed.iter().map(|point| month_name(&point.month, "%b")),
         )
         .series(Series::new(
             "Monthly net",
@@ -1163,10 +1157,11 @@ fn render_spend_goals_chart(
     for goal in goals {
         let target = (goal.target_cents.max(1)) as f64;
         let spent = (goal.spent_cents.max(0)) as f64;
-        chart = chart.bullet(
-            Bullet::new(goal.label.clone(), spent, target)
-                .bands([target * 0.5, target * 0.85, target]),
-        );
+        chart = chart.bullet(Bullet::new(goal.label.clone(), spent, target).bands([
+            target * 0.5,
+            target * 0.85,
+            target,
+        ]));
     }
     Some(
         panel(palette)

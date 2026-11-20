@@ -343,31 +343,32 @@ impl Travel {
             .border_color(rgba(palette.border))
             .bg(rgba(crate::theme::tint(palette.surface, 0x55)));
 
-        panel = panel.child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_sm()
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .child(if overview {
-                            "Trips & Locations"
-                        } else {
-                            "Trip Stops"
-                        }),
-                )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(format!("{} stops", places.len())),
-                ),
-        )
-        .when_some(self.place_search_input.as_ref(), |panel, (input, _)| {
-            panel.child(crate::ely::forms::Input::new(input).size(ControlSize::Sm))
-        });
+        panel = panel
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child(if overview {
+                                "Trips & Locations"
+                            } else {
+                                "Trip Stops"
+                            }),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!("{} stops", places.len())),
+                    ),
+            )
+            .when_some(self.place_search_input.as_ref(), |panel, (input, _)| {
+                panel.child(crate::ely::forms::Input::new(input).size(ControlSize::Sm))
+            });
 
         if overview {
             let mut upcoming_plans: Vec<_> = self

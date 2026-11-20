@@ -36,7 +36,6 @@ use sjel_gpui_ui::calendar::page::CalendarPage;
 use sjel_gpui_ui::clipper::ClipperSettings;
 use sjel_gpui_ui::context::{ContextEvent, ContextPage};
 use sjel_gpui_ui::cv::CvPage;
-use sjel_gpui_ui::posts::PostsPage;
 use sjel_gpui_ui::docs::DocsPage;
 use sjel_gpui_ui::documents::Documents;
 use sjel_gpui_ui::feed::Feed;
@@ -48,6 +47,7 @@ use sjel_gpui_ui::media::MediaPage;
 use sjel_gpui_ui::music::{Music, MusicEvent};
 use sjel_gpui_ui::packs::PacksPage;
 use sjel_gpui_ui::people::page::PeoplePage;
+use sjel_gpui_ui::posts::PostsPage;
 use sjel_gpui_ui::projects::Projects;
 use sjel_gpui_ui::record::RecordPage;
 use sjel_gpui_ui::research::ResearchPage;
@@ -1779,7 +1779,8 @@ impl Workspace {
                     let cur = self.projects.read(cx).project_section;
                     let ix = SECS.iter().position(|&s| s == cur).unwrap_or(0);
                     let next = SECS[wrap(ix, SECS.len())];
-                    self.projects.update(cx, |p, cx| p.set_project_section(next, cx));
+                    self.projects
+                        .update(cx, |p, cx| p.set_project_section(next, cx));
                 } else {
                     const TABS: [ProjectsTab; 3] = [
                         ProjectsTab::Hubs,
@@ -1832,11 +1833,8 @@ impl Workspace {
             }
             Page::Systems => {
                 use sjel_gpui_ui::systems::SystemsTab;
-                const TABS: [SystemsTab; 3] = [
-                    SystemsTab::Overview,
-                    SystemsTab::Storage,
-                    SystemsTab::Agent,
-                ];
+                const TABS: [SystemsTab; 3] =
+                    [SystemsTab::Overview, SystemsTab::Storage, SystemsTab::Agent];
                 let sp = self.ensure_systems(cx);
                 let cur = sp.read(cx).tab;
                 let ix = TABS.iter().position(|&t| t == cur).unwrap_or(0);
@@ -1845,11 +1843,8 @@ impl Workspace {
             }
             Page::Backup => {
                 use sjel_gpui_ui::backup::BackupTab;
-                const TABS: [BackupTab; 3] = [
-                    BackupTab::Contracts,
-                    BackupTab::Targets,
-                    BackupTab::History,
-                ];
+                const TABS: [BackupTab; 3] =
+                    [BackupTab::Contracts, BackupTab::Targets, BackupTab::History];
                 let bp = self.ensure_backup_page(cx);
                 let cur = bp.read(cx).tab;
                 let ix = TABS.iter().position(|&t| t == cur).unwrap_or(0);
@@ -1858,11 +1853,8 @@ impl Workspace {
             }
             Page::Calendar => {
                 use sjel_gpui_ui::calendar::View as CalendarView;
-                const VIEWS: [CalendarView; 3] = [
-                    CalendarView::Day,
-                    CalendarView::Week,
-                    CalendarView::Month,
-                ];
+                const VIEWS: [CalendarView; 3] =
+                    [CalendarView::Day, CalendarView::Week, CalendarView::Month];
                 let cp = self.ensure_calendar_page(cx);
                 let cur = cp.read(cx).view;
                 let ix = VIEWS.iter().position(|&v| v == cur).unwrap_or(2);
@@ -1895,10 +1887,7 @@ impl Workspace {
                 use sjel_gpui_core::travel::{TravelRoute, TripSection};
                 if self.travel.read(cx).active_plan_title().is_some() {
                     let cur = self.travel.read(cx).active_section();
-                    let ix = TripSection::ALL
-                        .iter()
-                        .position(|&s| s == cur)
-                        .unwrap_or(0);
+                    let ix = TripSection::ALL.iter().position(|&s| s == cur).unwrap_or(0);
                     let next = TripSection::ALL[wrap(ix, TripSection::ALL.len())];
                     self.travel.update(cx, |t, cx| t.set_section(next, cx));
                 } else {

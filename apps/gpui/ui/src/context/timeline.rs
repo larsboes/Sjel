@@ -18,7 +18,9 @@ fn timeline_columns() -> [Column; 5] {
         Column::new("time", "TIME").width(rems(5.5)).muted(),
         Column::new("kind", "KIND").width(rems(5.5)),
         Column::new("item", "ITEM"),
-        Column::new("detail", "AMOUNT / STATUS").width(rems(8.)).end(),
+        Column::new("detail", "AMOUNT / STATUS")
+            .width(rems(8.))
+            .end(),
         Column::new("actions", "").width(rems(8.)).actions([
             RowAction::new("done", "Mark Done").primary(),
             RowAction::new("undo", "✓ Done"),
@@ -72,9 +74,7 @@ fn timeline_table_row(item: &TimelineItem) -> Row {
         }
     };
     let actions = match item.kind {
-        TimelineKind::Task if item.completed => {
-            Cell::Actions(vec!["undo".into(), "open".into()])
-        }
+        TimelineKind::Task if item.completed => Cell::Actions(vec!["undo".into(), "open".into()]),
         TimelineKind::Task => Cell::Actions(vec!["done".into(), "open".into()]),
         _ => Cell::Actions(vec!["open".into()]),
     };
@@ -152,26 +152,24 @@ pub fn render_timeline_content(
         .on_open(move |key, _, cx| {
             open_item(&entity_open, &items_for_open, key.as_ref(), cx);
         })
-        .on_action(move |key, action, _, cx| {
-            match action.as_ref() {
-                "done" | "undo" => {
-                    if let Some(item) = items_for_action.iter().find(|i| i.id == key.as_ref()) {
-                        let task_id = item
-                            .id
-                            .strip_prefix("task:")
-                            .unwrap_or(&item.id)
-                            .to_string();
-                        let is_done = item.completed;
-                        entity_action.update(cx, |page, cx| {
-                            page.toggle_task(task_id, is_done, cx);
-                        });
-                    }
+        .on_action(move |key, action, _, cx| match action.as_ref() {
+            "done" | "undo" => {
+                if let Some(item) = items_for_action.iter().find(|i| i.id == key.as_ref()) {
+                    let task_id = item
+                        .id
+                        .strip_prefix("task:")
+                        .unwrap_or(&item.id)
+                        .to_string();
+                    let is_done = item.completed;
+                    entity_action.update(cx, |page, cx| {
+                        page.toggle_task(task_id, is_done, cx);
+                    });
                 }
-                "open" => {
-                    open_item(&entity_action, &items_for_action, key.as_ref(), cx);
-                }
-                _ => {}
             }
+            "open" => {
+                open_item(&entity_action, &items_for_action, key.as_ref(), cx);
+            }
+            _ => {}
         })
         .into_any_element()
 }

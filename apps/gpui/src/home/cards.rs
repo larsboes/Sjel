@@ -10,7 +10,9 @@ use sjel_gpui_ui::ely::theme::ControlSize;
 
 use crate::route::Page;
 use crate::workspace::Workspace;
-use sjel_gpui_ui::primitives::{list, mono_num, progress_bar, row, section, surface_card, tone_chip};
+use sjel_gpui_ui::primitives::{
+    list, mono_num, progress_bar, row, section, surface_card, tone_chip,
+};
 use sjel_gpui_ui::theme::{tint, Palette};
 
 /// Prompts an agent drafted for you to paste elsewhere. Copy empties the card; none draws nothing.
@@ -444,15 +446,18 @@ pub fn scratchpad_card(
                 .gap_1()
                 .when(count > 0, |el| {
                     el.child(
-                        Button::new("home-scratchpad-sort", if sorting { "Sorting…" } else { "Sort now" })
-                            .size(ControlSize::Sm)
-                            .variant(ButtonVariant::Primary)
-                            .disabled(sorting)
-                            .on_click(cx.listener(|view, _, window, cx| {
-                                view.scratchpad.update(cx, |seat, cx| {
-                                    seat.sort_now(Some(window), cx);
-                                });
-                            })),
+                        Button::new(
+                            "home-scratchpad-sort",
+                            if sorting { "Sorting…" } else { "Sort now" },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Primary)
+                        .disabled(sorting)
+                        .on_click(cx.listener(|view, _, window, cx| {
+                            view.scratchpad.update(cx, |seat, cx| {
+                                seat.sort_now(Some(window), cx);
+                            });
+                        })),
                     )
                 })
                 .child(

@@ -145,21 +145,18 @@ pub fn nav(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> V
                         .gap_1p5()
                         .min_w_0()
                         .child(div().truncate().child(area.label()))
-                        .when(
-                            has_tabs && tab != area.default_page() && !selected,
-                            |el| {
-                                el.child(
-                                    div()
-                                        .px_1p5()
-                                        .py(px(0.5))
-                                        .rounded(px(4.))
-                                        .bg(rgba(tint(palette.accent, 0x1c)))
-                                        .text_color(rgb(palette.accent))
-                                        .text_xs()
-                                        .child(tab.label()),
-                                )
-                            },
-                        ),
+                        .when(has_tabs && tab != area.default_page() && !selected, |el| {
+                            el.child(
+                                div()
+                                    .px_1p5()
+                                    .py(px(0.5))
+                                    .rounded(px(4.))
+                                    .bg(rgba(tint(palette.accent, 0x1c)))
+                                    .text_color(rgb(palette.accent))
+                                    .text_xs()
+                                    .child(tab.label()),
+                            )
+                        }),
                 )
                 .child(
                     div()
@@ -232,10 +229,9 @@ pub fn nav(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> V
                                     .font_weight(FontWeight::MEDIUM)
                             })
                             .when(!is_current, |el| {
-                                el.text_color(rgb(palette.muted))
-                                    .hover(move |s| {
-                                        s.bg(rgba(palette.raised)).text_color(rgb(palette.text))
-                                    })
+                                el.text_color(rgb(palette.muted)).hover(move |s| {
+                                    s.bg(rgba(palette.raised)).text_color(rgb(palette.text))
+                                })
                             })
                             .on_click(cx.listener(move |view, _, _, cx| view.go(sub_page, cx)))
                             .child(div().truncate().child(sub_page.label()))
@@ -289,10 +285,9 @@ pub fn nav(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> V
                                     .font_weight(FontWeight::MEDIUM)
                             })
                             .when(!is_current, |el| {
-                                el.text_color(rgb(palette.muted))
-                                    .hover(move |s| {
-                                        s.bg(rgba(palette.raised)).text_color(rgb(palette.text))
-                                    })
+                                el.text_color(rgb(palette.muted)).hover(move |s| {
+                                    s.bg(rgba(palette.raised)).text_color(rgb(palette.text))
+                                })
                             })
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 view.go(Page::Calendar, cx);
@@ -348,10 +343,9 @@ pub fn nav(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> V
                                     .font_weight(FontWeight::MEDIUM)
                             })
                             .when(!is_current, |el| {
-                                el.text_color(rgb(palette.muted))
-                                    .hover(move |s| {
-                                        s.bg(rgba(palette.raised)).text_color(rgb(palette.text))
-                                    })
+                                el.text_color(rgb(palette.muted)).hover(move |s| {
+                                    s.bg(rgba(palette.raised)).text_color(rgb(palette.text))
+                                })
                             })
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 let route = target.clone();
@@ -386,12 +380,7 @@ pub fn scratchpad_row(
     cx: &mut Context<Workspace>,
 ) -> impl IntoElement {
     let active = view.right_panel.is_open() && view.right_panel.seat() == Seat::Scratchpad;
-    let count = view
-        .scratchpad
-        .read(cx)
-        .state
-        .parse_targets()
-        .len();
+    let count = view.scratchpad.read(cx).state.parse_targets().len();
     div()
         .id("sidebar-scratchpad-row")
         .flex()
@@ -528,7 +517,11 @@ pub fn soundscape(
                 .child(
                     IconButton::new(
                         "soundscape-mini-transport",
-                        if playing { IconName::Pause } else { IconName::Play },
+                        if playing {
+                            IconName::Pause
+                        } else {
+                            IconName::Play
+                        },
                     )
                     .size(ControlSize::Sm)
                     .variant(if playing {

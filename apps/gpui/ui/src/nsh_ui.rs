@@ -74,11 +74,7 @@ pub(crate) fn metric_tile(
         .py_3()
         .gap_1()
         .child(section_heading(label))
-        .child(
-            text(value.into())
-                .text_2xl()
-                .font_weight(FontWeight::BOLD),
-        )
+        .child(text(value.into()).text_2xl().font_weight(FontWeight::BOLD))
         .child(caption(caption_text))
 }
 
@@ -284,31 +280,28 @@ pub(crate) fn list_row(
 ) -> impl IntoElement {
     let title = title.into();
     let subtitle = subtitle.into();
-    surface_card()
-        .px_3()
-        .py_2p5()
-        .child(
-            button()
-                .min_h(px(44.0))
-                .flex_row()
-                .items_center()
-                .justify_between()
-                .gap_2()
-                .on_press(press)
-                .child(
-                    view()
-                        .flex_1()
-                        .gap_0p5()
-                        .child(
-                            text(title)
-                                .text_sm()
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(move || nsh_base::theme().foreground),
-                        )
-                        .child((!subtitle.is_empty()).then(|| caption(subtitle))),
-                )
-                .child(trailing.map(|badge| status_chip(badge, false))),
-        )
+    surface_card().px_3().py_2p5().child(
+        button()
+            .min_h(px(44.0))
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .gap_2()
+            .on_press(press)
+            .child(
+                view()
+                    .flex_1()
+                    .gap_0p5()
+                    .child(
+                        text(title)
+                            .text_sm()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(move || nsh_base::theme().foreground),
+                    )
+                    .child((!subtitle.is_empty()).then(|| caption(subtitle))),
+            )
+            .child(trailing.map(|badge| status_chip(badge, false))),
+    )
 }
 
 pub(crate) fn filter_drawer(
@@ -361,10 +354,7 @@ pub(crate) fn filter_drawer(
         .child(body)
 }
 
-pub(crate) fn empty_state(
-    title: impl Into<String>,
-    detail: impl Into<String>,
-) -> impl IntoElement {
+pub(crate) fn empty_state(title: impl Into<String>, detail: impl Into<String>) -> impl IntoElement {
     surface_card()
         .px_4()
         .py_4()

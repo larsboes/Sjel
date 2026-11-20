@@ -1124,10 +1124,7 @@ fn TravelContent() -> impl IntoElement {
                                             plan.status.eq_ignore_ascii_case("active"),
                                         )),
                                 )
-                                .child(caption(format!(
-                                    "{}–{}",
-                                    plan.date_start, plan.date_end
-                                ))),
+                                .child(caption(format!("{}–{}", plan.date_start, plan.date_end))),
                         );
                     }
                     if current.plans.is_empty() && !current.loading {

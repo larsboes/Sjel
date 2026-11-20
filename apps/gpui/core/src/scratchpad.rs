@@ -49,10 +49,7 @@ pub enum ScratchTarget {
         tag: Option<String>,
     },
     /// A capture in Inbox (e.g. `#learn` without a URL).
-    Inbox {
-        text: String,
-        tag: Option<String>,
-    },
+    Inbox { text: String, tag: Option<String> },
     /// A freeform note line that joins the daily note in Projects.
     Note {
         text: String,
@@ -75,8 +72,16 @@ impl ScratchTarget {
 
     pub fn summary(&self) -> String {
         match self {
-            Self::Task { title, project: Some(p), .. } => format!("{title} (@{p})"),
-            Self::Task { title, project: None, .. } => title.clone(),
+            Self::Task {
+                title,
+                project: Some(p),
+                ..
+            } => format!("{title} (@{p})"),
+            Self::Task {
+                title,
+                project: None,
+                ..
+            } => title.clone(),
             Self::Wishlist { text, url } | Self::Place { text, url } => text
                 .clone()
                 .filter(|t| !t.is_empty())
@@ -123,14 +128,22 @@ impl SortOutcome {
             parts.push(format!(
                 "{} {}",
                 self.tasks_created,
-                if self.tasks_created == 1 { "task" } else { "tasks" }
+                if self.tasks_created == 1 {
+                    "task"
+                } else {
+                    "tasks"
+                }
             ));
         }
         if self.feed_routed > 0 {
             parts.push(format!(
                 "{} {}",
                 self.feed_routed,
-                if self.feed_routed == 1 { "link" } else { "links" }
+                if self.feed_routed == 1 {
+                    "link"
+                } else {
+                    "links"
+                }
             ));
         }
         if self.wishlist_created > 0 {
@@ -140,7 +153,11 @@ impl SortOutcome {
             parts.push(format!(
                 "{} {}",
                 self.places_created,
-                if self.places_created == 1 { "place" } else { "places" }
+                if self.places_created == 1 {
+                    "place"
+                } else {
+                    "places"
+                }
             ));
         }
         if self.inbox_captured > 0 {
@@ -291,7 +308,8 @@ fn extract_project_mention(line: &str) -> (Option<String>, String) {
     for word in line.split_whitespace() {
         if project.is_none() {
             if let Some(name) = word.strip_prefix('@') {
-                let clean = name.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '_');
+                let clean =
+                    name.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '_');
                 if !clean.is_empty() {
                     project = Some(clean.to_owned());
                     continue;
@@ -338,12 +356,9 @@ pub fn parse_line(line: &str, default_project: Option<&str>) -> Option<ScratchTa
 
     // 2. Check for `#task` or `#todo` hashtag anywhere in the line
     let words: Vec<&str> = trimmed.split_whitespace().collect();
-    let has_task_tag = words.iter().any(|w| {
-        matches!(
-            w.to_ascii_lowercase().as_str(),
-            "#task" | "#todo"
-        )
-    });
+    let has_task_tag = words
+        .iter()
+        .any(|w| matches!(w.to_ascii_lowercase().as_str(), "#task" | "#todo"));
     if has_task_tag {
         let stripped = words
             .into_iter()

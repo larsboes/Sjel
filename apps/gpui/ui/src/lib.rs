@@ -31,8 +31,6 @@ pub mod context;
 #[cfg(feature = "gpui")]
 pub mod cv;
 #[cfg(feature = "gpui")]
-pub mod posts;
-#[cfg(feature = "gpui")]
 pub mod data;
 #[cfg(feature = "gpui")]
 pub mod doc_view;
@@ -109,6 +107,8 @@ pub mod pdf_kit;
 #[cfg(feature = "gpui")]
 pub mod people;
 #[cfg(feature = "gpui")]
+pub mod posts;
+#[cfg(feature = "gpui")]
 pub mod primitives;
 #[cfg(feature = "gpui")]
 pub mod projects;
@@ -157,8 +157,8 @@ pub use nav::{mobile_tab_bar, nav_header, NavItem};
 #[cfg(feature = "gpui")]
 pub use primitives::{
     back_button, card, chart_card, column_width, cycle_column_width, dashboard_metric_tile, dot,
-    due_badge, due_status, filter_pill, interactive_pill, key_bar, list, mono_num, note,
-    pill_tab, pill_tab_bar, placeholder, priority_pill, progress_bar, quick_action_button, row,
+    due_badge, due_status, filter_pill, interactive_pill, key_bar, list, mono_num, note, pill_tab,
+    pill_tab_bar, placeholder, priority_pill, progress_bar, quick_action_button, row,
     row_for_density, section, shortcut_hint, stat_card, stat_card_interactive, stat_strip,
     status_pill, sub_tabs, surface_card, sync_status_badge, tabular_cell, tone_chip, virtual_list,
     DueStatus, QuickAction, SortOrder, RADIUS_LG, RADIUS_MD, RADIUS_SM,

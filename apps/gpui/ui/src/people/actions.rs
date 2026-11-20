@@ -100,12 +100,7 @@ impl PeoplePage {
     }
 
     /// Opens a file picker to attach a local profile picture to `id`.
-    pub(super) fn pick_photo(
-        &mut self,
-        id: String,
-        revision: u32,
-        cx: &mut Context<Self>,
-    ) {
+    pub(super) fn pick_photo(&mut self, id: String, revision: u32, cx: &mut Context<Self>) {
         let Some(shell) = self.writer() else {
             return;
         };

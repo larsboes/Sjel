@@ -596,12 +596,17 @@ impl InventoryPage {
                 ),
         );
         Some(
-            Sheet::new("wishlist-create-sheet", Place::Right, title, move |_, cx| {
-                close_entity.update(cx, |page, cx| {
-                    page.wish_form = None;
-                    cx.notify();
-                });
-            })
+            Sheet::new(
+                "wishlist-create-sheet",
+                Place::Right,
+                title,
+                move |_, cx| {
+                    close_entity.update(cx, |page, cx| {
+                        page.wish_form = None;
+                        cx.notify();
+                    });
+                },
+            )
             .child(body)
             .into_any_element(),
         )
@@ -820,18 +825,28 @@ impl InventoryPage {
             content = content.child(form);
         }
         if budget.high_cents > 0 {
-            let monthly_cents = monthly_balance.as_ref().map_or(0, |b| b.median_cents.max(0));
+            let monthly_cents = monthly_balance
+                .as_ref()
+                .map_or(0, |b| b.median_cents.max(0));
             let ceiling = (budget.high_cents.max(monthly_cents).max(1)) as f64;
             let mut chart = BulletChart::new("wishlist-budget-bullet")
                 .format(|cents| format_cents(Some(cents.round() as i64)));
             chart = chart.bullet(
-                Bullet::new("Wishlist range", budget.low_cents as f64, budget.high_cents as f64)
-                    .bands([ceiling * 0.5, ceiling * 0.85, ceiling]),
+                Bullet::new(
+                    "Wishlist range",
+                    budget.low_cents as f64,
+                    budget.high_cents as f64,
+                )
+                .bands([ceiling * 0.5, ceiling * 0.85, ceiling]),
             );
             if monthly_cents > 0 {
                 chart = chart.bullet(
-                    Bullet::new("Monthly net", monthly_cents as f64, budget.high_cents as f64)
-                        .bands([ceiling * 0.5, ceiling * 0.85, ceiling]),
+                    Bullet::new(
+                        "Monthly net",
+                        monthly_cents as f64,
+                        budget.high_cents as f64,
+                    )
+                    .bands([ceiling * 0.5, ceiling * 0.85, ceiling]),
                 );
             }
             content = content.child(chart.w_full());
@@ -1045,34 +1060,27 @@ impl InventoryPage {
                 page_entity.update(cx, |page, cx| page.create_group(window, cx));
             })
             .child(fields);
-        let body = div()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .child(fields)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        ElyButton::new("group-create-save", "Create group")
-                            .size(ControlSize::Sm)
-                            .primary()
-                            .on_click(
-                                cx.listener(|page, _, window, cx| page.create_group(window, cx)),
-                            ),
-                    )
-                    .child(
-                        ElyButton::new("group-create-cancel", "Cancel")
-                            .size(ControlSize::Sm)
-                            .variant(ButtonVariant::Ghost)
-                            .on_click(cx.listener(|page, _, _, cx| {
-                                page.group_form = None;
-                                cx.notify();
-                            })),
-                    ),
-            );
+        let body = div().flex().flex_col().gap_3().child(fields).child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    ElyButton::new("group-create-save", "Create group")
+                        .size(ControlSize::Sm)
+                        .primary()
+                        .on_click(cx.listener(|page, _, window, cx| page.create_group(window, cx))),
+                )
+                .child(
+                    ElyButton::new("group-create-cancel", "Cancel")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(cx.listener(|page, _, _, cx| {
+                            page.group_form = None;
+                            cx.notify();
+                        })),
+                ),
+        );
         Some(
             Sheet::new(
                 "wishlist-group-sheet",
@@ -1100,7 +1108,9 @@ impl InventoryPage {
         let columns = [
             Column::new("wish", "WISH"),
             Column::new("priority", "PRIORITY").width(rems(8.)),
-            Column::new("dimensions", "DIMENSIONS").width(rems(9.)).muted(),
+            Column::new("dimensions", "DIMENSIONS")
+                .width(rems(9.))
+                .muted(),
             Column::new("price", "BUDGET").width(rems(8.)).end(),
             Column::new("actions", "").width(rems(16.)).actions([
                 RowAction::new("group", "Group"),

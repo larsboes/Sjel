@@ -7,8 +7,8 @@ use nsh_base::{button, input};
 use nsh_core::prelude::*;
 use sjel_gpui_core::device::Source;
 use sjel_gpui_core::inventory::{
-    budget_of, counted, filter_inventory, format_cents, format_dimensions, group_of,
-    months_to_pay, wishlist_view, InventoryItem, InventoryRow, InventoryWishlist, WishGroup,
+    budget_of, counted, filter_inventory, format_cents, format_dimensions, group_of, months_to_pay,
+    wishlist_view, InventoryItem, InventoryRow, InventoryWishlist, WishGroup,
 };
 use sjel_gpui_core::shell;
 use tokio::sync::watch;
@@ -105,11 +105,7 @@ pub fn connect(source: Source) {
 }
 
 /// Sets the inventory and wishlist snapshot directly (used by offline caching and tests).
-pub fn set_snapshot(
-    rows: Vec<InventoryRow>,
-    wishlist: InventoryWishlist,
-    groups: Vec<WishGroup>,
-) {
+pub fn set_snapshot(rows: Vec<InventoryRow>, wishlist: InventoryWishlist, groups: Vec<WishGroup>) {
     let mut s = state();
     let owned_count = rows
         .iter()
@@ -122,9 +118,7 @@ pub fn set_snapshot(
     s.snap.groups = groups;
     s.snap.loading = false;
     s.snap.error = None;
-    s.snap.status = format!(
-        "{wish_count} wishes · {owned_count} owned · {group_count} groups"
-    );
+    s.snap.status = format!("{wish_count} wishes · {owned_count} owned · {group_count} groups");
     publish(&s);
 }
 
@@ -223,18 +217,19 @@ fn wishlist_section(
         .wishlist
         .monthly_balance
         .as_ref()
-        .map(|bal| format!("At {}/mo median surplus", format_cents(Some(bal.median_cents))))
+        .map(|bal| {
+            format!(
+                "At {}/mo median surplus",
+                format_cents(Some(bal.median_cents))
+            )
+        })
         .unwrap_or_else(|| format!("{} unpriced", budget.unpriced));
 
-    let mut group_pills = view()
-        .flex_row()
-        .flex_wrap()
-        .gap_1p5()
-        .child(pill_tab(
-            "All wishes",
-            selected_group.get().is_none(),
-            move || selected_group.set(None),
-        ));
+    let mut group_pills = view().flex_row().flex_wrap().gap_1p5().child(pill_tab(
+        "All wishes",
+        selected_group.get().is_none(),
+        move || selected_group.set(None),
+    ));
     for group in &snap.groups {
         let gid = group.id.clone();
         let active = selected_group.with(|g| g.as_deref() == Some(group.id.as_str()));
@@ -263,7 +258,11 @@ fn wishlist_section(
                         visible.len()
                     ),
                 ))
-                .child(metric_tile("SURPLUS HORIZON", payback_text, payback_caption)),
+                .child(metric_tile(
+                    "SURPLUS HORIZON",
+                    payback_text,
+                    payback_caption,
+                )),
         )
         .child(group_pills);
 
@@ -332,15 +331,11 @@ fn owned_section(
         Some("owned"),
     );
 
-    let mut cat_pills = view()
-        .flex_row()
-        .flex_wrap()
-        .gap_1p5()
-        .child(pill_tab(
-            "All owned",
-            category_filter.get().is_none(),
-            move || category_filter.set(None),
-        ));
+    let mut cat_pills = view().flex_row().flex_wrap().gap_1p5().child(pill_tab(
+        "All owned",
+        category_filter.get().is_none(),
+        move || category_filter.set(None),
+    ));
     for (key, label) in [
         ("furniture", "Furniture"),
         ("gear", "Gear"),

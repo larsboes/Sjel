@@ -179,9 +179,9 @@ impl AppState {
                         sjel_gpui_ui::nsh_mail::connect(sjel_gpui_core::device::Source::Device(
                             client.clone(),
                         ));
-                        sjel_gpui_ui::nsh_finance::connect(
-                            sjel_gpui_core::device::Source::Device(client.clone()),
-                        );
+                        sjel_gpui_ui::nsh_finance::connect(sjel_gpui_core::device::Source::Device(
+                            client.clone(),
+                        ));
                         sjel_gpui_ui::nsh_inventory::connect(
                             sjel_gpui_core::device::Source::Device(client.clone()),
                         );

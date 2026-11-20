@@ -173,16 +173,20 @@ pub fn SoundscapeScreen() -> impl IntoElement {
         let mut row = view().flex_row().flex_wrap().gap_1p5();
         for preset in Preset::ALL {
             let is_active = current.eq_ignore_ascii_case(preset.key());
-            row = row.child(crate::nsh_ui::pill_tab(preset.key(), is_active, move || {
-                {
-                    let mut s = state();
-                    s.control.set_preset(preset);
-                    s.prefs.preset = preset.key().into();
-                    publish(&mut s);
-                }
-                active_preset.set(preset.key().into());
-                save();
-            }));
+            row = row.child(crate::nsh_ui::pill_tab(
+                preset.key(),
+                is_active,
+                move || {
+                    {
+                        let mut s = state();
+                        s.control.set_preset(preset);
+                        s.prefs.preset = preset.key().into();
+                        publish(&mut s);
+                    }
+                    active_preset.set(preset.key().into());
+                    save();
+                },
+            ));
         }
         row.into_element()
     });

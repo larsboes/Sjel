@@ -215,32 +215,32 @@ impl Soundscape {
                 .iter()
                 .find(|(l, _)| *l == layer)
                 .map(|(_, s)| s);
-            card = card.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.text))
-                                    .child(layer.label()),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .child(mono_num(format!("{:.0}%", value * 100.), palette.muted)),
-                            ),
-                    )
-                    .when_some(slider, |el, s| {
-                        el.child(Slider::new(s).accessibility_label(layer.label()))
-                    }),
-            );
+            card =
+                card.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.text))
+                                        .child(layer.label()),
+                                )
+                                .child(div().text_xs().child(mono_num(
+                                    format!("{:.0}%", value * 100.),
+                                    palette.muted,
+                                ))),
+                        )
+                        .when_some(slider, |el, s| {
+                            el.child(Slider::new(s).accessibility_label(layer.label()))
+                        }),
+                );
         }
         card.into_any_element()
     }

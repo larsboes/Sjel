@@ -13,7 +13,9 @@ use crate::ely::data_display::Tone;
 use crate::ely::tables::{Cell, Column, DataTable, Row, SortKey};
 use crate::ely::theme::{ControlSize, Density};
 use crate::theme::Palette;
-use gpui_kit::{div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
+use gpui_kit::{
+    div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, FontWeight, SharedString,
+};
 
 use super::FinancePage;
 
@@ -222,7 +224,10 @@ impl FinancePage {
                         div()
                             .text_xs()
                             .text_color(rgb(palette.muted))
-                            .child(format!("{active_count} active of {} tracked", summaries.len())),
+                            .child(format!(
+                                "{active_count} active of {} tracked",
+                                summaries.len()
+                            )),
                     )
                     .child(status_chips),
             );

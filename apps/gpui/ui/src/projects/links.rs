@@ -335,24 +335,26 @@ impl Projects {
                     })
                     .collect();
                 let on_act = cx.entity();
-                body = body.child("Existing links (current Inventory state not checked):").child(
-                    DataTable::new("project-existing-links-table", columns)
-                        .label("Existing inventory links")
-                        .rows(rows)
-                        .on_action(move |key, action, _, cx| {
-                            if action.as_ref() == "remove" {
-                                let item_ref = key.to_string();
-                                let label = labels_by_ref
-                                    .get(&item_ref)
-                                    .cloned()
-                                    .unwrap_or_else(|| "Inventory item unavailable".into());
-                                on_act.update(cx, |view, cx| {
-                                    view.review_inventory_link(item_ref, label, None, true, cx);
-                                });
-                            }
-                        })
-                        .empty("No links for this record."),
-                );
+                body = body
+                    .child("Existing links (current Inventory state not checked):")
+                    .child(
+                        DataTable::new("project-existing-links-table", columns)
+                            .label("Existing inventory links")
+                            .rows(rows)
+                            .on_action(move |key, action, _, cx| {
+                                if action.as_ref() == "remove" {
+                                    let item_ref = key.to_string();
+                                    let label = labels_by_ref
+                                        .get(&item_ref)
+                                        .cloned()
+                                        .unwrap_or_else(|| "Inventory item unavailable".into());
+                                    on_act.update(cx, |view, cx| {
+                                        view.review_inventory_link(item_ref, label, None, true, cx);
+                                    });
+                                }
+                            })
+                            .empty("No links for this record."),
+                    );
             }
             if let Some(items) = &self.link_items.value {
                 let owned: Vec<_> = items
@@ -443,56 +445,56 @@ impl Projects {
                     });
                 },
             )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_3()
-                        .p_3()
-                        .border_1()
-                        .border_color(rgba(palette.border))
-                        .rounded(px(6.))
-                        .child(format!(
-                            "Project record: {} · {}",
-                            review.record.title, review.record.path
-                        ))
-                        .child(format!(
-                            "Inventory: {} · {}",
-                            review.item_label, review.item_ref
-                        ))
-                        .child(format!("Project revision: {}", review.record.updated_at))
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_2()
-                                .child(
-                                    Button::new("link-confirm")
-                                        .small()
-                                        .primary()
-                                        .label(if review.remove {
-                                            "Confirm removal"
-                                        } else {
-                                            "Confirm link"
-                                        })
-                                        .disabled(self.link_busy)
-                                        .on_click(cx.listener(|view, _, _, cx| {
-                                            view.confirm_inventory_link(cx)
-                                        })),
-                                )
-                                .child(
-                                    Button::new("link-cancel")
-                                        .small()
-                                        .ghost()
-                                        .label("Cancel")
-                                        .disabled(self.link_busy)
-                                        .on_click(cx.listener(|view, _, _, cx| {
-                                            view.link_review = None;
-                                            cx.notify();
-                                        })),
-                                ),
-                        ),
-                )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .p_3()
+                    .border_1()
+                    .border_color(rgba(palette.border))
+                    .rounded(px(6.))
+                    .child(format!(
+                        "Project record: {} · {}",
+                        review.record.title, review.record.path
+                    ))
+                    .child(format!(
+                        "Inventory: {} · {}",
+                        review.item_label, review.item_ref
+                    ))
+                    .child(format!("Project revision: {}", review.record.updated_at))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Button::new("link-confirm")
+                                    .small()
+                                    .primary()
+                                    .label(if review.remove {
+                                        "Confirm removal"
+                                    } else {
+                                        "Confirm link"
+                                    })
+                                    .disabled(self.link_busy)
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.confirm_inventory_link(cx)
+                                    })),
+                            )
+                            .child(
+                                Button::new("link-cancel")
+                                    .small()
+                                    .ghost()
+                                    .label("Cancel")
+                                    .disabled(self.link_busy)
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.link_review = None;
+                                        cx.notify();
+                                    })),
+                            ),
+                    ),
+            )
         });
         div()
             .id("project-links-scroll")

@@ -119,18 +119,14 @@ pub fn set_snapshot(
     let mut s = state();
     let tx_count = dashboard.transactions.len();
     let sub_count = subscriptions.len();
-    let pending_count = candidates
-        .iter()
-        .filter(|c| c.state == "pending")
-        .count();
+    let pending_count = candidates.iter().filter(|c| c.state == "pending").count();
     s.snap.dashboard = dashboard;
     s.snap.subscriptions = subscriptions;
     s.snap.candidates = candidates;
     s.snap.loading = false;
     s.snap.error = None;
-    s.snap.status = format!(
-        "{tx_count} transactions · {sub_count} subscriptions · {pending_count} to review"
-    );
+    s.snap.status =
+        format!("{tx_count} transactions · {sub_count} subscriptions · {pending_count} to review");
     publish(&s);
 }
 
@@ -203,9 +199,7 @@ fn review_candidate(id: String, decision: &'static str) {
             .iter()
             .filter(|c| c.state == "pending")
             .count();
-        s.snap.status = format!(
-            "Recorded {decision} · {pending} candidates left to review"
-        );
+        s.snap.status = format!("Recorded {decision} · {pending} candidates left to review");
         publish(&s);
         s.source.clone()
     };
@@ -348,14 +342,15 @@ fn overview_section(snap: &Snapshot) -> nsh_core::element::AnyElement {
 
     if let Some(balance_snap) = &snap.dashboard.balance_snapshot {
         if !balance_snap.balances.is_empty() {
-            let mut bal_card = surface_card()
-                .px_4()
-                .py_3()
-                .gap_2()
-                .child(section_heading(format!(
-                    "BALANCES AS OF {}",
-                    balance_snap.as_of
-                )));
+            let mut bal_card =
+                surface_card()
+                    .px_4()
+                    .py_3()
+                    .gap_2()
+                    .child(section_heading(format!(
+                        "BALANCES AS OF {}",
+                        balance_snap.as_of
+                    )));
             for bal in &balance_snap.balances {
                 let kind_label = match bal.kind {
                     BalanceKind::Asset => "Asset",
@@ -445,13 +440,11 @@ fn transactions_section(
         category: category.get(),
     };
     let filtered = filter_transactions(&snap.dashboard.transactions, &filter);
-    let mut cat_strip = view()
-        .flex_row()
-        .flex_wrap()
-        .gap_1p5()
-        .child(pill_tab("All categories", category.get().is_none(), move || {
-            category.set(None)
-        }));
+    let mut cat_strip = view().flex_row().flex_wrap().gap_1p5().child(pill_tab(
+        "All categories",
+        category.get().is_none(),
+        move || category.set(None),
+    ));
     for cat in snap.dashboard.categories.iter().take(8) {
         let cat_name = cat.clone();
         let active = category.with(|c| c.as_deref() == Some(cat.as_str()));
@@ -460,14 +453,11 @@ fn transactions_section(
         }));
     }
 
-    let mut out = view()
-        .gap_2()
-        .child(cat_strip)
-        .child(caption(format!(
-            "Showing {} of {} transactions",
-            filtered.len(),
-            snap.dashboard.transactions.len()
-        )));
+    let mut out = view().gap_2().child(cat_strip).child(caption(format!(
+        "Showing {} of {} transactions",
+        filtered.len(),
+        snap.dashboard.transactions.len()
+    )));
 
     if filtered.is_empty() {
         out = out.child(empty_state(
@@ -494,30 +484,28 @@ fn subscriptions_section(
         .collect();
     let monthly_burn = calculate_monthly_burn(&snap.subscriptions);
 
-    let mut out = view()
-        .gap_3()
-        .child(
-            view()
-                .flex_row()
-                .items_center()
-                .justify_between()
-                .gap_2()
-                .child(
-                    view()
-                        .flex_row()
-                        .gap_1p5()
-                        .child(pill_tab("Active only", active_only.get(), move || {
-                            active_only.set(true)
-                        }))
-                        .child(pill_tab("All states", !active_only.get(), move || {
-                            active_only.set(false)
-                        })),
-                )
-                .child(status_chip(
-                    format!("Burn: {}/mo", format_signed_cents(monthly_burn, "EUR")),
-                    true,
-                )),
-        );
+    let mut out = view().gap_3().child(
+        view()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .gap_2()
+            .child(
+                view()
+                    .flex_row()
+                    .gap_1p5()
+                    .child(pill_tab("Active only", active_only.get(), move || {
+                        active_only.set(true)
+                    }))
+                    .child(pill_tab("All states", !active_only.get(), move || {
+                        active_only.set(false)
+                    })),
+            )
+            .child(status_chip(
+                format!("Burn: {}/mo", format_signed_cents(monthly_burn, "EUR")),
+                true,
+            )),
+    );
 
     if summaries.is_empty() {
         out = out.child(empty_state(
@@ -538,11 +526,7 @@ fn subscriptions_section(
                             .items_center()
                             .justify_between()
                             .gap_2()
-                            .child(
-                                text(sub.name)
-                                    .text_sm()
-                                    .font_weight(FontWeight::SEMIBOLD),
-                            )
+                            .child(text(sub.name).text_sm().font_weight(FontWeight::SEMIBOLD))
                             .child(status_chip(sub.status, is_active)),
                     )
                     .child(

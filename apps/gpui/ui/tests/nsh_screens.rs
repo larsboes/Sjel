@@ -36,8 +36,7 @@ fn today_documents_and_mail_render_and_switch_in_the_phone_host() {
         app.press("text:Today")
             .expect("the map can return to Today");
         app.wait_for("text:TODAY").unwrap();
-        app.press("text:More")
-            .expect("the More hub drawer opens");
+        app.press("text:More").expect("the More hub drawer opens");
         app.wait_for("text:SWITCH PHONE AREA").unwrap();
         app.press("text:Finance >> nth=0")
             .expect("Finance opens from the More hub");

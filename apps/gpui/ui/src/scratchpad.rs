@@ -233,7 +233,8 @@ impl ScratchpadSeat {
         let repo = self.repo.clone();
         let now = now_unix_secs();
         let date_label = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let work = shell::run(async move { sort_into_sjel(&repo, targets, &date_label, now).await });
+        let work =
+            shell::run(async move { sort_into_sjel(&repo, targets, &date_label, now).await });
 
         if let Some(win) = window.as_deref_mut() {
             cx.spawn_in(win, async move |this, cx| {
@@ -276,8 +277,8 @@ impl ScratchpadSeat {
                 self.state.history.insert(0, outcome.clone());
                 self.state.history.truncate(5);
                 if !cfg!(test) {
-            let _ = self.state.save();
-        }
+                    let _ = self.state.save();
+                }
                 self.last_outcome = Some(outcome.clone());
                 if let Some((textarea, _)) = &self.textarea {
                     if let Some(win) = window {
@@ -522,7 +523,10 @@ impl Render for ScratchpadSeat {
             }
             if notes_n > 0 {
                 summary_chips = summary_chips.child(tone_chip(
-                    format!("{notes_n} note {}", if notes_n == 1 { "line" } else { "lines" }),
+                    format!(
+                        "{notes_n} note {}",
+                        if notes_n == 1 { "line" } else { "lines" }
+                    ),
                     palette.muted,
                 ));
             }
@@ -607,17 +611,12 @@ impl Render for ScratchpadSeat {
                             .text_color(rgb(palette.text))
                             .child("How the 24-hour Scratchpad works"),
                     )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(
-                                "Anything you jot here stays at your fingertips for 24 hours. \
+                    .child(div().text_xs().text_color(rgb(palette.muted)).child(
+                        "Anything you jot here stays at your fingertips for 24 hours. \
                                  When the day is up (or whenever you press Sort into Sjel), \
                                  links move to Feed, - [ ] lines become Tasks, #buy items go to \
                                  Wishlist, #go goes to Places, and notes save to your Daily Note.",
-                            ),
-                    ),
+                    )),
             );
         }
 

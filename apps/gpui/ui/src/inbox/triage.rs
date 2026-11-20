@@ -611,14 +611,10 @@ impl Inbox {
 
         let group_name = SharedString::from(format!("capture-row-group-{i}"));
         let group_hover_name = group_name.clone();
-        let mut secondary_actions = div()
-            .flex()
-            .items_center()
-            .gap_1()
-            .when(!chosen, |el| {
-                el.opacity(0.)
-                    .group_hover(group_hover_name, |s| s.opacity(1.))
-            });
+        let mut secondary_actions = div().flex().items_center().gap_1().when(!chosen, |el| {
+            el.opacity(0.)
+                .group_hover(group_hover_name, |s| s.opacity(1.))
+        });
         if is_new {
             if capture.url.as_deref().is_some_and(is_youtube_url) {
                 let url = capture.url.clone().unwrap_or_default();
@@ -667,15 +663,16 @@ impl Inbox {
         }
         if chosen {
             let capture = capture.clone();
-            secondary_actions = secondary_actions.child(
-                Button::new(SharedString::from(format!("inbox-edit-{i}")), "Edit")
-                    .size(ControlSize::Sm)
-                    .variant(ButtonVariant::Ghost)
-                    .disabled(busy)
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.edit_text(&capture, window, cx)
-                    })),
-            );
+            secondary_actions =
+                secondary_actions.child(
+                    Button::new(SharedString::from(format!("inbox-edit-{i}")), "Edit")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .disabled(busy)
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            view.edit_text(&capture, window, cx)
+                        })),
+                );
         }
         let actions = div()
             .flex()

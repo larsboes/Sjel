@@ -134,8 +134,7 @@ fn hero_strip(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                 icon: IconName::Plus,
                 label: "Scratchpad".into(),
                 tooltip: "Open 24-hour quick Scratchpad (⌘\\)".into(),
-                active: view.right_panel.is_open()
-                    && view.right_panel.seat() == Seat::Scratchpad,
+                active: view.right_panel.is_open() && view.right_panel.seat() == Seat::Scratchpad,
                 tone: None,
                 palette,
             },

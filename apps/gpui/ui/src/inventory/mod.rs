@@ -588,7 +588,9 @@ impl Render for InventoryPage {
             .flex_col()
             .size_full()
             .gap_4()
-            .when(cfg!(test), |el| el.child(self.render_header_bar(palette, cx)))
+            .when(cfg!(test), |el| {
+                el.child(self.render_header_bar(palette, cx))
+            })
             .child(if self.tab == InventoryTab::Owned {
                 div()
                     .id("inventory-content")

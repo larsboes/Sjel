@@ -2430,28 +2430,26 @@ impl Projects {
                                         .collect(),
                                 );
                                 let (on_open, on_act) = (cx.entity(), cx.entity());
-                                let notes_content = DataTable::new(
-                                    "project-supporting-notes-table",
-                                    columns,
-                                )
-                                .label("Supporting notes")
-                                .rows(rows)
-                                .on_open(move |key, window, cx| {
-                                    let path = key.to_string();
-                                    on_open.update(cx, |view, cx| {
-                                        view.open_note(path, true, window, cx);
-                                    });
-                                })
-                                .on_action(move |key, action, window, cx| {
-                                    if action.as_ref() == "delete" {
-                                        let path = key.to_string();
-                                        on_act.update(cx, |view, cx| {
-                                            view.remove_record(path, window, cx);
-                                        });
-                                    }
-                                })
-                                .empty("No supporting notes yet in this project.")
-                                .into_any_element();
+                                let notes_content =
+                                    DataTable::new("project-supporting-notes-table", columns)
+                                        .label("Supporting notes")
+                                        .rows(rows)
+                                        .on_open(move |key, window, cx| {
+                                            let path = key.to_string();
+                                            on_open.update(cx, |view, cx| {
+                                                view.open_note(path, true, window, cx);
+                                            });
+                                        })
+                                        .on_action(move |key, action, window, cx| {
+                                            if action.as_ref() == "delete" {
+                                                let path = key.to_string();
+                                                on_act.update(cx, |view, cx| {
+                                                    view.remove_record(path, window, cx);
+                                                });
+                                            }
+                                        })
+                                        .empty("No supporting notes yet in this project.")
+                                        .into_any_element();
 
                                 div()
                                     .flex()
@@ -2529,8 +2527,18 @@ impl Projects {
             .as_ref()
             .map(|list| list.iter().filter(|p| !p.archived).count())
             .filter(|&c| c > 0);
-        let tasks_count = self.all_tasks.value.as_ref().map(Vec::len).filter(|&c| c > 0);
-        let notes_count = self.all_notes.value.as_ref().map(Vec::len).filter(|&c| c > 0);
+        let tasks_count = self
+            .all_tasks
+            .value
+            .as_ref()
+            .map(Vec::len)
+            .filter(|&c| c > 0);
+        let notes_count = self
+            .all_notes
+            .value
+            .as_ref()
+            .map(Vec::len)
+            .filter(|&c| c > 0);
         let tab_entity = cx.entity();
         let tab_bar = show_inline_tabs.then(|| {
             div()

@@ -537,14 +537,9 @@ fn body(snap: Snapshot, active_tab: Signal<NshTodayTab>) -> impl IntoElement {
         .gap_4()
         .child(tiles)
         .child(tabs)
-        .child(show_day.then(|| {
-            section(
-                "THE DAY",
-                "Nothing on the calendar today.",
-                entries,
-                None,
-            )
-        }))
+        .child(
+            show_day.then(|| section("THE DAY", "Nothing on the calendar today.", entries, None)),
+        )
         .child(show_tasks.then(|| {
             view()
                 .gap_2()
@@ -645,7 +640,9 @@ fn header(snap: Signal<Snapshot>) -> impl IntoElement {
                                 .child(
                                     text(move || {
                                         snap.with(|s| {
-                                            if s.travel.as_ref().is_some_and(|(_, waiting)| *waiting)
+                                            if s.travel
+                                                .as_ref()
+                                                .is_some_and(|(_, waiting)| *waiting)
                                             {
                                                 "Queued · Sync"
                                             } else if s.show_pair {
@@ -736,30 +733,21 @@ fn capture_bar() -> impl IntoElement {
                     false,
                     || emit(TodayEvent::Documents),
                 ))
-                .child(crate::nsh_ui::action_circle(
-                    "P",
-                    "Projects",
-                    false,
-                    || emit(TodayEvent::Projects),
-                ))
-                .child(crate::nsh_ui::action_circle(
-                    "I",
-                    "Interior",
-                    false,
-                    || emit(TodayEvent::Interior),
-                ))
+                .child(crate::nsh_ui::action_circle("P", "Projects", false, || {
+                    emit(TodayEvent::Projects)
+                }))
+                .child(crate::nsh_ui::action_circle("I", "Interior", false, || {
+                    emit(TodayEvent::Interior)
+                }))
                 .child(crate::nsh_ui::action_circle(
                     "€",
                     "Finance",
                     false,
                     || emit(TodayEvent::Finance),
                 ))
-                .child(crate::nsh_ui::action_circle(
-                    "W",
-                    "Wishlist",
-                    false,
-                    || emit(TodayEvent::Inventory),
-                )),
+                .child(crate::nsh_ui::action_circle("W", "Wishlist", false, || {
+                    emit(TodayEvent::Inventory)
+                })),
         )
 }
 

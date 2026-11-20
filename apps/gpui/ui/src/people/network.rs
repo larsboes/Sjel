@@ -155,7 +155,14 @@ impl PeoplePage {
                         if paint_bounds.replace(Some(bounds)) != Some(bounds) {
                             window.refresh();
                         }
-                        paint(&paint_graph, selected, connected_only, palette, bounds, window);
+                        paint(
+                            &paint_graph,
+                            selected,
+                            connected_only,
+                            palette,
+                            bounds,
+                            window,
+                        );
                     },
                 )
                 .absolute()
@@ -415,10 +422,12 @@ impl PeoplePage {
                                     )
                                     .size(ControlSize::Sm)
                                     .variant(ButtonVariant::Ghost)
-                                    .on_click(cx.listener(|page, _, _, cx| {
-                                        page.show_ego_graph = !page.show_ego_graph;
-                                        cx.notify();
-                                    })),
+                                    .on_click(cx.listener(
+                                        |page, _, _, cx| {
+                                            page.show_ego_graph = !page.show_ego_graph;
+                                            cx.notify();
+                                        },
+                                    )),
                                 )
                             })
                             .when(can_introduce, |el| {
@@ -470,7 +479,11 @@ impl PeoplePage {
         }
         if let Some(group_ix) = graph.nodes[center_ix].group {
             for (ix, node) in graph.nodes.iter().enumerate() {
-                if node.group == Some(group_ix) && !node.is_self && seen.insert(ix) && neighbors.len() < 10 {
+                if node.group == Some(group_ix)
+                    && !node.is_self
+                    && seen.insert(ix)
+                    && neighbors.len() < 10
+                {
                     neighbors.push((ix, "coworker".to_owned(), false));
                 }
             }
@@ -529,7 +542,8 @@ impl PeoplePage {
 
                 for (ix, x, y, is_direct) in &paint_inner {
                     let (nx, ny) = scale_pt(*x, *y);
-                    let mut line = gpui_kit::PathBuilder::stroke(px(if *is_direct { 1.8 } else { 1.0 }));
+                    let mut line =
+                        gpui_kit::PathBuilder::stroke(px(if *is_direct { 1.8 } else { 1.0 }));
                     line.move_to(point(px(cx_w), px(cy_w)));
                     line.line_to(point(px(nx), px(ny)));
                     if let Ok(path) = line.build() {
@@ -833,14 +847,9 @@ fn labels(
             neighbor_set.insert(other);
         }
     }
-    for (index, node) in graph
-        .nodes
-        .iter()
-        .enumerate()
-        .filter(|(index, node)| {
-            node.is_self || Some(*index) == selected || neighbor_set.contains(index)
-        })
-    {
+    for (index, node) in graph.nodes.iter().enumerate().filter(|(index, node)| {
+        node.is_self || Some(*index) == selected || neighbor_set.contains(index)
+    }) {
         let (x, y) = (cx + node.x * side - ox, cy + node.y * side - oy);
         out.push(
             div()

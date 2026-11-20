@@ -565,7 +565,11 @@ impl FinancePage {
                 .entry(tx.currency.clone())
                 .or_default()
                 .entry(tx.category.clone())
-                .or_default() += if cfg!(test) { tx.amount_cents as f64 } else { amt };
+                .or_default() += if cfg!(test) {
+                tx.amount_cents as f64
+            } else {
+                amt
+            };
             *daily_spend.entry(tx.date.clone()).or_default() += amt;
         }
         let charts = spending
@@ -581,10 +585,7 @@ impl FinancePage {
                 let selected = labels.clone();
                 let entity = cx.weak_entity();
                 BarChart::new(format!("finance-category-spending-{currency}"), labels)
-                    .series(Series::new(
-                        format!("Expenses · {currency}"),
-                        values,
-                    ))
+                    .series(Series::new(format!("Expenses · {currency}"), values))
                     .horizontal()
                     .format(move |cents| format_money(cents.round() as i64, &currency))
                     .on_select(move |ix, _, cx| {
@@ -606,35 +607,37 @@ impl FinancePage {
             })
             .collect::<Vec<_>>();
 
-        let heatmap = (!cfg!(test) && self.tx_charts_open && !daily_spend.is_empty()).then(|| {
-            let today = chrono::Local::now().date_naive();
-            let start = today - chrono::Duration::days(90);
-            let counts: Vec<f64> = (0..=90)
-                .map(|day_offset| {
-                    let date = (start + chrono::Duration::days(day_offset))
-                        .format("%Y-%m-%d")
-                        .to_string();
-                    daily_spend.get(&date).copied().unwrap_or(0.0)
+        let heatmap = (!cfg!(test) && self.tx_charts_open && !daily_spend.is_empty())
+            .then(|| {
+                let today = chrono::Local::now().date_naive();
+                let start = today - chrono::Duration::days(90);
+                let counts: Vec<f64> = (0..=90)
+                    .map(|day_offset| {
+                        let date = (start + chrono::Duration::days(day_offset))
+                            .format("%Y-%m-%d")
+                            .to_string();
+                        daily_spend.get(&date).copied().unwrap_or(0.0)
+                    })
+                    .collect();
+                start.to_string().parse().ok().map(|first| {
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_xs()
+                                .child("Daily spending intensity · last 91 days"),
+                        )
+                        .child(
+                            CalendarHeatmap::new("finance-daily-spend-heatmap", first, counts)
+                                .format(|cents| format_money(cents.round() as i64, "EUR"))
+                                .w_full()
+                                .h(px(96.)),
+                        )
                 })
-                .collect();
-            start.to_string().parse().ok().map(|first| {
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_xs()
-                            .child("Daily spending intensity · last 91 days"),
-                    )
-                    .child(
-                        CalendarHeatmap::new("finance-daily-spend-heatmap", first, counts)
-                            .format(|cents| format_money(cents.round() as i64, "EUR"))
-                            .w_full()
-                            .h(px(96.)),
-                    )
             })
-        }).flatten();
+            .flatten();
 
         let search_field = self.search_field(window, cx);
         let entity_cols = cx.entity();
@@ -779,10 +782,12 @@ impl FinancePage {
                                 )
                                 .size(ControlSize::Sm)
                                 .variant(ButtonVariant::Ghost)
-                                .on_click(cx.listener(|page, _, _, cx| {
-                                    page.tx_charts_open = !page.tx_charts_open;
-                                    cx.notify();
-                                })),
+                                .on_click(cx.listener(
+                                    |page, _, _, cx| {
+                                        page.tx_charts_open = !page.tx_charts_open;
+                                        cx.notify();
+                                    },
+                                )),
                             ),
                     ),
             )
@@ -862,9 +867,11 @@ impl FinancePage {
             .size_full()
             .child(filter_bar)
             .when(self.tx_charts_open && !charts.is_empty(), |body| {
-                body.child(div().text_xs().child(
-                    "Personal spending by category · click a bar to filter",
-                ))
+                body.child(
+                    div()
+                        .text_xs()
+                        .child("Personal spending by category · click a bar to filter"),
+                )
                 .children(charts)
                 .children(heatmap)
             })

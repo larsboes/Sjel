@@ -691,33 +691,30 @@ impl Travel {
                     .child("One stage is made per destination, in the order typed. Dates and modes are set per stage afterwards."),
             );
         }
-        let body = ElyForm::new("travel-form")
+        let body = ElyForm::new("travel-form").child(
+            card.when_some(form.error.clone(), |card, why| {
+                card.child(FormError::new("travel-form-error", why))
+            })
             .child(
-                card.when_some(form.error.clone(), |card, why| {
-                    card.child(FormError::new("travel-form-error", why))
-                })
-                .child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(
-                            Button::new(
-                                "travel-form-save",
-                                if form.saving { "Saving…" } else { "Save" },
-                            )
-                            .primary()
-                            .disabled(form.saving)
-                            .on_click(
-                                cx.listener(|view, _, window, cx| view.save_form(window, cx)),
-                            ),
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(
+                        Button::new(
+                            "travel-form-save",
+                            if form.saving { "Saving…" } else { "Save" },
                         )
-                        .child(
-                            Button::new("travel-form-cancel", "Cancel")
-                                .variant(ButtonVariant::Ghost)
-                                .on_click(cx.listener(|view, _, _, cx| view.close_form(cx))),
-                        ),
-                ),
-            );
+                        .primary()
+                        .disabled(form.saving)
+                        .on_click(cx.listener(|view, _, window, cx| view.save_form(window, cx))),
+                    )
+                    .child(
+                        Button::new("travel-form-cancel", "Cancel")
+                            .variant(ButtonVariant::Ghost)
+                            .on_click(cx.listener(|view, _, _, cx| view.close_form(cx))),
+                    ),
+            ),
+        );
         let close_entity = cx.entity();
         Some(
             Sheet::new("travel-form-sheet", Place::Right, title, move |_, cx| {

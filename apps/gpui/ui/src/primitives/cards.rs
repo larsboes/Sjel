@@ -82,10 +82,7 @@ pub fn surface_card(palette: Palette) -> gpui_kit::Div {
 }
 
 pub fn card(body: AnyElement, palette: Palette) -> AnyElement {
-    surface_card(palette)
-        .p_4()
-        .child(body)
-        .into_any_element()
+    surface_card(palette).p_4().child(body).into_any_element()
 }
 
 /// Framed chart card with uppercase title, optional subtitle, and elevated surface.
@@ -186,7 +183,13 @@ pub fn stat_card(
                 .child(value.into()),
         )
         .when_some(detail, |el, det| {
-            el.child(div().truncate().text_xs().text_color(rgb(palette.muted)).child(det))
+            el.child(
+                div()
+                    .truncate()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(det),
+            )
         })
         .into_any_element()
 }

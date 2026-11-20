@@ -601,7 +601,12 @@ impl Render for PeoplePage {
                             .graph
                             .value
                             .as_ref()
-                            .and_then(|g| g.nodes.iter().position(|n| n.id == pid).map(|i| g.links_of(i).count()))
+                            .and_then(|g| {
+                                g.nodes
+                                    .iter()
+                                    .position(|n| n.id == pid)
+                                    .map(|i| g.links_of(i).count())
+                            })
                             .unwrap_or(0);
                         let day = page
                             .order

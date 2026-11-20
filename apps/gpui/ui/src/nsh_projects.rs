@@ -513,9 +513,11 @@ pub fn ProjectsScreen() -> impl IntoElement {
                 .flex_row()
                 .flex_wrap()
                 .gap_1p5()
-                .child(crate::nsh_ui::pill_tab("Hubs", current_tab == 0, move || {
-                    tab.set(0)
-                }))
+                .child(crate::nsh_ui::pill_tab(
+                    "Hubs",
+                    current_tab == 0,
+                    move || tab.set(0),
+                ))
                 .child(crate::nsh_ui::pill_tab(
                     "All tasks",
                     current_tab == 1,
@@ -575,18 +577,17 @@ pub fn ProjectsScreen() -> impl IntoElement {
                         }));
                     }
                     if let Some(project) = current.project {
-                        out = out
-                            .child(
-                                view()
-                                    .flex_row()
-                                    .items_center()
-                                    .justify_between()
-                                    .gap_2()
-                                    .child(heading(project))
-                                    .child(crate::nsh_ui::pill_tab("‹ All projects", false, || {
-                                        open_project(None)
-                                    })),
-                            );
+                        out = out.child(
+                            view()
+                                .flex_row()
+                                .items_center()
+                                .justify_between()
+                                .gap_2()
+                                .child(heading(project))
+                                .child(crate::nsh_ui::pill_tab("‹ All projects", false, || {
+                                    open_project(None)
+                                })),
+                        );
                         for record in current.records.iter().filter(|r| matches(&r.title)) {
                             let path = record.path.clone();
                             out = out.child(crate::nsh_ui::list_row(
@@ -668,8 +669,8 @@ pub fn ProjectsScreen() -> impl IntoElement {
                             let mut project_pills = view().flex_row().flex_wrap().gap_1p5();
                             for p in &current.projects {
                                 let name = p.name.clone();
-                                let active =
-                                    project_filter.with(|pf| pf.as_deref() == Some(p.name.as_str()));
+                                let active = project_filter
+                                    .with(|pf| pf.as_deref() == Some(p.name.as_str()));
                                 project_pills = project_pills.child(crate::nsh_ui::pill_tab(
                                     name.clone(),
                                     active,
@@ -777,15 +778,11 @@ pub fn ProjectsScreen() -> impl IntoElement {
                         sort_notes(&mut notes, note_sort.get(), ascending.get());
                         for note in notes {
                             let path = note.path.clone();
-                            out = out.child(
-                                crate::nsh_ui::surface_card()
-                                    .px_3()
-                                    .py_2()
-                                    .child(action(
-                                        format!("{} · {}", note.title, note.project),
-                                        move || open_record(path.clone()),
-                                    )),
-                            );
+                            out = out.child(crate::nsh_ui::surface_card().px_3().py_2().child(
+                                action(format!("{} · {}", note.title, note.project), move || {
+                                    open_record(path.clone())
+                                }),
+                            ));
                         }
                     }
                     out

@@ -55,6 +55,10 @@ Rust binding fails to compile on arm64 iOS with stable Rust. A generated MVCC sn
 open connection preserved the intended commit boundary. Concurrent-write backup, power-loss
 recovery and physical iPhone behavior remain unverified.
 
+The Documents owner uses native WAL and a Unicode61-compatible search over the canonical
+stored text. The 27-page migration replay checked prefix and diacritic matches, filters,
+pagination, ordering and page hits against the SQLite FTS5 control.
+
 ## Decision
 
 Use Turso WAL for the Inventory pilot. The owner-only copy passed the SQL replay and restored to

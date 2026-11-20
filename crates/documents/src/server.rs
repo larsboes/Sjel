@@ -32,6 +32,11 @@ const ROUTES: &[route_manifest::Route] = &[
     route_manifest::get("GET", "/health", "Check document service liveness."),
     route_manifest::get(
         "GET",
+        "/api/documents/find",
+        "Find document names and filing labels for the authenticated operator.",
+    ),
+    route_manifest::get(
+        "GET",
         "/routes",
         "Describe the operator-only document API. Agent credentials are not admitted.",
     ),
@@ -238,6 +243,18 @@ struct ListQuery {
     sha256: Option<String>,
     limit: Option<usize>,
     offset: Option<usize>,
+}
+
+async fn find(
+    State(library): State<Arc<Library>>,
+    Query(query): Query<ListQuery>,
+) -> Result<Json<Vec<documents_api::FinderHit>>, ApiError> {
+    blocking(library, move |library| {
+        Ok(Json(
+            library.finder(query.q.as_deref().unwrap_or_default())?,
+        ))
+    })
+    .await
 }
 
 async fn list(
@@ -652,6 +669,7 @@ fn router(library: Arc<Library>) -> Router {
             get(|| async { Json(route_manifest::manifest("documents", ROUTES)) }),
         )
         .route("/api/documents", get(list).post(upload))
+        .route("/api/documents/find", get(find))
         .route("/api/documents/{id}/analyze", axum::routing::post(analyze))
         .route("/api/documents/{id}/children", get(children))
         .route("/api/documents/{id}/split", axum::routing::post(split))
@@ -694,13 +712,20 @@ pub fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let port = sjel_config::resolve_port(None, None, DEFAULT_PORT);
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.spawn(proposal_backfill_worker(Arc::clone(&library)));
-    runtime.block_on(sjel_server::serve(
+    let http = sjel_server::serve(
         "documents",
         sjel_server::Reach::Loopback,
         port,
-        router(library),
+        router(Arc::clone(&library)),
         sjel_server::InboundAuth::from_deployment().require_credential(),
-    ));
+    );
+    #[cfg(feature = "turso-wal")]
+    runtime.block_on(async {
+        tokio::join!(http, crate::jobs::serve(library, crate::database_path()?));
+        Ok::<_, crate::LibraryError>(())
+    })?;
+    #[cfg(not(feature = "turso-wal"))]
+    runtime.block_on(http);
     Ok(())
 }
 

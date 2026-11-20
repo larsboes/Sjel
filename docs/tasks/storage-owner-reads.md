@@ -59,3 +59,5 @@ It starts the enabled Finance service on demand after a refused connection and r
 maintenance holds through the service runner. The live Finder returned a matching subscription
 after starting the stopped Finance owner. Places spending and enrichment still read Finance
 tables in the shared database.
+
+Finder requests at most five Documents results through the authenticated owner route.

@@ -39,16 +39,6 @@ struct Source {
 
 const SOURCES: &[Source] = &[
     Source {
-        kind: "document",
-        table: "documents_items",
-        id: "id",
-        title: "coalesce(extracted_title, filename)",
-        detail: "trim(coalesce(category, '') || ' ' || coalesce(project, ''))",
-        haystack: "coalesce(extracted_title, '') || ' ' || filename || ' ' || coalesce(category, '') || ' ' || coalesce(project, '')",
-        order: "imported_at DESC",
-        link: |_| "sjel://documents".into(),
-    },
-    Source {
         kind: "trip",
         table: "trips_plans",
         id: "id",
@@ -194,7 +184,7 @@ pub(super) async fn owner_get<T: serde::de::DeserializeOwned>(
     }
     let mut upstream = request.try_clone()?.send().await;
     if matches!(&upstream, Err(error) if error.is_connect())
-        && service.autostart == "false"
+        && service.autostart != "true"
         && super::lifecycle(service.name.clone(), "start")
             .await
             .is_ok()
@@ -204,19 +194,12 @@ pub(super) async fn owner_get<T: serde::de::DeserializeOwned>(
     upstream.ok()?.error_for_status().ok()?.json().await.ok()
 }
 
-async fn owner_hits(
-    query: &str,
-) -> (
-    Vec<SearchHit>,
-    Vec<SearchHit>,
-    Vec<SearchHit>,
-    Vec<SearchHit>,
-) {
+async fn owner_hits(query: &str) -> Vec<SearchHit> {
     let Ok(services) = registry().await else {
-        return (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        return Vec::new();
     };
     let parameters = [("q", query)];
-    let (calendar, entities, inventory, subscriptions) = tokio::join!(
+    let (calendar, entities, documents, inventory, subscriptions) = tokio::join!(
         owner_get::<Vec<calendar_api::SearchHit>>(
             &services,
             "calendar",
@@ -227,6 +210,12 @@ async fn owner_hits(
             &services,
             "entities",
             entities_api::ROUTE_SEARCH,
+            &parameters,
+        ),
+        owner_get::<Vec<documents_api::FinderHit>>(
+            &services,
+            "documents",
+            documents_api::ROUTE_FINDER,
             &parameters,
         ),
         owner_get::<InventoryHits>(&services, "inventory", "/api/search", &parameters),
@@ -246,8 +235,7 @@ async fn owner_hits(
             title: entity.name,
             detail: entity.kind,
             link: "sjel://people".into(),
-        })
-        .collect();
+        });
     let inventory = inventory.map_or_else(Vec::new, |response| response.hits);
     let calendar = calendar
         .unwrap_or_default()
@@ -258,8 +246,7 @@ async fn owner_hits(
             title: entry.title,
             detail: entry.detail,
             link: "sjel://calendar".into(),
-        })
-        .collect();
+        });
     let subscriptions = subscriptions
         .unwrap_or_default()
         .into_iter()
@@ -269,9 +256,23 @@ async fn owner_hits(
             title: hit.title,
             detail: hit.detail,
             link: "sjel://finance".into(),
-        })
-        .collect();
-    (calendar, entities, inventory, subscriptions)
+        });
+    let documents = documents
+        .unwrap_or_default()
+        .into_iter()
+        .take(PER_SOURCE)
+        .map(|hit| SearchHit {
+            kind: "document".into(),
+            title: hit.title,
+            detail: hit.detail,
+            link: "sjel://documents".into(),
+        });
+    calendar
+        .chain(entities)
+        .chain(documents)
+        .chain(inventory.into_iter().take(PER_SOURCE))
+        .chain(subscriptions)
+        .collect()
 }
 
 pub(crate) async fn search_handler(
@@ -284,21 +285,11 @@ pub(crate) async fn search_handler(
     }
     let db_path = sjel_config::database_path();
     let local_query = text.clone();
-    let (local, (calendar, entities, inventory, subscriptions)) = tokio::join!(
+    let (local, mut hits) = tokio::join!(
         tokio::task::spawn_blocking(move || search(&db_path, &local_query)),
         owner_hits(&text),
     );
-    let mut hits = calendar;
-    hits.extend(entities);
     hits.extend(local.unwrap_or_default());
-    let inventory_position = hits
-        .iter()
-        .position(|hit| matches!(hit.kind.as_str(), "trip" | "mail"))
-        .unwrap_or(hits.len());
-    hits.splice(
-        inventory_position..inventory_position,
-        inventory.into_iter().take(PER_SOURCE).chain(subscriptions),
-    );
     Json(json!({ "hits": hits }))
 }
 

@@ -17,6 +17,14 @@ OWNERS = {
         "calendar_rhythms",
         "calendar_trip_materializations",
     },
+    "documents": {
+        "documents_classification_backfills",
+        "documents_classification_proposals",
+        "documents_classification_reviews",
+        "documents_duplicate_reviews",
+        "documents_items",
+        "documents_sources",
+    },
     "punctuality": {
         "punctuality_ingest_months",
         "punctuality_ingest_runs",
@@ -24,6 +32,19 @@ OWNERS = {
         "punctuality_stop_stats",
     },
     "software": {"software_apps", "software_decisions"},
+}
+
+
+DOCUMENT_SEARCH_OBJECTS = {
+    "documents_search",
+    "documents_search_config",
+    "documents_search_data",
+    "documents_search_docsize",
+    "documents_search_idx",
+    "documents_search_state",
+    "documents_search_after_delete",
+    "documents_search_after_insert",
+    "documents_search_after_update",
 }
 
 
@@ -48,6 +69,8 @@ def stage(owner, source_path, destination):
                 "WHERE tbl_name GLOB ? AND sql IS NOT NULL ORDER BY type, name",
                 (f"{owner}_*",),
             ).fetchall()
+            if owner == "documents":
+                catalog = [entry for entry in catalog if entry[1] not in DOCUMENT_SEARCH_OBJECTS]
             tables = {name for kind, name, _, _ in catalog if kind == "table"}
             if tables != OWNERS[owner]:
                 raise ValueError(f"the shared database has an unexpected {owner} schema")
@@ -60,7 +83,8 @@ def stage(owner, source_path, destination):
             column_counts = {}
             for name in sorted(tables):
                 table = identifier(name)
-                rows = source.execute(f"SELECT * FROM {table}")
+                columns_sql = "rowid, *" if name == "documents_items" else "*"
+                rows = source.execute(f"SELECT {columns_sql} FROM {table}")
                 columns = ",".join(identifier(column[0]) for column in rows.description)
                 parameters = ",".join("?" for _ in rows.description)
                 inserted = target.executemany(
@@ -84,7 +108,8 @@ def stage(owner, source_path, destination):
             for name in sorted(tables):
                 table = identifier(name)
                 order = ",".join(map(str, range(1, column_counts[name] + 1)))
-                sql = f"SELECT * FROM {table} ORDER BY {order}"
+                columns_sql = "rowid, *" if name == "documents_items" else "*"
+                sql = f"SELECT {columns_sql} FROM {table} ORDER BY {order}"
                 pairs = zip(source.execute(sql), target.execute(sql), strict=True)
                 if any(left != right for left, right in pairs):
                     raise ValueError(f"row mismatch in {name}")

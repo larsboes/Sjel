@@ -7,14 +7,23 @@ use std::{
     sync::Mutex,
 };
 
-use rusqlite::{params, Connection, OptionalExtension, Row};
+#[cfg(not(feature = "turso-wal"))]
+use rusqlite as sql;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal as sql;
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal as engine;
+#[cfg(not(feature = "turso-wal"))]
+use sjel_store as engine;
+use sql::{params, params_from_iter, Connection, OptionalExtension, Row};
 
 use crate::review::DuplicateDecision;
 use sha2::{Digest, Sha256};
 
 const PREFIX: &str = "documents";
 const DOCUMENT_ID_BATCH: usize = 500;
+#[cfg(not(feature = "turso-wal"))]
 const SEARCH_INDEX_VERSION: i64 = 1;
 pub(crate) const MAX_BYTES: usize = 128 * 1024 * 1024;
 
@@ -24,7 +33,7 @@ type Fallible<T> = Result<T, LibraryError>;
 pub enum LibraryError {
     Invalid(String),
     Io(std::io::Error),
-    Sql(rusqlite::Error),
+    Sql(sql::Error),
     Store(String),
     Model(String),
 }
@@ -47,8 +56,8 @@ impl From<std::io::Error> for LibraryError {
         Self::Io(value)
     }
 }
-impl From<rusqlite::Error> for LibraryError {
-    fn from(value: rusqlite::Error) -> Self {
+impl From<sql::Error> for LibraryError {
+    fn from(value: sql::Error) -> Self {
         Self::Sql(value)
     }
 }
@@ -108,7 +117,7 @@ struct ClassificationSidecar {
 }
 
 pub struct Library {
-    pool: sjel_store::Pool,
+    pool: engine::Pool,
     root: PathBuf,
     classification: crate::classification::ClassificationConfig,
     rule_proposal_lock: Mutex<()>,
@@ -142,7 +151,7 @@ impl Library {
         fs::set_permissions(&blobs, fs::Permissions::from_mode(0o700))?;
         fs::set_permissions(&records, fs::Permissions::from_mode(0o700))?;
         fs::set_permissions(&classifications, fs::Permissions::from_mode(0o700))?;
-        let pool = sjel_store::open_pool(database, PREFIX, migrate)
+        let pool = engine::open_pool(database, PREFIX, migrate)
             .map_err(|e| LibraryError::Store(e.to_string()))?;
         let library = Self {
             pool,
@@ -151,6 +160,16 @@ impl Library {
             rule_proposal_lock: Mutex::new(()),
         };
         Ok(library)
+    }
+
+    /// Write a closed metadata snapshot from the running Documents owner.
+    ///
+    /// # Errors
+    /// The database or snapshot destination cannot be opened.
+    #[cfg(feature = "turso-wal")]
+    pub fn snapshot(&self, database: &Path, target: &Path) -> Fallible<()> {
+        engine::snapshot(&self.pool.get()?, database, target)
+            .map_err(|error| LibraryError::Store(error.to_string()))
     }
 
     /// Intake bytes idempotently by digest. Existing originals are never overwritten.
@@ -207,8 +226,8 @@ impl Library {
             "INSERT OR IGNORE INTO documents_items
              (id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'inbox', NULL, NULL, ?7, ?8, ?9, ?10, NULL, NULL, NULL)",
-            params![document.id, document.sha256, document.filename, document.media_type, document.byte_len,
-                document.imported_at, document.extracted_title, document.extracted_text, document.extractor, extracted_pages],
+            params![document.id.as_str(), document.sha256.as_str(), document.filename.as_str(), document.media_type.as_str(), document.byte_len,
+                document.imported_at.as_str(), document.extracted_title.as_deref(), document.extracted_text.as_deref(), document.extractor.as_deref(), extracted_pages],
         )?;
         let saved = self.get(&id)?.ok_or_else(|| {
             LibraryError::Invalid("intake did not create a document record".into())
@@ -242,12 +261,13 @@ impl Library {
             "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items ORDER BY imported_at DESC, filename"
         };
         let mut stmt = conn.prepare(sql)?;
-        let rows = if let Some(status) = status {
-            stmt.query_map([status], read_document)?
+        let documents = if let Some(status) = status {
+            stmt.query_map(params![status], read_document)?
+                .collect::<sql::Result<Vec<_>>>()?
         } else {
-            stmt.query_map([], read_document)?
+            stmt.query_map(params![], read_document)?
+                .collect::<sql::Result<Vec<_>>>()?
         };
-        let documents = rows.collect::<Result<Vec<_>, _>>()?;
         Ok(documents
             .into_iter()
             .map(|document| self.with_configured_suggestion(document))
@@ -284,24 +304,66 @@ impl Library {
             )
         };
         let total: i64 = if let Some(status) = status {
-            conn.query_row(count_sql, [status], |row| row.get(0))?
+            conn.query_row(count_sql, params![status], |row| row.get(0))?
         } else {
-            conn.query_row(count_sql, [], |row| row.get(0))?
+            conn.query_row(count_sql, params![], |row| row.get(0))?
         };
         let total = usize::try_from(total)
             .map_err(|_| LibraryError::Invalid("document count is out of range".into()))?;
         let mut statement = conn.prepare(page_sql)?;
         let rows = if let Some(status) = status {
-            statement.query_map(params![status, limit, offset], read_document)?
+            statement
+                .query_map(params![status, limit, offset], read_document)?
+                .collect::<sql::Result<Vec<_>>>()?
         } else {
-            statement.query_map(params![limit, offset], read_document)?
+            statement
+                .query_map(params![limit, offset], read_document)?
+                .collect::<sql::Result<Vec<_>>>()?
         };
         let documents = rows
-            .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .map(|document| self.with_configured_suggestion(document))
             .collect();
         Ok((documents, total))
+    }
+
+    /// Find document names and filing labels for Finder.
+    ///
+    /// # Errors
+    /// The metadata store cannot be read.
+    pub fn finder(&self, query: &str) -> Fallible<Vec<documents_api::FinderHit>> {
+        let query: String = query.chars().take(200).collect();
+        let words: Vec<_> = query
+            .split_whitespace()
+            .take(6)
+            .map(str::to_lowercase)
+            .collect();
+        if words.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = (1..=words.len())
+            .map(|index| format!(
+                "instr(lower(coalesce(extracted_title, '') || ' ' || filename || ' ' || coalesce(category, '') || ' ' || coalesce(project, '')), ?{index}) > 0"
+            ))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        let conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let mut statement = conn.prepare(&format!(
+            "SELECT coalesce(extracted_title, filename), trim(coalesce(category, '') || ' ' || coalesce(project, ''))
+             FROM documents_items WHERE {filter} ORDER BY imported_at DESC, id LIMIT 5"
+        ))?;
+        let hits = statement
+            .query_map(params_from_iter(words.iter().map(String::as_str)), |row| {
+                Ok(documents_api::FinderHit {
+                    title: row.get(0)?,
+                    detail: row.get(1)?,
+                })
+            })?
+            .collect::<sql::Result<_>>()?;
+        Ok(hits)
     }
 
     /// Search indexed document text locally with token prefixes, loading full records only for this page.
@@ -333,48 +395,60 @@ impl Library {
             .pool
             .get()
             .map_err(|error| LibraryError::Store(error.to_string()))?;
-        let fts_query = terms
-            .iter()
-            .map(|term| format!("{term}*"))
-            .collect::<Vec<_>>()
-            .join(" OR ");
-        let mut statement = conn.prepare(
-            "SELECT d.id, d.filename, d.extracted_title, d.extracted_text, d.category, d.project, d.imported_at
-             FROM documents_search
-             JOIN documents_items d ON d.rowid = documents_search.rowid
-             WHERE documents_search MATCH ?1 AND (?2 IS NULL OR d.status = ?2)",
-        )?;
-        let rows = statement.query_map(params![fts_query, status], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, Option<String>>(2)?,
-                row.get::<_, Option<String>>(3)?,
-                row.get::<_, Option<String>>(4)?,
-                row.get::<_, Option<String>>(5)?,
-                row.get::<_, String>(6)?,
-            ))
-        })?;
+        #[cfg(feature = "turso-wal")]
+        let prefixes = crate::search_tokens::Prefixes::new(&terms);
         let mut matches = Vec::new();
-        for row in rows {
-            let (id, filename, title, text, category, project, imported_at) = row?;
-            let filename = filename.to_lowercase();
-            let title = title.unwrap_or_default().to_lowercase();
-            let text = text.unwrap_or_default().to_lowercase();
-            let category = category.unwrap_or_default().to_lowercase();
-            let project = project.unwrap_or_default().to_lowercase();
+        let mut inspect = |row: &Row<'_>| -> sql::Result<()> {
+            let id: String = row.get(0)?;
+            let filename: String = row.get(1)?;
+            let title: Option<String> = row.get(2)?;
+            let text: Option<String> = row.get(3)?;
+            let category: Option<String> = row.get(4)?;
+            let project: Option<String> = row.get(5)?;
+            let imported_at: String = row.get(6)?;
+            let fields = [
+                filename.as_str(),
+                title.as_deref().unwrap_or_default(),
+                text.as_deref().unwrap_or_default(),
+                category.as_deref().unwrap_or_default(),
+                project.as_deref().unwrap_or_default(),
+            ];
+            let lower = fields.map(str::to_lowercase);
             let score = terms
                 .iter()
-                .filter(|term| {
-                    filename.contains(term.as_str())
-                        || title.contains(term.as_str())
-                        || text.contains(term.as_str())
-                        || category.contains(term.as_str())
-                        || project.contains(term.as_str())
-                })
+                .filter(|term| lower.iter().any(|field| field.contains(term.as_str())))
                 .count();
-            if score > 0 {
-                matches.push((score, imported_at, id));
+            if score == 0 {
+                return Ok(());
+            }
+            #[cfg(feature = "turso-wal")]
+            if !fields.iter().any(|field| prefixes.matches(field)) {
+                return Ok(());
+            }
+            matches.push((score, imported_at, id));
+            Ok(())
+        };
+        #[cfg(feature = "turso-wal")]
+        conn.prepare(
+            "SELECT id, filename, extracted_title, extracted_text, category, project, imported_at
+             FROM documents_items WHERE (?1 IS NULL OR status = ?1)",
+        )?
+        .visit_rows(params![status], &mut inspect)?;
+        #[cfg(not(feature = "turso-wal"))]
+        {
+            let fts_query = terms
+                .iter()
+                .map(|term| format!("{term}*"))
+                .collect::<Vec<_>>()
+                .join(" OR ");
+            let mut statement = conn.prepare(
+                "SELECT d.id, d.filename, d.extracted_title, d.extracted_text, d.category, d.project, d.imported_at
+                 FROM documents_search
+                 JOIN documents_items d ON d.rowid = documents_search.rowid
+                 WHERE documents_search MATCH ?1 AND (?2 IS NULL OR d.status = ?2)",
+            )?;
+            for row in statement.query_map(params![fts_query, status], &mut inspect)? {
+                row?;
             }
         }
         matches.sort_by(|left, right| {
@@ -430,7 +504,7 @@ impl Library {
         let mut statement = conn.prepare(
             "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items WHERE parent_id = ?1 ORDER BY page_first, id",
         )?;
-        let rows = statement.query_map([parent_id], read_document)?;
+        let rows = statement.query_map(params![parent_id], read_document)?;
         rows.map(|row| row.map(|document| self.with_configured_suggestion(document)))
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
@@ -644,7 +718,7 @@ impl Library {
                 .pool
                 .get()
                 .map_err(|error| LibraryError::Store(error.to_string()))?;
-            let transaction = sjel_store::write_transaction(&mut conn)?;
+            let transaction = engine::write_transaction(&mut conn)?;
             for expected in &children {
                 let mut existing = existing_children
                     .iter()
@@ -658,7 +732,11 @@ impl Library {
                     self.write_blob(&expected.sha256, bytes)?;
                     transaction.execute(
                         "UPDATE documents_items SET sha256 = ?2, byte_len = ?3 WHERE id = ?1",
-                        params![existing.id, expected.sha256, expected.byte_len],
+                        params![
+                            existing.id.as_str(),
+                            expected.sha256.as_str(),
+                            expected.byte_len
+                        ],
                     )?;
                     existing.sha256 = expected.sha256.clone();
                     existing.byte_len = expected.byte_len;
@@ -693,12 +771,12 @@ impl Library {
             .pool
             .get()
             .map_err(|error| LibraryError::Store(error.to_string()))?;
-        let transaction = sjel_store::write_transaction(&mut conn)?;
+        let transaction = engine::write_transaction(&mut conn)?;
         for child in &children {
             transaction.execute(
                 "INSERT INTO documents_items (id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'inbox', NULL, NULL, NULL, ?7, ?8, ?9, ?10, ?11, ?12)",
-                params![child.id, child.sha256, child.filename, child.media_type, child.byte_len,
-                    child.imported_at, child.extracted_text, child.extractor,
+                params![child.id.as_str(), child.sha256.as_str(), child.filename.as_str(), child.media_type.as_str(), child.byte_len,
+                    child.imported_at.as_str(), child.extracted_text.as_deref(), child.extractor.as_deref(),
                     serde_json::to_string(&child.pages).map_err(|error| LibraryError::Invalid(error.to_string()))?,
                     parent_id, child.page_range.map(|range| range.first), child.page_range.map(|range| range.last)],
             )?;
@@ -731,7 +809,7 @@ impl Library {
                  WHERE document_id = ?1 ORDER BY generated_at, proposal_id",
             )?;
             let rows = statement
-                .query_map([document_id], |row| {
+                .query_map(params![document_id], |row| {
                     Ok((
                         row.get::<_, String>(0)?,
                         row.get::<_, String>(1)?,
@@ -755,7 +833,7 @@ impl Library {
                      WHERE proposal_id = ?1 ORDER BY review_id",
                 )?;
                 let rows = statement
-                    .query_map([&id], |row| {
+                    .query_map(params![id.as_str()], |row| {
                         Ok((
                             row.get::<_, i64>(0)?,
                             row.get::<_, String>(1)?,
@@ -833,7 +911,7 @@ impl Library {
             let rows = {
                 let mut statement = conn.prepare(&sql)?;
                 let mapped = statement
-                    .query_map(rusqlite::params_from_iter(batch.iter()), |row| {
+                    .query_map(params_from_iter(batch.iter().map(String::as_str)), |row| {
                         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
                     })?;
                 mapped.collect::<Result<Vec<_>, _>>()?
@@ -879,7 +957,7 @@ impl Library {
             let mut statement = conn.prepare(&sql)?;
             parents.extend(
                 statement
-                    .query_map(rusqlite::params_from_iter(batch.iter()), |row| {
+                    .query_map(params_from_iter(batch.iter().map(String::as_str)), |row| {
                         row.get::<_, String>(0)
                     })?
                     .collect::<Result<Vec<_>, _>>()?,
@@ -933,11 +1011,11 @@ impl Library {
             .pool
             .get()
             .map_err(|error| LibraryError::Store(error.to_string()))?;
-        let transaction = sjel_store::write_transaction(&mut conn)?;
+        let transaction = engine::write_transaction(&mut conn)?;
         let proposal_document = transaction
             .query_row(
                 "SELECT document_id FROM documents_classification_proposals WHERE proposal_id = ?1",
-                [proposal_id],
+                params![proposal_id],
                 |row| row.get::<_, String>(0),
             )
             .optional()?
@@ -975,7 +1053,7 @@ impl Library {
             let has_current_version = conn.query_row(
                 "SELECT EXISTS(SELECT 1 FROM documents_classification_proposals
                  WHERE document_id = ?1 AND source_kind = 'rules' AND source_version = ?2)",
-                params![document.id, self.classification.version()],
+                params![document.id.as_str(), self.classification.version()],
                 |row| row.get::<_, bool>(0),
             )?;
             if !has_current_version {
@@ -1007,14 +1085,14 @@ impl Library {
         let high_water = conn
             .query_row(
                 "SELECT high_water_rowid FROM documents_classification_backfills WHERE version = ?1",
-                [version],
+                params![version],
                 |row| row.get::<_, i64>(0),
             )
             .optional()?
             .unwrap_or_default();
         let latest: i64 = conn.query_row(
             "SELECT COALESCE(MAX(rowid), 0) FROM documents_items",
-            [],
+            params![],
             |row| row.get(0),
         )?;
         let documents = {
@@ -1124,7 +1202,7 @@ impl Library {
             .pool
             .get()
             .map_err(|error| LibraryError::Store(error.to_string()))?;
-        let transaction = sjel_store::write_transaction(&mut conn)?;
+        let transaction = engine::write_transaction(&mut conn)?;
         for mut proposal in proposals {
             proposal.review = None;
             let proposal_json = serde_json::to_string(&proposal)
@@ -1147,12 +1225,12 @@ impl Library {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     proposal_id,
-                    document.id,
+                    document.id.as_str(),
                     generation_id,
                     source_kind,
                     identity,
                     version,
-                    proposal_json,
+                    proposal_json.as_str(),
                     generated_at,
                 ],
             )?;
@@ -1225,7 +1303,7 @@ impl Library {
         Ok(conn
             .query_row(
                 "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items WHERE id = ?1",
-                [id],
+                params![id],
                 read_document,
             )
             .optional()?
@@ -1296,7 +1374,7 @@ impl Library {
             .get()
             .map_err(|e| LibraryError::Store(e.to_string()))?;
         let mut stmt = conn.prepare("SELECT id, path FROM documents_sources ORDER BY id, path")?;
-        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        let rows = stmt.query_map(params![], |row| Ok((row.get(0)?, row.get(1)?)))?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
@@ -1312,7 +1390,7 @@ impl Library {
         let mut statement = conn.prepare(
             "SELECT decision_json FROM documents_duplicate_reviews ORDER BY candidate_key",
         )?;
-        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+        let rows = statement.query_map(params![], |row| row.get::<_, String>(0))?;
         rows.map(|row| {
             let json = row?;
             serde_json::from_str(&json).map_err(|error| {
@@ -1336,12 +1414,14 @@ impl Library {
             .pool
             .get()
             .map_err(|e| LibraryError::Store(e.to_string()))?;
-        let transaction = sjel_store::write_transaction(&mut conn)?;
+        let transaction = engine::write_transaction(&mut conn)?;
         for id in &decision.member_ids {
             let exists = transaction
-                .query_row("SELECT 1 FROM documents_items WHERE id = ?1", [id], |row| {
-                    row.get::<_, i64>(0)
-                })
+                .query_row(
+                    "SELECT 1 FROM documents_items WHERE id = ?1",
+                    params![id.as_str()],
+                    |row| row.get::<_, i64>(0),
+                )
                 .optional()?
                 .is_some();
             if !exists {
@@ -1357,7 +1437,7 @@ impl Library {
                  decision_json = excluded.decision_json,
                  updated_at = excluded.updated_at",
             params![
-                decision.candidate_key,
+                decision.candidate_key.as_str(),
                 decision_json,
                 chrono::Utc::now().to_rfc3339()
             ],
@@ -1427,7 +1507,7 @@ impl Library {
             .map_err(|e| LibraryError::Store(e.to_string()))?;
         if conn.execute(
             "UPDATE documents_items SET status = 'archived' WHERE id = ?1",
-            [id],
+            params![id],
         )? == 0
         {
             return Err(LibraryError::Invalid("no document with that digest".into()));
@@ -1548,7 +1628,7 @@ impl Library {
                 .pool
                 .get()
                 .map_err(|error| LibraryError::Store(error.to_string()))?;
-            let transaction = sjel_store::write_transaction(&mut conn)?;
+            let transaction = engine::write_transaction(&mut conn)?;
             for record in sidecar.proposals {
                 check_id(&record.id)?;
                 if record.proposal.document_id != sidecar.document_id {
@@ -1596,12 +1676,12 @@ impl Library {
                     "INSERT OR IGNORE INTO documents_classification_proposals
                      (proposal_id, document_id, generation_id, source_kind, source_identity, source_version, proposal_json, generated_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                    params![record.id, sidecar.document_id, record.generation_id, source_kind, identity, version, proposal_json, record.generated_at],
+                    params![record.id.as_str(), sidecar.document_id.as_str(), record.generation_id.as_str(), source_kind, identity, version, proposal_json.as_str(), record.generated_at.as_str()],
                 )?;
                 let saved_proposal = transaction.query_row(
                     "SELECT document_id, generation_id, proposal_json, generated_at
                      FROM documents_classification_proposals WHERE proposal_id = ?1",
-                    [&record.id],
+                    params![record.id.as_str()],
                     |row| {
                         Ok((
                             row.get::<_, String>(0)?,
@@ -1632,12 +1712,17 @@ impl Library {
                     transaction.execute(
                         "INSERT OR IGNORE INTO documents_classification_reviews
                          (review_id, proposal_id, outcome, reviewed_at) VALUES (?1, ?2, ?3, ?4)",
-                        params![event.id, record.id, outcome, event.reviewed_at],
+                        params![
+                            event.id,
+                            record.id.as_str(),
+                            outcome,
+                            event.reviewed_at.as_str()
+                        ],
                     )?;
                     let saved_event = transaction.query_row(
                         "SELECT proposal_id, outcome, reviewed_at
                          FROM documents_classification_reviews WHERE review_id = ?1",
-                        [event.id],
+                        params![event.id],
                         |row| {
                             Ok((
                                 row.get::<_, String>(0)?,
@@ -1817,9 +1902,9 @@ impl Library {
             .map_err(|e| LibraryError::Store(e.to_string()))?;
         conn.execute(
             "INSERT INTO documents_items (id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
-            params![document.id, document.sha256, document.filename, document.media_type, document.byte_len, document.imported_at,
-                document.status, document.category, document.project, document.extracted_title, document.extracted_text, document.extractor,
-                serde_json::to_string(&document.pages).map_err(|error| LibraryError::Invalid(error.to_string()))?, document.parent_id,
+            params![document.id.as_str(), document.sha256.as_str(), document.filename.as_str(), document.media_type.as_str(), document.byte_len, document.imported_at.as_str(),
+                document.status.as_str(), document.category.as_deref(), document.project.as_deref(), document.extracted_title.as_deref(), document.extracted_text.as_deref(), document.extractor.as_deref(),
+                serde_json::to_string(&document.pages).map_err(|error| LibraryError::Invalid(error.to_string()))?, document.parent_id.as_deref(),
                 document.page_range.map(|range| range.first), document.page_range.map(|range| range.last)],
         )?;
         Ok(())
@@ -1885,7 +1970,7 @@ fn migrate(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     )?;
     let columns = conn
         .prepare("PRAGMA table_info(documents_items)")?
-        .query_map([], |row| row.get::<_, String>(1))?
+        .query_map(params![], |row| row.get::<_, String>(1))?
         .collect::<Result<Vec<_>, _>>()?;
     if !columns.iter().any(|column| column == "sha256") {
         conn.execute_batch("ALTER TABLE documents_items ADD COLUMN sha256 TEXT NOT NULL DEFAULT ''; UPDATE documents_items SET sha256 = id WHERE sha256 = ''; ")?;
@@ -1944,52 +2029,13 @@ fn migrate(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
         CREATE TABLE IF NOT EXISTS documents_classification_backfills (
             version TEXT PRIMARY KEY,
             high_water_rowid INTEGER NOT NULL
-        );
-        CREATE VIRTUAL TABLE IF NOT EXISTS documents_search USING fts5(
-            filename, extracted_title, extracted_text, category, project,
-            content='documents_items', content_rowid='rowid',
-            tokenize='unicode61 remove_diacritics 2'
-        );
-        CREATE TABLE IF NOT EXISTS documents_search_state (
-            version INTEGER NOT NULL
-        );
-        CREATE TRIGGER IF NOT EXISTS documents_search_after_insert
-        AFTER INSERT ON documents_items BEGIN
-            INSERT INTO documents_search(rowid, filename, extracted_title, extracted_text, category, project)
-            VALUES (new.rowid, new.filename, new.extracted_title, new.extracted_text, new.category, new.project);
-        END;
-        CREATE TRIGGER IF NOT EXISTS documents_search_after_update
-        AFTER UPDATE OF filename, extracted_title, extracted_text, category, project ON documents_items BEGIN
-            INSERT INTO documents_search(documents_search, rowid, filename, extracted_title, extracted_text, category, project)
-            VALUES ('delete', old.rowid, old.filename, old.extracted_title, old.extracted_text, old.category, old.project);
-            INSERT INTO documents_search(rowid, filename, extracted_title, extracted_text, category, project)
-            VALUES (new.rowid, new.filename, new.extracted_title, new.extracted_text, new.category, new.project);
-        END;
-        CREATE TRIGGER IF NOT EXISTS documents_search_after_delete
-        AFTER DELETE ON documents_items BEGIN
-            INSERT INTO documents_search(documents_search, rowid, filename, extracted_title, extracted_text, category, project)
-            VALUES ('delete', old.rowid, old.filename, old.extracted_title, old.extracted_text, old.category, old.project);
-        END;",
+        );",
     )?;
-    let search_index_version: Option<i64> = conn.query_row(
-        "SELECT MAX(version) FROM documents_search_state",
-        [],
-        |row| row.get(0),
-    )?;
-    if search_index_version.unwrap_or_default() < SEARCH_INDEX_VERSION {
-        conn.execute(
-            "INSERT INTO documents_search(documents_search) VALUES ('rebuild')",
-            [],
-        )?;
-        conn.execute("DELETE FROM documents_search_state", [])?;
-        conn.execute(
-            "INSERT INTO documents_search_state (version) VALUES (?1)",
-            [SEARCH_INDEX_VERSION],
-        )?;
-    }
+    #[cfg(not(feature = "turso-wal"))]
+    migrate_fts(conn)?;
     let proposal_columns = conn
         .prepare("PRAGMA table_info(documents_classification_proposals)")?
-        .query_map([], |row| row.get::<_, String>(1))?
+        .query_map(params![], |row| row.get::<_, String>(1))?
         .collect::<Result<Vec<_>, _>>()?;
     if !proposal_columns
         .iter()
@@ -2079,45 +2125,92 @@ fn same_record(left: &Document, right: &Document) -> bool {
         && left.page_range == right.page_range
 }
 
-fn read_document(row: &Row<'_>) -> rusqlite::Result<Document> {
+#[cfg(not(feature = "turso-wal"))]
+fn migrate_fts(conn: &Connection) -> sql::Result<()> {
+    conn.execute_batch(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS documents_search USING fts5(
+            filename, extracted_title, extracted_text, category, project,
+            content='documents_items', content_rowid='rowid',
+            tokenize='unicode61 remove_diacritics 2'
+        );
+        CREATE TABLE IF NOT EXISTS documents_search_state (
+            version INTEGER NOT NULL
+        );
+        CREATE TRIGGER IF NOT EXISTS documents_search_after_insert
+        AFTER INSERT ON documents_items BEGIN
+            INSERT INTO documents_search(rowid, filename, extracted_title, extracted_text, category, project)
+            VALUES (new.rowid, new.filename, new.extracted_title, new.extracted_text, new.category, new.project);
+        END;
+        CREATE TRIGGER IF NOT EXISTS documents_search_after_update
+        AFTER UPDATE OF filename, extracted_title, extracted_text, category, project ON documents_items BEGIN
+            INSERT INTO documents_search(documents_search, rowid, filename, extracted_title, extracted_text, category, project)
+            VALUES ('delete', old.rowid, old.filename, old.extracted_title, old.extracted_text, old.category, old.project);
+            INSERT INTO documents_search(rowid, filename, extracted_title, extracted_text, category, project)
+            VALUES (new.rowid, new.filename, new.extracted_title, new.extracted_text, new.category, new.project);
+        END;
+        CREATE TRIGGER IF NOT EXISTS documents_search_after_delete
+        AFTER DELETE ON documents_items BEGIN
+            INSERT INTO documents_search(documents_search, rowid, filename, extracted_title, extracted_text, category, project)
+            VALUES ('delete', old.rowid, old.filename, old.extracted_title, old.extracted_text, old.category, old.project);
+        END;",
+    )?;
+    let search_index_version: Option<i64> = conn.query_row(
+        "SELECT MAX(version) FROM documents_search_state",
+        params![],
+        |row| row.get(0),
+    )?;
+    if search_index_version.unwrap_or_default() < SEARCH_INDEX_VERSION {
+        conn.execute(
+            "INSERT INTO documents_search(documents_search) VALUES ('rebuild')",
+            params![],
+        )?;
+        conn.execute("DELETE FROM documents_search_state", params![])?;
+        conn.execute(
+            "INSERT INTO documents_search_state (version) VALUES (?1)",
+            params![SEARCH_INDEX_VERSION],
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "turso-wal")]
+fn conversion_error(index: usize, error: impl std::fmt::Display) -> sql::Error {
+    sql::Error::ConversionFailure(format!("column {index}: {error}"))
+}
+
+#[cfg(not(feature = "turso-wal"))]
+fn conversion_error(index: usize, error: impl std::fmt::Display) -> sql::Error {
+    let kind = if index == 12 {
+        rusqlite::types::Type::Text
+    } else {
+        rusqlite::types::Type::Integer
+    };
+    sql::Error::FromSqlConversionFailure(
+        index,
+        kind,
+        std::io::Error::other(error.to_string()).into(),
+    )
+}
+
+fn read_document(row: &Row<'_>) -> sql::Result<Document> {
     let filename: String = row.get(2)?;
     let extracted_text: Option<String> = row.get(10)?;
     let page_json: String = row.get(12)?;
     let pages: Vec<sjel_extraction::ExtractedPage> =
-        serde_json::from_str(&page_json).map_err(|error| {
-            rusqlite::Error::FromSqlConversionFailure(
-                12,
-                rusqlite::types::Type::Text,
-                Box::new(error),
-            )
-        })?;
+        serde_json::from_str(&page_json).map_err(|error| conversion_error(12, error))?;
     let parent_id: Option<String> = row.get(13)?;
-    let page_first: Option<u32> = row.get(14)?;
-    let page_last: Option<u32> = row.get(15)?;
-    let page_range = match (page_first, page_last) {
-        (Some(first), Some(last)) => {
-            Some(crate::split::PageRange::new(first, last).map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    14,
-                    rusqlite::types::Type::Integer,
-                    Box::new(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        error.to_string(),
-                    )),
-                )
-            })?)
-        }
+    let page = |index| -> sql::Result<Option<u32>> {
+        row.get::<_, Option<i64>>(index)?
+            .map(|value| u32::try_from(value).map_err(|error| conversion_error(index, error)))
+            .transpose()
+    };
+    let page_range = match (page(14)?, page(15)?) {
+        (Some(first), Some(last)) => Some(
+            crate::split::PageRange::new(first, last)
+                .map_err(|error| conversion_error(14, error))?,
+        ),
         (None, None) => None,
-        _ => {
-            return Err(rusqlite::Error::FromSqlConversionFailure(
-                14,
-                rusqlite::types::Type::Integer,
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "incomplete child page range",
-                )),
-            ));
-        }
+        _ => return Err(conversion_error(14, "incomplete child page range")),
     };
     Ok(Document {
         id: row.get(0)?,
@@ -2444,7 +2537,10 @@ mod tests {
         let conn = library.pool.get().unwrap();
         conn.execute(
             "UPDATE documents_items SET extracted_text = ?2 WHERE id = ?1",
-            params![document.id, "Fahrgastrechte Verspätungsentschädigung"],
+            params![
+                document.id.as_str(),
+                "Fahrgastrechte Verspätungsentschädigung"
+            ],
         )
         .unwrap();
         drop(conn);
@@ -2666,8 +2762,11 @@ mod tests {
             .unwrap();
         assert!(library.verify().unwrap().is_empty());
         let conn = library.pool.get().unwrap();
-        conn.execute("DELETE FROM documents_items WHERE id = ?1", [&document.id])
-            .unwrap();
+        conn.execute(
+            "DELETE FROM documents_items WHERE id = ?1",
+            params![document.id.as_str()],
+        )
+        .unwrap();
         assert_eq!(library.restore_index().unwrap(), (1, 0));
         assert_eq!(
             library.get(&document.id).unwrap().unwrap().filename,
@@ -2697,7 +2796,8 @@ mod tests {
             serde_json::from_slice(&fs::read(&sidecar).unwrap()).unwrap();
         fs::remove_file(&sidecar).unwrap();
         let conn = library.pool.get().unwrap();
-        conn.execute("DELETE FROM documents_items", []).unwrap();
+        conn.execute("DELETE FROM documents_items", params![])
+            .unwrap();
 
         let forged = "0".repeat(64);
         value["id"] = forged.clone().into();

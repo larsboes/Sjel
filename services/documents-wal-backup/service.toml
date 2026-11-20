@@ -1,0 +1,6 @@
+kind                  = "data"
+name                  = "documents-wal-backup"
+requires              = ["documents"]
+backup_owner_snapshot = "documents"
+backup_sqlite_online  = "data/documents/snapshots/documents.db"
+backup_target         = "documents-ssd"

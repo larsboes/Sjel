@@ -15,6 +15,11 @@ path = "src/lib.rs"
 name = "documents"
 path = "src/cli.rs"
 
+[features]
+default = ["sqlite"]
+sqlite = ["dep:rusqlite", "dep:sjel-store"]
+turso-wal = ["dep:reqwest", "dep:sjel-native-wal"]
+
 [dependencies]
 documents-api = { path = "../documents-api" }
 axum.workspace = true
@@ -22,15 +27,17 @@ route-manifest = { path = "../route-manifest" }
 schemars.workspace = true
 chrono.workspace = true
 lopdf = { version = "=0.47.0", default-features = false }
-rusqlite.workspace = true
+rusqlite = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true
+reqwest = { workspace = true, features = ["blocking", "json"], optional = true }
 sjel-config = { path = "../sjel-config" }
 sjel-http = { path = "../sjel-http" }
 sjel-inference = { path = "../inference" }
 sjel-extraction = { path = "../extraction" }
-sjel-store = { path = "../sjel-store" }
+sjel-store = { path = "../sjel-store", optional = true }
+sjel-native-wal = { path = "../sjel-native-wal", optional = true }
 sjel-server = { path = "../sjel-server" }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 

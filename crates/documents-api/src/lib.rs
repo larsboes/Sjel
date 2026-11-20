@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 // ============================================================================
 
 pub const ROUTE_DOCUMENTS: &str = "/api/documents";
+pub const ROUTE_FINDER: &str = "/api/documents/find";
 pub const ROUTE_DOCUMENT_BY_ID: &str = "/api/documents/{id}";
 pub const ROUTE_DOCUMENT_ANALYZE: &str = "/api/documents/{id}/analyze";
 pub const ROUTE_DOCUMENT_CHILDREN: &str = "/api/documents/{id}/children";
@@ -23,8 +24,9 @@ pub const ROUTE_DOCUMENT_PROPOSAL_REVIEW: &str =
     "/api/documents/{id}/proposals/{proposal_id}/review";
 
 /// Every route constant above. The server test checks each one against its manifest.
-pub const ALL_ROUTES: [&str; 11] = [
+pub const ALL_ROUTES: [&str; 12] = [
     ROUTE_DOCUMENTS,
+    ROUTE_FINDER,
     ROUTE_DOCUMENT_BY_ID,
     ROUTE_DOCUMENT_ANALYZE,
     ROUTE_DOCUMENT_CHILDREN,
@@ -36,6 +38,13 @@ pub const ALL_ROUTES: [&str; 11] = [
     ROUTE_DOCUMENT_PROPOSALS_MODEL,
     ROUTE_DOCUMENT_PROPOSAL_REVIEW,
 ];
+
+/// The projection used by Finder.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct FinderHit {
+    pub title: String,
+    pub detail: String,
+}
 
 /// The path prefix under which the status proxy serves these routes.
 pub const PROXY_PREFIX: &str = "/documents";

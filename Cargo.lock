@@ -5704,6 +5704,7 @@ dependencies = [
  "chrono",
  "documents-api",
  "lopdf 0.47.0",
+ "reqwest",
  "route-manifest",
  "rusqlite",
  "schemars",
@@ -5714,6 +5715,7 @@ dependencies = [
  "sjel-extraction",
  "sjel-http",
  "sjel-inference",
+ "sjel-native-wal",
  "sjel-server",
  "sjel-store",
  "tokio",
@@ -6141,6 +6143,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "calendar-api",
+ "documents-api",
  "entities-api",
  "finance-api",
  "futures-util",

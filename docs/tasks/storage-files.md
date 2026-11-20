@@ -124,14 +124,17 @@ scheduled ingester resumed, a second receipt-backed restore contained the new ru
 with no change to the aggregate rows. The four users of the shared native adapter passed
 304 package tests.
 
+Documents runs on its own Turso WAL file. The Unicode61-compatible search replay matched
+27 result pages against SQLite for counts, order, and page hits, with a 107 ms median.
+The receipt-backed originals restore matched all 6,958 distinct file hashes. The first
+Turso catalog backup restored 23,970 rows with exact value and item row ID parity.
+Live search, pagination and authenticated original download passed.
+
 ## Remaining migration gates
 
 - Verify a successful signed request from a paired client against the live Inventory owner.
 - Verify a refresh on a paired iPhone.
 - Migrate the remaining owners after their cross-owner readers and independent writers are
   routed through the owning services. See [owner reads](storage-owner-reads.md).
-- Keep Documents on its current search implementation until a replacement passes prefix,
-  diacritic, status and pagination parity. The [engine measurements](storage-engine.md) record
-  the FTS and iOS results.
 - Any MVCC cutover requires recovery with the logical log and proof that backups preserve
   committed writes during concurrent use. Keep the original database through rollback acceptance.

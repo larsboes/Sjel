@@ -192,6 +192,28 @@ impl Query {
         })
     }
 
+    /// Visit result rows while the cursor is open.
+    ///
+    /// # Errors
+    /// Returns the first database or visitor error. The visitor must not query this connection.
+    pub fn visit_rows(
+        &mut self,
+        params: impl IntoParams,
+        mut visit: impl FnMut(&Row<'_>) -> Result<()>,
+    ) -> Result<()> {
+        block_on(async {
+            let mut cursor = self.0.query(params).await?;
+            let columns = cursor.column_names();
+            while let Some(row) = cursor.next().await? {
+                visit(&Row {
+                    row: &row,
+                    columns: &columns,
+                })?;
+            }
+            Ok(())
+        })
+    }
+
     pub fn query_map<T>(
         &mut self,
         params: impl IntoParams,

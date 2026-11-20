@@ -2,13 +2,14 @@
 kind          = "process"
 name          = "documents"
 command       = ["target/release/documents", "serve"]
-build         = ["cargo", "build", "--locked", "--release", "--bin", "documents"]
+build         = ["cargo", "build", "--locked", "--release", "-p", "sjel-documents", "--no-default-features", "--features", "turso-wal", "--bin", "documents"]
 port          = "8104"
 health_path   = "/health"
 proxy_api_only = "true"
 imports       = ["pdf", "office-documents"]
 exports       = ["json", "original-bytes"]
 backup_paths  = ["data/documents"]
+backup_exclude = ["/snapshots/documents.db"]
 backup_target = "documents-ssd"
 backup_retain = "14"
 backup_advise_days = "1"

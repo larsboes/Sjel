@@ -75,6 +75,16 @@ reason = "ip-address 10.5.0, a fourth advisory against the same version, fixed i
 # Informational unmaintained-crate advisories in installed Cargo lockfiles.
 # Transitive dependencies in published Cargo.lock files of crates installed at their latest release.
 [[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+effectiveUntil = 2027-03-01
+reason = "chrono 0.4.45 is unmaintained (RustSec INFO): no CVE, no affected function, no patched version. Reach: the published lock of macmon 0.12.0, installed at its latest release, so no install moves it. Same advisory as the workspace entry in osv-scanner.toml. Ends when macmon republishes without chrono, or when it is dropped."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0542"
+effectiveUntil = 2027-03-01
+reason = "humantime 2.3.0 is unmaintained because it wraps chrono (RustSec INFO): no CVE, no affected function, no patched version. Reach: the published lock of bottom 0.15.0, installed at its latest release, so no install moves it. Ends when bottom republishes without humantime, or when it is dropped."
+
+[[IgnoredVulns]]
 id = "RUSTSEC-2026-0253"
 effectiveUntil = 2027-01-01
 reason = "A potential use-after-free in lru 0.18.0's `LruCache::pop()` when a value's destructor panics, fixed in 0.18.2. Two installed crates carry it, both at their latest release: bottom 0.14.9 and macmon 0.8.2, and the audit reports one row per crate because each ships its own lock. macmon is a dependency of the `macmon` capability, so this one runs when that capability is asked for machine metrics; bottom is a terminal monitor. For either to be reached, a cached value's destructor has to panic inside those tools — nothing here hands them a payload. Ends when bottom or macmon republishes against lru >= 0.18.2, or when the tool is dropped."

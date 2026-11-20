@@ -20,6 +20,7 @@ pub const ROUTE_MEDIA_STATUS: &str = "/api/status";
 pub const ROUTE_MEDIA_INGESTS: &str = "/api/ingests";
 pub const ROUTE_MEDIA_INGEST_BY_ID: &str = "/api/ingests/{id}";
 pub const ROUTE_MEDIA_PERCEPTUAL: &str = "/api/perceptual";
+pub const ROUTE_MEDIA_MAP_GEOTAGS: &str = "/map-geotags";
 pub const ROUTE_MEDIA_GEOTAGS: &str = "/api/geotags";
 pub const ROUTE_MEDIA_CONTENT_PROPOSALS: &str = "/api/content/proposals";
 pub const ROUTE_MEDIA_CONTENT_PROPOSAL: &str = "/api/content/proposals/{id}";
@@ -128,6 +129,13 @@ pub const ADVISORY_NOTE: &str =
     "Advisory only: perceptual near-duplicates have different bytes and are never passed to \
      `supersede` or `reclaim` automatically. Every pair requires explicit operator review.";
 
+/// A local location for an indexed image.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+pub struct GeotagLocation {
+    pub uuid: String,
+    pub relpath: String,
+}
+
 /// One digest's perceptual hash in the advisory perceptual layer.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
 pub struct PhashRow {
@@ -156,6 +164,8 @@ pub struct GeotagRow {
     #[serde(default)]
     pub captured_at: Option<String>,
     pub indexed_at: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locations: Vec<GeotagLocation>,
 }
 
 /// Response payload from `GET /api/geotags`.

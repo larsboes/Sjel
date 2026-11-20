@@ -22,6 +22,7 @@ path = "src/desktop_launcher.rs"
 
 [dependencies]
 calendar-api = { path = "../calendar-api" }
+places-api = { path = "../places-api" }
 entities-api = { path = "../entities-api" }
 status-api = { path = "../status-api" }
 tempfile = "3"

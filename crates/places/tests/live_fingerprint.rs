@@ -29,7 +29,10 @@ fn overlay() -> Option<(AmexProfile, PathBuf, PathBuf)> {
     let root = PathBuf::from(root);
     let config = root.join("config/finance.json");
     let raw = root.join("data/finance/import/raw");
+    #[cfg(not(feature = "turso-wal"))]
     let database = root.join("data/sjel/sjel.db");
+    #[cfg(feature = "turso-wal")]
+    let database = std::env::var_os("SJEL_PLACES_FINGERPRINT_SNAPSHOT").map(PathBuf::from)?;
     for path in [&config, &raw, &database] {
         if !path.exists() {
             eprintln!("SJEL_PERSONAL_ROOT is set but the overlay is incomplete; skipping");
@@ -58,14 +61,11 @@ fn the_shared_fingerprint_reproduces_every_live_link() {
     let conn = rusqlite::Connection::open_with_flags(uri, flags)
         .expect("the live store must open read-only");
 
-    let candidates: HashSet<String> = conn
-        .prepare("SELECT fingerprint FROM finance_transaction_candidates WHERE source_account = ?1")
-        .and_then(|mut statement| {
-            statement
-                .query_map([&profile.source_account], |row| row.get::<_, String>(0))
-                .and_then(|rows| rows.collect())
-        })
-        .expect("the candidate table must be readable");
+    let candidates: HashSet<String> = places::finance::candidates(&profile.source_account)
+        .expect("the Finance owner must answer")
+        .into_iter()
+        .map(|row| row.fingerprint)
+        .collect();
     let linked: HashSet<String> = conn
         .prepare("SELECT source_id FROM places_transaction_places WHERE source = 'amex-backfill'")
         .and_then(|mut statement| {

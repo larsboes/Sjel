@@ -4,18 +4,24 @@
 //! supplies all of it, which is what keeps this capability publishable while the
 //! data it operates on is the most private in the system.
 //!
-//! The store path comes from `sjel_config::database_path`: `$SJEL_DB_PATH`, else
-//! `$SJEL_PERSONAL_ROOT/data/sjel/sjel.db`. It is a deployment fact rather than a
-//! capability one (PRD Q45), so `$SJEL_FINANCE_DATABASE_URL` is gone -- a file per
-//! capability would drop the cross-capability joins places builds its spend layer
-//! on.
-
 use crate::import::CsvMapping;
 use crate::investment::{HoldingsCoverage, InvestmentCsvMapping};
 use crate::planning::PlanningConfig;
 use serde::{Deserialize, Serialize};
 use sjel_config::{database_path, expand_tilde, resolve_port};
 use std::path::PathBuf;
+
+fn default_database_path() -> PathBuf {
+    #[cfg(feature = "turso-wal")]
+    if let Some(path) =
+        sjel_config::overlay_data_dir("finance-store").map(|directory| directory.join("finance.db"))
+    {
+        if path.is_file() {
+            return path;
+        }
+    }
+    database_path()
+}
 
 /// A reusable import shape whose values come only from the private overlay.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -341,7 +347,10 @@ impl Config {
                     .map(|path| expand_tilde(path))
             });
         Self {
-            database_path: database_path(),
+            database_path: sjel_config::env_var("SJEL_FINANCE_DB_PATH")
+                .ok()
+                .filter(|path| !path.trim().is_empty())
+                .map_or_else(default_database_path, |path| expand_tilde(&path)),
             port,
             projects_base_url,
             journal,

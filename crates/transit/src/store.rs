@@ -487,17 +487,30 @@ impl TransitStore {
         session_id: Option<&str>,
         limit: Option<i64>,
     ) -> Result<Vec<TripWithLegs>, Box<dyn std::error::Error>> {
+        self.list_trips_page(session_id, limit, 0)
+    }
+
+    /// Read a deterministic page of the journey cache.
+    ///
+    /// # Errors
+    /// The journey cache cannot be queried.
+    pub fn list_trips_page(
+        &self,
+        session_id: Option<&str>,
+        limit: Option<i64>,
+        offset: i64,
+    ) -> Result<Vec<TripWithLegs>, Box<dyn std::error::Error>> {
         let conn = self.conn()?;
         let trips = conn.query_all(
             &format!(
                 "SELECT {TRIP_COLUMNS}
                  FROM {prefix}_trips
                  WHERE (?1 IS NULL OR session_id = ?1)
-                 ORDER BY total_price ASC NULLS LAST, total_duration_minutes ASC NULLS LAST
-                 LIMIT COALESCE(?2, -1)",
+                 ORDER BY total_price ASC NULLS LAST, total_duration_minutes ASC NULLS LAST, id
+                 LIMIT COALESCE(?2, -1) OFFSET ?3",
                 prefix = self.prefix
             ),
-            params![&session_id, &limit],
+            params![&session_id, &limit, offset.max(0)],
             row_to_trip,
         )?;
         let mut out = Vec::with_capacity(trips.len());

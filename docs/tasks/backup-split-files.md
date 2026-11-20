@@ -25,11 +25,15 @@ The native WAL probe used `VACUUM INTO` on a second connection while an Inventor
 in flight. The snapshot preserved the prior committed edit and its receipt. A separate
 shutdown restore preserved the later commit.
 
-Inventory, Entities, Calendar, Software, Punctuality, and Documents each have an enabled contract that asks the
-running owner for a closed snapshot. All six restored under their immutable receipts.
+Inventory, Entities, Calendar, Software, Punctuality, Documents, Finance, and Places
+each have an enabled contract that asks the owner for a closed snapshot. All eight restored
+under their immutable receipts.
 Software's initial attempt could not reach the private snapshot socket during cutover.
 The retry through the backup gateway succeeded after the watchdog was running and restored
 its apps, decisions, and sequence counter. The [owner migration task](storage-files.md)
 records the data checks for each owner.
 
 The Documents catalog archive and canonical-originals archive each passed an isolated restore.
+
+Finance and Places each restored their first native archive and matched every owner row.
+Finance journal files retain a separate archive contract.

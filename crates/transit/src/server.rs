@@ -455,6 +455,7 @@ fn trip_json(t: &transit::store::TripRow, legs: &[transit::store::TripLegRow]) -
 struct TripsQuery {
     session_id: Option<String>,
     limit: Option<i64>,
+    offset: Option<i64>,
 }
 
 /// How many trips one unfiltered read returns before it starts saying `truncated`.
@@ -477,15 +478,17 @@ async fn handle_list_trips(
     match tokio::task::spawn_blocking(move || -> Result<Value, String> {
         let store = TransitStore::open(&database_path).map_err(|e| e.to_string())?;
         let session_id = params.session_id.as_deref();
+        let offset = params.offset.unwrap_or_default().max(0);
         let count = store.count_trips(session_id).map_err(|e| e.to_string())?;
         let trips = store
-            .list_trips(session_id, Some(limit))
+            .list_trips_page(session_id, Some(limit), offset)
             .map_err(|e| e.to_string())?;
         let rendered: Vec<Value> = trips.iter().map(|(t, legs)| trip_json(t, legs)).collect();
         Ok(json!({
             "count": count,
             "returned": rendered.len(),
-            "truncated": count > rendered.len() as i64,
+            "truncated": count > offset.saturating_add(rendered.len() as i64),
+            "offset": offset,
             "session_id": params.session_id,
             "trips": rendered,
         }))

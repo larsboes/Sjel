@@ -633,8 +633,7 @@ impl Ledger {
     pub fn geotags(&self) -> Result<Vec<GeotagRow>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(
-            "SELECT digest, latitude, longitude, captured_at, indexed_at
-             FROM media_geotags
+            "SELECT digest, latitude, longitude, captured_at, indexed_at FROM media_geotags
              ORDER BY digest",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -644,8 +643,41 @@ impl Ledger {
                 longitude: row.get(2)?,
                 captured_at: row.get(3)?,
                 indexed_at: row.get(4)?,
+                locations: Vec::new(),
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn geotags_with_locations(&self) -> Result<Vec<GeotagRow>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT g.digest, g.latitude, g.longitude, g.captured_at, g.indexed_at, l.uuid, l.relpath
+             FROM media_geotags g LEFT JOIN media_locations l ON l.digest = g.digest
+             ORDER BY g.digest, l.uuid, l.relpath",
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut tags: Vec<GeotagRow> = Vec::new();
+        while let Some(row) = rows.next()? {
+            let digest: String = row.get(0)?;
+            let uuid: Option<String> = row.get(5)?;
+            let relpath: Option<String> = row.get(6)?;
+            let location = uuid
+                .zip(relpath)
+                .map(|(uuid, relpath)| media_api::GeotagLocation { uuid, relpath });
+            if let Some(tag) = tags.last_mut().filter(|tag| tag.digest == digest) {
+                tag.locations.extend(location);
+            } else {
+                tags.push(GeotagRow {
+                    digest,
+                    latitude: row.get(1)?,
+                    longitude: row.get(2)?,
+                    captured_at: row.get(3)?,
+                    indexed_at: row.get(4)?,
+                    locations: location.into_iter().collect(),
+                });
+            }
+        }
+        Ok(tags)
     }
 }

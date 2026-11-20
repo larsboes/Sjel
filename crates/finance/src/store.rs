@@ -12,8 +12,15 @@
 
 use std::path::Path;
 
-use rusqlite::{params, Connection, OptionalExtension, Row};
-use sjel_store::QueryAll;
+#[cfg(not(feature = "turso-wal"))]
+use rusqlite as sql;
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal as sql;
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal as engine;
+#[cfg(not(feature = "turso-wal"))]
+use sjel_store::{self as engine, QueryAll};
+use sql::{params, params_from_iter, Connection, OptionalExtension, Row};
 
 use crate::analytics::{TransactionKind, TransactionRow};
 use crate::import::{CandidateState, TransactionCandidate};
@@ -27,7 +34,7 @@ use crate::subscription_notes::ScannedNote;
 type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
 pub struct FinanceStore {
-    pool: sjel_store::Pool,
+    pool: engine::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `finance` here means `finance_subscriptions` and its seven siblings.
     prefix: String,
@@ -57,7 +64,7 @@ impl FinanceStore {
 
     pub fn open_with_prefix(database_path: &Path, prefix: &str) -> Fallible<Self> {
         validate_prefix(prefix)?;
-        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
+        let pool = engine::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -66,15 +73,24 @@ impl FinanceStore {
         })
     }
 
-    fn conn(&self) -> Fallible<sjel_store::PooledClient> {
+    fn conn(&self) -> Fallible<engine::PooledClient> {
         Ok(self.pool.get()?)
+    }
+
+    /// Write a closed owner snapshot for recovery.
+    ///
+    /// # Errors
+    /// The database or snapshot destination cannot be opened.
+    #[cfg(feature = "turso-wal")]
+    pub fn snapshot(&self, database: &Path, target: &Path) -> Fallible<()> {
+        engine::snapshot(&self.conn()?, database, target)
     }
 
     /// The cheapest statement that proves this store can reach its database, which
     /// is what the readiness surface promises rather than mere liveness (#126).
     pub fn ping(&self) -> Fallible<()> {
         let conn = self.conn()?;
-        conn.query_row("SELECT 1", [], |row| row.get::<_, i64>(0))?;
+        conn.query_row("SELECT 1", params![], |row| row.get::<_, i64>(0))?;
         Ok(())
     }
 
@@ -440,7 +456,7 @@ impl FinanceStore {
                 "SELECT name, coalesce(category, '') FROM {prefix}_subscriptions
                  WHERE {filter} ORDER BY name, id LIMIT 5"
             ),
-            rusqlite::params_from_iter(words.iter().map(String::as_str)),
+            params_from_iter(words.iter().map(String::as_str)),
             |row| {
                 Ok(finance_api::SubscriptionSearchHit {
                     title: row.get(0)?,
@@ -459,7 +475,7 @@ impl FinanceStore {
                 "SELECT id, name, source_path, category, value_rating
                  FROM {prefix}_subscriptions ORDER BY name"
             ),
-            [],
+            params![],
             row_to_subscription,
         )?;
 
@@ -470,7 +486,7 @@ impl FinanceStore {
                      FROM {prefix}_price_points
                      WHERE subscription_id = ?1 ORDER BY valid_from, id"
                 ),
-                params![&sub.id],
+                params![sub.id.as_str()],
                 row_to_price,
             )?;
 
@@ -481,7 +497,7 @@ impl FinanceStore {
                          FROM {prefix}_state_changes
                          WHERE subscription_id = ?1 ORDER BY effective, id"
                     ),
-                    params![&sub.id],
+                    params![sub.id.as_str()],
                     row_to_state,
                 )?
                 .into_iter()
@@ -510,7 +526,7 @@ impl FinanceStore {
         if let Some(existing) = conn
             .query_row(
                 &format!("SELECT id FROM {prefix}_subscriptions WHERE source_path = ?1"),
-                params![&note.source_path],
+                params![note.source_path.as_str()],
                 |row| row.get::<_, String>(0),
             )
             .optional()?
@@ -528,12 +544,12 @@ impl FinanceStore {
                  VALUES (?1,?2,?3,?4,?5,?6,?6)"
             ),
             params![
-                &id,
-                &seed.name,
-                &seed.source_path,
-                &seed.category,
-                &seed.value_rating,
-                &today,
+                id.as_str(),
+                seed.name.as_str(),
+                seed.source_path.as_str(),
+                seed.category.as_deref(),
+                seed.value_rating,
+                today,
             ],
         )?;
 
@@ -569,12 +585,12 @@ impl FinanceStore {
         let conn = self.conn()?;
         let prices: i64 = conn.query_row(
             &format!("SELECT COUNT(*) FROM {prefix}_price_points WHERE subscription_id = ?1"),
-            params![&id],
+            params![id],
             |row| row.get(0),
         )?;
         let states: i64 = conn.query_row(
             &format!("SELECT COUNT(*) FROM {prefix}_state_changes WHERE subscription_id = ?1"),
-            params![&id],
+            params![id],
             |row| row.get(0),
         )?;
         Ok((prices, states))
@@ -606,23 +622,23 @@ impl FinanceStore {
                      ON CONFLICT (fingerprint) DO NOTHING"
                 ),
                 params![
-                    &candidate.id,
-                    &candidate.fingerprint,
-                    &candidate.booked_at,
-                    &candidate.description,
+                    candidate.id.as_str(),
+                    candidate.fingerprint.as_str(),
+                    candidate.booked_at.as_str(),
+                    candidate.description.as_str(),
                     candidate.amount_cents,
-                    &candidate.currency,
-                    &candidate.source_account,
-                    &candidate.source_reference,
-                    &candidate.proposed_account,
+                    candidate.currency.as_str(),
+                    candidate.source_account.as_str(),
+                    candidate.source_reference.as_deref(),
+                    candidate.proposed_account.as_str(),
                     confidence,
                     candidate.state.as_str(),
-                    &today,
-                    &candidate.location_street,
-                    &candidate.location_postal_code,
-                    &candidate.location_city,
-                    &candidate.location_country,
-                    &candidate.location_mcc,
+                    today,
+                    candidate.location_street.as_deref(),
+                    candidate.location_postal_code.as_deref(),
+                    candidate.location_city.as_deref(),
+                    candidate.location_country.as_deref(),
+                    candidate.location_mcc.as_deref(),
                 ],
             )?;
             if inserted == 1 {
@@ -644,14 +660,14 @@ impl FinanceStore {
                          WHERE fingerprint = ?1 AND state = 'pending'"
                     ),
                     params![
-                        &candidate.fingerprint,
-                        &candidate.proposed_account,
+                        candidate.fingerprint.as_str(),
+                        candidate.proposed_account.as_str(),
                         confidence,
-                        &candidate.location_street,
-                        &candidate.location_postal_code,
-                        &candidate.location_city,
-                        &candidate.location_country,
-                        &candidate.location_mcc,
+                        candidate.location_street.as_deref(),
+                        candidate.location_postal_code.as_deref(),
+                        candidate.location_city.as_deref(),
+                        candidate.location_country.as_deref(),
+                        candidate.location_mcc.as_deref(),
                     ],
                 )?;
                 existing += 1;
@@ -674,7 +690,7 @@ impl FinanceStore {
                      FROM {prefix}_transaction_candidates
                      ORDER BY booked_at DESC, id"
                 ),
-                [],
+                params![],
                 row_to_candidate,
             )?
             .into_iter()
@@ -702,7 +718,7 @@ impl FinanceStore {
                      FROM {prefix}_transaction_candidates
                      WHERE id = ?1"
                 ),
-                params![&id],
+                params![id],
                 row_to_candidate,
             )
             .optional()?
@@ -724,7 +740,7 @@ impl FinanceStore {
                  SET state = ?2, proposed_account = ?3, reviewed_at = ?4
                  WHERE id = ?1"
             ),
-            params![&id, state.as_str(), &account, &today],
+            params![id, state.as_str(), account, today],
         )? == 1)
     }
 
@@ -744,7 +760,7 @@ impl FinanceStore {
                  SET state = ?2, proposed_account = ?3, source_account = ?4, reviewed_at = ?5
                  WHERE id = ?1"
             ),
-            params![&id, state.as_str(), &account, &source_account, &today],
+            params![id, state.as_str(), account, source_account, today],
         )? == 1)
     }
 
@@ -757,14 +773,14 @@ impl FinanceStore {
     ) -> Fallible<bool> {
         let prefix = &self.prefix;
         let mut conn = self.conn()?;
-        let transaction = sjel_store::write_transaction(&mut conn)?;
+        let transaction = engine::write_transaction(&mut conn)?;
         let canonical = transaction.execute(
             &format!(
                 "UPDATE {prefix}_transaction_candidates
                  SET state = 'confirmed', proposed_account = ?2, reviewed_at = ?3
                  WHERE id = ?1 AND state IN ('pending','confirmed')"
             ),
-            params![&canonical_id, &canonical_account, &today],
+            params![canonical_id, canonical_account, today],
         )?;
         let duplicate = transaction.execute(
             &format!(
@@ -772,7 +788,7 @@ impl FinanceStore {
                  SET state = 'duplicate', reviewed_at = ?3
                  WHERE id = ?1 AND id <> ?2 AND state IN ('pending','duplicate')"
             ),
-            params![&duplicate_id, &canonical_id, &today],
+            params![duplicate_id, canonical_id, today],
         )?;
         if canonical != 1 || duplicate != 1 {
             // Dropped without committing, so `Transaction`'s own Drop rolls back:
@@ -788,8 +804,11 @@ impl FinanceStore {
     pub fn replace_transaction_projection(&self, rows: &[TransactionRow]) -> Fallible<()> {
         let prefix = &self.prefix;
         let mut conn = self.conn()?;
-        let transaction = sjel_store::write_transaction(&mut conn)?;
-        transaction.execute(&format!("DELETE FROM {prefix}_transaction_projection"), [])?;
+        let transaction = engine::write_transaction(&mut conn)?;
+        transaction.execute(
+            &format!("DELETE FROM {prefix}_transaction_projection"),
+            params![],
+        )?;
         {
             let mut insert = transaction.prepare(&format!(
                 "INSERT INTO {prefix}_transaction_projection
@@ -800,25 +819,76 @@ impl FinanceStore {
             ))?;
             for row in rows {
                 insert.execute(params![
-                    &row.id,
-                    &row.date,
-                    &row.description,
+                    row.id.as_str(),
+                    row.date.as_str(),
+                    row.description.as_str(),
                     row.kind.as_str(),
-                    &row.account,
-                    &row.category,
+                    row.account.as_str(),
+                    row.category.as_str(),
                     row.amount_cents,
-                    &row.currency,
-                    &row.source_id,
-                    &row.purpose.map(|purpose| purpose.as_str()),
-                    &row.trip_id,
+                    row.currency.as_str(),
+                    row.source_id.as_deref(),
+                    row.purpose.map(|purpose| purpose.as_str()),
+                    row.trip_id.as_deref(),
                     row.cash_amount_cents,
                     row.shared_cents,
-                    &row.reimbursement_for,
+                    row.reimbursement_for.as_deref(),
                 ])?;
             }
         }
         transaction.commit()?;
         Ok(())
+    }
+
+    /// Read EUR expenses for the local Places capability.
+    ///
+    /// # Errors
+    /// The transaction projection cannot be read.
+    pub fn place_expenses(
+        &self,
+        description: Option<&str>,
+    ) -> Fallible<Vec<finance_api::places::Expense>> {
+        let prefix = &self.prefix;
+        Ok(self.conn()?.query_all(
+            &format!(
+                "SELECT source_id, description, amount_cents, booked_at, category
+                 FROM {prefix}_transaction_projection
+                 WHERE kind = 'expense' AND currency = 'EUR' AND (?1 IS NULL OR description = ?1)
+                 ORDER BY booked_at, source_id, id"
+            ),
+            params![description],
+            |row| {
+                Ok(finance_api::places::Expense {
+                    source_id: row.get(0)?,
+                    description: row.get(1)?,
+                    amount_cents: row.get(2)?,
+                    booked_at: row.get(3)?,
+                    category: row.get(4)?,
+                })
+            },
+        )?)
+    }
+
+    /// Read the candidate identities and addresses for one source account.
+    ///
+    /// # Errors
+    /// The transaction candidates cannot be read.
+    pub fn place_candidates(
+        &self,
+        source_account: &str,
+    ) -> Fallible<Vec<finance_api::places::Candidate>> {
+        let prefix = &self.prefix;
+        Ok(self.conn()?.query_all(
+            &format!(
+                "SELECT fingerprint, location_street, location_city, location_postal_code, location_country
+                 FROM {prefix}_transaction_candidates WHERE source_account = ?1 ORDER BY fingerprint"
+            ),
+            params![source_account],
+            |row| Ok(finance_api::places::Candidate {
+                fingerprint: row.get(0)?, street: row.get(1)?, city: row.get(2)?,
+                postal_code: row.get(3)?, country: row.get(4)?,
+            }),
+        )?)
     }
 
     pub fn transaction_projection(&self) -> Fallible<Vec<TransactionRow>> {
@@ -833,7 +903,7 @@ impl FinanceStore {
                      FROM {prefix}_transaction_projection
                      ORDER BY booked_at DESC, id"
                 ),
-                [],
+                params![],
                 row_to_transaction,
             )?
             .into_iter()
@@ -855,7 +925,7 @@ impl FinanceStore {
                  GROUP BY month ORDER BY month DESC LIMIT 12",
                 self.prefix
             ),
-            [],
+            params![],
             |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
         )?;
         let (Some((to, _)), Some((from, _))) = (months.first(), months.last()) else {
@@ -882,15 +952,18 @@ impl FinanceStore {
     pub fn replace_holding_projection(&self, snapshot: &ReviewedHoldingsSnapshot) -> Fallible<()> {
         let prefix = &self.prefix;
         let mut conn = self.conn()?;
-        let transaction = sjel_store::write_transaction(&mut conn)?;
-        transaction.execute(&format!("DELETE FROM {prefix}_holding_projection"), [])?;
+        let transaction = engine::write_transaction(&mut conn)?;
+        transaction.execute(
+            &format!("DELETE FROM {prefix}_holding_projection"),
+            params![],
+        )?;
         transaction.execute(
             &format!("DELETE FROM {prefix}_holding_projection_state"),
-            [],
+            params![],
         )?;
         transaction.execute(
             &format!("DELETE FROM {prefix}_holding_projection_sources"),
-            [],
+            params![],
         )?;
         transaction.execute(
             &format!(
@@ -898,8 +971,8 @@ impl FinanceStore {
                     (singleton, snapshot_id, reviewed_at, coverage) VALUES (1, ?1, ?2, ?3)"
             ),
             params![
-                &snapshot.snapshot_id,
-                &snapshot.reviewed_at,
+                snapshot.snapshot_id.as_str(),
+                snapshot.reviewed_at.as_str(),
                 snapshot.coverage.as_str(),
             ],
         )?;
@@ -924,12 +997,12 @@ impl FinanceStore {
                      VALUES (?1,?2,?3,?4,?5,?6)"
                 ),
                 params![
-                    &holding.instrument,
+                    holding.instrument.as_str(),
                     holding.quantity.mantissa,
                     quantity_scale,
                     price_mantissa,
                     price_scale,
-                    &holding.currency,
+                    holding.currency.as_str(),
                 ],
             )?;
         }
@@ -940,9 +1013,9 @@ impl FinanceStore {
                         (source_key, snapshot_id, reviewed_at, coverage) VALUES (?1,?2,?3,?4)"
                 ),
                 params![
-                    &source.source_key,
-                    &source.snapshot_id,
-                    &source.reviewed_at,
+                    source.source_key.as_str(),
+                    source.snapshot_id.as_str(),
+                    source.reviewed_at.as_str(),
                     source.coverage.as_str(),
                 ],
             )?;
@@ -954,15 +1027,18 @@ impl FinanceStore {
     pub fn clear_holding_projection(&self) -> Fallible<()> {
         let prefix = &self.prefix;
         let mut conn = self.conn()?;
-        let transaction = sjel_store::write_transaction(&mut conn)?;
-        transaction.execute(&format!("DELETE FROM {prefix}_holding_projection"), [])?;
+        let transaction = engine::write_transaction(&mut conn)?;
+        transaction.execute(
+            &format!("DELETE FROM {prefix}_holding_projection"),
+            params![],
+        )?;
         transaction.execute(
             &format!("DELETE FROM {prefix}_holding_projection_state"),
-            [],
+            params![],
         )?;
         transaction.execute(
             &format!("DELETE FROM {prefix}_holding_projection_sources"),
-            [],
+            params![],
         )?;
         transaction.commit()?;
         Ok(())
@@ -977,7 +1053,7 @@ impl FinanceStore {
                     "SELECT snapshot_id, reviewed_at, coverage
                      FROM {prefix}_holding_projection_state WHERE singleton = 1"
                 ),
-                [],
+                params![],
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,
@@ -1004,7 +1080,7 @@ impl FinanceStore {
                             price_mantissa, price_scale, currency
                      FROM {prefix}_holding_projection ORDER BY instrument"
             ),
-            [],
+            params![],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -1040,7 +1116,7 @@ impl FinanceStore {
                     "SELECT source_key, snapshot_id, reviewed_at, coverage
                      FROM {prefix}_holding_projection_sources ORDER BY source_key"
                 ),
-                [],
+                params![],
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,
@@ -1095,13 +1171,13 @@ impl FinanceStore {
                  VALUES (?1,?2,?3,?4,?5,?6,?7)"
             ),
             params![
-                &observation.instrument,
-                &observation.observed_on,
+                observation.instrument.as_str(),
+                observation.observed_on.as_str(),
                 observation.price.mantissa,
                 scale,
-                &observation.currency,
-                &observation.source,
-                &observation.fetched_at,
+                observation.currency.as_str(),
+                observation.source.as_str(),
+                observation.fetched_at.as_str(),
             ],
         )?;
         Ok(changed == 1)
@@ -1118,13 +1194,13 @@ impl FinanceStore {
                  VALUES (?1,?2,?3,?4,?5,?6,?7)"
             ),
             params![
-                &observation.base,
-                &observation.quote,
-                &observation.observed_on,
+                observation.base.as_str(),
+                observation.quote.as_str(),
+                observation.observed_on.as_str(),
                 observation.rate.mantissa,
                 scale,
-                &observation.source,
-                &observation.fetched_at,
+                observation.source.as_str(),
+                observation.fetched_at.as_str(),
             ],
         )?;
         Ok(changed == 1)
@@ -1267,9 +1343,9 @@ impl FinanceStore {
                 idea_id,
                 created_at,
                 model,
-                review.digest,
+                review.digest.as_str(),
                 review.action.as_str(),
-                review.rationale,
+                review.rationale.as_str(),
                 serde_json::to_string(&review.cited)?,
                 price_json
             ],
@@ -1402,13 +1478,13 @@ impl FinanceStore {
                  VALUES (?1,?2,?3,?4,?5,?6,?7)"
             ),
             params![
-                &attempt.provider,
-                &attempt.target,
-                &attempt.requested_on,
+                attempt.provider.as_str(),
+                attempt.target.as_str(),
+                attempt.requested_on.as_str(),
                 attempt.status.as_str(),
-                &attempt.detail,
+                attempt.detail.as_str(),
                 attempt.rows_written,
-                &attempt.fetched_at,
+                attempt.fetched_at.as_str(),
             ],
         )?;
         Ok(())
@@ -1436,7 +1512,7 @@ impl FinanceStore {
                      )
                      ORDER BY instrument"
                 ),
-                [],
+                params![],
                 row_to_market_price,
             )?
             .into_iter()
@@ -1456,7 +1532,7 @@ impl FinanceStore {
                      FROM {prefix}_prices WHERE instrument = ?1
                      ORDER BY observed_on, fetched_at, id"
                 ),
-                params![&instrument],
+                params![instrument],
                 row_to_market_price,
             )?
             .into_iter()
@@ -1475,7 +1551,7 @@ impl FinanceStore {
                             currency, source, fetched_at
                      FROM {prefix}_prices ORDER BY instrument, observed_on, fetched_at, id"
                 ),
-                [],
+                params![],
                 row_to_market_price,
             )?
             .into_iter()
@@ -1492,7 +1568,7 @@ impl FinanceStore {
                 "SELECT instrument, COUNT(*) FROM {prefix}_prices
                  GROUP BY instrument ORDER BY instrument"
             ),
-            [],
+            params![],
             |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
         )
         .map_err(Into::into)
@@ -1517,7 +1593,7 @@ impl FinanceStore {
                      )
                      ORDER BY base, quote"
                 ),
-                [],
+                params![],
                 row_to_fx,
             )?
             .into_iter()
@@ -1585,7 +1661,7 @@ impl FinanceStore {
                 "SELECT MAX(fetched_at) FROM {prefix}_price_fetches
                  WHERE status = 'ok' AND fetched_at <> ''"
             ),
-            [],
+            params![],
             |row| row.get::<_, Option<String>>(0),
         )?)
     }
@@ -1609,7 +1685,7 @@ impl FinanceStore {
                             proposal_json, evidence_json, model_revision, proposed_at
                      FROM {prefix}_decisions ORDER BY proposed_at DESC, id"
                 ),
-                [],
+                params![],
                 row_to_proposal,
             )?
             .into_iter()
@@ -1623,7 +1699,7 @@ impl FinanceStore {
                     "SELECT decision_id, event, verdict, note, outcome_json, recorded_at
                      FROM {prefix}_decision_events ORDER BY recorded_at, id"
                 ),
-                [],
+                params![],
                 row_to_decision_event,
             )?
             .into_iter()
@@ -1669,11 +1745,11 @@ impl FinanceStore {
             ),
             params![
                 &decision_id,
-                &event.event,
-                &event.verdict,
-                &event.note,
-                &event.outcome_json,
-                &event.recorded_at,
+                event.event.as_str(),
+                event.verdict.as_deref(),
+                event.note.as_str(),
+                event.outcome_json.as_deref(),
+                event.recorded_at.as_str(),
             ],
         )?;
         Ok(changed == 1)
@@ -1696,8 +1772,7 @@ impl FinanceStore {
     ) -> Fallible<DecisionRunOutcome> {
         let prefix = self.prefix.clone();
         let mut conn = self.conn()?;
-        let transaction =
-            conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let transaction = engine::write_transaction(&mut conn)?;
         let open_ids: Vec<String> = {
             // "Currently open", derived exactly as `StoredDecision::status`
             // derives it, because a presence test would be wrong now that a
@@ -1720,8 +1795,8 @@ impl FinanceStore {
                  ), 'reinstated') <> 'superseded'"
             ))?;
             let ids = statement
-                .query_map([], |row| row.get::<_, String>(0))?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
+                .query_map(params![], |row| row.get::<_, String>(0))?
+                .collect::<sql::Result<Vec<_>>>()?;
             ids
         };
         let mut outcome = DecisionRunOutcome::default();
@@ -1763,7 +1838,7 @@ impl FinanceStore {
                        ) = 'superseded'"
                 ),
                 params![
-                    &proposal.id,
+                    proposal.id.as_str(),
                     "a later run produced this proposal again",
                     recorded_at
                 ],
@@ -1783,7 +1858,7 @@ impl FinanceStore {
                      VALUES (?1, 'superseded', NULL, ?2, NULL, ?3)"
                 ),
                 params![
-                    id,
+                    id.as_str(),
                     "the run that produced this no longer produces it",
                     recorded_at
                 ],
@@ -1799,16 +1874,16 @@ impl FinanceStore {
                      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)"
                 ),
                 params![
-                    &proposal.id,
-                    &proposal.kind,
-                    &proposal.subject,
-                    &proposal.rung,
-                    &proposal.data_class,
-                    &proposal.data_class_rationale,
-                    &proposal.proposal_json,
-                    &proposal.evidence_json,
-                    &proposal.model_revision,
-                    &proposal.proposed_at,
+                    proposal.id.as_str(),
+                    proposal.kind.as_str(),
+                    proposal.subject.as_str(),
+                    proposal.rung.as_str(),
+                    proposal.data_class.as_str(),
+                    proposal.data_class_rationale.as_str(),
+                    proposal.proposal_json.as_str(),
+                    proposal.evidence_json.as_str(),
+                    proposal.model_revision.as_str(),
+                    proposal.proposed_at.as_str(),
                 ],
             )?;
             if changed == 1 {
@@ -1922,7 +1997,7 @@ impl StoredDecision {
     }
 }
 
-fn row_to_market_price(row: &Row) -> rusqlite::Result<Option<PriceObservation>> {
+fn row_to_market_price(row: &Row) -> sql::Result<Option<PriceObservation>> {
     let scale: i32 = row.get("price_scale")?;
     let Ok(scale) = u32::try_from(scale) else {
         return Ok(None);
@@ -1940,7 +2015,7 @@ fn row_to_market_price(row: &Row) -> rusqlite::Result<Option<PriceObservation>> 
     }))
 }
 
-fn row_to_fx(row: &Row) -> rusqlite::Result<Option<FxObservation>> {
+fn row_to_fx(row: &Row) -> sql::Result<Option<FxObservation>> {
     let scale: i32 = row.get("rate_scale")?;
     let Ok(scale) = u32::try_from(scale) else {
         return Ok(None);
@@ -1960,7 +2035,7 @@ fn row_to_fx(row: &Row) -> rusqlite::Result<Option<FxObservation>> {
 
 /// A status this binary does not know is dropped rather than guessed into the
 /// nearest neighbour, the way `row_to_state` above already does it.
-fn row_to_fetch(row: &Row) -> rusqlite::Result<Option<FetchAttempt>> {
+fn row_to_fetch(row: &Row) -> sql::Result<Option<FetchAttempt>> {
     let Some(status) = FetchStatus::parse(row.get::<_, String>("status")?.as_str()) else {
         return Ok(None);
     };
@@ -1975,7 +2050,7 @@ fn row_to_fetch(row: &Row) -> rusqlite::Result<Option<FetchAttempt>> {
     }))
 }
 
-fn row_to_proposal(row: &Row) -> rusqlite::Result<Option<StoredProposal>> {
+fn row_to_proposal(row: &Row) -> sql::Result<Option<StoredProposal>> {
     Ok(Some(StoredProposal {
         id: row.get("id")?,
         kind: row.get("kind")?,
@@ -1990,7 +2065,7 @@ fn row_to_proposal(row: &Row) -> rusqlite::Result<Option<StoredProposal>> {
     }))
 }
 
-fn row_to_decision_event(row: &Row) -> rusqlite::Result<Option<(String, StoredDecisionEvent)>> {
+fn row_to_decision_event(row: &Row) -> sql::Result<Option<(String, StoredDecisionEvent)>> {
     Ok(Some((
         row.get("decision_id")?,
         StoredDecisionEvent {
@@ -2033,7 +2108,7 @@ fn rebuild_decision_events_check(conn: &Connection, prefix: &str) -> Fallible<()
     let installed: Option<String> = conn
         .query_row(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
-            params![&table],
+            params![table.as_str()],
             |row| row.get(0),
         )
         .optional()?;
@@ -2051,7 +2126,7 @@ fn rebuild_decision_events_check(conn: &Connection, prefix: &str) -> Fallible<()
     let attached: Vec<String> = conn.query_all(
         "SELECT sql FROM sqlite_master
          WHERE tbl_name = ?1 AND type IN ('index','trigger') AND sql IS NOT NULL",
-        params![&table],
+        params![table.as_str()],
         |row| row.get(0),
     )?;
     let scratch = format!("{table}_reinstated");
@@ -2089,7 +2164,7 @@ fn add_candidate_location_mcc(conn: &Connection, prefix: &str) -> Fallible<()> {
     let table = format!("{prefix}_transaction_candidates");
     let present: i64 = conn.query_row(
         "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = 'location_mcc'",
-        params![&table],
+        params![table.as_str()],
         |row| row.get(0),
     )?;
     if present == 0 {
@@ -2115,14 +2190,14 @@ fn insert_price(
              ON CONFLICT (subscription_id, valid_from, reason) DO NOTHING"
         ),
         params![
-            &id,
-            &price.valid_from,
+            id,
+            price.valid_from.as_str(),
             price.amount_cents,
-            &price.currency,
+            price.currency.as_str(),
             cycle_str(price.cycle),
-            &price.plan,
-            &price.reason,
-            &today,
+            price.plan.as_deref(),
+            price.reason.as_str(),
+            today,
         ],
     )?;
     Ok(inserted == 1)
@@ -2143,11 +2218,11 @@ fn insert_state(
              ON CONFLICT (subscription_id, effective, state) DO NOTHING"
         ),
         params![
-            &id,
-            &change.effective,
+            id,
+            change.effective.as_str(),
             change.state.as_str(),
-            &change.note,
-            &today,
+            change.note.as_str(),
+            today,
         ],
     )?;
     Ok(inserted == 1)
@@ -2158,7 +2233,7 @@ fn insert_state(
 fn touch(conn: &Connection, prefix: &str, id: &str, today: &str) -> Fallible<()> {
     conn.execute(
         &format!("UPDATE {prefix}_subscriptions SET updated_at = ?2 WHERE id = ?1"),
-        params![&id, &today],
+        params![id, today],
     )?;
     Ok(())
 }
@@ -2183,19 +2258,33 @@ fn cycle_from_str(raw: &str) -> BillingCycle {
     }
 }
 
-fn row_to_subscription(row: &Row) -> rusqlite::Result<Subscription> {
+#[cfg(feature = "turso-wal")]
+fn value_rating_error(error: std::num::TryFromIntError) -> sql::Error {
+    sql::Error::ConversionFailure(format!("value_rating: {error}"))
+}
+
+#[cfg(not(feature = "turso-wal"))]
+fn value_rating_error(error: std::num::TryFromIntError) -> sql::Error {
+    sql::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Integer, Box::new(error))
+}
+
+fn row_to_subscription(row: &Row) -> sql::Result<Subscription> {
     Ok(Subscription {
         id: row.get("id")?,
         name: row.get("name")?,
         source_path: row.get("source_path")?,
         category: row.get("category")?,
-        value_rating: row.get("value_rating")?,
+        value_rating: row
+            .get::<_, Option<i32>>("value_rating")?
+            .map(i16::try_from)
+            .transpose()
+            .map_err(value_rating_error)?,
         prices: Vec::new(),
         states: Vec::new(),
     })
 }
 
-fn row_to_price(row: &Row) -> rusqlite::Result<PricePoint> {
+fn row_to_price(row: &Row) -> sql::Result<PricePoint> {
     Ok(PricePoint {
         valid_from: row.get("valid_from")?,
         amount_cents: row.get("amount_cents")?,
@@ -2210,7 +2299,7 @@ fn row_to_price(row: &Row) -> rusqlite::Result<PricePoint> {
 /// nearest neighbour. The CHECK constraint makes it unreachable today; if a later
 /// migration widens it, a stale binary reporting the wrong state is worse than one
 /// reporting a shorter history.
-fn row_to_state(row: &Row) -> rusqlite::Result<Option<StateChange>> {
+fn row_to_state(row: &Row) -> sql::Result<Option<StateChange>> {
     let Some(state) = State::parse(row.get::<_, String>("state")?.as_str()) else {
         return Ok(None);
     };
@@ -2224,8 +2313,8 @@ fn row_to_state(row: &Row) -> rusqlite::Result<Option<StateChange>> {
 /// `Ok(None)` for a row this binary cannot represent, which the caller drops.
 /// Distinct from `Err`: a column that will not convert is a broken read, while a
 /// state string the enum does not know is a row from a newer writer.
-fn row_to_candidate(row: &Row) -> rusqlite::Result<Option<TransactionCandidate>> {
-    let confidence: i16 = row.get("confidence_basis_points")?;
+fn row_to_candidate(row: &Row) -> sql::Result<Option<TransactionCandidate>> {
+    let confidence: i32 = row.get("confidence_basis_points")?;
     let (Ok(confidence_basis_points), Some(state)) = (
         confidence.try_into(),
         CandidateState::parse(row.get::<_, String>("state")?.as_str()),
@@ -2252,7 +2341,7 @@ fn row_to_candidate(row: &Row) -> rusqlite::Result<Option<TransactionCandidate>>
     }))
 }
 
-fn row_to_transaction(row: &Row) -> rusqlite::Result<Option<TransactionRow>> {
+fn row_to_transaction(row: &Row) -> sql::Result<Option<TransactionRow>> {
     let Some(kind) = TransactionKind::parse(row.get::<_, String>("kind")?.as_str()) else {
         return Ok(None);
     };

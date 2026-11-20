@@ -1,15 +1,17 @@
-//! The three map layers, assembled with read-only SELECTs over `finance_*`,
-//! `trips_*` and `transit_*`. One database with a namespace per capability was
-//! chosen exactly for these joins; PRD Q45 (2026-08-27) made that namespace a
-//! table prefix instead of a schema, and the joins are the same joins.
+//! Map layers over the place registry and owner projections.
 //! The wire shapes here are the map view's contract; every collection is
 //! GeoJSON with `[longitude, latitude]` coordinate order.
 
-use rusqlite::{params, OptionalExtension};
+use finance_api::places::Expense;
+#[cfg(not(feature = "turso-wal"))]
+use rusqlite::params;
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal::params;
+#[cfg(not(feature = "turso-wal"))]
 use sjel_store::QueryAll;
 
 use crate::geocode::{GeocodeQuery, Geocoder};
-use crate::store::{validate_prefix, Fallible, PlacesStore};
+use crate::store::{Fallible, PlacesStore};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -90,6 +92,7 @@ pub fn parse_station_ref(raw: &str) -> Option<StationRef> {
 
 /// One linked expense row: a `places.transaction_places` link joined to the
 /// finance projection on the journal-stable `source_id` (README D2).
+#[derive(Clone)]
 struct LinkedSpendRow {
     place_id: String,
     precision: String,
@@ -103,36 +106,50 @@ struct LinkedSpendRow {
     category: String,
 }
 
-fn linked_spend_rows(store: &PlacesStore, finance_prefix: &str) -> Fallible<Vec<LinkedSpendRow>> {
-    validate_prefix(finance_prefix)?;
+fn linked_spend_rows(store: &PlacesStore, expenses: &[Expense]) -> Fallible<Vec<LinkedSpendRow>> {
     let prefix = store.prefix();
     let conn = store.conn()?;
-    Ok(conn.query_all(
-        &format!(
-            "SELECT tp.place_id, tp.precision, pl.name, pl.city, pl.country_code,
-                    pl.latitude, pl.longitude, p.amount_cents, p.booked_at, p.category
-             FROM {prefix}_transaction_places tp
-             JOIN {prefix}_places pl ON pl.id = tp.place_id
-             JOIN {finance_prefix}_transaction_projection p ON p.source_id = tp.source_id
-             WHERE p.kind = 'expense' AND p.currency = 'EUR'
-             ORDER BY p.booked_at, tp.source_id"
-        ),
-        [],
-        |row| {
-            Ok(LinkedSpendRow {
-                place_id: row.get(0)?,
-                precision: row.get(1)?,
-                place_name: row.get(2)?,
-                place_city: row.get(3)?,
-                country_code: row.get(4)?,
-                latitude: row.get(5)?,
-                longitude: row.get(6)?,
-                amount_cents: row.get(7)?,
-                booked_at: row.get(8)?,
-                category: row.get(9)?,
+    let links: HashMap<String, LinkedSpendRow> = conn
+        .query_all(
+            &format!(
+                "SELECT tp.source_id, tp.place_id, tp.precision, pl.name, pl.city,
+                        pl.country_code, pl.latitude, pl.longitude
+                 FROM {prefix}_transaction_places tp
+                 JOIN {prefix}_places pl ON pl.id = tp.place_id"
+            ),
+            params![],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    LinkedSpendRow {
+                        place_id: row.get(1)?,
+                        precision: row.get(2)?,
+                        place_name: row.get(3)?,
+                        place_city: row.get(4)?,
+                        country_code: row.get(5)?,
+                        latitude: row.get(6)?,
+                        longitude: row.get(7)?,
+                        amount_cents: 0,
+                        booked_at: String::new(),
+                        category: String::new(),
+                    },
+                ))
+            },
+        )?
+        .into_iter()
+        .collect();
+    Ok(expenses
+        .iter()
+        .filter_map(|expense| {
+            let link = links.get(expense.source_id.as_deref()?)?;
+            Some(LinkedSpendRow {
+                amount_cents: expense.amount_cents,
+                booked_at: expense.booked_at.clone(),
+                category: expense.category.clone(),
+                ..link.clone()
             })
-        },
-    )?)
+        })
+        .collect())
 }
 
 /// Coordinates for city names, from city-kind registry rows.
@@ -197,24 +214,13 @@ impl Aggregate {
 /// every EUR expense row in the projection; `summary.linked` counts the ones a
 /// link exists for.
 pub fn spend_layer(store: &PlacesStore) -> Fallible<Value> {
-    spend_layer_in(store, "finance")
+    spend_layer_with(store, &crate::finance::expenses(None)?)
 }
 
-/// The finance prefix is a parameter so a test can point the same SQL at a scratch
-/// projection table in its own file; production passes `finance`.
-pub fn spend_layer_in(store: &PlacesStore, finance_prefix: &str) -> Fallible<Value> {
-    validate_prefix(finance_prefix)?;
-    let rows = linked_spend_rows(store, finance_prefix)?;
+fn spend_layer_with(store: &PlacesStore, expenses: &[Expense]) -> Fallible<Value> {
+    let rows = linked_spend_rows(store, expenses)?;
     let city_coords = city_coordinates(store)?;
-    let conn = store.conn()?;
-    let projected_expenses: i64 = conn.query_row(
-        &format!(
-            "SELECT COUNT(*) FROM {finance_prefix}_transaction_projection
-             WHERE kind = 'expense' AND currency = 'EUR'"
-        ),
-        [],
-        |row| row.get(0),
-    )?;
+    let projected_expenses = expenses.len();
 
     struct PlaceInfo {
         name: String,
@@ -358,65 +364,51 @@ fn phase(date: Option<&str>, today: &str) -> Value {
 /// as LineStrings between station coordinates, station points from the
 /// registry, and city-presence evidence derived from linked spend.
 pub fn travel_layer(store: &PlacesStore, today: &str) -> Fallible<Value> {
-    travel_layer_in(store, "trips", "transit", today)
+    let plans = crate::travel_reads::plans()?;
+    let legs = crate::travel_reads::legs(crate::travel_reads::journeys()?);
+    travel_layer_with(
+        store,
+        &plans,
+        &legs,
+        today,
+        &crate::finance::expenses(None)?,
+    )
 }
 
-/// The neighbour prefixes are parameters so a test can build scratch `plans` and
-/// `trip_legs` tables in its own file; production passes `trips` and `transit`.
-pub fn travel_layer_in(
+fn travel_layer_with(
     store: &PlacesStore,
-    trips_prefix: &str,
-    transit_prefix: &str,
+    plans: &[crate::travel_reads::Plan],
+    legs: &[crate::travel_reads::Leg],
     today: &str,
+    expenses: &[Expense],
 ) -> Fallible<Value> {
-    validate_prefix(trips_prefix)?;
-    validate_prefix(transit_prefix)?;
-    let mut points: Vec<Value> = Vec::new();
-    let mut routes: Vec<Value> = Vec::new();
-
-    // Trip destinations: PlaceRef JSON serialized by trips' store
-    // (crates/trips/src/store.rs); only refs that carry a coordinate can
-    // be drawn.
-    {
-        let conn = store.conn()?;
-        let plans: Vec<(String, String, String, String)> = conn.query_all(
-            &format!(
-                "SELECT id, destinations, date_start, date_end
-                 FROM {trips_prefix}_plans WHERE status != 'archived'
-                 ORDER BY date_start, id"
-            ),
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-        )?;
-        for (plan_id, destinations, date_start, date_end) in plans {
-            let Ok(refs) = serde_json::from_str::<Value>(&destinations) else {
+    let mut points = Vec::new();
+    let mut routes = Vec::new();
+    for plan in plans {
+        for place_ref in plan.destinations.as_array().into_iter().flatten() {
+            let (Some(latitude), Some(longitude)) = (
+                place_ref.get("latitude").and_then(Value::as_f64),
+                place_ref.get("longitude").and_then(Value::as_f64),
+            ) else {
                 continue;
             };
-            for place_ref in refs.as_array().into_iter().flatten() {
-                let (Some(latitude), Some(longitude)) = (
-                    place_ref.get("latitude").and_then(Value::as_f64),
-                    place_ref.get("longitude").and_then(Value::as_f64),
-                ) else {
-                    continue;
-                };
-                let name = place_ref
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .unwrap_or("unnamed destination");
-                points.push(feature(
-                    longitude,
-                    latitude,
-                    json!({
-                        "kind": "trip-destination",
-                        "name": name,
-                        "phase": phase(Some(&date_end), today),
-                        "plan_id": plan_id,
-                        "first": date_start,
-                        "last": date_end,
-                        "visits": Value::Null,
-                    }),
-                ));
-            }
+            let name = place_ref
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("unnamed destination");
+            points.push(feature(
+                longitude,
+                latitude,
+                json!({
+                    "kind": "trip-destination",
+                    "name": name,
+                    "phase": phase(Some(&plan.date_end), today),
+                    "plan_id": plan.id,
+                    "first": plan.date_start,
+                    "last": plan.date_end,
+                    "visits": Value::Null,
+                }),
+            ));
         }
     }
 
@@ -433,40 +425,9 @@ pub fn travel_layer_in(
         })
         .collect();
 
-    struct LegRow {
-        origin: String,
-        origin_name: String,
-        destination: String,
-        destination_name: String,
-        departure_time: String,
-        train_name: String,
-    }
-    let legs: Vec<LegRow> = {
-        let conn = store.conn()?;
-        conn.query_all(
-            &format!(
-                "SELECT origin_eva, origin_name, destination_eva, destination_name,
-                        departure_time, train_name
-                 FROM {transit_prefix}_trip_legs
-                 ORDER BY departure_time, trip_id, leg_index"
-            ),
-            [],
-            |row| {
-                Ok(LegRow {
-                    origin: row.get(0)?,
-                    origin_name: row.get(1)?,
-                    destination: row.get(2)?,
-                    destination_name: row.get(3)?,
-                    departure_time: row.get(4)?,
-                    train_name: row.get(5)?,
-                })
-            },
-        )?
-    };
-
     let mut visits: HashMap<String, i64> = HashMap::new();
     let mut seen_routes: HashSet<String> = HashSet::new();
-    for leg in &legs {
+    for leg in legs {
         let Some(origin) = parse_station_ref(&leg.origin) else {
             continue;
         };
@@ -522,7 +483,7 @@ pub fn travel_layer_in(
     }
 
     // Spend presence: cities where linked purchases prove the operator was.
-    let spend_rows = linked_spend_rows(store, "finance")?;
+    let spend_rows = linked_spend_rows(store, expenses)?;
     let city_coords = city_coordinates(store)?;
     let mut presence: BTreeMap<String, Aggregate> = BTreeMap::new();
     for row in &spend_rows {
@@ -565,44 +526,50 @@ pub fn travel_layer_in(
 /// description, ranked by total spend, capped at 200 groups. Cents are
 /// integers, EUR implied — the same units as the spend layer.
 pub fn unplaced_groups(store: &PlacesStore) -> Fallible<Value> {
-    unplaced_groups_in(store, "finance")
+    unplaced_groups_with(store, &crate::finance::expenses(None)?)
 }
 
-/// The finance prefix is a parameter so a test can point the same SQL at a scratch
-/// copy of the projection table; production passes `finance`.
-pub fn unplaced_groups_in(store: &PlacesStore, finance_prefix: &str) -> Fallible<Value> {
-    validate_prefix(finance_prefix)?;
-    let prefix = store.prefix();
-    let conn = store.conn()?;
-    // `COUNT(*)::bigint` and `SUM(...)::bigint` lose their casts: SQLite integers
-    // are already 64-bit. `left(x, 10)` becomes `substr(x, 1, 10)`.
-    let groups: Vec<Value> = conn.query_all(
-        &format!(
-            "SELECT p.description, COUNT(*), SUM(p.amount_cents),
-                    substr(MIN(p.booked_at), 1, 10), substr(MAX(p.booked_at), 1, 10)
-             FROM {finance_prefix}_transaction_projection p
-             WHERE p.kind = 'expense' AND p.currency = 'EUR'
-               AND p.source_id IS NOT NULL
-               AND NOT EXISTS (
-                   SELECT 1 FROM {prefix}_transaction_places tp
-                   WHERE tp.source_id = p.source_id
-               )
-             GROUP BY p.description
-             ORDER BY SUM(p.amount_cents) DESC, p.description
-             LIMIT 200"
-        ),
-        [],
-        |row| {
-            Ok(json!({
-                "description": row.get::<_, String>(0)?,
-                "transactions": row.get::<_, i64>(1)?,
-                "total_cents": row.get::<_, i64>(2)?,
-                "first": row.get::<_, String>(3)?,
-                "last": row.get::<_, String>(4)?,
-            }))
-        },
-    )?;
-    Ok(json!({ "groups": groups }))
+fn unplaced_groups_with(store: &PlacesStore, expenses: &[Expense]) -> Fallible<Value> {
+    let linked = store.linked_source_ids()?;
+    let mut groups = BTreeMap::new();
+    for expense in expenses {
+        if expense
+            .source_id
+            .as_ref()
+            .is_none_or(|id| linked.contains(id))
+        {
+            continue;
+        }
+        let group = groups.entry(expense.description.as_str()).or_insert((
+            0_i64,
+            0_i64,
+            expense.booked_at.as_str(),
+            expense.booked_at.as_str(),
+        ));
+        group.0 += 1;
+        group.1 = group
+            .1
+            .checked_add(expense.amount_cents)
+            .ok_or("expense total overflow")?;
+        group.2 = group.2.min(&expense.booked_at);
+        group.3 = group.3.max(&expense.booked_at);
+    }
+    let mut groups: Vec<_> = groups.into_iter().collect();
+    groups.sort_by(|(left, a), (right, b)| b.1.cmp(&a.1).then_with(|| left.cmp(right)));
+    let groups: Vec<_> = groups
+        .into_iter()
+        .take(200)
+        .map(|(description, (count, total, first, last))| {
+            json!({
+                "description": description,
+                "transactions": count,
+                "total_cents": total,
+                "first": first.chars().take(10).collect::<String>(),
+                "last": last.chars().take(10).collect::<String>(),
+            })
+        })
+        .collect();
+    Ok(json!({"groups": groups}))
 }
 
 /// `POST /api/unplaced/assign` body. Exactly one of `place_id` /
@@ -627,11 +594,21 @@ pub struct AssignUnplaced {
 pub fn assign_unplaced(
     store: &PlacesStore,
     geocoder: &Geocoder,
-    finance_prefix: &str,
     request: &AssignUnplaced,
     today: &str,
 ) -> Fallible<Option<Value>> {
-    validate_prefix(finance_prefix)?;
+    assign_unplaced_with(store, geocoder, request, today, || {
+        crate::finance::expenses(Some(&request.description))
+    })
+}
+
+fn assign_unplaced_with(
+    store: &PlacesStore,
+    geocoder: &Geocoder,
+    request: &AssignUnplaced,
+    today: &str,
+    expenses: impl FnOnce() -> Fallible<Vec<Expense>>,
+) -> Fallible<Option<Value>> {
     if !matches!(request.precision.as_str(), "venue" | "city") {
         return Err("precision must be venue or city".into());
     }
@@ -658,24 +635,27 @@ pub fn assign_unplaced(
     } else {
         request.precision.as_str()
     };
+    let expenses = expenses()?;
     let prefix = store.prefix();
-    let conn = store.conn()?;
-    // 9500: operator-asserted, above any derived link (amex venue 9000,
-    // city fallback 6000). The `::text`/`::smallint` casts on the SELECT list are
-    // gone: they told Postgres what type a bare parameter was, and SQLite binds a
-    // value rather than inferring a type.
-    let linked = conn.execute(
-        &format!(
+    let mut conn = store.conn()?;
+    let transaction = crate::store::db::write_transaction(&mut conn)?;
+    let mut linked = 0;
+    {
+        let mut insert = transaction.prepare(&format!(
             "INSERT INTO {prefix}_transaction_places
                 (source_id, place_id, precision, confidence_bp, source, created_at)
-             SELECT DISTINCT p.source_id, ?2, ?3, ?4, 'manual', ?5
-             FROM {finance_prefix}_transaction_projection p
-             WHERE p.kind = 'expense' AND p.currency = 'EUR'
-               AND p.source_id IS NOT NULL AND p.description = ?1
+             VALUES (?1, ?2, ?3, 9500, 'manual', ?4)
              ON CONFLICT (source_id) DO NOTHING"
-        ),
-        params![&request.description, &place.id, precision, 9500_i16, &today],
-    )?;
+        ))?;
+        for row in expenses {
+            if row.description == request.description {
+                if let Some(id) = row.source_id {
+                    linked += insert.execute(params![id, place.id.as_str(), precision, today])?;
+                }
+            }
+        }
+    }
+    transaction.commit()?;
     Ok(Some(json!({
         "ok": true,
         "linked": linked,
@@ -722,7 +702,7 @@ pub fn people_layer(store: &PlacesStore, today: &str) -> Fallible<Value> {
                         // Null means "still there". A planner asking about a day
                         // after today needs the end as much as the start.
                         "until": row.get::<_, Option<String>>(8)?,
-                        "confidence_bp": i64::from(row.get::<_, i16>(3)?),
+                        "confidence_bp": row.get::<_, i64>(3)?,
                         "source": row.get::<_, String>(4)?,
                     }),
                     row.get::<_, Option<f64>>(6)?,
@@ -738,111 +718,26 @@ pub fn people_layer(store: &PlacesStore, today: &str) -> Fallible<Value> {
     Ok(collection(features))
 }
 
-/// `GET /api/layers/photos`: GeoJSON FeatureCollection of geotagged media items (PRD N4: index and link, never copy).
-pub fn photos_layer(store: &PlacesStore) -> Fallible<Value> {
-    photos_layer_in(store, "media")
-}
-
-pub fn photos_layer_in(store: &PlacesStore, media_prefix: &str) -> Fallible<Value> {
-    validate_prefix(media_prefix)?;
-    let conn = store.conn()?;
-    let table_name = format!("{media_prefix}_geotags");
-    let has_table: bool = conn
-        .query_row(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
-            [&table_name],
-            |_| Ok(()),
-        )
-        .optional()?
-        .is_some();
-    if !has_table {
-        return Ok(collection(Vec::new()));
-    }
-
-    let has_locations: bool = conn
-        .query_row(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
-            [&format!("{media_prefix}_locations")],
-            |_| Ok(()),
-        )
-        .optional()?
-        .is_some();
-
-    let mut features = Vec::new();
-    if has_locations {
-        let rows = conn.query_all(
-            &format!(
-                "SELECT g.digest, g.latitude, g.longitude, g.captured_at, l.uuid, l.relpath
-                 FROM {media_prefix}_geotags g
-                 LEFT JOIN {media_prefix}_locations l ON l.digest = g.digest
-                 ORDER BY g.digest, l.uuid, l.relpath"
-            ),
-            [],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, f64>(1)?,
-                    row.get::<_, f64>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                    row.get::<_, Option<String>>(4)?,
-                    row.get::<_, Option<String>>(5)?,
-                ))
-            },
-        )?;
-
-        let mut by_digest: BTreeMap<String, (f64, f64, Option<String>, Vec<Value>)> =
-            BTreeMap::new();
-        for (digest, lat, lon, captured_at, uuid, relpath) in rows {
-            let entry = by_digest
-                .entry(digest)
-                .or_insert_with(|| (lat, lon, captured_at, Vec::new()));
-            if let (Some(u), Some(r)) = (uuid, relpath) {
-                entry.3.push(json!({ "uuid": u, "relpath": r }));
-            }
-        }
-
-        for (digest, (lat, lon, captured_at, locations)) in by_digest {
-            features.push(feature(
-                lon,
-                lat,
-                json!({
-                    "digest": digest,
-                    "captured_at": captured_at,
-                    "locations": locations,
-                }),
-            ));
-        }
-    } else {
-        let rows = conn.query_all(
-            &format!(
-                "SELECT digest, latitude, longitude, captured_at
-                 FROM {media_prefix}_geotags
-                 ORDER BY digest"
-            ),
-            [],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, f64>(1)?,
-                    row.get::<_, f64>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                ))
-            },
-        )?;
-        for (digest, lat, lon, captured_at) in rows {
-            features.push(feature(
-                lon,
-                lat,
-                json!({
-                    "digest": digest,
-                    "captured_at": captured_at,
-                    "locations": [],
-                }),
-            ));
-        }
-    }
-
-    Ok(collection(features))
+/// Features from the Media owner's indexed geotags.
+pub fn photos_layer() -> Fallible<Value> {
+    let response = crate::travel_reads::media_geotags()?;
+    Ok(collection(
+        response
+            .geotags
+            .into_iter()
+            .map(|tag| {
+                feature(
+                    tag.longitude,
+                    tag.latitude,
+                    json!({
+                        "digest": tag.digest,
+                        "captured_at": tag.captured_at,
+                        "locations": tag.locations,
+                    }),
+                )
+            })
+            .collect(),
+    ))
 }
 
 #[cfg(test)]
@@ -888,6 +783,7 @@ mod db_tests {
     use super::*;
     use crate::store::db_tests::open_test_store;
     use rusqlite::Connection;
+    use sjel_store::QueryAll;
 
     /// The neighbour tables the layers read, created in the test's own file under the
     /// prefixes production uses. It restates their shape rather than linking their
@@ -895,8 +791,8 @@ mod db_tests {
     /// (CONTRIBUTING.md#schemas-and-dependency-direction) — the columns named here ARE the
     /// coupling the cross-capability join creates, so writing them down is the point.
     /// Kept to the columns these queries project.
-    fn create_neighbour_tables(path: &std::path::Path) -> Connection {
-        let conn = Connection::open(path).unwrap();
+    fn create_neighbour_tables() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS finance_transaction_projection (
                  source_id TEXT,
@@ -929,6 +825,60 @@ mod db_tests {
         conn
     }
 
+    fn fixture_travel(
+        conn: &Connection,
+    ) -> (
+        Vec<crate::travel_reads::Plan>,
+        Vec<crate::travel_reads::Leg>,
+    ) {
+        let plans = conn
+            .query_all(
+                "SELECT id, destinations, date_start, date_end, status FROM trips_plans
+             WHERE status != 'archived' ORDER BY date_start, id",
+                [],
+                |row| {
+                    let destination: String = row.get(1)?;
+                    Ok(crate::travel_reads::Plan {
+                        id: row.get(0)?,
+                        destinations: serde_json::from_str(&destination).unwrap(),
+                        date_start: row.get(2)?,
+                        date_end: row.get(3)?,
+                        status: row.get(4)?,
+                        travelers: Value::Null,
+                    })
+                },
+            )
+            .unwrap();
+        let legs = conn.query_all(
+            "SELECT origin_eva, origin_name, destination_eva, destination_name, departure_time, train_name
+             FROM transit_trip_legs ORDER BY departure_time, trip_id, leg_index", [],
+            |row| Ok(crate::travel_reads::Leg {
+                origin: row.get(0)?, origin_name: row.get(1)?, destination: row.get(2)?,
+                destination_name: row.get(3)?, departure_time: row.get(4)?, train_name: row.get(5)?,
+            }),
+        ).unwrap();
+        (plans, legs)
+    }
+
+    fn fixture_expenses(conn: &Connection) -> Vec<Expense> {
+        conn.query_all(
+            "SELECT source_id, description, amount_cents, booked_at, category
+             FROM finance_transaction_projection
+             WHERE kind = 'expense' AND currency = 'EUR' ORDER BY booked_at, source_id",
+            [],
+            |row| {
+                Ok(Expense {
+                    source_id: row.get(0)?,
+                    description: row.get(1)?,
+                    amount_cents: row.get(2)?,
+                    booked_at: row.get(3)?,
+                    category: row.get(4)?,
+                })
+            },
+        )
+        .unwrap()
+    }
+
     /// Was `#[ignore]`d: `spend_layer` and `travel_layer` named
     /// `finance.transaction_projection` and `trips.plans` in another *database schema*,
     /// so an empty CI database failed at parse time (measured 2026-08-26, `relation
@@ -937,19 +887,28 @@ mod db_tests {
     /// the layer SQL runs hermetically and the ignore is gone.
     #[test]
     fn the_three_layers_assemble_and_reconcile_against_an_empty_registry() {
-        let (store, path) = open_test_store("layers");
-        create_neighbour_tables(&path);
+        let (store, _) = open_test_store("layers");
+        let conn = create_neighbour_tables();
 
         // No links yet: the spend layer must reconcile to zero (the reconciliation rule:
         // total is the sum over linked rows, and none are linked here).
-        let spend = spend_layer(&store).expect("spend layer SQL is valid");
+        let spend =
+            spend_layer_with(&store, &fixture_expenses(&conn)).expect("spend layer SQL is valid");
         assert_eq!(spend["summary"]["total_cents"], 0);
         assert_eq!(spend["summary"]["linked"], 0);
         assert_eq!(spend["venues"]["type"], "FeatureCollection");
         assert_eq!(spend["cities"]["type"], "FeatureCollection");
         assert_eq!(spend["summary"]["transactions"], 0);
 
-        let travel = travel_layer(&store, "2026-08-25").expect("travel layer SQL is valid");
+        let (plans, legs) = fixture_travel(&conn);
+        let travel = travel_layer_with(
+            &store,
+            &plans,
+            &legs,
+            "2026-08-25",
+            &fixture_expenses(&conn),
+        )
+        .expect("travel layer SQL is valid");
         assert_eq!(travel["points"]["type"], "FeatureCollection");
         assert_eq!(travel["routes"]["type"], "FeatureCollection");
 
@@ -963,8 +922,8 @@ mod db_tests {
     /// have to reach the map through the same file the registry lives in.
     #[test]
     fn the_travel_layer_joins_trips_and_transit_out_of_the_same_file() {
-        let (store, path) = open_test_store("travel_join");
-        let conn = create_neighbour_tables(&path);
+        let (store, _) = open_test_store("travel_join");
+        let conn = create_neighbour_tables();
         conn.execute(
             "INSERT INTO trips_plans VALUES ('plan-1',
                  '[{\"name\":\"Musterstadt\",\"latitude\":50.0,\"longitude\":7.0}]',
@@ -991,7 +950,15 @@ mod db_tests {
         )
         .unwrap();
 
-        let travel = travel_layer(&store, "2026-08-25").unwrap();
+        let (plans, legs) = fixture_travel(&conn);
+        let travel = travel_layer_with(
+            &store,
+            &plans,
+            &legs,
+            "2026-08-25",
+            &fixture_expenses(&conn),
+        )
+        .unwrap();
         let names: Vec<&str> = travel["points"]["features"]
             .as_array()
             .unwrap()
@@ -1016,8 +983,8 @@ mod db_tests {
     fn unplaced_groups_rank_by_total_and_assign_links_by_exact_description() {
         use crate::store::{stable_id, Place};
 
-        let (store, path) = open_test_store("unplaced");
-        let neighbours = create_neighbour_tables(&path);
+        let (store, _) = open_test_store("unplaced");
+        let neighbours = create_neighbour_tables();
         neighbours
             .execute_batch(
                 "INSERT INTO finance_transaction_projection
@@ -1031,7 +998,7 @@ mod db_tests {
             )
             .unwrap();
 
-        let groups = unplaced_groups(&store).unwrap();
+        let groups = unplaced_groups_with(&store, &fixture_expenses(&neighbours)).unwrap();
         let groups = groups["groups"].as_array().unwrap().clone();
         assert_eq!(groups.len(), 2, "income, USD and NULL source_id stay out");
         assert_eq!(groups[0]["description"], "SYNTHETIC MARKET MUSTERSTADT");
@@ -1055,9 +1022,11 @@ mod db_tests {
             geocode_query: Some("Musterstadt".into()),
             precision: "venue".into(),
         };
-        let body = assign_unplaced(&store, &geocoder, "finance", &request, "2026-08-25")
-            .unwrap()
-            .expect("the stub resolves the city");
+        let body = assign_unplaced_with(&store, &geocoder, &request, "2026-08-25", || {
+            Ok(fixture_expenses(&neighbours))
+        })
+        .unwrap()
+        .expect("the stub resolves the city");
         assert_eq!(body["ok"], true);
         assert_eq!(body["linked"], 2, "both unlinked EUR expenses, exactly");
         assert_eq!(body["place"]["name"], "Musterstadt");
@@ -1068,9 +1037,11 @@ mod db_tests {
         );
 
         // Idempotent: the same assignment again links nothing new.
-        let again = assign_unplaced(&store, &geocoder, "finance", &request, "2026-08-25")
-            .unwrap()
-            .unwrap();
+        let again = assign_unplaced_with(&store, &geocoder, &request, "2026-08-25", || {
+            Ok(fixture_expenses(&neighbours))
+        })
+        .unwrap()
+        .unwrap();
         assert_eq!(again["linked"], 0);
 
         // The place_id path against an existing registry row.
@@ -1093,15 +1064,17 @@ mod db_tests {
             geocode_query: None,
             precision: "venue".into(),
         };
-        let body = assign_unplaced(&store, &geocoder, "finance", &request, "2026-08-25")
-            .unwrap()
-            .unwrap();
+        let body = assign_unplaced_with(&store, &geocoder, &request, "2026-08-25", || {
+            Ok(fixture_expenses(&neighbours))
+        })
+        .unwrap()
+        .unwrap();
         assert_eq!(body["linked"], 1);
         assert_eq!(body["place"]["id"], venue.id.as_str());
         assert_eq!(body["precision"], "venue", "a venue-kind place keeps it");
 
         // Everything assigned: the review queue is empty.
-        let groups = unplaced_groups(&store).unwrap();
+        let groups = unplaced_groups_with(&store, &fixture_expenses(&neighbours)).unwrap();
         assert_eq!(groups["groups"].as_array().map(Vec::len), Some(0));
         {
             let conn = store.conn().unwrap();
@@ -1111,7 +1084,7 @@ mod db_tests {
                         "SELECT COUNT(*) FROM {}_transaction_places WHERE source = 'manual'",
                         store.prefix()
                     ),
-                    [],
+                    params![],
                     |row| row.get(0),
                 )
                 .unwrap();
@@ -1122,7 +1095,7 @@ mod db_tests {
                         "SELECT COUNT(*) FROM {}_transaction_places WHERE precision = 'city'",
                         store.prefix()
                     ),
-                    [],
+                    params![],
                     |row| row.get(0),
                 )
                 .unwrap();
@@ -1130,7 +1103,7 @@ mod db_tests {
         }
 
         // The spend layer reconciles over the same links, out of the same file.
-        let spend = spend_layer(&store).unwrap();
+        let spend = spend_layer_with(&store, &fixture_expenses(&neighbours)).unwrap();
         assert_eq!(spend["summary"]["linked"], 3);
         assert_eq!(spend["summary"]["total_cents"], 1500);
 
@@ -1142,9 +1115,11 @@ mod db_tests {
             precision: "venue".into(),
         };
         assert!(
-            assign_unplaced(&store, &geocoder, "finance", &request, "2026-08-25")
-                .unwrap()
-                .is_none()
+            assign_unplaced_with(&store, &geocoder, &request, "2026-08-25", || Ok(
+                fixture_expenses(&neighbours)
+            ))
+            .unwrap()
+            .is_none()
         );
     }
 }

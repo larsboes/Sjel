@@ -129,6 +129,10 @@ impl Pool {
 }
 
 impl Connection {
+    pub fn last_insert_rowid(&self) -> i64 {
+        self.0.last_insert_rowid()
+    }
+
     pub fn execute(&self, sql: &str, params: impl IntoParams) -> Result<usize> {
         let changed = block_on(self.0.execute(sql, params))?;
         usize::try_from(changed).map_err(|error| Error::ConversionFailure(error.to_string()))

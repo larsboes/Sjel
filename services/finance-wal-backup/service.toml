@@ -1,0 +1,6 @@
+kind                  = "data"
+name                  = "finance-wal-backup"
+requires              = ["finance"]
+backup_owner_snapshot = "finance"
+backup_sqlite_online  = "data/finance/snapshots/finance.db"
+backup_target         = "backup-target"

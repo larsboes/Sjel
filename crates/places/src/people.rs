@@ -12,8 +12,12 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
 
+#[cfg(not(feature = "turso-wal"))]
 use rusqlite::params;
 use sjel_links::{Link, Links, Match, ResolveAnswer, ResolveRequest};
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal::params;
+#[cfg(not(feature = "turso-wal"))]
 use sjel_store::QueryAll;
 
 use crate::store::PlacesStore;
@@ -53,7 +57,7 @@ pub fn rows(store: &PlacesStore) -> Fallible<Vec<Row>> {
              WHERE pp.state <> 'dismissed'
              ORDER BY pp.person, p.name"
         ),
-        [],
+        params![],
         |row| {
             Ok(Row {
                 person: row.get(0)?,
@@ -72,7 +76,7 @@ pub fn decisions(store: &PlacesStore) -> Fallible<HashMap<String, Option<String>
     Ok(conn
         .query_all(
             &format!("SELECT name_key, entity_id FROM {prefix}_people"),
-            [],
+            params![],
             |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
         )?
         .into_iter()

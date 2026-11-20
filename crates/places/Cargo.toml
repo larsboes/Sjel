@@ -15,6 +15,11 @@ path = "src/lib.rs"
 name = "places-server"
 path = "src/main.rs"
 
+[features]
+default = ["sqlite"]
+sqlite = ["dep:rusqlite", "dep:sjel-store"]
+turso-wal = ["dep:sjel-native-wal"]
+
 [dependencies]
 # Howard Hinnant's civil-from-days pair, shared rather than copied. No
 # dependencies of its own, which is why the four copies existed.
@@ -22,11 +27,14 @@ civil-date = { path = "../civil-date" }
 # Outbound HTTP goes through one factory: the user-agent, the timeout and the
 # connection pool are decided there, not at each call site (libs/sjel-http).
 sjel-http = { path = "../sjel-http" }
+finance-api = { path = "../finance-api" }
+media-api = { path = "../media-api" }
 calendar-api = { path = "../calendar-api" }
 punctuality-api = { path = "../punctuality-api" }
 sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }
-sjel-store = { path = "../sjel-store" }
+sjel-store = { path = "../sjel-store", optional = true }
+sjel-native-wal = { path = "../sjel-native-wal", optional = true }
 # The candidate identity, shared with crates/finance, which mints it.
 # A lib rather than a dependency on finance: a capability does not link another
 # capability's crate, and the shape belongs to neither of them alone.
@@ -41,7 +49,7 @@ serde_json.workspace = true
 # depend on whichever SQLite the host ships; upstreams.toml [rusqlite] has the
 # measurement that settled it. Blocking, driven from spawn_blocking, same as every
 # store-owning capability.
-rusqlite.workspace = true
+rusqlite = { workspace = true, optional = true }
 # Not `full`: these are the drivers this crate reaches for, verified with a lone
 # `cargo check -p <crate> --all-targets`, which is the only build where a missing
 # tokio feature is visible (a workspace build unifies them away).
@@ -58,6 +66,10 @@ sha2.workspace = true
 # Outbound HTTP to Nominatim and transit's suggest surface; the blocking client,
 # matching crates/transit/src/hafas.rs.
 reqwest = { workspace = true, features = ["blocking", "json", "query", "form"] }
+
+[dev-dependencies]
+rusqlite.workspace = true
+sjel-store = { path = "../sjel-store" }
 
 [lints]
 workspace = true

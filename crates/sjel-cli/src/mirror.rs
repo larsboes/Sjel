@@ -6,7 +6,7 @@
 //! route R1. It moves no data between files, changes no capability, and closes off none of the
 //! larger routes.
 //!
-//! Shared tables are copied in one read transaction. Calendar and Entities supply their
+//! Shared tables are copied in one read transaction. Calendar, Entities and Places supply their
 //! projections through their APIs. The built file is renamed after integrity verification.
 //!
 //! [`research/offline-on-the-phone.md`]: ../../../research/offline-on-the-phone.md
@@ -18,10 +18,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 /// Shared-store sources for the phone mirror.
-const PHONE_SET: &[&str] = &["projects_records", "places_places"];
+const PHONE_SET: &[&str] = &["projects_records"];
 
 struct PhoneExport {
     people: Vec<entities_api::OfflinePerson>,
+    places: Vec<places_api::OfflinePlace>,
     calendar: Vec<calendar_api::CalendarEntry>,
 }
 
@@ -237,6 +238,10 @@ fn build(tables: Option<&[String]>, out: Option<&Path>, phone: bool) -> Result<M
             rows: export.people.len() as u64,
         });
         wanted.push(Table {
+            name: "places_places".into(),
+            rows: export.places.len() as u64,
+        });
+        wanted.push(Table {
             name: "calendar_entries".into(),
             rows: export.calendar.len() as u64,
         });
@@ -338,7 +343,33 @@ fn phone_export() -> Result<PhoneExport, String> {
         .filter(|row| matches!(row.data_class.as_str(), "c0" | "c1"))
         .map(|row| row.entry)
         .collect();
-    Ok(PhoneExport { people, calendar })
+    let places = offline_places()?;
+    Ok(PhoneExport {
+        people,
+        calendar,
+        places,
+    })
+}
+
+fn offline_places() -> Result<Vec<places_api::OfflinePlace>, String> {
+    let client = reqwest::blocking::Client::builder()
+        .unix_socket(sjel_server::owner_snapshot::socket_path("places")?)
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let url = format!("http://127.0.0.1{}", places_api::ROUTE_OFFLINE_PLACES);
+    let request = || sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url).send();
+    let mut response = request();
+    if response.as_ref().is_err_and(reqwest::Error::is_connect)
+        && crate::runner::run(&["start".into(), "places".into()]) == ExitCode::SUCCESS
+    {
+        response = request();
+    }
+    response
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .and_then(reqwest::blocking::Response::json)
+        .map_err(|error| format!("cannot fetch the offline Places projection: {error}"))
 }
 
 fn owner_projection<T: serde::de::DeserializeOwned>(
@@ -494,6 +525,8 @@ fn copy_tables(
         if let Some(export) = export {
             write_people(&conn, &export.people)
                 .map_err(|e| format!("cannot write offline People: {e}"))?;
+            write_places(&conn, &export.places)
+                .map_err(|e| format!("cannot write offline Places: {e}"))?;
             write_calendar(&conn, &export.calendar)
                 .map_err(|e| format!("cannot write offline Calendar: {e}"))?;
         }
@@ -542,6 +575,39 @@ fn write_people(
     )?;
     for person in people {
         insert.execute(rusqlite::params![person.id, person.label, person.revision])?;
+    }
+    Ok(())
+}
+
+fn write_places(
+    conn: &rusqlite::Connection,
+    rows: &[places_api::OfflinePlace],
+) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE places_places (
+            id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL, address TEXT,
+            city TEXT, country_code TEXT, latitude REAL, longitude REAL, source TEXT NOT NULL,
+            external_ref TEXT, created_at TEXT NOT NULL
+         );",
+    )?;
+    let mut insert = conn.prepare(
+        "INSERT INTO places_places VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+    )?;
+    for row in rows {
+        let place = &row.place;
+        insert.execute(rusqlite::params![
+            place.id,
+            place.name,
+            place.kind,
+            place.address,
+            place.city,
+            place.country_code,
+            place.latitude,
+            place.longitude,
+            place.source,
+            place.external_ref,
+            row.created_at,
+        ])?;
     }
     Ok(())
 }
@@ -710,6 +776,15 @@ mod tests {
         }];
         let export = PhoneExport {
             people,
+            places: vec![places_api::OfflinePlace {
+                place: places_api::Place {
+                    id: "place-fixture".into(),
+                    name: "Owner place".into(),
+                    kind: "venue".into(),
+                    ..Default::default()
+                },
+                created_at: "2026-11-20".into(),
+            }],
             calendar: vec![calendar_api::CalendarEntry {
                 id: "cal-fixture".into(),
                 title: "Owner entry".into(),
@@ -731,6 +806,10 @@ mod tests {
             .query_row("SELECT title FROM calendar_entries", [], |row| row.get(0))
             .unwrap();
         assert_eq!(title, "Owner entry");
+        let place: String = db
+            .query_row("SELECT name FROM places_places", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(place, "Owner place");
         let private_tables: i64 = db.query_row(
             "SELECT count(*) FROM sqlite_schema WHERE name IN ('entities_values', 'entities_facts', 'calendar_rhythms')",
             [],

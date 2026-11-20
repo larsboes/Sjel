@@ -938,12 +938,9 @@ async fn people_layer(State(state): State<AppState>) -> ApiResponse {
     }
 }
 
-async fn photos_layer(State(state): State<AppState>) -> ApiResponse {
-    let database_path = state.database_path.clone();
+async fn photos_layer() -> ApiResponse {
     match tokio::task::spawn_blocking(move || {
-        PlacesStore::open(&database_path)
-            .and_then(|store| layers::photos_layer(&store))
-            .map_err(|error| error.to_string())
+        layers::photos_layer().map_err(|error| error.to_string())
     })
     .await
     {
@@ -1007,7 +1004,7 @@ async fn assign_unplaced(
     match tokio::task::spawn_blocking(move || {
         let store = PlacesStore::open(&database_path).map_err(|error| error.to_string())?;
         let geocoder = Geocoder::new(&store);
-        layers::assign_unplaced(&store, &geocoder, "finance", &request, &now)
+        layers::assign_unplaced(&store, &geocoder, &request, &now)
             .map_err(|error| error.to_string())
     })
     .await
@@ -1302,14 +1299,48 @@ fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-pub async fn serve() {
-    let config = Config::load();
+pub(crate) fn private_jobs(database: Arc<PathBuf>) -> Router {
+    Router::new().route(
+        places_api::ROUTE_OFFLINE_PLACES,
+        get(move || async move {
+            tokio::task::spawn_blocking(move || {
+                PlacesStore::open(&database)
+                    .and_then(|store| store.offline_places())
+                    .map(Json)
+                    .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
+            })
+            .await
+            .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        }),
+    )
+}
+
+pub async fn serve(config: Config) {
     let state = AppState {
         database_path: Arc::new(config.database_path),
     };
     // Names a backfill wrote while entities was down get their exact matches now (D11).
     link_exact_later(state.database_path.clone());
-    sjel_server::serve_local("places", config.port, build_router(state)).await;
+    let database = state.database_path.clone();
+    let http = sjel_server::serve_local("places", config.port, build_router(state));
+    #[cfg(feature = "turso-wal")]
+    tokio::join!(http, crate::jobs::serve(database));
+    #[cfg(not(feature = "turso-wal"))]
+    {
+        if let Ok(socket) = sjel_server::owner_snapshot::socket_path("places") {
+            tokio::join!(
+                http,
+                sjel_server::serve_unix(
+                    "places-jobs",
+                    &socket,
+                    private_jobs(database),
+                    sjel_server::InboundAuth::from_deployment().require_credential(),
+                ),
+            );
+        } else {
+            http.await;
+        }
+    }
 }
 
 #[cfg(test)]

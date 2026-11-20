@@ -1,0 +1,6 @@
+kind                  = "data"
+name                  = "places-wal-backup"
+requires              = ["places"]
+backup_owner_snapshot = "places"
+backup_sqlite_online  = "data/places/snapshots/places.db"
+backup_target         = "backup-target"

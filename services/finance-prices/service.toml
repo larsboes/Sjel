@@ -2,6 +2,6 @@
 kind     = "process"
 name     = "finance-prices"
 command  = ["target/release/finance-cli", "prices", "fetch"]
-build    = ["cargo", "build", "--locked", "--release", "--bin", "finance-cli"]
+build    = ["cargo", "build", "--locked", "--release", "-p", "sjel-finance", "--no-default-features", "--features", "turso-wal", "--bin", "finance-cli"]
 schedule = "24h"
 requires = ["finance"]

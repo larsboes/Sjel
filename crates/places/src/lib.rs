@@ -1,20 +1,17 @@
 //! places: canonical place registry, cached geocoder, and the map layers.
 //!
-//! Contract: `README.md` here (decisions D1-D4).
-//! Writes stay inside the `places` schema; reads of `finance.*`, `trips.*`,
-//! `transit.*` and `punctuality.*` are read-only SELECTs, the correlation-join
-//! usage `services/store/README.md` chose one database for.
-
 pub use places_api::*;
 
 pub mod backfill;
 pub mod climate;
 pub mod config;
+pub mod finance;
 pub mod geocode;
 pub mod layers;
 pub mod links;
 pub mod people;
 pub mod store;
+mod travel_reads;
 
 /// Today as an ISO date from the wall clock, UTC.
 ///

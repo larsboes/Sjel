@@ -1,10 +1,4 @@
-//! Config resolution. Sjel doctrine: this crate is public, so no personal value
-//! lives here — everything personal comes from the private overlay at runtime.
-//!
-//! The store path resolves through `sjel_config::database_path`: `SJEL_DB_PATH`,
-//! else `<overlay>/data/sjel/sjel.db`. It is a deployment fact rather than a
-//! capability one (PRD Q45) — a file per capability would drop the
-//! cross-capability joins `layers.rs` and `backfill.rs` are built on.
+//! Place owner path and service port.
 
 use std::path::PathBuf;
 
@@ -24,8 +18,22 @@ impl Config {
         // 8080 collision class, libs/sjel-config.
         let port = resolve_port(None, None, 8093);
         Self {
-            database_path: database_path(),
+            database_path: sjel_config::env_var("SJEL_PLACES_DB_PATH")
+                .ok()
+                .filter(|path| !path.is_empty())
+                .map_or_else(owner_database_path, |path| sjel_config::expand_tilde(&path)),
             port,
         }
     }
+}
+
+fn owner_database_path() -> PathBuf {
+    #[cfg(feature = "turso-wal")]
+    if let Some(path) = sjel_config::overlay_data_dir("places-store")
+        .map(|directory| directory.join("places.db"))
+        .filter(|path| path.is_file())
+    {
+        return path;
+    }
+    database_path()
 }

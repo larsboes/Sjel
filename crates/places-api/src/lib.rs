@@ -11,6 +11,16 @@ pub use sjel_links::name_key;
 // Route Constants
 // ============================================================================
 
+/// Local authenticated projection used by the offline phone mirror.
+pub const ROUTE_OFFLINE_PLACES: &str = "/offline-places";
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OfflinePlace {
+    #[serde(flatten)]
+    pub place: Place,
+    pub created_at: String,
+}
+
 pub const DEFAULT_PLACES_PORT: u16 = 8093;
 
 pub const ROUTE_PLACES_HEALTH: &str = "/health";

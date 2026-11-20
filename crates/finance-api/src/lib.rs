@@ -3,6 +3,8 @@
 //! Client applications (e.g. `sjel-gpui-core`) and the server capability (`sjel-finance`)
 //! share these definitions to eliminate wire model drift.
 
+pub mod places;
+
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

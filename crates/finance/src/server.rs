@@ -2905,11 +2905,64 @@ async fn trip_spending(State(state): State<AppState>, Path(id): Path<String>) ->
     }
 }
 
+#[path = "places_jobs.rs"]
+mod places_jobs;
+
 #[tokio::main]
 async fn main() {
     let config = Config::load();
+    #[cfg(feature = "turso-wal")]
+    {
+        if std::env::args().nth(1).as_deref() == Some("snapshot") {
+            tokio::task::spawn_blocking(finance::jobs::snapshot)
+                .await
+                .unwrap_or_else(|error| fatal(error))
+                .unwrap_or_else(|error| fatal(error));
+            return;
+        }
+        if config.database_path == sjel_config::database_path() {
+            fatal("Turso requires a separate Finance owner database");
+        }
+    }
     let port = config.port;
-    sjel_server::serve_local("finance", port, build_router(state_from(config))).await;
+    let state = state_from(config);
+    let database = Arc::clone(&state.database_path);
+    let http = sjel_server::serve_local("finance", port, build_router(state));
+    #[cfg(feature = "turso-wal")]
+    {
+        let jobs = finance::jobs::router().merge(places_jobs::router(Arc::clone(&database)));
+        let snapshot = sjel_server::owner_snapshot::serve_with_jobs(
+            "finance",
+            database,
+            |database, target| {
+                FinanceStore::open(database)
+                    .and_then(|store| store.snapshot(database, target))
+                    .map_err(|error| error.to_string())
+            },
+            jobs,
+        );
+        tokio::join!(http, snapshot);
+    }
+    #[cfg(not(feature = "turso-wal"))]
+    if let Ok(socket) = sjel_server::owner_snapshot::socket_path("finance") {
+        tokio::join!(
+            http,
+            sjel_server::serve_unix(
+                "finance-jobs",
+                &socket,
+                places_jobs::router(database),
+                sjel_server::InboundAuth::from_deployment().require_credential(),
+            )
+        );
+    } else {
+        http.await;
+    }
+}
+
+#[cfg(feature = "turso-wal")]
+fn fatal(error: impl std::fmt::Display) -> ! {
+    eprintln!("finance: {error}");
+    std::process::exit(1);
 }
 
 /// This capability's name, for the origin guard's env var
@@ -3344,7 +3397,13 @@ mod tests {
         };
         assert_eq!(read().await, None);
 
+        #[cfg(not(feature = "turso-wal"))]
         let conn = rusqlite::Connection::open(database).unwrap();
+        #[cfg(feature = "turso-wal")]
+        let conn = sjel_native_wal::open_pool(&database, "finance", |_| Ok(()))
+            .unwrap()
+            .get()
+            .unwrap();
         conn.execute_batch(
             "INSERT INTO finance_transaction_projection
                 (id, booked_at, description, kind, account, category, amount_cents, currency)

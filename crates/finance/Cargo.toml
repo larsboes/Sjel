@@ -21,6 +21,11 @@ path = "src/server.rs"
 name = "finance-cli"
 path = "src/bin/finance-cli.rs"
 
+[features]
+default = ["sqlite"]
+sqlite = ["dep:rusqlite", "dep:sjel-store"]
+turso-wal = ["dep:sjel-native-wal"]
+
 [dependencies]
 # Howard Hinnant's civil-from-days pair, shared rather than copied. No
 # dependencies of its own, which is why the four copies existed.
@@ -30,7 +35,8 @@ civil-date = { path = "../civil-date" }
 sjel-http = { path = "../sjel-http" }
 sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }
-sjel-store = { path = "../sjel-store" }
+sjel-store = { path = "../sjel-store", optional = true }
+sjel-native-wal = { path = "../sjel-native-wal", optional = true }
 # The candidate identity, shared with crates/places, which re-derives it.
 # One implementation because 263 live venue links resolve only while the two
 # agree byte for byte.
@@ -46,7 +52,7 @@ schemars.workspace = true
 # The database, after PRD Q45 retired Postgres. Bundled so the deployment does not
 # depend on whichever SQLite the host ships; upstreams.toml [rusqlite] has the
 # measurement that settled it.
-rusqlite.workspace = true
+rusqlite = { workspace = true, optional = true }
 # Not `full`: these are the drivers this crate reaches for, verified with a lone
 # `cargo check -p <crate> --all-targets`, which is the only build where a missing
 # tokio feature is visible (a workspace build unifies them away).
@@ -64,6 +70,7 @@ content-item = { path = "../content-item" }
 reqwest = { workspace = true, features = ["blocking", "json", "cookies"] }
 
 [dev-dependencies]
+rusqlite.workspace = true
 # `ServiceExt::oneshot`, so the origin test drives the wired Router with no listener
 # and no port. The same pattern crates/sjel-status already uses.
 tower = { workspace = true, features = ["util"] }

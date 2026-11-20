@@ -57,7 +57,12 @@ use the wire response, and the live owner returned 125 entries with attendee arr
 Finder requests Finance subscription names and categories through a five-result projection.
 It starts the enabled Finance service on demand after a refused connection and respects
 maintenance holds through the service runner. The live Finder returned a matching subscription
-after starting the stopped Finance owner. Places spending and enrichment still read Finance
-tables in the shared database.
+after starting the stopped Finance owner.
 
 Finder requests at most five Documents results through the authenticated owner route.
+
+Places reads Finance expenses and candidate locations through credentialed Unix routes.
+Live parity checked the spend count and cent total. Trip plans and paged Transit journeys
+supply the live travel layer. The Media owner supplies indexed photo locations through a
+protected Unix projection. The phone mirror reads the entire Places registry through its
+protected owner projection, and the rebuilt copy matches all 257 rows.

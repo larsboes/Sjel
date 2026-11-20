@@ -986,6 +986,8 @@ mod db_tests {
         // under it and the index the batch declares.
         {
             let conn = rusqlite::Connection::open(&path).expect("a scratch database");
+            #[cfg(feature = "turso-wal")]
+            conn.execute_batch("PRAGMA journal_mode=WAL").unwrap();
             conn.execute_batch(
                 "CREATE TABLE finance_decisions (
                      id TEXT PRIMARY KEY,
@@ -1050,12 +1052,22 @@ mod db_tests {
         assert_eq!(stored.status(), "superseded");
 
         {
+            #[cfg(not(feature = "turso-wal"))]
             let conn = rusqlite::Connection::open(&path).expect("the rebuilt database");
+            #[cfg(feature = "turso-wal")]
+            let conn = sjel_native_wal::open_pool(&path, "finance", |_| Ok(()))
+                .unwrap()
+                .get()
+                .unwrap();
+            #[cfg(not(feature = "turso-wal"))]
+            let empty = [];
+            #[cfg(feature = "turso-wal")]
+            let empty = ();
             let ddl: String = conn
                 .query_row(
                     "SELECT sql FROM sqlite_master
                      WHERE type = 'table' AND name = 'finance_decision_events'",
-                    [],
+                    empty,
                     |row| row.get(0),
                 )
                 .expect("the installed shape");
@@ -1065,7 +1077,7 @@ mod db_tests {
                     "SELECT COUNT(*) FROM sqlite_master
                      WHERE type = 'index' AND tbl_name = 'finance_decision_events'
                        AND name = 'idx_finance_decision_events_decision'",
-                    [],
+                    empty,
                     |row| row.get(0),
                 )
                 .expect("the index count");
@@ -1074,7 +1086,7 @@ mod db_tests {
                 conn.query_row(
                     "SELECT COUNT(*) FROM sqlite_master
                      WHERE name = 'finance_decision_events_reinstated'",
-                    [],
+                    empty,
                     |row| row.get::<_, i64>(0)
                 )
                 .unwrap()

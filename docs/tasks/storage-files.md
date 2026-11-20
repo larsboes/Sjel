@@ -128,13 +128,27 @@ Documents runs on its own Turso WAL file. The Unicode61-compatible search replay
 27 result pages against SQLite for counts, order, and page hits, with a 107 ms median.
 The receipt-backed originals restore matched all 6,958 distinct file hashes. The first
 Turso catalog backup restored 23,970 rows with exact value and item row ID parity.
-Live search, pagination and authenticated original download passed.
+Live search, pagination and authenticated original download passed. Finder matched all five
+results from the Documents owner.
+
+Finance runs on its own Turso WAL file. The pre-cutover shared-store and journal archives
+restored in isolation. The first native backup matched all 12,231 rows. The protected
+Places reads matched the restored SQLite control, including 1,290 expense rows and 744
+candidate rows for a sampled import account. The price status command passed and its
+existing scheduled job resumed.
+
+Places runs on its own Turso WAL file. The first native backup restored all seven tables
+with exact parity across 1,075 rows. Live checks covered the 257-place registry, 436 linked
+expenses, 10 travel legs, visits, and map layers. The rebuilt phone mirror matched all 257
+registry rows. The live Media ledger had zero indexed photos.
 
 ## Remaining migration gates
 
 - Verify a successful signed request from a paired client against the live Inventory owner.
 - Verify a refresh on a paired iPhone.
 - Migrate the remaining owners after their cross-owner readers and independent writers are
-  routed through the owning services. See [owner reads](storage-owner-reads.md).
+  routed through the owning services. The shared store still serves active capabilities
+  including Comms, Devices, Interior, Media, Projects, Transit, and Trips. See
+  [owner reads](storage-owner-reads.md).
 - Any MVCC cutover requires recovery with the logical log and proof that backups preserve
   committed writes during concurrent use. Keep the original database through rollback acceptance.

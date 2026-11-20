@@ -143,6 +143,12 @@ case "$SNAPSHOT_OWNER:$CAP:$SQLITE_ONLINE_REL" in
   documents:documents-wal-backup:data/documents/snapshots/documents.db)
     SNAPSHOT_BIN="${SJEL_DOCUMENTS_BIN:-$SJEL_ROOT/target/release/documents}"
     SNAPSHOT_LABEL=Documents ;;
+  finance:finance-wal-backup:data/finance/snapshots/finance.db)
+    SNAPSHOT_BIN="${SJEL_FINANCE_BIN:-$SJEL_ROOT/target/release/finance-server}"
+    SNAPSHOT_LABEL=Finance ;;
+  places:places-wal-backup:data/places/snapshots/places.db)
+    SNAPSHOT_BIN="${SJEL_PLACES_BIN:-$SJEL_ROOT/target/release/places-server}"
+    SNAPSHOT_LABEL=Places ;;
   *) echo "backup.sh: owner snapshots require the registered owner and archive path" >&2; exit 1 ;;
 esac
 if [ -n "$SOURCE_FLAG" ] && { [ -n "$SQLITE_REL" ] || [ -n "$SQLITE_ONLINE_REL" ]; }; then

@@ -252,6 +252,18 @@ async fn upload_attachment(
     ))
 }
 
+async fn map_geotags(State(ledger): State<Arc<Ledger>>) -> Result<Json<Value>, ApiError> {
+    Ok(Json(
+        blocking(ledger, |ledger| {
+            let geotags = ledger
+                .geotags_with_locations()
+                .map_err(|err| err.to_string())?;
+            Ok(json!({ "geotags": geotags }))
+        })
+        .await?,
+    ))
+}
+
 fn attachment_router(library: Arc<attachments::Library>) -> Router {
     Router::new()
         .route("/api/attachments", axum::routing::post(upload_attachment))
@@ -301,6 +313,10 @@ pub fn serve() {
             std::process::exit(1);
         }
     };
+    let socket = sjel_server::owner_snapshot::socket_path("media").expect("media overlay");
+    let jobs = Router::new()
+        .route(media_api::ROUTE_MEDIA_MAP_GEOTAGS, get(map_geotags))
+        .with_state(Arc::clone(&ledger));
     let app = router(ledger.clone())
         .merge(content_review::router(ledger, library.clone()))
         .merge(attachment_router(library))
@@ -310,13 +326,19 @@ pub fn serve() {
         ));
     let port = sjel_config::resolve_port(None, None, DEFAULT_PORT);
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime could not start");
-    runtime.block_on(sjel_server::serve(
-        "media",
-        sjel_server::Reach::Loopback,
-        port,
-        app,
-        sjel_server::InboundAuth::from_deployment().require_credential(),
-    ));
+    runtime.block_on(async {
+        let auth = sjel_server::InboundAuth::from_deployment().require_credential();
+        tokio::join!(
+            sjel_server::serve(
+                "media",
+                sjel_server::Reach::Loopback,
+                port,
+                app,
+                auth.clone()
+            ),
+            sjel_server::serve_unix("media-map", &socket, jobs, auth),
+        );
+    });
 }
 
 #[cfg(test)]
@@ -329,6 +351,26 @@ mod tests {
             "media-server-{name}-{}-{id}.db",
             std::process::id()
         ))
+    }
+
+    #[test]
+    fn geotag_locations_are_available_only_in_the_map_projection() {
+        let path = scratch("map-geotags", 1);
+        let ledger = Ledger::open(&path).unwrap();
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection.execute_batch(
+            "INSERT INTO media_volumes(uuid, label) VALUES ('fixture', 'Fixture');
+             INSERT INTO media_files(digest, size) VALUES ('digest', 1);
+             INSERT INTO media_locations(uuid, relpath, digest, size, mtime_ns)
+                 VALUES ('fixture', 'b.jpg', 'digest', 1, 0), ('fixture', 'a.jpg', 'digest', 1, 0);",
+        ).unwrap();
+        ledger.record_geotag("digest", 1.0, 2.0, None).unwrap();
+        let public = geotags_json(&ledger).unwrap();
+        assert!(public["geotags"][0].get("locations").is_none());
+        let map = ledger.geotags_with_locations().unwrap();
+        assert_eq!(map.len(), 1);
+        assert_eq!(map[0].locations[0].relpath, "a.jpg");
+        assert_eq!(map[0].locations[1].relpath, "b.jpg");
     }
 
     #[test]

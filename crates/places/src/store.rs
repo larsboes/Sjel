@@ -1,21 +1,27 @@
-//! Persistence for the place registry, the permanent geocode cache, the
-//! transaction links and the companion register.
-//!
-//! Writes happen only under this store's own table prefix.
-//! Cross-capability reads live in `layers.rs` and `backfill.rs` as plain
-//! SELECTs. PRD Q45 (2026-08-27) made those same-file joins across table
-//! prefixes rather than across schemas; they are joins either way, which is the
-//! property the shared instance existed for.
+//! Persistence for the place registry, its caches, and local links.
 
 use std::path::Path;
 
-use rusqlite::{params, Connection, OptionalExtension, Row};
+#[cfg(not(feature = "turso-wal"))]
+use rusqlite::{params, Connection, OptionalExtension, Result as DbResult, Row};
+#[cfg(feature = "turso-wal")]
+pub(crate) use sjel_native_wal as db;
+#[cfg(feature = "turso-wal")]
+use sjel_native_wal::{params, Connection, OptionalExtension, Result as DbResult, Row};
+#[cfg(not(feature = "turso-wal"))]
+pub(crate) use sjel_store as db;
+#[cfg(not(feature = "turso-wal"))]
 use sjel_store::QueryAll;
+
+#[cfg(feature = "turso-wal")]
+type StoreClient = db::Connection;
+#[cfg(not(feature = "turso-wal"))]
+type StoreClient = db::PooledClient;
 
 pub type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
 pub struct PlacesStore {
-    pool: sjel_store::Pool,
+    pool: db::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `places` here means `places_places` and its three siblings.
     prefix: String,
@@ -114,7 +120,7 @@ impl PlacesStore {
 
     pub fn open_with_prefix(database_path: &Path, prefix: &str) -> Fallible<Self> {
         validate_prefix(prefix)?;
-        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
+        let pool = db::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -123,8 +129,13 @@ impl PlacesStore {
         })
     }
 
-    pub(crate) fn conn(&self) -> Fallible<sjel_store::PooledClient> {
+    pub(crate) fn conn(&self) -> Fallible<StoreClient> {
         Ok(self.pool.get()?)
+    }
+
+    #[cfg(feature = "turso-wal")]
+    pub fn snapshot(&self, path: &Path, target: &Path) -> Fallible<()> {
+        db::snapshot(&self.conn()?, path, target)
     }
 
     pub fn prefix(&self) -> &str {
@@ -135,7 +146,7 @@ impl PlacesStore {
     /// what `/ready` promises, rather than mere liveness (#126).
     pub fn ping(&self) -> Fallible<()> {
         let conn = self.conn()?;
-        conn.query_row("SELECT 1", [], |row| row.get::<_, i64>(0))?;
+        conn.query_row("SELECT 1", params![], |row| row.get::<_, i64>(0))?;
         Ok(())
     }
 
@@ -278,48 +289,59 @@ impl PlacesStore {
         Self::type_ids(conn, prefix)
     }
 
-    /// Renames `place_<hex>`, `pp_<hex>` and `visit_<hex>` to `<kind>:<hex>` (docs/capabilities/links.md D3,
-    /// LNK-12). The hex is unchanged, so a backfill that re-derives an id lands on the renamed row.
-    ///
-    /// Four tables reference `places.id` and foreign keys are on for every connection
-    /// (`libs/sjel-store`), so the check is deferred to the commit of the migration transaction:
-    /// parent and children change together or not at all. Each statement matches only the old
-    /// shape at its exact length, so a second run changes nothing.
+    /// Convert legacy IDs while preserving every link and checked reference.
     fn type_ids(conn: &Connection, prefix: &str) -> Fallible<()> {
-        let place = "GLOB 'place_[0-9a-f]*' AND length({col}) = 22";
-        let rename = |table: &str, col: &str, old: &str, kind: &str, guard: &str| {
+        let old_places = conn.query_all(
+            &format!(
+                "SELECT id, external_ref FROM {prefix}_places
+                      WHERE id GLOB 'place_[0-9a-f]*' AND length(id) = 22"
+            ),
+            params![],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+        )?;
+        for (id, external_ref) in old_places {
+            let new_id = format!("place:{}", &id["place_".len()..]);
+            conn.execute(
+                &format!("UPDATE {prefix}_places SET external_ref = NULL WHERE id = ?1"),
+                [id.as_str()],
+            )?;
+            conn.execute(
+                &format!(
+                    "INSERT INTO {prefix}_places
+                    (id, name, kind, address, city, country_code, latitude, longitude,
+                     source, external_ref, created_at)
+                    SELECT ?1, name, kind, address, city, country_code, latitude, longitude,
+                           source, ?2, created_at FROM {prefix}_places WHERE id = ?3"
+                ),
+                params![new_id.as_str(), external_ref.as_deref(), id.as_str()],
+            )?;
+            for table in [
+                "geocode_cache",
+                "transaction_places",
+                "person_places",
+                "climate_normals",
+                "place_visits",
+            ] {
+                conn.execute(
+                    &format!("UPDATE {prefix}_{table} SET place_id = ?1 WHERE place_id = ?2"),
+                    [new_id.as_str(), id.as_str()],
+                )?;
+            }
+            conn.execute(
+                &format!("DELETE FROM {prefix}_places WHERE id = ?1"),
+                [id.as_str()],
+            )?;
+        }
+        let rename = |table: &str, old: &str, kind: &str, length: usize| {
             format!(
-                "UPDATE {prefix}_{table} SET {col} = '{kind}:' || substr({col}, {cut}) \
-                 WHERE {col} {guard};\n",
+                "UPDATE {prefix}_{table} SET id = '{kind}:' || substr(id, {cut})
+                 WHERE id GLOB '{old}[0-9a-f]*' AND length(id) = {length};",
                 cut = old.len() + 1,
-                guard = guard.replace("{col}", col),
             )
         };
-        let mut batch = String::from("PRAGMA defer_foreign_keys = ON;\n");
-        batch += &rename("places", "id", "place_", "place", place);
-        for table in [
-            "geocode_cache",
-            "transaction_places",
-            "person_places",
-            "climate_normals",
-            "place_visits",
-        ] {
-            batch += &rename(table, "place_id", "place_", "place", place);
-        }
-        batch += &rename(
-            "person_places",
-            "id",
-            "pp_",
-            "pp",
-            "GLOB 'pp_[0-9a-f]*' AND length({col}) = 19",
-        );
-        batch += &rename(
-            "place_visits",
-            "id",
-            "visit_",
-            "visit",
-            "GLOB 'visit_[0-9a-f]*' AND length({col}) = 22",
-        );
+        let mut batch = String::new();
+        batch += &rename("person_places", "pp_", "pp", 19);
+        batch += &rename("place_visits", "visit_", "visit", 22);
         conn.execute_batch(&batch)?;
         Ok(())
     }
@@ -339,16 +361,16 @@ impl PlacesStore {
                  ON CONFLICT (id) DO NOTHING"
             ),
             params![
-                &place.id,
-                &place.name,
-                &place.kind,
-                &place.address,
-                &place.city,
-                &place.country_code,
+                place.id.as_str(),
+                place.name.as_str(),
+                place.kind.as_str(),
+                place.address.as_deref(),
+                place.city.as_deref(),
+                place.country_code.as_deref(),
                 &place.latitude,
                 &place.longitude,
-                &place.source,
-                &place.external_ref,
+                place.source.as_str(),
+                place.external_ref.as_deref(),
                 &today,
             ],
         )?;
@@ -372,12 +394,12 @@ impl PlacesStore {
                  ON CONFLICT (id) DO NOTHING"
             ),
             params![
-                &visit.id,
-                &visit.place_id,
-                &visit.visited_on,
+                visit.id.as_str(),
+                visit.place_id.as_str(),
+                visit.visited_on.as_deref(),
                 &visit.rating,
-                &visit.source,
-                &visit.external_ref,
+                visit.source.as_str(),
+                visit.external_ref.as_deref(),
                 &today,
             ],
         )?;
@@ -399,7 +421,7 @@ impl PlacesStore {
                  JOIN {prefix}_places p ON p.id = v.place_id
                  ORDER BY v.visited_on DESC, p.name"
             ),
-            [],
+            params![],
             |row| {
                 Ok(PlaceVisitRow {
                     place_id: row.get(0)?,
@@ -468,8 +490,25 @@ impl PlacesStore {
                  ORDER BY name, id
                  LIMIT 500"
             ),
-            params![&pattern, &kind],
+            params![pattern.as_deref(), &kind],
             row_to_place,
+        )?)
+    }
+
+    pub fn offline_places(&self) -> Fallible<Vec<places_api::OfflinePlace>> {
+        let prefix = &self.prefix;
+        Ok(self.conn()?.query_all(
+            &format!(
+                "SELECT id, name, kind, address, city, country_code, latitude, longitude,
+                             source, external_ref, created_at FROM {prefix}_places ORDER BY id"
+            ),
+            params![],
+            |row| {
+                Ok(places_api::OfflinePlace {
+                    place: row_to_place(row)?,
+                    created_at: row.get(10)?,
+                })
+            },
         )?)
     }
 
@@ -485,7 +524,7 @@ impl PlacesStore {
                  FROM {prefix}_places
                  WHERE latitude IS NOT NULL AND longitude IS NOT NULL"
             ),
-            [],
+            params![],
             row_to_place,
         )?)
     }
@@ -547,7 +586,7 @@ impl PlacesStore {
     ) -> Fallible<usize> {
         let prefix = self.prefix.clone();
         let mut conn = self.conn()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
+        let tx = crate::store::db::write_transaction(&mut conn)?;
         tx.execute(
             &format!("DELETE FROM {prefix}_climate_normals WHERE place_id = ?1"),
             params![&place_id],
@@ -573,10 +612,10 @@ impl PlacesStore {
                     &month.sunshine_hours_mean,
                     &month.days_observed,
                     &meta.years_covered,
-                    &meta.period_start,
-                    &meta.period_end,
-                    &meta.source,
-                    &meta.fetched_at,
+                    meta.period_start.as_str(),
+                    meta.period_end.as_str(),
+                    meta.source.as_str(),
+                    meta.fetched_at.as_str(),
                 ])?;
             }
         }
@@ -599,7 +638,7 @@ impl PlacesStore {
                  FROM {prefix}_places p
                  WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL"
             ),
-            [],
+            params![],
             |row| Ok((row_to_place(row)?, row.get::<_, i64>(10)? == 1)),
         )?)
     }
@@ -722,7 +761,7 @@ impl PlacesStore {
         Ok(conn
             .query_all(
                 &format!("SELECT source_id FROM {prefix}_transaction_places"),
-                [],
+                params![],
                 |row| row.get::<_, String>(0),
             )?
             .into_iter()
@@ -787,7 +826,7 @@ impl PlacesStore {
                     place_id: row.get(2)?,
                     date_start: row.get(3)?,
                     date_end: row.get(4)?,
-                    confidence_bp: row.get(5)?,
+                    confidence_bp: row.get::<_, i64>(5)? as i16,
                     source: row.get(6)?,
                     state: row.get(7)?,
                 })
@@ -851,7 +890,7 @@ impl PlacesStore {
                  SET state = ?2, reviewed_at = ?3
                  WHERE id = ?1 AND state = ?4"
             ),
-            params![&id, review.as_str(), &now, &state],
+            params![&id, review.as_str(), now, state.as_str()],
         )?;
         Ok(if changed == 1 {
             ReviewOutcome::Applied
@@ -993,7 +1032,7 @@ pub struct Presence {
     pub overlap_days: u32,
 }
 
-fn row_to_place(row: &Row) -> rusqlite::Result<Place> {
+fn row_to_place(row: &Row) -> DbResult<Place> {
     Ok(Place {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -1008,9 +1047,9 @@ fn row_to_place(row: &Row) -> rusqlite::Result<Place> {
     })
 }
 
-fn row_to_normal(row: &Row) -> rusqlite::Result<MonthlyNormal> {
+fn row_to_normal(row: &Row) -> DbResult<MonthlyNormal> {
     Ok(MonthlyNormal {
-        month: row.get(0)?,
+        month: row.get::<_, i64>(0)? as u32,
         t_max_mean: row.get(1)?,
         t_min_mean: row.get(2)?,
         rain_days_mean: row.get(3)?,
@@ -1112,8 +1151,8 @@ pub(crate) mod db_tests {
         let old = "place_32b1af1b5a9b8869";
         let mut conn = store.conn().unwrap();
         conn.execute_batch(&format!(
-            "INSERT INTO places_places (id, name, kind, source, created_at)
-                 VALUES ('{old}', 'Bonn Hbf', 'station', 'test', '2026-10-06');
+            "INSERT INTO places_places (id, name, kind, source, external_ref, created_at)
+                 VALUES ('{old}', 'Bonn Hbf', 'station', 'test', 'eva:8000207', '2026-10-06');
              INSERT INTO places_transaction_places
                  (source_id, place_id, precision, confidence_bp, source, created_at)
                  VALUES ('abc', '{old}', 'city', 9000, 'test', '2026-10-06');
@@ -1123,26 +1162,28 @@ pub(crate) mod db_tests {
         .unwrap();
 
         for _ in 0..2 {
-            let tx = sjel_store::write_transaction(&mut conn).unwrap();
+            let tx = crate::store::db::write_transaction(&mut conn).unwrap();
             PlacesStore::type_ids(&tx, "places").unwrap();
             tx.commit().unwrap();
         }
 
         let new = "place:32b1af1b5a9b8869";
         assert_eq!(new, stable_id("place", "eva:8000207"));
-        let one = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, String>(0)).unwrap();
+        let one = |sql: &str| {
+            conn.query_row(sql, params![], |r| r.get::<_, String>(0))
+                .unwrap()
+        };
         assert_eq!(one("SELECT id FROM places_places"), new);
         assert_eq!(one("SELECT place_id FROM places_transaction_places"), new);
         assert_eq!(
             one("SELECT id FROM places_place_visits"),
             "visit:0123456789abcdef"
         );
-        let broken: i64 = conn
-            .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| {
-                r.get(0)
-            })
+        assert_eq!(one("SELECT external_ref FROM places_places"), "eva:8000207");
+        let broken = conn
+            .query_all("PRAGMA foreign_key_check", params![], |_| Ok(()))
             .unwrap();
-        assert_eq!(broken, 0);
+        assert!(broken.is_empty());
     }
 
     #[test]
@@ -1237,10 +1278,10 @@ pub(crate) mod db_tests {
 
     #[test]
     fn ddl_is_idempotent_and_the_store_answers_its_own_ping() {
-        let (store, path) = open_test_store("ddl");
+        let (store, _) = open_test_store("ddl");
         store.ping().expect("a live store answers its own ping");
         // A second migration over the same prefix must be a no-op, not an error.
-        let conn = Connection::open(&path).unwrap();
+        let conn = store.conn().unwrap();
         PlacesStore::run_migration(&conn, store.prefix()).expect("re-running DDL is a no-op");
     }
 
@@ -1323,10 +1364,24 @@ pub(crate) mod db_tests {
             place.id
         );
         assert!(store
-            .link_transaction("fp-1", &place.id, "venue", 9000, "test", "2026-08-25")
+            .link_transaction(
+                "fp-1",
+                place.id.as_str(),
+                "venue",
+                9000,
+                "test",
+                "2026-08-25"
+            )
             .unwrap());
         assert!(!store
-            .link_transaction("fp-1", &place.id, "city", 6000, "test", "2026-08-25")
+            .link_transaction(
+                "fp-1",
+                place.id.as_str(),
+                "city",
+                6000,
+                "test",
+                "2026-08-25"
+            )
             .unwrap());
         assert_eq!(store.linked_source_ids().unwrap().len(), 1);
     }
@@ -1351,7 +1406,7 @@ pub(crate) mod db_tests {
             .propose_person_place(
                 "pp_test",
                 "Synthetic Person",
-                &place.id,
+                place.id.as_str(),
                 None,
                 None,
                 5000,
@@ -1364,7 +1419,7 @@ pub(crate) mod db_tests {
             .propose_person_place(
                 "pp_test",
                 "Synthetic Person",
-                &place.id,
+                place.id.as_str(),
                 None,
                 None,
                 5000,
@@ -1417,7 +1472,7 @@ pub(crate) mod db_tests {
             .propose_person_place(
                 id,
                 &format!("Synthetic Person {id}"),
-                &place.id,
+                place.id.as_str(),
                 date_start,
                 date_end,
                 5000,
@@ -1567,7 +1622,7 @@ pub(crate) mod db_tests {
             .propose_person_place(
                 "pp_p",
                 "Synthetic Person",
-                &place.id,
+                place.id.as_str(),
                 None,
                 None,
                 9000,

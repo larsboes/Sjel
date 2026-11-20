@@ -14,12 +14,15 @@ pub mod allocation;
 pub mod analytics;
 pub mod balance;
 pub mod clock;
+pub mod commands;
 pub mod config;
 pub mod decision;
 pub mod feed;
 pub mod ideas;
 pub mod import;
 pub mod investment;
+#[cfg(feature = "turso-wal")]
+pub mod jobs;
 pub mod journal;
 pub mod links;
 pub mod money;

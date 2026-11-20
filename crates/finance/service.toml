@@ -2,7 +2,7 @@
 kind           = "process"
 name           = "finance"
 command        = ["target/release/finance-server"]
-build          = ["cargo", "build", "--locked", "--release", "--bin", "finance-server"]
+build          = ["cargo", "build", "--locked", "--release", "-p", "sjel-finance", "--no-default-features", "--features", "turso-wal", "--bin", "finance-server"]
 port           = "8090"
 health_path    = "/health"
 ready_path     = "/ready"
@@ -14,6 +14,7 @@ exports        = ["hledger-journal", "json"]
 
 # Canonical plaintext journal, snapshots, and finance configuration.
 backup_paths       = ["data/finance", "config/finance.json"]
+backup_exclude     = ["/snapshots/finance.db"]
 backup_target      = "backup-target"
 backup_retain      = "14"
 backup_advise_days = "1"

@@ -38,17 +38,18 @@ pub async fn open_default() -> Result<Projects, Box<dyn std::error::Error + Send
     Ok(projects.with_sources(sjel_config::overlay_config("projects-sources.json")))
 }
 
-/// The Projects owner file: `SJEL_PROJECTS_DB_PATH`, or `data/projects-index/projects.db` in the
-/// overlay when that file exists. It stays outside `data/projects`, the Markdown record tree.
+/// The existing Projects owner file: `SJEL_PROJECTS_DB_PATH`, or `data/projects-index/projects.db`
+/// in the overlay. It stays outside `data/projects`, the Markdown record tree. A declared path
+/// that does not exist yet is no owner file.
 #[must_use]
 pub fn owner_file() -> Option<std::path::PathBuf> {
-    if let Some(path) = sjel_config::env_var("SJEL_PROJECTS_DB_PATH")
+    let declared = sjel_config::env_var("SJEL_PROJECTS_DB_PATH")
         .ok()
         .filter(|path| !path.trim().is_empty())
-    {
-        return Some(sjel_config::expand_tilde(&path));
-    }
-    sjel_config::overlay_data_dir("projects-index")
-        .map(|dir| dir.join("projects.db"))
+        .map(|path| sjel_config::expand_tilde(&path));
+    declared
+        .or_else(|| {
+            sjel_config::overlay_data_dir("projects-index").map(|dir| dir.join("projects.db"))
+        })
         .filter(|path| path.is_file())
 }

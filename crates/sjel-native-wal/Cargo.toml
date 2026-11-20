@@ -11,7 +11,7 @@ publish = false
 futures-executor = "0.3"
 tempfile = "3"
 turso = { version = "=0.8.3", default-features = false }
-turso_sdk_kit = { version = "=0.8.3", default-features = false }
+turso_sdk_kit = { version = "=0.8.4", default-features = false }
 
 [lints]
 workspace = true

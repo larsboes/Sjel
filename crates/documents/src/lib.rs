@@ -15,7 +15,7 @@ pub mod server;
 pub mod split;
 pub mod workflow;
 
-pub use library::{Document, Library, LibraryError, Review, Stored};
+pub use library::{Derived, Document, Library, LibraryError, ListRow, Review, Stored};
 
 /// The data class of every stored document.
 pub const DATA_CLASS: &str = "c2";

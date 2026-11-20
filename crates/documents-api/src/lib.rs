@@ -508,8 +508,6 @@ pub enum DecisionError {
     InvalidMembers,
     /// The selected survivor or split parent is not part of the candidate.
     SelectedRecordNotMember,
-    /// A part candidate must be dismissed or promoted to a split, not confirmed as a group.
-    ConfirmPartRequiresSplit,
     /// Splits can only resolve a part candidate.
     SplitRequiresPart,
     /// The page ranges do not exactly partition the parent.
@@ -522,9 +520,6 @@ impl std::fmt::Display for DecisionError {
             Self::InvalidCandidateKey => "duplicate candidate key is invalid",
             Self::InvalidMembers => "duplicate candidate members are invalid",
             Self::SelectedRecordNotMember => "selected document is not a candidate member",
-            Self::ConfirmPartRequiresSplit => {
-                "a part candidate must be dismissed or promoted to a split"
-            }
             Self::SplitRequiresPart => "only a part candidate can become a split",
             Self::InvalidPartition(error) => return write!(f, "invalid split partition: {error}"),
         };
@@ -565,9 +560,6 @@ impl DuplicateDecision {
         }
         match &self.action {
             DuplicateDecisionAction::ConfirmGroup { survivor_id } => {
-                if self.kind == DuplicateCandidateKind::Part {
-                    return Err(DecisionError::ConfirmPartRequiresSplit);
-                }
                 if !self.member_ids.contains(survivor_id) {
                     return Err(DecisionError::SelectedRecordNotMember);
                 }

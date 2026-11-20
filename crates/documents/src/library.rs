@@ -21,6 +21,10 @@ use sql::{params, params_from_iter, Connection, OptionalExtension, Row};
 use crate::review::DuplicateDecision;
 
 mod collections;
+mod duplicate_cache;
+mod listing;
+
+pub use listing::{Derived, ListRow};
 use sha2::{Digest, Sha256};
 
 const PREFIX: &str = "documents";
@@ -123,6 +127,8 @@ pub struct Library {
     root: PathBuf,
     classification: crate::classification::ClassificationConfig,
     rule_proposal_lock: Mutex<()>,
+    revision: std::sync::atomic::AtomicU64,
+    duplicate_cache: Mutex<duplicate_cache::DuplicateCache>,
 }
 
 impl Library {
@@ -160,6 +166,8 @@ impl Library {
             root,
             classification,
             rule_proposal_lock: Mutex::new(()),
+            revision: std::sync::atomic::AtomicU64::new(0),
+            duplicate_cache: Mutex::new(duplicate_cache::DuplicateCache::default()),
         };
         Ok(library)
     }
@@ -179,6 +187,7 @@ impl Library {
     /// # Errors
     /// The filename is unsafe, the input is too large, extraction or persistence fails.
     pub fn intake(&self, filename: &str, bytes: &[u8]) -> Fallible<Stored> {
+        let _stale = self.stale_after();
         let filename = safe_filename(filename)?;
         if bytes.is_empty() || bytes.len() > MAX_BYTES {
             return Err(LibraryError::Invalid(format!(
@@ -553,12 +562,13 @@ impl Library {
             self.ensure_rule_proposals(id)?;
             return Ok(document);
         }
+        let _stale = self.stale_after();
         let conn = self
             .pool
             .get()
             .map_err(|error| LibraryError::Store(error.to_string()))?;
         conn.execute(
-            "UPDATE documents_items SET extracted_title = ?2, extracted_text = ?3, extractor = ?4, extracted_pages_json = ?5 WHERE id = ?1",
+            "UPDATE documents_items SET extracted_title = ?2, extracted_text = ?3, extractor = ?4, extracted_pages_json = ?5, derived_json = NULL WHERE id = ?1",
             params![id, extraction.title, extraction.text, extraction.producer, pages_json],
         )?;
         let analyzed = self
@@ -600,6 +610,7 @@ impl Library {
         parent_id: &str,
         request: &crate::split::SplitRequest,
     ) -> Fallible<Vec<Document>> {
+        let _stale = self.stale_after();
         check_id(parent_id)?;
         let parent = self
             .get(parent_id)?
@@ -1394,6 +1405,7 @@ impl Library {
     /// # Errors
     /// The id is malformed, the path is not UTF-8, or the write fails.
     pub fn record_source(&self, id: &str, path: &Path) -> Fallible<()> {
+        let _stale = self.stale_after();
         check_id(id)?;
         let path = path
             .to_str()
@@ -1453,6 +1465,7 @@ impl Library {
     /// # Errors
     /// The decision is invalid, a referenced record is missing, or persistence fails.
     pub fn save_duplicate_decision(&self, decision: &DuplicateDecision) -> Fallible<Vec<String>> {
+        let _stale = self.stale_after();
         decision
             .validate()
             .map_err(|error| LibraryError::Invalid(error.to_string()))?;
@@ -1547,6 +1560,7 @@ impl Library {
     /// # Errors
     /// The id/category/project is invalid, or the document does not exist.
     pub fn review(&self, id: &str, review: &Review) -> Fallible<Document> {
+        let _stale = self.stale_after();
         check_id(id)?;
         let category = safe_category(&review.category)?;
         let project = review.project.as_deref().map(safe_project).transpose()?;
@@ -1573,6 +1587,7 @@ impl Library {
     /// # Errors
     /// The id is malformed or no matching document exists.
     pub fn archive(&self, id: &str) -> Fallible<Document> {
+        let _stale = self.stale_after();
         check_id(id)?;
         let conn = self
             .pool
@@ -1598,6 +1613,7 @@ impl Library {
     /// # Errors
     /// A sidecar is malformed, its original is missing/corrupt, or an existing row conflicts.
     pub fn restore_index(&self) -> Fallible<(usize, usize)> {
+        let _stale = self.stale_after();
         let mut restored = 0;
         let mut unchanged = 0;
         let records = self.root.join("records");
@@ -1822,6 +1838,7 @@ impl Library {
     /// # Errors
     /// The metadata query or filesystem walk fails.
     pub fn verify(&self) -> Fallible<Vec<String>> {
+        let _stale = self.stale_after();
         let docs = self.list(None)?;
         let mut issues = Vec::new();
         let known: std::collections::HashSet<String> =
@@ -2083,6 +2100,7 @@ fn migrate(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
         );",
     )?;
     collections::migrate(conn)?;
+    listing::migrate(conn)?;
     #[cfg(not(feature = "turso-wal"))]
     migrate_fts(conn)?;
     let proposal_columns = conn
@@ -2614,7 +2632,7 @@ mod tests {
 
         let conn = library.pool.get().unwrap();
         conn.execute(
-            "UPDATE documents_items SET extracted_text = ?2 WHERE id = ?1",
+            "UPDATE documents_items SET extracted_text = ?2, derived_json = NULL WHERE id = ?1",
             params![
                 document.id.as_str(),
                 "Fahrgastrechte Verspätungsentschädigung"

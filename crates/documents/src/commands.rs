@@ -66,14 +66,22 @@ pub fn run(
         }
         "list" => {
             let status = flag("--status");
-            let documents = library.list(status)?;
-            let ids = documents
+            let mut rows = Vec::new();
+            loop {
+                let (page, total) = library.list_rows(status, rows.len(), 500)?;
+                let done = page.is_empty() || rows.len() + page.len() >= total;
+                rows.extend(page);
+                if done {
+                    break;
+                }
+            }
+            let ids = rows
                 .iter()
-                .map(|document| document.id.clone())
+                .map(|row| row.document.id.clone())
                 .collect::<Vec<_>>();
             let pending = library.pending_proposal_documents(&ids)?;
             let parents_with_children = library.documents_with_children(&ids)?;
-            for document in documents {
+            for crate::ListRow { document, derived } in rows {
                 let category = document
                     .category
                     .as_deref()
@@ -90,8 +98,9 @@ pub fn run(
                     "{}  {:8}  {:16}  {:10}  {:8}  {}{}{}",
                     document.id,
                     document.status,
-                    crate::workflow::stage(
+                    crate::workflow::stage_from(
                         &document,
+                        &derived,
                         pending.contains(&document.id),
                         parents_with_children.contains(&document.id),
                     )

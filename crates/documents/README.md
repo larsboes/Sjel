@@ -12,6 +12,9 @@ CLI and authenticated desktop interface use the same library. Agent credentials 
 `GET /api/documents/duplicates`: member ids, kind, score, digest and pseudonymized source paths, with
 no extracted text and no originals. Every other route is operator-only.
 
+Duplicate detection compares active records only; archived records are out of the working set.
+The owner computes candidates once per library change and serves later reads from memory.
+
 A confirmed duplicate group keeps the survivor and archives every other member in the same
 transaction. Archived records keep their originals, source paths and sidecars, and leave the
 duplicate review queue.
@@ -91,7 +94,9 @@ Multi-page document handling preserves complete page lineage:
 
 1. **Per-page text and OCR provenance.** The running server analyzes every active original PDF that has
    no page evidence, a failed page or no text, one at a time, and repeats the pass every six hours.
-   A document that fails is tried again only after a restart. PDF pages are analyzed independently. Pages with sufficient
+   A document that fails is tried again only after a restart. PDF pages are analyzed independently.
+   The list reads no extracted text: each record caches its character count, page count, analysis
+   gap and split proposal, a new extraction clears that cache, and the server fills it at start. Pages with sufficient
    vector text use native extraction; scanned or image-heavy pages fall back to local OCR. Each page retains
    its engine version and error status.
 2. **Explicit partition splits.** When a mixed document contains multiple receipts or forms, `split`

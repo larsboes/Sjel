@@ -149,6 +149,20 @@ fn summary_from_document(
     pending_proposal: bool,
     has_children: bool,
 ) -> Summary {
+    summary_from_derived(
+        document,
+        &crate::Derived::of(document),
+        pending_proposal,
+        has_children,
+    )
+}
+
+fn summary_from_derived(
+    document: &Document,
+    derived: &crate::Derived,
+    pending_proposal: bool,
+    has_children: bool,
+) -> Summary {
     Summary {
         id: document.id.clone(),
         sha256: document.sha256.clone(),
@@ -161,21 +175,22 @@ fn summary_from_document(
         project: document.project.clone(),
         extracted_title: document.extracted_title.clone(),
         extractor: document.extractor.clone(),
-        extracted_chars: document.extracted_text.as_deref().map_or(0, |text| {
-            text.chars()
-                .filter(|character| !character.is_whitespace())
-                .count()
-        }),
+        extracted_chars: derived.extracted_chars,
         suggested_category: document.suggested_category.clone(),
         suggestion_reason: document.suggestion_reason.clone(),
         data_class: crate::DATA_CLASS.to_string(),
-        page_count: document.pages.len(),
+        page_count: derived.page_count,
         parent_id: document.parent_id.clone(),
         page_range: document.page_range,
         matched_pages: Vec::new(),
-        workflow_stage: crate::workflow::stage(document, pending_proposal, has_children)
-            .as_str()
-            .to_string(),
+        workflow_stage: crate::workflow::stage_from(
+            document,
+            derived,
+            pending_proposal,
+            has_children,
+        )
+        .as_str()
+        .to_string(),
     }
 }
 
@@ -197,6 +212,29 @@ fn summarize_documents<'a>(
                 document,
                 pending.contains(&document.id),
                 parents_with_children.contains(&document.id),
+            )
+        })
+        .collect())
+}
+
+fn summarize_rows(
+    library: &Library,
+    rows: &[crate::ListRow],
+) -> Result<Vec<Summary>, LibraryError> {
+    let ids = rows
+        .iter()
+        .map(|row| row.document.id.clone())
+        .collect::<Vec<_>>();
+    let pending = library.pending_proposal_documents(&ids)?;
+    let parents_with_children = library.documents_with_children(&ids)?;
+    Ok(rows
+        .iter()
+        .map(|row| {
+            summary_from_derived(
+                &row.document,
+                &row.derived,
+                pending.contains(&row.document.id),
+                parents_with_children.contains(&row.document.id),
             )
         })
         .collect())
@@ -306,8 +344,8 @@ async fn list(
             ));
         }
         if query.sha256.is_none() {
-            let (documents, total) = library.list_page(query.status.as_deref(), offset, limit)?;
-            let rows = summarize_documents(library, documents.iter())?;
+            let (listed, total) = library.list_rows(query.status.as_deref(), offset, limit)?;
+            let rows = summarize_rows(library, &listed)?;
             return Ok(Json(
                 json!({"documents": rows, "total": total, "offset": offset, "limit": limit}),
             ));
@@ -408,6 +446,16 @@ async fn review_duplicate(
                 StatusCode::CONFLICT,
                 "duplicate candidate changed; refresh the review queue".into(),
             ));
+        }
+        if let (CandidateKind::Part, DecisionAction::ConfirmGroup { survivor_id }) =
+            (candidate.kind, &decision.action)
+        {
+            if candidate.part.as_ref().map(|part| &part.parent_id) != Some(survivor_id) {
+                return Err(ApiError(
+                    StatusCode::BAD_REQUEST,
+                    "a contained document can only be archived in favour of the longer one".into(),
+                ));
+            }
         }
         if let DecisionAction::Split { parent_id, .. } = &decision.action {
             if candidate.kind != CandidateKind::Part
@@ -838,6 +886,27 @@ fn analysis_backlog(
 /// Run local extraction for every active PDF with an analysis gap, one at a time. A
 /// document is tried once per process; a restart tries the remaining gaps again.
 async fn analysis_backfill_worker(library: Arc<Library>) {
+    loop {
+        let batch_library = Arc::clone(&library);
+        match tokio::task::spawn_blocking(move || batch_library.backfill_derived(200)).await {
+            Ok(Ok(0)) => break,
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => {
+                eprintln!("documents: list cache backfill failed: {error}");
+                break;
+            }
+            Err(error) => {
+                eprintln!("documents: list cache worker failed: {error}");
+                break;
+            }
+        }
+    }
+    let warm_library = Arc::clone(&library);
+    if let Ok(Err(error)) =
+        tokio::task::spawn_blocking(move || warm_library.duplicate_candidates()).await
+    {
+        eprintln!("documents: duplicate cache warm-up failed: {error}");
+    }
     let mut tried = std::collections::HashSet::new();
     loop {
         let scan_library = Arc::clone(&library);

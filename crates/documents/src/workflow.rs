@@ -46,6 +46,21 @@ impl Stage {
 /// A pending proposal is an unreviewed category from the newest proposal run. `has_children`
 /// identifies an original that has already been split into stored child PDFs.
 pub fn stage(document: &Document, has_pending_proposal: bool, has_children: bool) -> Stage {
+    stage_from(
+        document,
+        &crate::Derived::of(document),
+        has_pending_proposal,
+        has_children,
+    )
+}
+
+/// [`stage`] from cached derived values, for a record listed without its extracted text.
+pub fn stage_from(
+    document: &Document,
+    derived: &crate::Derived,
+    has_pending_proposal: bool,
+    has_children: bool,
+) -> Stage {
     if document.status == "archived" {
         return Stage::Archived;
     }
@@ -57,13 +72,11 @@ pub fn stage(document: &Document, has_pending_proposal: bool, has_children: bool
         return Stage::Split;
     }
 
-    if has_analysis_gap(document) {
+    if derived.analysis_gap {
         return Stage::Analyze;
     }
 
-    if document.media_type == "application/pdf"
-        && crate::split::suggest_ranges(&document.pages).ranges.len() > 1
-    {
+    if derived.split_proposed {
         return Stage::ReviewSplit;
     }
 

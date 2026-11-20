@@ -47,6 +47,19 @@ pub struct Pair {
 
 /// Build the report from every record and the `(id, path)` source receipts.
 pub fn report(documents: &[Document], sources: &[(String, String)]) -> Report {
+    let page_counts: HashMap<String, usize> = documents
+        .iter()
+        .map(|document| (document.id.clone(), document.pages.len()))
+        .collect();
+    report_counted(documents, sources, &page_counts)
+}
+
+/// [`report`] with page counts supplied, for records loaded without their page evidence.
+pub fn report_counted(
+    documents: &[Document],
+    sources: &[(String, String)],
+    page_counts: &HashMap<String, usize>,
+) -> Report {
     let mut by_hash = BTreeMap::<&str, Vec<&Document>>::new();
     for document in documents
         .iter()
@@ -75,6 +88,12 @@ pub fn report(documents: &[Document], sources: &[(String, String)]) -> Report {
     // Plain text has no scan to redo or split, and edited note versions would
     // flood the queue: 5,888 of 7,154 records produced most of 49,015 pairs
     // (measured 2026-10-23).
+    // A rescan has the same number of pages. Different page counts can still be a part.
+    let count = |id: &str| page_counts.get(id).copied().unwrap_or(0);
+    let same_length = |left: &str, right: &str| match (count(left), count(right)) {
+        (0, _) | (_, 0) => true,
+        (left, right) => left == right,
+    };
     let texts: Vec<(&str, HashSet<u64>)> = by_hash
         .values()
         .filter_map(|group| {
@@ -99,7 +118,7 @@ pub fn report(documents: &[Document], sources: &[(String, String)]) -> Report {
             ((right_id, right), (left_id, left))
         };
         let containment = shared as f64 / small.1.len() as f64;
-        if jaccard >= RESCAN_MIN_JACCARD {
+        if jaccard >= RESCAN_MIN_JACCARD && same_length(left_id, right_id) {
             report.rescans.push(Pair {
                 a: left_id.to_string(),
                 b: right_id.to_string(),
@@ -151,7 +170,20 @@ fn candidate_pairs(texts: &[(&str, HashSet<u64>)]) -> BTreeSet<(usize, usize)> {
 
 /// Build stable, metadata-only candidates for the operator review queue.
 pub fn candidates(documents: &[Document], sources: &[(String, String)]) -> Vec<ReviewCandidate> {
-    let report = report(documents, sources);
+    let page_counts: HashMap<String, usize> = documents
+        .iter()
+        .map(|document| (document.id.clone(), document.pages.len()))
+        .collect();
+    candidates_counted(documents, sources, &page_counts)
+}
+
+/// [`candidates`] with page counts supplied.
+pub fn candidates_counted(
+    documents: &[Document],
+    sources: &[(String, String)],
+    page_counts: &HashMap<String, usize>,
+) -> Vec<ReviewCandidate> {
+    let report = report_counted(documents, sources, page_counts);
     let locations = |ids: &[String]| {
         sources
             .iter()
@@ -251,25 +283,14 @@ pub fn preferred<'a>(documents: impl IntoIterator<Item = &'a Document>) -> Optio
     })
 }
 
-/// Candidates over the library, without records that a confirmed group archived.
+/// Candidates among the active (not archived) records, from the library's cache.
 ///
 /// # Errors
-/// The library or its saved decisions cannot be read.
+/// The library cannot be read.
 pub fn open_candidates(
     library: &crate::Library,
 ) -> Result<Vec<ReviewCandidate>, crate::LibraryError> {
-    let absorbed = library.absorbed_ids()?;
-    let documents: Vec<_> = library
-        .list(None)?
-        .into_iter()
-        .filter(|document| !absorbed.contains(&document.id))
-        .collect();
-    let sources: Vec<_> = library
-        .sources()?
-        .into_iter()
-        .filter(|(id, _)| !absorbed.contains(id))
-        .collect();
-    Ok(candidates(&documents, &sources))
+    Ok(library.duplicate_candidates()?.as_ref().clone())
 }
 
 #[cfg(test)]
@@ -305,6 +326,34 @@ mod tests {
             suggested_category: None,
             suggestion_reason: None,
         }
+    }
+
+    fn with_pages(mut document: Document, count: u32) -> Document {
+        document.pages = (1..=count)
+            .map(|page_number| sjel_extraction::ExtractedPage {
+                page_number,
+                text: String::new(),
+                engine: "test".into(),
+                failure: None,
+            })
+            .collect();
+        document
+    }
+
+    #[test]
+    fn a_rescan_needs_the_same_page_count() {
+        let same = [
+            with_pages(doc("a", "1", LETTER), 2),
+            with_pages(doc("b", "2", LETTER), 2),
+        ];
+        assert_eq!(report(&same, &[]).rescans.len(), 1);
+        let longer = [
+            with_pages(doc("a", "1", LETTER), 2),
+            with_pages(doc("b", "2", LETTER), 5),
+        ];
+        let report = report(&longer, &[]);
+        assert!(report.rescans.is_empty());
+        assert_eq!(report.parts.len(), 1);
     }
 
     #[test]

@@ -14,7 +14,7 @@ use crate::ely::forms::Input;
 use crate::ely::theme::ControlSize;
 use crate::theme::Palette;
 
-use super::viewer::{reader_page_element, Reader};
+use super::viewer::{reader_page_element, Reader, ReaderTarget, Zoom};
 use super::Documents;
 
 fn duplicate_filter_button(
@@ -272,6 +272,14 @@ impl Documents {
         .detach();
     }
 
+    pub(super) fn set_duplicate_zoom(&mut self, side: usize, zoom: Zoom, cx: &mut Context<Self>) {
+        if self.compare_readers[side].zoom != zoom {
+            self.compare_readers[side].zoom = zoom;
+            self.request_compare_page(side, cx);
+            cx.notify();
+        }
+    }
+
     pub(super) fn move_compare_page(&mut self, side: usize, by: isize, cx: &mut Context<Self>) {
         if self.compare_readers[side].next_page(by) {
             self.request_compare_page(side, cx);
@@ -316,7 +324,7 @@ impl Documents {
                 ))
                 .child(duplicate_filter_button(
                     "duplicate-parts",
-                    "Possible parts",
+                    "Contained in longer",
                     self.duplicate_kind == Some(DuplicateCandidateKind::Part),
                     cx.listener(|view, _, _, cx| {
                         view.set_duplicate_kind(Some(DuplicateCandidateKind::Part), cx)
@@ -363,7 +371,7 @@ impl Documents {
                     candidate.score.unwrap_or_default() * 100.0
                 ),
                 DuplicateCandidateKind::Part => format!(
-                    "Possible part · {:.0}% text overlap",
+                    "Contained in a longer document · {:.0}% of its text",
                     candidate.score.unwrap_or_default() * 100.0
                 ),
             };
@@ -376,8 +384,8 @@ impl Documents {
                     .unwrap_or_else(|| "No second document record".into());
                 let title = candidate.part.as_ref().map_or(title.clone(), |part| {
                     match candidate.member_ids.get(side).map(String::as_str) {
-                        Some(id) if id == part.part_id => format!("Likely part · {title}"),
-                        Some(id) if id == part.parent_id => format!("Likely parent · {title}"),
+                        Some(id) if id == part.part_id => format!("Shorter · {title}"),
+                        Some(id) if id == part.parent_id => format!("Longer · {title}"),
                         _ => title,
                     }
                 });
@@ -466,9 +474,20 @@ impl Documents {
                                 .on_click(cx.listener(
                                     move |view, _, _, cx| view.move_compare_page(side, 1, cx),
                                 )),
-                            ),
+                            )
+                            .child(div().flex_1())
+                            .child(self.reader_zoom_controls(
+                                &format!("duplicate-zoom-{side}"),
+                                ReaderTarget::Duplicate(side),
+                                reader.zoom,
+                                cx,
+                            )),
                     )
-                    .child(reader_page_element(reader, palette));
+                    .child(reader_page_element(
+                        gpui::SharedString::from(format!("duplicate-page-{side}")),
+                        reader,
+                        palette,
+                    ));
                 panes = panes.child(pane);
             }
             let receipts = candidate
@@ -562,7 +581,7 @@ impl Documents {
                                 .map(|part| part.parent_id.clone())
                                 .unwrap_or_default();
                             bar.child(
-                                Button::new("duplicate-record-split", "Record split relationship")
+                                Button::new("duplicate-record-split", "Split the longer one")
                                     .size(ControlSize::Sm)
                                     .on_click(cx.listener(move |view, _, _, cx| {
                                         match parse_page_ranges(&view.split_ranges) {
@@ -583,8 +602,22 @@ impl Documents {
                                     })),
                             )
                         })
+                        .when_some(parent.map(|part| part.parent_id.clone()), |bar, longer| {
+                            bar.child(
+                                Button::new("duplicate-archive-shorter", "Archive shorter")
+                                    .size(ControlSize::Sm)
+                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                        view.record_duplicate_decision(
+                                            DuplicateDecisionAction::ConfirmGroup {
+                                                survivor_id: longer.clone(),
+                                            },
+                                            cx,
+                                        )
+                                    })),
+                            )
+                        })
                         .child(
-                            Button::new("duplicate-keep-separate", "Keep separate")
+                            Button::new("duplicate-keep-separate", "Keep both")
                                 .size(ControlSize::Sm)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.record_duplicate_decision(
@@ -704,7 +737,7 @@ impl Documents {
                         candidate.score.unwrap_or_default() * 100.0
                     ),
                     DuplicateCandidateKind::Part => format!(
-                        "Possible part · {:.0}%",
+                        "Contained in longer · {:.0}%",
                         candidate.score.unwrap_or_default() * 100.0
                     ),
                 };

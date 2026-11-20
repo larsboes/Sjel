@@ -139,36 +139,14 @@ pub(crate) fn search_extracted_pages(
     hits
 }
 
-/// The zoom level the reader draws at. The bitmap is re-rendered at the width Zoom specifies, so
-/// the difference the reader sees is sharpness, not layout.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum Zoom {
-    #[default]
-    Page,
-    Close,
-}
+pub(crate) use crate::pdf_kit::Zoom;
 
-impl Zoom {
-    pub(crate) fn width(self) -> u32 {
-        match self {
-            Self::Page => 1200,
-            Self::Close => 2400,
-        }
-    }
-
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            Self::Page => "Fit",
-            Self::Close => "2×",
-        }
-    }
-
-    pub(crate) fn other(self) -> Self {
-        match self {
-            Self::Page => Self::Close,
-            Self::Close => Self::Page,
-        }
-    }
+/// Which of the view's readers a control drives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ReaderTarget {
+    Main,
+    FilingCompare,
+    Duplicate(usize),
 }
 
 /// The document on screen: its bytes, and the pages of it that have been drawn.
@@ -314,27 +292,13 @@ impl Reader {
     }
 }
 
-pub(super) fn reader_page_element(reader: &Reader, palette: Palette) -> AnyElement {
+pub(super) fn reader_page_element(
+    id: impl Into<gpui::ElementId>,
+    reader: &Reader,
+    palette: Palette,
+) -> AnyElement {
     if let Some(image) = reader.image() {
-        if reader.zoom == Zoom::Close {
-            return div()
-                .id("document-page-zoom-scroll")
-                .flex_1()
-                .min_h_0()
-                .w_full()
-                .overflow_scroll()
-                .p_2()
-                .child(img(image).w(px(1200.)))
-                .into_any_element();
-        }
-        return div()
-            .flex_1()
-            .min_h_0()
-            .w_full()
-            .overflow_hidden()
-            .p_2()
-            .child(img(image).object_fit(ObjectFit::Contain).size_full())
-            .into_any_element();
+        return crate::pdf_kit::page_view(id, image, reader.zoom);
     }
     let message = if reader.loading {
         "Reading the original…".to_owned()
@@ -563,11 +527,11 @@ impl Documents {
     }
 
     pub fn zoom_in(&mut self, cx: &mut Context<Self>) {
-        self.set_zoom(Zoom::Close, cx);
+        self.set_zoom(self.reader.zoom.zoomed_in(), cx);
     }
 
     pub fn zoom_out(&mut self, cx: &mut Context<Self>) {
-        self.set_zoom(Zoom::Page, cx);
+        self.set_zoom(self.reader.zoom.zoomed_out(), cx);
     }
 
     pub fn on_wheel_zoom(&mut self, event: &gpui::ScrollEvent, cx: &mut Context<Self>) {
@@ -590,6 +554,28 @@ impl Documents {
         }
     }
 
+    /// The shared zoom strip for one of this view's readers.
+    pub(super) fn reader_zoom_controls(
+        &self,
+        id: &str,
+        target: ReaderTarget,
+        zoom: Zoom,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let view = cx.entity().downgrade();
+        crate::pdf_kit::zoom_controls(
+            id,
+            zoom,
+            std::rc::Rc::new(move |zoom, _, cx| {
+                let _ = view.update(cx, |view, cx| match target {
+                    ReaderTarget::Main => view.set_zoom(zoom, cx),
+                    ReaderTarget::FilingCompare => view.set_compare_zoom(zoom, cx),
+                    ReaderTarget::Duplicate(side) => view.set_duplicate_zoom(side, zoom, cx),
+                });
+            }),
+        )
+    }
+
     pub(super) fn show_text(&mut self, show: bool, cx: &mut Context<Self>) {
         self.reader.reading_text = show;
         cx.notify();
@@ -602,7 +588,7 @@ impl Documents {
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let canvas = reader_page_element(&self.reader, palette);
+        let canvas = reader_page_element("document-page", &self.reader, palette);
         let Some((first, last)) = self
             .reader
             .page_bounds()
@@ -964,7 +950,8 @@ impl Documents {
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let canvas = reader_page_element(&self.filing_compare_reader, palette);
+        let canvas =
+            reader_page_element("filing-compare-page", &self.filing_compare_reader, palette);
         let Some((first, last)) = self.filing_compare_reader.page_bounds().filter(|_| {
             self.filing_compare_reader.show_thumbnails && self.filing_compare_reader.pages > 1
         }) else {

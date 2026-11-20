@@ -12,11 +12,13 @@
 pub mod document;
 pub mod renderer;
 pub mod types;
+pub mod view;
 
 pub use crate::documents::{PdfError, PdfRenderer};
 pub use document::Pdf;
 pub use renderer::{default_renderer, PageRenderer};
 pub use types::PageImage;
+pub use view::{page_view, zoom_controls, Zoom};
 
 #[cfg(all(test, target_os = "macos"))]
 mod tests {

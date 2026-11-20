@@ -34,7 +34,7 @@ pub mod viewer;
 
 use proposals::{proposal_panel, workflow_panel};
 pub use viewer::{register_renderer, set_default_pdf_renderer, PdfError, PdfRenderer};
-use viewer::{search_extracted_pages, PageSearchHit, Reader, Zoom, DEFAULT_RENDERER};
+use viewer::{search_extracted_pages, PageSearchHit, Reader, ReaderTarget, DEFAULT_RENDERER};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Filter {
@@ -1596,29 +1596,12 @@ impl Render for Documents {
                                 .text_color(rgb(palette.muted))
                                 .child(page_label),
                         )
-                        .child(
-                            Button::new("document-zoom-out", "−")
-                                .size(ControlSize::Sm)
-                                .disabled(zoom == Zoom::Page)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.zoom_out(cx);
-                                })),
-                        )
-                        .child(
-                            Button::new("document-zoom", zoom.label())
-                                .size(ControlSize::Sm)
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.set_zoom(zoom.other(), cx);
-                                })),
-                        )
-                        .child(
-                            Button::new("document-zoom-in", "+")
-                                .size(ControlSize::Sm)
-                                .disabled(zoom == Zoom::Close)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.zoom_in(cx);
-                                })),
-                        )
+                        .child(self.reader_zoom_controls(
+                            "document-zoom",
+                            ReaderTarget::Main,
+                            zoom,
+                            cx,
+                        ))
                         .child(
                             Button::new(
                                 "document-read-text",
@@ -1859,13 +1842,12 @@ impl Render for Documents {
                                 .text_color(rgb(palette.muted))
                                 .child(compare_page_label),
                         )
-                        .child(
-                            Button::new("cmp-zoom", self.filing_compare_reader.zoom.label())
-                                .size(ControlSize::Sm)
-                                .on_click(
-                                    cx.listener(|view, _, _, cx| view.toggle_compare_zoom(cx)),
-                                ),
-                        )
+                        .child(self.reader_zoom_controls(
+                            "cmp-zoom",
+                            ReaderTarget::FilingCompare,
+                            self.filing_compare_reader.zoom,
+                            cx,
+                        ))
                         .child(
                             Button::new(
                                 "cmp-text",
@@ -2394,8 +2376,9 @@ mod tests {
     use gpui::{Focusable, TestAppContext};
 
     use super::duplicates::parse_page_ranges;
-    use super::{workflow_label, DocSort, Documents, Filter, Reader, SortOrder, Zoom};
+    use super::{workflow_label, DocSort, Documents, Filter, Reader, SortOrder};
     use crate::data::Repo;
+    use crate::pdf_kit::Zoom;
     use sjel_gpui_core::shell::{DocumentDetail, DocumentSummary, ShellError};
 
     fn summary(id: &str, category: Option<&str>, filename: &str) -> DocumentSummary {
@@ -2673,17 +2656,17 @@ mod tests {
 
     #[test]
     fn a_drawn_page_is_asked_for_at_the_zoom_that_is_on_screen() {
-        assert_ne!(Zoom::Page.width(), Zoom::Close.width());
-        assert_eq!(Zoom::Page.other(), Zoom::Close);
-        assert_eq!(Zoom::Close.other(), Zoom::Page);
+        assert_ne!(Zoom::Width.width(), Zoom::Percent(300).width());
+        assert_eq!(Zoom::Width.other(), Zoom::Page);
+        assert_eq!(Zoom::Page.other(), Zoom::Width);
     }
 
     #[test]
     fn zoom_labels_do_not_collide_with_close() {
-        assert_ne!(Zoom::Page.label(), "Close");
-        assert_ne!(Zoom::Close.label(), "Close");
-        assert_eq!(Zoom::Page.label(), "Fit");
-        assert_eq!(Zoom::Close.label(), "2×");
+        for zoom in [Zoom::Page, Zoom::Width, Zoom::Percent(150)] {
+            assert_ne!(zoom.label(), "Close");
+        }
+        assert_eq!(Zoom::Percent(150).label(), "150%");
     }
 
     #[test]

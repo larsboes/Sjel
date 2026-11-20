@@ -41,3 +41,23 @@ fn collections_group_documents_and_survive_restore_index() {
     assert_eq!(rebuilt.collections().unwrap(), vec![flat]);
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn the_list_reads_cached_values_that_match_the_full_record() {
+    let root = std::env::temp_dir().join(format!("sjel-documents-listing-{}", std::process::id()));
+    fs::create_dir_all(&root).unwrap();
+    let library = Library::open(&root.join("list.db"), root.join("library")).unwrap();
+    for (name, body) in [("a.txt", "erste Rechnung"), ("b.txt", "zweite Notiz")] {
+        library.intake(name, body.as_bytes()).unwrap();
+    }
+    assert_eq!(library.backfill_derived(100).unwrap(), 2);
+    assert_eq!(library.backfill_derived(100).unwrap(), 0);
+    let (rows, total) = library.list_rows(None, 0, 10).unwrap();
+    assert_eq!(total, 2);
+    for row in rows {
+        assert!(row.document.extracted_text.is_none());
+        let full = library.get(&row.document.id).unwrap().unwrap();
+        assert_eq!(row.derived, documents::Derived::of(&full));
+    }
+    fs::remove_dir_all(root).unwrap();
+}

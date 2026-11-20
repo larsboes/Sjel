@@ -152,3 +152,31 @@ fn merge_copies_previews_then_keeps_one_record_per_exact_copy_group() {
     assert!(run(&["merge-copies"]).contains("0 exact-copy group(s)"));
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn cached_candidates_follow_every_write() {
+    let (library, root) = scratch();
+    library.intake("a.pdf", b"synthetic same").unwrap();
+    library.intake("b.pdf", b"synthetic same").unwrap();
+    let first = library.duplicate_candidates().unwrap();
+    assert_eq!(first.len(), 1);
+    assert!(std::sync::Arc::ptr_eq(
+        &first,
+        &library.duplicate_candidates().unwrap()
+    ));
+    library.intake("c.pdf", b"synthetic same").unwrap();
+    let grown = library.duplicate_candidates().unwrap();
+    assert_eq!(grown[0].member_ids.len(), 3);
+    let survivor = grown[0].member_ids[0].clone();
+    let decision = DuplicateDecision {
+        candidate_key: grown[0].candidate_key.clone(),
+        kind: CandidateKind::ExactCopy,
+        member_ids: grown[0].member_ids.clone(),
+        action: DecisionAction::ConfirmGroup {
+            survivor_id: survivor,
+        },
+    };
+    library.save_duplicate_decision(&decision).unwrap();
+    assert!(library.duplicate_candidates().unwrap().is_empty());
+    fs::remove_dir_all(root).unwrap();
+}

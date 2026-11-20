@@ -5,12 +5,11 @@ use std::sync::Arc;
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, Window};
 use sjel_gpui_core::shell::{
     self, DuplicateCandidate, DuplicateCandidateKind, DuplicateDecision, DuplicateDecisionAction,
-    DuplicatePageRange, ShellError,
+    ShellError,
 };
 
 use crate::data::Remote;
 use crate::ely::buttons::Button;
-use crate::ely::forms::Input;
 use crate::ely::theme::ControlSize;
 use crate::theme::Palette;
 
@@ -34,35 +33,6 @@ fn duplicate_filter_button(
     .size(ControlSize::Sm)
     .on_click(on_click)
     .into_any_element()
-}
-
-pub(super) fn parse_page_ranges(value: &str) -> Result<Vec<DuplicatePageRange>, String> {
-    let mut ranges = Vec::new();
-    for part in value
-        .split(',')
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
-    {
-        let (first, last) = part
-            .split_once('-')
-            .ok_or_else(|| "Use inclusive ranges such as 1-3, 4-8.".to_owned())?;
-        let first = first
-            .trim()
-            .parse::<u32>()
-            .map_err(|_| "Page range start must be a positive number.".to_owned())?;
-        let last = last
-            .trim()
-            .parse::<u32>()
-            .map_err(|_| "Page range end must be a positive number.".to_owned())?;
-        if first == 0 || last < first {
-            return Err("Ranges must be positive and ordered, for example 1-3, 4-8.".into());
-        }
-        ranges.push(DuplicatePageRange { first, last });
-    }
-    if ranges.is_empty() {
-        return Err("Enter every child range, for example 1-3, 4-8.".into());
-    }
-    Ok(ranges)
 }
 
 impl Documents {
@@ -126,8 +96,6 @@ impl Documents {
             .first()
             .cloned()
             .filter(|_| candidate.member_ids.len() == 1);
-        self.split_ranges.clear();
-        self.split_input = None;
         self.duplicate_error = None;
         self.duplicate_selection = Some(candidate.clone());
         self.compare_readers = [Reader::default(), Reader::default()];
@@ -287,11 +255,7 @@ impl Documents {
         }
     }
 
-    pub(super) fn duplicate_workspace(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    pub(super) fn duplicate_workspace(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let palette = self.palette.unwrap_or_else(Palette::dark);
         let rows = self.rows.value.clone().unwrap_or_default();
         let mut body = div().flex_1().min_h_0().flex().flex_col().gap_3();
@@ -551,7 +515,6 @@ impl Documents {
             }
 
             if candidate.kind == DuplicateCandidateKind::Part {
-                let input = self.split_range_field(window, cx);
                 let parent = candidate.part.as_ref();
                 let parent_pages = parent
                     .and_then(|part| {
@@ -568,39 +531,30 @@ impl Documents {
                         .gap_2()
                         .text_xs()
                         .text_color(rgb(palette.muted))
-                        .child(format!(
-                            "Split page ranges · parent has {parent_pages} pages"
-                        ))
-                        .child(
-                            div()
-                                .w(px(220.))
-                                .child(Input::new(&input).size(ControlSize::Sm)),
-                        )
-                        .when(parent_pages > 0, |bar| {
+                        .when(parent_pages > 1, |bar| {
                             let parent_id = parent
                                 .map(|part| part.parent_id.clone())
                                 .unwrap_or_default();
-                            bar.child(
-                                Button::new("duplicate-record-split", "Split the longer one")
+                            let can_split = rows
+                                .iter()
+                                .find(|row| row.id == parent_id)
+                                .is_none_or(super::split_picker::can_split);
+                            bar.when(can_split, |bar| {
+                                bar.child(
+                                    Button::new(
+                                        "duplicate-record-split",
+                                        "Pick pages in longer PDF",
+                                    )
                                     .size(ControlSize::Sm)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        match parse_page_ranges(&view.split_ranges) {
-                                            Ok(ranges) => view.record_duplicate_decision(
-                                                DuplicateDecisionAction::Split {
-                                                    parent_id: parent_id.clone(),
-                                                    page_count: u32::try_from(parent_pages)
-                                                        .unwrap_or(u32::MAX),
-                                                    ranges,
-                                                },
-                                                cx,
-                                            ),
-                                            Err(error) => {
-                                                view.duplicate_error = Some(error);
-                                                cx.notify();
-                                            }
-                                        }
-                                    })),
-                            )
+                                    .on_click(cx.listener(
+                                        move |view, _, _, cx| {
+                                            view.set_duplicate_mode(false, cx);
+                                            view.open(parent_id.clone(), cx);
+                                            view.begin_split_picker(cx);
+                                        },
+                                    )),
+                                )
+                            })
                         })
                         .when_some(parent.map(|part| part.parent_id.clone()), |bar, longer| {
                             bar.child(

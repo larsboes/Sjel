@@ -92,13 +92,14 @@ pub use projects_api::{
 pub use status_api::ServerHit;
 
 pub use documents_api::{
-    ClassificationProposal, DocumentBoundaryEvidence, DocumentDetail, DocumentExtractedPage,
-    DocumentPage, DocumentPageRange, DocumentProposalRecord, DocumentSplitChildInput,
-    DocumentSplitRequest, DocumentSplitSuggestion, DocumentSummary, DocumentUpload,
-    DuplicateCandidate, DuplicateCandidateKind, DuplicateCandidatePage, DuplicateDecision,
-    DuplicateDecisionAction, DuplicateDecisionResponse, DuplicatePageRange, DuplicatePartRelation,
-    DuplicateSourceLocation, ProposalAbstentionReason, ProposalEvidence, ProposalEvidenceSource,
-    ProposalInvalidReason, ProposalOutcome, ProposalReview, ProposalReviewEvent, ProposalSource,
+    ClassificationProposal, DocumentBoundaryEvidence, DocumentCollection, DocumentDetail,
+    DocumentExtractedPage, DocumentPage, DocumentPageRange, DocumentProposalRecord,
+    DocumentSplitChildInput, DocumentSplitRequest, DocumentSplitSuggestion, DocumentSummary,
+    DocumentUpload, DuplicateCandidate, DuplicateCandidateKind, DuplicateCandidatePage,
+    DuplicateDecision, DuplicateDecisionAction, DuplicateDecisionResponse, DuplicatePageRange,
+    DuplicatePartRelation, DuplicateSourceLocation, ProposalAbstentionReason, ProposalEvidence,
+    ProposalEvidenceSource, ProposalInvalidReason, ProposalOutcome, ProposalReview,
+    ProposalReviewEvent, ProposalSource,
 };
 
 pub use feed_api::{

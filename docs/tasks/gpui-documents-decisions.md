@@ -26,13 +26,15 @@ Complete reviewable document decisions through the existing owner, with implemen
 ## Evidence
 
 - The owner merges a confirmed group: `save_duplicate_decision` archives every member except the survivor in the decision's transaction and writes their record sidecars (`crates/documents/src/library.rs`). Archived members keep originals and source paths and leave the review queue (`open_candidates` in `crates/documents/src/server.rs`).
-- `cargo test -p sjel-documents --no-default-features --features turso-wal` passes 51 unit and 3 duplicate-review tests, including `confirmed_group_archives_every_member_except_the_survivor`.
-- Unverified: decision rows have no versioned sidecar yet, so a dismissal and the absorbed-id link do not survive `restore-index`. The archived status does. Split decisions, live acceptance in the Mac app and a live merge on the real library have not run.
+- Duplicate decision rows have no versioned sidecar. A dismissal and the absorbed-record link are lost on `restore-index`, while the archived status survives.
 - Folder imports reuse the record for known bytes (`Library::intake_known`), and `inbox --dry-run` reports new and stored files by hash. `documents merge-copies --apply` merged 174 exact-copy groups and archived 199 records on the live library; a second run reports 0 groups. A catalog backup preceded it.
 - Every eligible file in the Extreme archive folders was already stored: 0 new of 1,405 across eight folders.
-- Collections exist in the owner: tables, one sidecar per collection rebuilt by `restore-index`, `documents collection` commands and operator routes (`crates/documents/src/library/collections.rs`). The Mac app does not show them yet.
+- The Documents owner stores collections in tables and rebuilds them from sidecars. The Mac split picker can assign every piece to an existing collection in the split request.
 - `suggest-splits` uses local page signals. After re-analysis of the 43 open part parents (562 pages), 9 received cut proposals: 6 vocabulary breaks with a date, 4 openings, 3 explicit page-one markers, 1 last-page marker. The page-one rule alone produced at most 3. Recall stays low; most known contained documents still get no cut.
 - The owner category list has 12 entries in the overlay's `documents-classification.json`, drafted from filename keyword counts. 994 active records have no page extraction yet, so rule proposals for them rest on filenames only.
-- A rescan needs equal page counts; a shorter record inside a longer one is a contained candidate, and the Mac app offers Archive shorter, Split the longer one, or Keep both.
+- A rescan needs equal known page counts. Contained candidates offer **Archive shorter**, **Pick pages in longer PDF** for an unsplit original, and **Keep both**.
 - One PDF page view (`apps/gpui/ui/src/pdf_kit/view.rs`) serves the reader, filing compare and duplicate panes with fit page, fit width and 50–400 % zoom. Native acceptance of scrolling and zoom has not run.
 - The list reads cached derived values instead of extracted text: 500 rows in about 27 ms instead of 1.0–1.65 s. Duplicate candidates over active records are cached per library revision: about 0.1 s warm instead of about 17 s.
+- **Big documents** orders analyzed, unsplit originals by descending page count. The reader preselects suggested cuts and shows editable cuts, names, and live page counts. The owner stores one PDF per range and refreshes duplicate candidates in the background after a split.
+- Documents tests pass on Turso WAL (64) and SQLite (65). The split test verifies that the source bytes stay intact, the named pieces enter duplicate review, and an index rebuild restores the pieces and their collection. The 17 headless Documents UI tests cover the queue order and the picker’s editable suggested cuts.
+- The installed Mac app still needs visual acceptance of the picker, PDF scrolling and zoom, and a real multi-page split.

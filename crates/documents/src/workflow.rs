@@ -64,12 +64,11 @@ pub fn stage_from(
     if document.status == "archived" {
         return Stage::Archived;
     }
-    if document.status == "filed" {
-        return Stage::Filed;
-    }
-
     if has_children {
         return Stage::Split;
+    }
+    if document.status == "filed" {
+        return Stage::Filed;
     }
 
     if derived.analysis_gap {

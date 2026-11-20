@@ -18,13 +18,14 @@ pub const ROUTE_DOCUMENT_ORIGINAL: &str = "/api/documents/{id}/original";
 pub const ROUTE_DOCUMENT_DUPLICATES: &str = "/api/documents/duplicates";
 pub const ROUTE_DOCUMENT_DUPLICATES_REVIEW: &str = "/api/documents/duplicates/review";
 pub const ROUTE_DOCUMENT_SPLIT: &str = "/api/documents/{id}/split";
+pub const ROUTE_DOCUMENT_COLLECTIONS: &str = "/api/documents/collections";
 pub const ROUTE_DOCUMENT_PROPOSALS_REGENERATE: &str = "/api/documents/{id}/proposals/regenerate";
 pub const ROUTE_DOCUMENT_PROPOSALS_MODEL: &str = "/api/documents/{id}/proposals/model";
 pub const ROUTE_DOCUMENT_PROPOSAL_REVIEW: &str =
     "/api/documents/{id}/proposals/{proposal_id}/review";
 
 /// Every route constant above. The server test checks each one against its manifest.
-pub const ALL_ROUTES: [&str; 12] = [
+pub const ALL_ROUTES: [&str; 13] = [
     ROUTE_DOCUMENTS,
     ROUTE_FINDER,
     ROUTE_DOCUMENT_BY_ID,
@@ -34,6 +35,7 @@ pub const ALL_ROUTES: [&str; 12] = [
     ROUTE_DOCUMENT_DUPLICATES,
     ROUTE_DOCUMENT_DUPLICATES_REVIEW,
     ROUTE_DOCUMENT_SPLIT,
+    ROUTE_DOCUMENT_COLLECTIONS,
     ROUTE_DOCUMENT_PROPOSALS_REGENERATE,
     ROUTE_DOCUMENT_PROPOSALS_MODEL,
     ROUTE_DOCUMENT_PROPOSAL_REVIEW,
@@ -269,6 +271,8 @@ pub type ChildInput = DocumentSplitChildInput;
 pub struct DocumentSplitRequest {
     pub page_count: u32,
     pub children: Vec<DocumentSplitChildInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collection_id: Option<String>,
 }
 
 pub type SplitRequest = DocumentSplitRequest;

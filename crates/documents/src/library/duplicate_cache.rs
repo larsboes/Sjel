@@ -82,7 +82,10 @@ impl Library {
         let mut page_counts = HashMap::with_capacity(rows.len());
         let mut documents = Vec::with_capacity(rows.len());
         for (document, derived) in rows {
-            let pages = super::listing::page_count(derived.as_deref()).unwrap_or(0);
+            let pages = document.page_range.map_or_else(
+                || super::listing::page_count(derived.as_deref()).unwrap_or(0),
+                |range| (range.last - range.first + 1) as usize,
+            );
             page_counts.insert(document.id.clone(), pages);
             documents.push(document);
         }

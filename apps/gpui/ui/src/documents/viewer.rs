@@ -1,6 +1,6 @@
 //! Document PDF viewer, page rendering, caching, and zoom controls.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
 
 use futures::channel::oneshot;
@@ -163,6 +163,8 @@ pub(crate) struct Reader {
     pub(crate) drawn: BTreeMap<(usize, u32), Arc<RenderImage>>,
     /// Low-resolution thumbnails (`THUMB_WIDTH`) keyed by zero-based page index.
     pub(crate) thumbnails: BTreeMap<usize, Arc<RenderImage>>,
+    pub(super) thumbnail_pending: BTreeSet<usize>,
+    pub(super) thumbnail_task: Option<gpui::Task<()>>,
     /// Whether the collapsible thumbnail rail is shown beside the page.
     pub(crate) show_thumbnails: bool,
     /// Why the original could not be read or drawn. Shown with the text, never instead of it.
@@ -261,8 +263,11 @@ impl Reader {
     }
 
     pub(super) fn trim_thumbnails(&mut self) {
+        self.trim_thumbnails_near(self.page);
+    }
+
+    fn trim_thumbnails_near(&mut self, current: usize) {
         while self.thumbnails.len() > CACHED_THUMBS {
-            let current = self.page;
             let furthest = self
                 .thumbnails
                 .keys()
@@ -401,7 +406,7 @@ impl Documents {
                     }
                 }
                 view.request_page(cx);
-                if view.reader.show_thumbnails {
+                if view.reader.show_thumbnails || view.split_picker.is_some() {
                     view.request_thumbnails(cx);
                 }
                 cx.notify();
@@ -418,42 +423,62 @@ impl Documents {
         cx.notify();
     }
 
-    /// Ask for thumbnails around the active page when the thumbnail rail is open.
+    /// Draw the current picker grid or the pages around the reader's active page.
     pub(super) fn request_thumbnails(&mut self, cx: &mut Context<Self>) {
         let Some((first, last)) = self.reader.page_bounds() else {
             return;
         };
-        let (Some(renderer), Some(bytes), Some(id)) = (
-            self.renderer.as_ref(),
-            self.reader.bytes.clone(),
-            self.reader.id.clone(),
-        ) else {
+        let (Some(renderer), Some(bytes)) = (&self.renderer, &self.reader.bytes) else {
             return;
         };
-        let center = self.reader.page;
-        let window_start = center.saturating_sub(6).max(first);
-        let window_end = (center + 6).min(last);
-        for page in window_start..=window_end {
-            if self.reader.thumbnails.contains_key(&page) {
-                continue;
-            }
-            let answer = renderer.render(bytes.clone(), page, THUMB_WIDTH);
-            let expected = (id.clone(), page);
-            cx.spawn(async move |this, cx| {
-                let Ok(Ok(image)) = answer.await else {
-                    return;
-                };
-                let _ = this.update(cx, |view, cx| {
-                    if view.reader.id.as_deref() != Some(expected.0.as_str()) {
-                        return;
-                    }
-                    view.reader.thumbnails.insert(expected.1, image);
-                    view.reader.trim_thumbnails();
-                    cx.notify();
-                });
-            })
-            .detach();
+        let (start, end) = self.split_picker.as_ref().map_or_else(
+            || {
+                (
+                    self.reader.page.saturating_sub(6).max(first),
+                    (self.reader.page + 6).min(last),
+                )
+            },
+            |picker| {
+                (
+                    picker.offset,
+                    (picker.offset + super::split_picker::PAGES_PER_GRID - 1).min(last),
+                )
+            },
+        );
+        let missing: Vec<_> = (start..=end)
+            .filter(|page| !self.reader.thumbnails.contains_key(page))
+            .collect();
+        self.reader.thumbnail_task = None;
+        self.reader.thumbnail_pending = missing.iter().copied().collect();
+        if missing.is_empty() {
+            return;
         }
+        let renderer = renderer.clone();
+        let bytes = bytes.clone();
+        let executor = cx.background_executor().clone();
+        let center = start + (end - start) / 2;
+        self.reader.thumbnail_task = Some(cx.spawn(async move |this, cx| {
+            for page in missing {
+                let renderer = renderer.clone();
+                let bytes = bytes.clone();
+                let image = executor
+                    .spawn(async move { renderer.render(bytes, page, THUMB_WIDTH).await })
+                    .await;
+                if this
+                    .update(cx, |view, cx| {
+                        view.reader.thumbnail_pending.remove(&page);
+                        if let Ok(Ok(image)) = image {
+                            view.reader.thumbnails.insert(page, image);
+                            view.reader.trim_thumbnails_near(center);
+                        }
+                        cx.notify();
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        }));
     }
 
     /// Ask for the page on screen unless it is drawn already.

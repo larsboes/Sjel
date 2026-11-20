@@ -134,6 +134,7 @@ impl Library {
         add: &[String],
         remove: &[String],
     ) -> Fallible<Collection> {
+        let _write = self.lock_collection_writes()?;
         let collection = self
             .collection(id_or_name)?
             .ok_or_else(|| LibraryError::Invalid("no collection with that id or name".into()))?;
@@ -175,7 +176,13 @@ impl Library {
         Ok(updated)
     }
 
-    fn write_collection(&self, collection: &Collection) -> Fallible<()> {
+    pub(super) fn lock_collection_writes(&self) -> Fallible<std::sync::MutexGuard<'_, ()>> {
+        self.collection_write_lock
+            .lock()
+            .map_err(|error| LibraryError::Store(error.to_string()))
+    }
+
+    pub(super) fn write_collection(&self, collection: &Collection) -> Fallible<()> {
         let directory = self.root.join("records").join("collections");
         fs::create_dir_all(&directory)?;
         let bytes =

@@ -30,6 +30,7 @@ use crate::theme::{tint, Density, Palette};
 
 mod duplicates;
 mod proposals;
+mod split_picker;
 pub mod viewer;
 
 use proposals::{proposal_panel, workflow_panel};
@@ -42,6 +43,7 @@ pub enum Filter {
     Filed,
     All,
     NeedsReview,
+    BigDocuments,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -205,6 +207,7 @@ impl Filter {
             Self::Inbox => row.status == "inbox",
             Self::Filed => row.status == "filed",
             Self::All => row.status != "archived",
+            Self::BigDocuments => split_picker::can_split(row) && row.page_count > 1,
             Self::NeedsReview => {
                 row.status == "inbox"
                     && matches!(
@@ -293,7 +296,7 @@ pub struct Documents {
     pub(super) list: gpui::ListState,
     /// The rows in draw order, each with the group header that opens its group.
     pub(super) order: Vec<DocRow>,
-    pub(super) counts: [usize; 5],
+    pub(super) counts: [usize; 6],
     pub(super) order_key: Option<(u64, usize, usize)>,
     /// Counts a change to the filters and the sort, which the records cannot report.
     pub(super) order_rev: u64,
@@ -312,9 +315,8 @@ pub struct Documents {
     pub(super) duplicate_selection: Option<DuplicateCandidate>,
     pub(super) compare_readers: [Reader; 2],
     pub(super) preferred_id: Option<String>,
-    pub(super) split_ranges: String,
     pub(super) duplicate_error: Option<String>,
-    pub(super) split_input: Option<(Entity<TextInput>, Subscription)>,
+    split_picker: Option<split_picker::SplitPicker>,
     pub(super) proposal_busy: Option<String>,
     pub(super) proposal_error: Option<String>,
     pub(super) proposal_notice: Option<String>,
@@ -364,7 +366,7 @@ impl Documents {
             current: None,
             list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
             order: Vec::new(),
-            counts: [0; 5],
+            counts: [0; 6],
             order_key: None,
             order_rev: 0,
             text_scroll: gpui::ScrollHandle::new(),
@@ -381,9 +383,8 @@ impl Documents {
             duplicate_selection: None,
             compare_readers: [Reader::default(), Reader::default()],
             preferred_id: None,
-            split_ranges: String::new(),
             duplicate_error: None,
-            split_input: None,
+            split_picker: None,
             proposal_busy: None,
             proposal_error: None,
             proposal_notice: None,
@@ -577,6 +578,13 @@ impl Documents {
 
     /// Clear the active document and close the reader, returning the view to the full table.
     pub fn close(&mut self, cx: &mut Context<Self>) {
+        if self.workflow_busy.as_deref() == Some("split") {
+            return;
+        }
+        if self.split_picker.is_some() {
+            self.close_split_picker(cx);
+            return;
+        }
         if self.selected.is_some() {
             self.selected = None;
             self.detail = Remote::default();
@@ -599,6 +607,9 @@ impl Documents {
     /// steps through as well as what is on screen. Nothing is filtered here: the order the frame
     /// already built is the order the keyboard moves through.
     pub fn select_relative(&mut self, by: isize, cx: &mut Context<Self>) {
+        if self.split_picker.is_some() {
+            return;
+        }
         self.sync_order();
         if self.order.is_empty() {
             return;
@@ -641,14 +652,21 @@ impl Documents {
 
     /// Open one record: its metadata and text first, then the original for the page view.
     fn open(&mut self, id: String, cx: &mut Context<Self>) {
+        if self.workflow_busy.as_deref() == Some("split") {
+            return;
+        }
+        let pick_pages = self.filter == Filter::BigDocuments
+            && self.rows.value.as_ref().is_some_and(|rows| {
+                rows.iter()
+                    .any(|row| row.id == id && Filter::BigDocuments.matches(row))
+            });
         let Ok(shell) = self.repo.shell() else { return };
         self.selected = Some(id.clone());
         self.detail = Remote::new_loading();
         self.reader.clear();
         self.page_search_query.clear();
         self.page_search_input = None;
-        self.split_ranges.clear();
-        self.split_input = None;
+        self.split_picker = None;
         self.workflow_busy = None;
         self.workflow_error = None;
         self.proposal_busy = None;
@@ -682,6 +700,9 @@ impl Documents {
         .detach();
 
         self.open_original(cx);
+        if pick_pages {
+            self.begin_split_picker(cx);
+        }
     }
 
     pub fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -888,7 +909,8 @@ impl Documents {
             return;
         }
         let mut picked: Vec<usize> = Vec::new();
-        let mut summary_counts = [0; 5];
+        let mut summary_counts = [0; 6];
+        let big_documents = self.filter == Filter::BigDocuments;
         if let Some(rows) = self.rows.value.as_ref() {
             summary_counts[0] = rows.len();
             for (index, row) in rows.iter().enumerate() {
@@ -903,11 +925,14 @@ impl Documents {
                 if Filter::NeedsReview.matches(row) {
                     summary_counts[4] += 1;
                 }
+                if Filter::BigDocuments.matches(row) {
+                    summary_counts[5] += 1;
+                }
                 if self.filter.matches(row)
-                    && self
-                        .category_filter
-                        .as_deref()
-                        .is_none_or(|category| row.category.as_deref().unwrap_or("") == category)
+                    && (big_documents
+                        || self.category_filter.as_deref().is_none_or(|category| {
+                            row.category.as_deref().unwrap_or("") == category
+                        }))
                     && (self.search_applied
                         || self.search_query.is_empty()
                         || document_matches(row, &self.search_query))
@@ -915,8 +940,8 @@ impl Documents {
                     picked.push(index);
                 }
             }
-            let (sort_col, sort_order) = self.sort;
-            match self.grouping {
+            let (sort_col, sort_order) = self.list_sort();
+            match self.list_grouping() {
                 Grouping::None => {
                     if (sort_col, sort_order) != (DocSort::Added, SortOrder::Descending) {
                         picked.sort_by(|left, right| {
@@ -1022,8 +1047,24 @@ impl Documents {
         self.file_document_as(primary_id, compare_cat, cx);
     }
 
+    fn list_sort(&self) -> (DocSort, SortOrder) {
+        if self.filter == Filter::BigDocuments {
+            (DocSort::Pages, SortOrder::Descending)
+        } else {
+            self.sort
+        }
+    }
+
+    fn list_grouping(&self) -> Grouping {
+        if self.filter == Filter::BigDocuments {
+            Grouping::None
+        } else {
+            self.grouping
+        }
+    }
+
     fn documents_table(&self, narrow: bool, total: usize, cx: &mut Context<Self>) -> AnyElement {
-        let (sort_col, sort_order) = self.sort;
+        let (sort_col, sort_order) = self.list_sort();
         let mut columns: Vec<Column> = DOC_COLUMNS
             .iter()
             .map(|spec| {
@@ -1113,7 +1154,7 @@ impl Documents {
                             pages_cell,
                             Cell::Tag(row.status.clone().into(), status_tone),
                             Cell::Text(date.to_owned().into()),
-                            Cell::Text(grouping_key(row, self.grouping).into()),
+                            Cell::Text(grouping_key(row, self.list_grouping()).into()),
                         ],
                     )
                 })
@@ -1127,7 +1168,10 @@ impl Documents {
             DocSort::Status => "status",
             DocSort::Added => "added",
         };
-        let empty_msg = if total == 0 {
+        let big_documents = self.filter == Filter::BigDocuments;
+        let empty_msg = if big_documents {
+            "No unsplit multi-page PDFs with page analysis in this view."
+        } else if total == 0 {
             "No documents yet."
         } else {
             "No documents in this view."
@@ -1146,7 +1190,9 @@ impl Documents {
                         column: sort_col_key.into(),
                         rising: sort_order.is_ascending(),
                     }])
-                    .when(self.grouping != Grouping::None, |t| t.group_by("group"))
+                    .when(self.list_grouping() != Grouping::None, |t| {
+                        t.group_by("group")
+                    })
                     .density(ElyDensity::Comfortable)
                     .virtualized()
                     .current(self.current.clone().or_else(|| self.selected.clone()))
@@ -1166,16 +1212,18 @@ impl Documents {
                             }
                         });
                     })
-                    .on_sort(move |keys, _, cx| {
-                        if let Some(first) = keys.first() {
-                            if let Some(col) = DocColDef::find(first.column.as_ref()) {
-                                on_sort.update(cx, |view, cx| {
-                                    view.sort = (col.sort, SortOrder::from_bool(first.rising));
-                                    view.order_rev = view.order_rev.wrapping_add(1);
-                                    cx.notify();
-                                });
+                    .when(!big_documents, |table| {
+                        table.on_sort(move |keys, _, cx| {
+                            if let Some(first) = keys.first() {
+                                if let Some(col) = DocColDef::find(first.column.as_ref()) {
+                                    on_sort.update(cx, |view, cx| {
+                                        view.sort = (col.sort, SortOrder::from_bool(first.rising));
+                                        view.order_rev = view.order_rev.wrapping_add(1);
+                                        cx.notify();
+                                    });
+                                }
                             }
-                        }
+                        })
                     })
                     .empty(empty_msg)
                     .size_full(),
@@ -1214,10 +1262,14 @@ impl Render for Documents {
                                 ),
                         ),
                 )
-                .child(self.duplicate_workspace(window, cx));
+                .child(self.duplicate_workspace(cx));
+        }
+        if self.split_picker.is_some() {
+            return self.split_picker_view(window, cx);
         }
         self.sync_order();
-        let [total, inbox, filed, active, next] = self.counts;
+        let [total, inbox, filed, active, next, big_count] = self.counts;
+        let big_documents = self.filter == Filter::BigDocuments;
         let selected = self.selected.clone();
         let mobile = self.density == Density::Mobile;
         // With a document open the list keeps a column beside the reader on desktop; on mobile
@@ -1232,7 +1284,6 @@ impl Render for Documents {
         let mut table = div().flex().flex_col().gap_1().flex_1().min_h_0();
         let search = self.search_field(window, cx);
         let page_search = self.page_search_field(window, cx);
-        let split_input = self.split_range_field(window, cx);
         let uploading = self.uploading;
         table = table.child(
             div()
@@ -1271,20 +1322,32 @@ impl Render for Documents {
                             self.filter == Filter::NeedsReview,
                             cx.listener(|view, _, _, cx| view.set_filter(Filter::NeedsReview, cx)),
                         ))
-                        .child(
-                            Button::new("documents-category-filter", category_label)
-                                .size(ControlSize::Sm)
-                                .variant(ButtonVariant::Ghost)
-                                .on_click(
-                                    cx.listener(|view, _, _, cx| view.cycle_category_filter(cx)),
-                                ),
-                        )
-                        .child(
-                            Button::new("documents-grouping", self.grouping.label())
-                                .size(ControlSize::Sm)
-                                .variant(ButtonVariant::Ghost)
-                                .on_click(cx.listener(|view, _, _, cx| view.cycle_grouping(cx))),
-                        ),
+                        .child(filter_pill(
+                            "Big documents",
+                            big_count,
+                            big_documents,
+                            cx.listener(|view, _, _, cx| view.set_filter(Filter::BigDocuments, cx)),
+                        ))
+                        .when(!big_documents, |bar| {
+                            bar.child(
+                                Button::new("documents-category-filter", category_label)
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(
+                                        cx.listener(|view, _, _, cx| {
+                                            view.cycle_category_filter(cx)
+                                        }),
+                                    ),
+                            )
+                            .child(
+                                Button::new("documents-grouping", self.grouping.label())
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(
+                                        cx.listener(|view, _, _, cx| view.cycle_grouping(cx)),
+                                    ),
+                            )
+                        }),
                 )
                 .child(
                     div()
@@ -1360,25 +1423,27 @@ impl Render for Documents {
                                     ),
                             )
                         })
-                        .child(
-                            Button::new("documents-sort", sort_col.button_label(sort_order))
-                                .size(ControlSize::Sm)
-                                .variant(ButtonVariant::Ghost)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    let next = match view.sort {
-                                        (DocSort::Added, SortOrder::Descending) => {
-                                            (DocSort::Name, SortOrder::Ascending)
-                                        }
-                                        (DocSort::Name, SortOrder::Ascending) => {
-                                            (DocSort::Pages, SortOrder::Descending)
-                                        }
-                                        _ => (DocSort::Added, SortOrder::Descending),
-                                    };
-                                    view.sort = next;
-                                    view.order_rev = view.order_rev.wrapping_add(1);
-                                    cx.notify();
-                                })),
-                        ),
+                        .when(!big_documents, |bar| {
+                            bar.child(
+                                Button::new("documents-sort", sort_col.button_label(sort_order))
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        let next = match view.sort {
+                                            (DocSort::Added, SortOrder::Descending) => {
+                                                (DocSort::Name, SortOrder::Ascending)
+                                            }
+                                            (DocSort::Name, SortOrder::Ascending) => {
+                                                (DocSort::Pages, SortOrder::Descending)
+                                            }
+                                            _ => (DocSort::Added, SortOrder::Descending),
+                                        };
+                                        view.sort = next;
+                                        view.order_rev = view.order_rev.wrapping_add(1);
+                                        cx.notify();
+                                    })),
+                            )
+                        }),
                 )
                 .child(
                     div()
@@ -1427,7 +1492,11 @@ impl Render for Documents {
                                     .truncate()
                                     .text_xs()
                                     .text_color(rgb(palette.muted))
-                                    .child(format!("{total} documents · local only")),
+                                    .child(if big_documents {
+                                        "Largest first".into()
+                                    } else {
+                                        format!("{total} documents · local only")
+                                    }),
                             )
                         }),
                 ),
@@ -1522,7 +1591,7 @@ impl Render for Documents {
                         .child(detail_panel(detail, palette))
                         .child(reader_tabs)
                         .when(reader_tab == 0, |col| {
-                            col.child(workflow_panel(self, detail, &split_input, palette, cx))
+                            col.child(workflow_panel(self, detail, palette, cx))
                         })
                         .when(reader_tab == 1, |col| {
                             col.child(proposal_panel(self, detail, palette, cx))
@@ -2375,7 +2444,6 @@ mod tests {
     use gpui::AppContext as _;
     use gpui::{Focusable, TestAppContext};
 
-    use super::duplicates::parse_page_ranges;
     use super::{workflow_label, DocSort, Documents, Filter, Reader, SortOrder};
     use crate::data::Repo;
     use crate::pdf_kit::Zoom;
@@ -2408,7 +2476,10 @@ mod tests {
 
     #[gpui::test]
     fn reader_controls_keep_page_identity_and_split_edits_unsaved(cx: &mut TestAppContext) {
-        use sjel_gpui_core::shell::DocumentExtractedPage;
+        use sjel_gpui_core::shell::{
+            DocumentBoundaryEvidence, DocumentExtractedPage, DocumentPageRange,
+            DocumentSplitSuggestion,
+        };
 
         let (page, cx) = crate::test_support::mount_root(cx, None, |_, _| {
             let mut page = Documents::new(Repo::new(Err(ShellError::NotSetUp)));
@@ -2433,7 +2504,19 @@ mod tests {
                     })
                     .collect(),
                 children: vec![],
-                split_suggestions: None,
+                split_suggestions: Some(DocumentSplitSuggestion {
+                    page_count: 3,
+                    ranges: vec![
+                        DocumentPageRange { first: 1, last: 2 },
+                        DocumentPageRange { first: 3, last: 3 },
+                    ],
+                    boundaries: vec![DocumentBoundaryEvidence {
+                        before_page: 3,
+                        marker: "page one".into(),
+                        quote: "Invoice payment".into(),
+                    }],
+                    abstention: None,
+                }),
             });
             page
         });
@@ -2457,18 +2540,58 @@ mod tests {
         cx.simulate_keystrokes("enter");
         cx.run_until_parked();
         page.read_with(cx, |page, _| assert_eq!(page.reader.page, 2));
-        cx.update(|window, cx| {
-            page.update(cx, |page, cx| {
-                let input = page.split_range_field(window, cx);
-                window.focus(&input.focus_handle(cx), cx);
-            });
-        });
-        cx.simulate_input("1-1, 2-3");
+        let open_picker = cx
+            .debug_bounds("document-pick-split-pages-control")
+            .unwrap();
+        cx.simulate_click(open_picker.center(), gpui::Modifiers::none());
         cx.run_until_parked();
         page.read_with(cx, |page, _| {
-            assert_eq!(page.split_ranges, "1-1, 2-3");
+            assert!(page.split_picker.as_ref().unwrap().has_cut(3));
+        });
+        let cut = cx.debug_bounds("split-cut-2").unwrap();
+        cx.simulate_click(cut.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        let suggested_cut = cx.debug_bounds("split-cut-3").unwrap();
+        cx.simulate_click(suggested_cut.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        page.read_with(cx, |page, _| {
+            let picker = page.split_picker.as_ref().unwrap();
+            assert!(picker.has_cut(2));
+            assert!(!picker.has_cut(3));
             assert!(page.workflow_busy.is_none());
             assert!(page.workflow_error.is_none());
+            assert_eq!(page.reader.page, 2);
+        });
+    }
+
+    #[gpui::test]
+    fn big_documents_queue_orders_only_unsplit_originals_by_page_count(cx: &mut TestAppContext) {
+        let page = cx.new(|_| Documents::new(Repo::new(Err(ShellError::NotSetUp))));
+        page.update(cx, |page, _| {
+            let mut small = summary("small", None, "small.pdf");
+            small.page_count = 2;
+            let mut large = summary("large", None, "large.pdf");
+            large.page_count = 40;
+            large.status = "filed".into();
+            let mut archived = summary("archived", None, "archived.pdf");
+            archived.page_count = 100;
+            archived.status = "archived".into();
+            let mut child = summary("child", None, "child.pdf");
+            child.page_count = 50;
+            child.parent_id = Some("parent".into());
+            let mut parent = summary("parent", None, "parent.pdf");
+            parent.page_count = 60;
+            parent.workflow_stage = "split".into();
+            page.rows.value = Some(vec![small, archived, child, parent, large]);
+            page.filter = Filter::BigDocuments;
+            page.sync_order();
+            let rows = page.rows.value.as_ref().unwrap();
+            let order: Vec<_> = page
+                .order
+                .iter()
+                .map(|row| rows[row.index].id.as_str())
+                .collect();
+            assert_eq!(order, ["large", "small"]);
         });
     }
 
@@ -2675,22 +2798,6 @@ mod tests {
         assert_eq!(super::format_bytes(1024), "1.0 KB");
         assert_eq!(super::format_bytes(138041), "134.8 KB");
         assert_eq!(super::format_bytes(1048576), "1.0 MB");
-    }
-
-    #[test]
-    fn split_input_parses_inclusive_one_based_ranges() {
-        let ranges = parse_page_ranges("1-3, 4-8").unwrap();
-        assert_eq!(
-            ranges
-                .iter()
-                .map(|range| (range.first, range.last))
-                .collect::<Vec<_>>(),
-            vec![(1, 3), (4, 8)]
-        );
-        assert!(parse_page_ranges("").is_err());
-        assert!(parse_page_ranges("0-3").is_err());
-        assert!(parse_page_ranges("4-2").is_err());
-        assert!(parse_page_ranges("1..3").is_err());
     }
 
     #[test]

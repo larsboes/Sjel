@@ -3,35 +3,34 @@
 //! A split assigns each page of a parent to exactly one child range. The document
 //! library stores the resulting PDFs as independent content-addressed blobs.
 
-/// Write a page-range PDF containing only the requested source pages.
-///
-/// # Errors
-/// The source PDF is malformed or encrypted, the source page count changed, the
-/// output exceeds the library limit, or the selected pages cannot be serialized.
-pub(crate) fn materialize_pdf_range(
+pub(crate) fn open_source(
     source: &[u8],
-    range: PageRange,
-    expected_source_page_count: u32,
-) -> Result<Vec<u8>, String> {
-    let mut document = lopdf::Document::load_mem(source)
+    expected_page_count: u32,
+) -> Result<lopdf::Document, String> {
+    let document = lopdf::Document::load_mem(source)
         .map_err(|error| format!("could not read source PDF: {error}"))?;
     if document.is_encrypted() {
         return Err("encrypted PDFs cannot be split without a password".into());
     }
 
-    let pages = document.get_pages();
-    let source_page_count = u32::try_from(pages.len())
+    let page_count = u32::try_from(document.get_pages().len())
         .map_err(|_| "source PDF has too many pages to split".to_owned())?;
-    if source_page_count != expected_source_page_count {
+    if page_count != expected_page_count {
         return Err(format!(
-            "PDF page count changed: extraction recorded {expected_source_page_count}, source has {source_page_count}"
+            "PDF page count changed: extraction recorded {expected_page_count}, source has {page_count}"
         ));
     }
-    if range.last > source_page_count {
-        return Err("page range exceeds the source PDF page count".into());
-    }
+    Ok(document)
+}
 
-    let pages_to_remove: Vec<u32> = pages
+/// Write one validated range from the already parsed source PDF.
+pub(crate) fn materialize_pdf_range(
+    source: &lopdf::Document,
+    range: PageRange,
+) -> Result<Vec<u8>, String> {
+    let mut document = source.clone();
+    let pages_to_remove: Vec<u32> = source
+        .get_pages()
         .keys()
         .copied()
         .filter(|page| *page < range.first || *page > range.last)
@@ -40,8 +39,7 @@ pub(crate) fn materialize_pdf_range(
     document.prune_objects();
     document.renumber_objects();
 
-    let expected_count = usize::try_from(range.last - range.first + 1)
-        .map_err(|_| "page range exceeds the platform page-count limit".to_owned())?;
+    let expected_count = (range.last - range.first + 1) as usize;
     if document.get_pages().len() != expected_count {
         return Err("PDF page selection did not produce the requested page count".into());
     }

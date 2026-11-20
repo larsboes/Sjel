@@ -336,6 +336,7 @@ pub fn run(
                 .unwrap_or("Document");
             let request = crate::split::SplitRequest {
                 page_count: u32::try_from(parent.pages.len())?,
+                collection_id: None,
                 children: ranges
                     .into_iter()
                     .map(|(first, last)| crate::split::ChildInput {

@@ -29,6 +29,7 @@ use sha2::{Digest, Sha256};
 
 const PREFIX: &str = "documents";
 const DOCUMENT_ID_BATCH: usize = 500;
+const CHILDREN_SQL: &str = "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items WHERE parent_id = ?1 ORDER BY page_first, id";
 #[cfg(not(feature = "turso-wal"))]
 const SEARCH_INDEX_VERSION: i64 = 1;
 pub(crate) const MAX_BYTES: usize = 128 * 1024 * 1024;
@@ -127,8 +128,10 @@ pub struct Library {
     root: PathBuf,
     classification: crate::classification::ClassificationConfig,
     rule_proposal_lock: Mutex<()>,
+    collection_write_lock: Mutex<()>,
     revision: std::sync::atomic::AtomicU64,
     duplicate_cache: Mutex<duplicate_cache::DuplicateCache>,
+    pub(crate) split_completed: tokio::sync::Notify,
 }
 
 impl Library {
@@ -166,8 +169,10 @@ impl Library {
             root,
             classification,
             rule_proposal_lock: Mutex::new(()),
+            collection_write_lock: Mutex::new(()),
             revision: std::sync::atomic::AtomicU64::new(0),
             duplicate_cache: Mutex::new(duplicate_cache::DuplicateCache::default()),
+            split_completed: tokio::sync::Notify::new(),
         };
         Ok(library)
     }
@@ -512,9 +517,7 @@ impl Library {
             .pool
             .get()
             .map_err(|error| LibraryError::Store(error.to_string()))?;
-        let mut statement = conn.prepare(
-            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items WHERE parent_id = ?1 ORDER BY page_first, id",
-        )?;
+        let mut statement = conn.prepare(CHILDREN_SQL)?;
         let rows = statement.query_map(params![parent_id], read_document)?;
         rows.map(|row| row.map(|document| self.with_configured_suggestion(document)))
             .collect::<Result<Vec<_>, _>>()
@@ -610,7 +613,7 @@ impl Library {
         parent_id: &str,
         request: &crate::split::SplitRequest,
     ) -> Fallible<Vec<Document>> {
-        let _stale = self.stale_after();
+        let stale = self.stale_after();
         check_id(parent_id)?;
         let parent = self
             .get(parent_id)?
@@ -642,7 +645,18 @@ impl Library {
         crate::split::Partition::new(request.page_count, ranges.clone())
             .map_err(|error| LibraryError::Invalid(error.to_string()))?;
 
-        let source_pdf = self.read_blob(&parent.sha256)?;
+        if let Some(id) = request.collection_id.as_deref() {
+            let exists = self
+                .collection(id)?
+                .is_some_and(|collection| collection.id == id);
+            if !exists {
+                return Err(LibraryError::Invalid(
+                    "split collection does not exist".into(),
+                ));
+            }
+        }
+        let source_pdf = crate::split::open_source(&self.read_blob(&parent.sha256)?, page_count)
+            .map_err(LibraryError::Invalid)?;
         let mut filenames = std::collections::BTreeSet::new();
         let mut children = Vec::with_capacity(request.children.len());
         let mut child_blobs = std::collections::BTreeMap::new();
@@ -662,20 +676,14 @@ impl Library {
                     "child filenames must be unique".into(),
                 ));
             }
-            let pages: Vec<_> = parent
-                .pages
-                .iter()
-                .filter(|page| {
-                    page_range.first <= page.page_number && page.page_number <= page_range.last
-                })
-                .cloned()
-                .collect();
+            let pages =
+                parent.pages[(page_range.first - 1) as usize..page_range.last as usize].to_vec();
             let text = pages
                 .iter()
                 .map(|page| page.text.as_str())
                 .collect::<Vec<_>>()
                 .join("\n\n\u{000c}\n\n");
-            let bytes = crate::split::materialize_pdf_range(&source_pdf, page_range, page_count)
+            let bytes = crate::split::materialize_pdf_range(&source_pdf, page_range)
                 .map_err(LibraryError::Invalid)?;
             let sha256 = hex(&Sha256::digest(&bytes));
             let byte_len = i64::try_from(bytes.len()).map_err(|_| {
@@ -704,19 +712,29 @@ impl Library {
             });
         }
 
-        let existing_children: Vec<Document> = self
-            .list(None)?
-            .into_iter()
-            .filter(|document| document.parent_id.as_deref() == Some(parent_id))
-            .collect();
-        if !existing_children.is_empty() {
+        let collection_write = request
+            .collection_id
+            .as_ref()
+            .map(|_| self.lock_collection_writes())
+            .transpose()?;
+        let mut conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let transaction = engine::write_transaction(&mut conn)?;
+        let existing_children = {
+            let mut statement = transaction.prepare(CHILDREN_SQL)?;
+            let rows = statement.query_map(params![parent_id], read_document)?;
+            rows.collect::<sql::Result<Vec<_>>>()?
+        };
+        let new_split = existing_children.is_empty();
+        if !new_split {
             if existing_children.len() != children.len()
                 || !children.iter().all(|child| {
                     existing_children.iter().any(|existing| {
                         existing.id == child.id
                             && existing.page_range == child.page_range
                             && existing.filename == child.filename
-                            && existing.pages == child.pages
                     })
                 })
             {
@@ -727,11 +745,6 @@ impl Library {
             }
 
             let mut refreshed = Vec::with_capacity(children.len());
-            let mut conn = self
-                .pool
-                .get()
-                .map_err(|error| LibraryError::Store(error.to_string()))?;
-            let transaction = engine::write_transaction(&mut conn)?;
             for expected in &children {
                 let mut existing = existing_children
                     .iter()
@@ -758,46 +771,60 @@ impl Library {
                     refreshed.push(existing);
                 }
             }
-            transaction.commit()?;
-            for child in &refreshed {
-                self.write_record(child)?;
+            children = refreshed;
+        } else {
+            for child in &children {
+                let collision = transaction
+                    .query_row(
+                        "SELECT 1 FROM documents_items WHERE sha256 = ?1 AND filename = ?2",
+                        params![child.sha256.as_str(), child.filename.as_str()],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .optional()?
+                    .is_some();
+                if collision {
+                    return Err(LibraryError::Invalid(format!(
+                        "child filename already exists in this library: {}",
+                        child.filename
+                    )));
+                }
+                let bytes = child_blobs.get(&child.id).ok_or_else(|| {
+                    LibraryError::Invalid("materialized child bytes disappeared".into())
+                })?;
+                self.write_blob(&child.sha256, bytes)?;
+                transaction.execute(
+                    "INSERT INTO documents_items (id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'inbox', NULL, NULL, NULL, ?7, ?8, ?9, ?10, ?11, ?12)",
+                    params![child.id.as_str(), child.sha256.as_str(), child.filename.as_str(), child.media_type.as_str(), child.byte_len,
+                        child.imported_at.as_str(), child.extracted_text.as_deref(), child.extractor.as_deref(),
+                        serde_json::to_string(&child.pages).map_err(|error| LibraryError::Invalid(error.to_string()))?,
+                        parent_id, child.page_range.map(|range| range.first), child.page_range.map(|range| range.last)],
+                )?;
             }
-            return Ok(refreshed);
         }
-        for child in &children {
-            if self
-                .by_hash_and_name(&child.sha256, &child.filename)?
-                .is_some()
-            {
-                return Err(LibraryError::Invalid(format!(
-                    "child filename already exists in this library: {}",
-                    child.filename
-                )));
+        if let Some(collection_id) = &request.collection_id {
+            for child in &children {
+                transaction.execute(
+                    "INSERT OR IGNORE INTO documents_collection_members (collection_id, document_id) VALUES (?1, ?2)",
+                    params![collection_id.as_str(), child.id.as_str()],
+                )?;
             }
-            let bytes = child_blobs.get(&child.id).ok_or_else(|| {
-                LibraryError::Invalid("materialized child bytes disappeared".into())
-            })?;
-            self.write_blob(&child.sha256, bytes)?;
-        }
-
-        let mut conn = self
-            .pool
-            .get()
-            .map_err(|error| LibraryError::Store(error.to_string()))?;
-        let transaction = engine::write_transaction(&mut conn)?;
-        for child in &children {
-            transaction.execute(
-                "INSERT INTO documents_items (id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'inbox', NULL, NULL, NULL, ?7, ?8, ?9, ?10, ?11, ?12)",
-                params![child.id.as_str(), child.sha256.as_str(), child.filename.as_str(), child.media_type.as_str(), child.byte_len,
-                    child.imported_at.as_str(), child.extracted_text.as_deref(), child.extractor.as_deref(),
-                    serde_json::to_string(&child.pages).map_err(|error| LibraryError::Invalid(error.to_string()))?,
-                    parent_id, child.page_range.map(|range| range.first), child.page_range.map(|range| range.last)],
-            )?;
         }
         transaction.commit()?;
+        drop(conn);
+        drop(stale);
+        self.split_completed.notify_one();
         for child in &children {
-            self.generate_rule_proposals(child, new_generation_id()?)?;
             self.write_record(child)?;
+        }
+        if let Some(id) = request.collection_id.as_deref() {
+            let collection = self
+                .collection(id)?
+                .ok_or_else(|| LibraryError::Invalid("split collection disappeared".into()))?;
+            self.write_collection(&collection)?;
+        }
+        drop(collection_write);
+        for child in &children {
+            self.ensure_rule_proposals(&child.id)?;
         }
         Ok(children)
     }
@@ -2598,6 +2625,165 @@ mod tests {
                 .unwrap(),
             path,
         )
+    }
+
+    fn pdf_with_pages(widths: &[i32]) -> Vec<u8> {
+        use lopdf::{dictionary, Object};
+
+        let mut pdf = lopdf::Document::with_version("1.4");
+        let parent = pdf.new_object_id();
+        let kids: Vec<Object> = widths
+            .iter()
+            .map(|width| {
+                let media_box: Vec<Object> =
+                    [0, 0, *width, 792].into_iter().map(Object::from).collect();
+                pdf.add_object(dictionary! {
+                    "Type" => "Page",
+                    "Parent" => parent,
+                    "MediaBox" => media_box,
+                })
+                .into()
+            })
+            .collect();
+        pdf.objects.insert(
+            parent,
+            dictionary! {
+                "Type" => "Pages",
+                "Count" => kids.len() as i64,
+                "Kids" => kids,
+            }
+            .into(),
+        );
+        let catalog = pdf.add_object(dictionary! { "Type" => "Catalog", "Pages" => parent });
+        pdf.trailer.set("Root", catalog);
+        let mut bytes = Vec::new();
+        pdf.save_to(&mut bytes).unwrap();
+        bytes
+    }
+
+    fn insert_pdf_fixture(
+        library: &Library,
+        filename: &str,
+        bytes: &[u8],
+        texts: &[&str],
+    ) -> Document {
+        let sha256 = hex(&Sha256::digest(bytes));
+        let record = Document {
+            id: record_id(&sha256, filename),
+            sha256,
+            filename: filename.into(),
+            media_type: "application/pdf".into(),
+            byte_len: bytes.len() as i64,
+            imported_at: chrono::Utc::now().to_rfc3339(),
+            status: "inbox".into(),
+            category: None,
+            project: None,
+            extracted_title: None,
+            extracted_text: Some(texts.join("\n")),
+            extractor: None,
+            pages: texts
+                .iter()
+                .enumerate()
+                .map(|(index, text)| sjel_extraction::ExtractedPage {
+                    page_number: index as u32 + 1,
+                    text: (*text).into(),
+                    engine: "fixture".into(),
+                    failure: None,
+                })
+                .collect(),
+            parent_id: None,
+            page_range: None,
+            suggested_category: None,
+            suggestion_reason: None,
+        };
+        library.write_blob(&record.sha256, bytes).unwrap();
+        library.insert_record(&record).unwrap();
+        library.write_record(&record).unwrap();
+        record
+    }
+
+    #[test]
+    fn split_keeps_the_original_and_adds_named_children_to_collections_and_duplicate_review() {
+        use crate::split::{ChildInput, SplitRequest};
+        use documents_api::DuplicateCandidateKind;
+
+        let (library, root) = scratch();
+        let invoice = "Your invoice for electric service includes the monthly meter charge. Pay the outstanding balance before the final business day in October. Keep this receipt with the signed contract for your records.";
+        let letter = "The concert tickets are enclosed with seating arranged along the balcony. Doors open thirty minutes before the orchestra begins.";
+        let source = pdf_with_pages(&[600, 620]);
+        let parent = insert_pdf_fixture(&library, "bundle.pdf", &source, &[invoice, letter]);
+        let standalone =
+            insert_pdf_fixture(&library, "scan.pdf", &pdf_with_pages(&[612]), &[invoice]);
+        library.backfill_derived(10).unwrap();
+        let before = library.duplicate_candidates().unwrap();
+        assert!(before
+            .iter()
+            .any(|candidate| candidate.kind == DuplicateCandidateKind::Part));
+        let collection = library.create_collection("Bills", None).unwrap();
+        let mut request = SplitRequest {
+            page_count: 2,
+            collection_id: Some("missing".into()),
+            children: [(1, "Electricity invoice.pdf"), (2, "Concert tickets.pdf")]
+                .into_iter()
+                .map(|(page, filename)| ChildInput {
+                    first: page,
+                    last: page,
+                    filename: filename.into(),
+                })
+                .collect(),
+        };
+        assert!(library.split(&parent.id, &request).is_err());
+        assert!(library.children(&parent.id).unwrap().is_empty());
+        request.collection_id = Some(collection.id.clone());
+
+        let children = library.split(&parent.id, &request).unwrap();
+        assert_eq!(children.len(), 2);
+        assert_eq!(library.bytes(&parent.id).unwrap(), source);
+        for (child, input) in children.iter().zip(&request.children) {
+            assert_eq!(child.filename, input.filename);
+            assert_eq!(child.parent_id.as_deref(), Some(parent.id.as_str()));
+            let bytes = library.bytes(&child.id).unwrap();
+            assert_eq!(
+                lopdf::Document::load_mem(&bytes).unwrap().get_pages().len(),
+                1
+            );
+        }
+        let mut child_ids: Vec<_> = children.iter().map(|child| child.id.clone()).collect();
+        child_ids.sort_unstable();
+        let mut comparable_child = vec![children[0].id.clone(), standalone.id.clone()];
+        comparable_child.sort_unstable();
+        let after = library.duplicate_candidates().unwrap();
+        assert!(after.iter().any(|candidate| {
+            candidate.kind == DuplicateCandidateKind::Rescan
+                && candidate.member_ids == comparable_child
+        }));
+        assert!(after
+            .iter()
+            .all(|candidate| !candidate.member_ids.contains(&parent.id)));
+        assert_eq!(library.split(&parent.id, &request).unwrap(), children);
+        let mut conflicting = request.clone();
+        conflicting.children[0].filename = "Different title.pdf".into();
+        assert!(library.split(&parent.id, &conflicting).is_err());
+        assert_eq!(
+            library
+                .collection(&collection.id)
+                .unwrap()
+                .unwrap()
+                .member_ids,
+            child_ids
+        );
+        let rebuilt = Library::open(&root.join("rebuilt.db"), root.join("library")).unwrap();
+        rebuilt.restore_index().unwrap();
+        assert_eq!(rebuilt.children(&parent.id).unwrap().len(), 2);
+        assert_eq!(
+            rebuilt
+                .collection(&collection.id)
+                .unwrap()
+                .unwrap()
+                .member_ids,
+            child_ids
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

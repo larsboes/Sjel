@@ -1,19 +1,17 @@
-//! Document proposal reviews, rule & model proposal generations, and document splitting.
+//! Document proposal reviews and local rule and model generation.
 
 use std::collections::BTreeMap;
 
-use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, Window};
+use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight};
 use sjel_gpui_core::shell::{
-    self, DocumentDetail, DocumentSplitChildInput, DocumentSplitRequest, ProposalEvidenceSource,
-    ProposalOutcome, ProposalReview, ProposalSource, ShellError,
+    self, DocumentDetail, ProposalEvidenceSource, ProposalOutcome, ProposalReview, ProposalSource,
+    ShellError,
 };
 
 use crate::ely::buttons::{Button, ButtonVariant};
-use crate::ely::forms::{Input, InputEvent, TextInput};
 use crate::ely::theme::ControlSize;
 use crate::theme::Palette;
 
-use super::duplicates::parse_page_ranges;
 use super::Documents;
 
 fn proposal_source_label(source: &ProposalSource) -> String {
@@ -412,13 +410,11 @@ pub(super) fn proposal_panel(
 pub(super) fn workflow_panel(
     view: &Documents,
     detail: &DocumentDetail,
-    split_input: &Entity<TextInput>,
     palette: Palette,
     cx: &mut Context<Documents>,
 ) -> AnyElement {
     let document = &detail.document;
     let is_pdf = document.media_type == "application/pdf";
-    let is_original = document.parent_id.is_none();
     let mut panel = div().flex().flex_col().gap_1();
 
     if is_pdf {
@@ -450,91 +446,18 @@ pub(super) fn workflow_panel(
                 ),
         );
 
-        if let Some(suggestion) = detail.split_suggestions.as_ref() {
-            if suggestion.boundaries.is_empty() {
-                if let Some(reason) = suggestion.abstention.as_ref() {
-                    panel = panel.child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(format!("No automatic cut: {reason}")),
-                    );
-                }
-            } else {
-                let cuts = suggestion
-                    .boundaries
-                    .iter()
-                    .map(|boundary| boundary.before_page.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                panel = panel.child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(format!("Page-one markers suggest cuts before pages {cuts}. Review each page before splitting.")),
-                );
-                for boundary in &suggestion.boundaries {
-                    panel = panel.child(div().text_xs().text_color(rgb(palette.muted)).child(
-                        format!(
-                            "Page {} · {} · {}",
-                            boundary.before_page, boundary.marker, boundary.quote
-                        ),
-                    ));
-                }
-            }
-        }
-
-        if is_original && document.page_count > 1 {
-            let splitting = view.workflow_busy.as_deref() == Some("split");
+        if super::split_picker::can_split(document)
+            && detail.children.is_empty()
+            && view.reader.pages > 1
+        {
             panel = panel.child(
                 div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .mt(px(2.))
+                    .debug_selector(|| "document-pick-split-pages-control".into())
                     .child(
-                        div()
-                            .w(px(220.))
-                            .child(Input::new(split_input).size(ControlSize::Sm)),
-                    )
-                    .child(
-                        Button::new(
-                            "document-create-split",
-                            if splitting {
-                                "Creating children…"
-                            } else {
-                                "Split into records"
-                            },
-                        )
-                        .size(ControlSize::Sm)
-                        .on_click(cx.listener(|view, _, _, cx| view.split_selected_document(cx))),
-                    )
-                    .when_else(
-                        detail
-                            .split_suggestions
-                            .as_ref()
-                            .is_some_and(|suggestion| !suggestion.ranges.is_empty()),
-                        |row| {
-                            row.child(
-                                Button::new(
-                                    "document-use-split-suggestions",
-                                    "Use page-marker suggestion",
-                                )
-                                .size(ControlSize::Sm)
-                                .variant(ButtonVariant::Ghost)
-                                .on_click(
-                                    cx.listener(|view, _, _, cx| view.use_split_suggestions(cx)),
-                                ),
-                            )
-                        },
-                        |row| row,
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child("Use every page once, e.g. 1-2,3-5. Original stays intact."),
+                        Button::new("document-pick-split-pages", "Pick split pages")
+                            .size(ControlSize::Sm)
+                            .disabled(view.workflow_busy.is_some())
+                            .on_click(cx.listener(|view, _, _, cx| view.begin_split_picker(cx))),
                     ),
             );
         }
@@ -612,7 +535,7 @@ pub(super) fn workflow_panel(
                 .child(error.clone()),
         );
     }
-    if is_pdf && !is_original {
+    if is_pdf && document.parent_id.is_some() {
         panel = panel.child(
             div()
                 .text_xs()
@@ -629,25 +552,6 @@ pub(super) fn workflow_panel(
 }
 
 impl Documents {
-    pub(super) fn split_range_field(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Entity<TextInput> {
-        if let Some((input, _)) = &self.split_input {
-            return input.clone();
-        }
-        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("1-3, 4-8"));
-        let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
-            if matches!(event, InputEvent::Changed) {
-                view.split_ranges = input.read(cx).text().trim().to_owned();
-                cx.notify();
-            }
-        });
-        self.split_input = Some((input.clone(), subscription));
-        input
-    }
-
     pub(super) fn review_proposal(
         &mut self,
         proposal_id: String,
@@ -928,132 +832,5 @@ impl Documents {
             });
         })
         .detach();
-    }
-
-    pub(super) fn split_selected_document(&mut self, cx: &mut Context<Self>) {
-        let Some(id) = self.selected.clone() else {
-            return;
-        };
-        if self.workflow_busy.is_some() {
-            return;
-        }
-        let Some(detail) = self.detail.value.as_ref() else {
-            return;
-        };
-        if detail.document.parent_id.is_some() || detail.document.page_count < 2 {
-            return;
-        }
-        let page_count = detail.document.page_count;
-        let filename = detail.document.filename.clone();
-        let ranges = match parse_page_ranges(&self.split_ranges) {
-            Ok(ranges) => ranges,
-            Err(error) => {
-                self.workflow_error = Some(error);
-                cx.notify();
-                return;
-            }
-        };
-        let stem = std::path::Path::new(&filename)
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .unwrap_or("Document");
-        let request = DocumentSplitRequest {
-            page_count: u32::try_from(page_count).unwrap_or(u32::MAX),
-            children: ranges
-                .into_iter()
-                .map(|range| DocumentSplitChildInput {
-                    first: range.first,
-                    last: range.last,
-                    filename: format!("{stem} pages {}-{}.pdf", range.first, range.last),
-                })
-                .collect(),
-        };
-        let Ok(shell) = self.repo.shell() else { return };
-        self.workflow_busy = Some("split".into());
-        self.workflow_error = None;
-        cx.notify();
-        let expected = id.clone();
-        let refresh_id = id.clone();
-        let work = shell::run(async move {
-            let children = shell.split_document(&id, &request).await?;
-            let parent = shell.document_detail(&refresh_id).await;
-            Ok((children, parent))
-        });
-        cx.spawn(async move |this, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = this.update(cx, |view, cx| {
-                if view.selected.as_deref() != Some(expected.as_str()) {
-                    return;
-                }
-                view.workflow_busy = None;
-                match result {
-                    Ok((children, parent)) => {
-                        if let Some(detail) = &mut view.detail.value {
-                            detail.document.workflow_stage = "split".into();
-                            for child in &children {
-                                if !detail
-                                    .children
-                                    .iter()
-                                    .any(|existing| existing.id == child.id)
-                                {
-                                    detail.children.push(child.clone());
-                                }
-                            }
-                        }
-                        if let Some(rows) = &mut view.rows.value {
-                            for child in children {
-                                if !rows.iter().any(|existing| existing.id == child.id) {
-                                    rows.push(child);
-                                }
-                            }
-                        }
-                        match parent {
-                            Ok(detail) => {
-                                if let Some(rows) = &mut view.rows.value {
-                                    if let Some(row) = rows
-                                        .iter_mut()
-                                        .find(|row| row.id == detail.document.id)
-                                    {
-                                        *row = detail.document.clone();
-                                    }
-                                }
-                                view.detail.settle(Ok(detail));
-                            }
-                            Err(error) => {
-                                view.workflow_error = Some(format!(
-                                    "Split was saved, but the parent workflow status did not refresh: {error}"
-                                ));
-                            }
-                        }
-                    }
-                    Err(error) => view.workflow_error = Some(error.to_string()),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    pub(super) fn use_split_suggestions(&mut self, cx: &mut Context<Self>) {
-        let Some(detail) = self.detail.value.as_ref() else {
-            return;
-        };
-        let Some(suggestion) = detail.split_suggestions.as_ref() else {
-            return;
-        };
-        if suggestion.ranges.is_empty() {
-            return;
-        }
-        let value = suggestion
-            .ranges
-            .iter()
-            .map(|range| format!("{}-{}", range.first, range.last))
-            .collect::<Vec<_>>()
-            .join(", ");
-        self.split_ranges = value.clone();
-        if let Some((input, _)) = &self.split_input {
-            input.update(cx, |input, cx| input.set_text(value, cx));
-        }
-        cx.notify();
     }
 }

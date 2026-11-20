@@ -129,6 +129,26 @@ impl Shell {
         self.document_detail(id).await
     }
 
+    pub async fn document_collections(&self) -> ShellResult<Vec<DocumentCollection>> {
+        #[derive(serde::Deserialize)]
+        struct Collections {
+            collections: Vec<DocumentCollection>,
+        }
+
+        let response: Collections = self
+            .json(
+                Method::GET,
+                &proxied(
+                    documents_api::PROXY_PREFIX,
+                    documents_api::ROUTE_DOCUMENT_COLLECTIONS,
+                ),
+                None,
+                10,
+            )
+            .await?;
+        Ok(response.collections)
+    }
+
     /// Create child records for a complete, operator-approved PDF partition.
     pub async fn split_document(
         &self,
@@ -146,7 +166,7 @@ impl Shell {
                 id,
             ),
             Some(body(request)?),
-            30,
+            120,
         )
         .await
     }

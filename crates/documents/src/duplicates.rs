@@ -23,7 +23,7 @@ const MIN_SHINGLES: usize = 20;
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Report {
-    /// Byte-identical originals: one SHA-256 with several records or source paths.
+    /// Byte-identical PDFs or other files: one SHA-256 with several records or source paths.
     pub copies: Vec<Copies>,
     /// Different bytes, nearly the same text.
     pub rescans: Vec<Pair>,
@@ -60,11 +60,22 @@ pub fn report_counted(
     sources: &[(String, String)],
     page_counts: &HashMap<String, usize>,
 ) -> Report {
-    let mut by_hash = BTreeMap::<&str, Vec<&Document>>::new();
-    for document in documents
+    let by_id: HashMap<_, _> = documents.iter().map(|doc| (doc.id.as_str(), doc)).collect();
+    let split_parents: HashSet<_> = documents
         .iter()
-        .filter(|document| document.parent_id.is_none())
-    {
+        .filter_map(|doc| doc.parent_id.as_deref())
+        .collect();
+    let mut by_hash = BTreeMap::<&str, Vec<&Document>>::new();
+    for document in documents {
+        // Older children could reference their parent's blob instead of their own PDF.
+        if document
+            .parent_id
+            .as_deref()
+            .and_then(|id| by_id.get(id))
+            .is_some_and(|parent| parent.sha256 == document.sha256)
+        {
+            continue;
+        }
         by_hash.entry(&document.sha256).or_default().push(document);
     }
     let mut report = Report::default();
@@ -84,7 +95,7 @@ pub fn report_counted(
         }
     }
 
-    // One text per distinct original; copies are already reported above.
+    // One text per distinct file; copies are already reported above.
     // Plain text has no scan to redo or split, and edited note versions would
     // flood the queue: 5,888 of 7,154 records produced most of 49,015 pairs
     // (measured 2026-10-23).
@@ -97,7 +108,11 @@ pub fn report_counted(
     let texts: Vec<(&str, HashSet<u64>)> = by_hash
         .values()
         .filter_map(|group| {
-            let document = group[0];
+            let document = group
+                .iter()
+                .copied()
+                .find(|doc| doc.parent_id.is_none())
+                .unwrap_or(group[0]);
             if document.media_type == "text/plain" {
                 return None;
             }
@@ -107,6 +122,11 @@ pub fn report_counted(
         .collect();
     for (i, j) in candidate_pairs(&texts) {
         let ((left_id, left), (right_id, right)) = (&texts[i], &texts[j]);
+        if by_id[left_id].parent_id.as_deref() == Some(*right_id)
+            || by_id[right_id].parent_id.as_deref() == Some(*left_id)
+        {
+            continue;
+        }
         let shared = left.intersection(right).count();
         if shared == 0 {
             continue;
@@ -124,7 +144,7 @@ pub fn report_counted(
                 b: right_id.to_string(),
                 score: jaccard,
             });
-        } else if containment >= PART_MIN_CONTAINMENT {
+        } else if containment >= PART_MIN_CONTAINMENT && !split_parents.contains(large.0) {
             report.parts.push(Pair {
                 a: small.0.to_string(),
                 b: large.0.to_string(),

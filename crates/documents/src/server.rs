@@ -100,7 +100,7 @@ const ROUTES: &[route_manifest::Route] = &[
         method: "POST",
         path: "/api/documents/{id}/split",
         request_schema: Some(route_manifest::schema_of::<SplitRequest>),
-        summary: "Store a standalone child PDF for each range in an operator-approved complete page partition, with parent id and source page range.",
+        summary: "Store a child PDF for each range in an operator-approved complete page partition. Keep the source and optionally add the children to an existing collection.",
     },
     route_manifest::Route {
         method: "POST",
@@ -121,7 +121,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     route_manifest::get(
         "GET",
-        "/api/documents/collections",
+        documents_api::ROUTE_DOCUMENT_COLLECTIONS,
         "List named document collections with their member ids, by name.",
     ),
     route_manifest::Route {
@@ -405,14 +405,25 @@ async fn duplicate_candidates(
     };
     let offset = query.offset.unwrap_or(0);
     blocking(library, move |library| {
-        let reviewed: std::collections::HashSet<_> = library
+        let reviewed: std::collections::HashMap<_, _> = library
             .duplicate_decisions()?
             .into_iter()
-            .map(|decision| decision.candidate_key)
+            .map(|decision| {
+                let mut ids = decision.member_ids;
+                ids.sort_unstable();
+                (decision.candidate_key, ids)
+            })
             .collect();
         let candidates: Vec<_> = open_candidates(library)?
             .into_iter()
-            .filter(|candidate| !reviewed.contains(&candidate.candidate_key))
+            .filter(|candidate| {
+                reviewed.get(&candidate.candidate_key).is_none_or(|ids| {
+                    candidate
+                        .member_ids
+                        .iter()
+                        .any(|id| ids.binary_search(id).is_err())
+                })
+            })
             .filter(|candidate| kind.is_none_or(|kind| candidate.kind == kind))
             .collect();
         let total = candidates.len();
@@ -771,7 +782,7 @@ fn router(library: Arc<Library>) -> Router {
         .route("/api/documents/{id}/split", axum::routing::post(split))
         .route("/api/documents/duplicates", get(duplicate_candidates))
         .route(
-            "/api/documents/collections",
+            documents_api::ROUTE_DOCUMENT_COLLECTIONS,
             get(list_collections).post(create_collection),
         )
         .route(
@@ -824,6 +835,7 @@ pub fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.spawn(proposal_backfill_worker(Arc::clone(&library)));
     runtime.spawn(analysis_backfill_worker(Arc::clone(&library)));
+    runtime.spawn(duplicate_refresh_worker(Arc::clone(&library)));
     let http = sjel_server::serve(
         "documents",
         sjel_server::Reach::Loopback,
@@ -841,6 +853,18 @@ pub fn serve() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(not(feature = "turso-wal"))]
     runtime.block_on(http);
     Ok(())
+}
+
+async fn duplicate_refresh_worker(library: Arc<Library>) {
+    loop {
+        library.split_completed.notified().await;
+        let library = Arc::clone(&library);
+        match tokio::task::spawn_blocking(move || library.duplicate_candidates()).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => eprintln!("documents: duplicate refresh after split failed: {error}"),
+            Err(error) => eprintln!("documents: duplicate refresh worker failed: {error}"),
+        }
+    }
 }
 
 async fn proposal_backfill_worker(library: Arc<Library>) {

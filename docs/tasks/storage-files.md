@@ -103,13 +103,18 @@ passed over HTTP. The protected snapshot contained the acknowledged write and pa
 integrity and foreign-key checks. Calendar and Entities passed 247 native tests. The SQLite
 control, status service, and phone mirror tests also passed.
 
+Calendar runs on its own Turso WAL database under its watchdog. The cutover held Calendar
+while taking and restoring a fresh shared-store backup. The first scheduled Turso archive
+restored with all six tables and 188 rows identical to the pre-cutover Calendar export.
+The live gateway returned Calendar from Finder and Now, and the phone mirror rebuilt
+from the native owner. The installed desktop build uses the Calendar API.
+
 ## Remaining migration gates
 
 - Verify a successful signed request from a paired client against the live Inventory owner.
 - Verify a refresh on a paired iPhone.
-- Deploy the Calendar owner readers, verify a fresh shared-store receipt while Calendar is held,
-  then switch the live owner and restore its first Turso backup.
-  [Route reads through owners](storage-owner-reads.md).
+- Migrate the remaining owners after their cross-owner readers and independent writers are
+  routed through the owning services. See [owner reads](storage-owner-reads.md).
 - Keep Documents on its current search implementation until a replacement passes prefix,
   diacritic, status and pagination parity. The [engine measurements](storage-engine.md) record
   the FTS and iOS results.

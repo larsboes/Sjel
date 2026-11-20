@@ -2,7 +2,7 @@
 kind           = "process"
 name           = "calendar"
 command        = ["target/release/calendar-server"]
-build          = ["cargo", "build", "--locked", "--release", "--bin", "calendar-server"]
+build          = ["cargo", "build", "--locked", "--release", "-p", "sjel-calendar", "--no-default-features", "--features", "turso-wal", "--bin", "calendar-server"]
 port           = "8087"
 health_path    = "/health"
 ready_path     = "/ready"

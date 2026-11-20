@@ -44,4 +44,5 @@ diagnostic builds, and the phone ignores People data in legacy cached copies.
 Finder and Now request bounded Calendar projections through the owner. The desktop Repo's
 Calendar read uses the same entries route as the shell. The phone mirror uses the owner's
 classified changes feed and carries only C0 or C1 rows. A fixture with stale shared rows
-verified that the phone copy uses the owner projection.
+verified that the phone copy uses the owner projection. Live Finder and Now requests passed
+against native Calendar, and the gateway rebuilt the phone mirror.

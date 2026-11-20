@@ -1,0 +1,6 @@
+kind                  = "data"
+name                  = "calendar-wal-backup"
+requires              = ["calendar"]
+backup_owner_snapshot = "calendar"
+backup_sqlite_online  = "data/calendar/snapshots/calendar.db"
+backup_target         = "backup-target"

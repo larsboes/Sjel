@@ -1,6 +1,6 @@
 # Projects, Tasks, and Notes UI/UX Overhaul
 
-This plan defines the UI/UX overhaul for Projects, Tasks, Notes, and their supporting charts in Sjel's native apps (`apps/gpui/ui/src/projects/` and `apps/gpui/ui/src/nsh_projects.rs`). It builds on the `ui-craftsmanship` rules, the [native UI contract](../architecture/native-ui-boundaries.md), and Sjel's `ely-gpui-component` fork (`apps/gpui/Cargo.toml`).
+This plan defines the UI/UX overhaul for Projects, Tasks, Notes, and their supporting charts in Sjel's native apps (`apps/gpui/ui/src/projects/`). It builds on the `ui-craftsmanship` rules, the [native UI contract](../architecture/native-ui-boundaries.md), and Sjel's `ely-gpui-component` fork (`apps/gpui/Cargo.toml`).
 
 Every chart in this plan uses data Sjel already stores (statuses, due dates, priorities, `blocked_by` edges, linked capability records, and note counts). Per [Accept native chart interactions](../tasks/gpui-chart-acceptance.md), historical completion velocity is excluded until capability event timestamps exist.
 
@@ -38,7 +38,7 @@ Every chart in this plan uses data Sjel already stores (statuses, due dates, pri
 
 1. **Question-driven saved views:** Complement `Hubs | AllTasks | AllNotes` with decision-oriented views: **Needs me today**, **Blocked on others** (joined with Mail/People), and **Drifting** (stale projects or overdue tasks).
 2. **Morning / Weekly guided review:** Provide a single keyboard-driven review flow stepping through overdue tasks, stale projects, unfiled `MailReview` / `scratchpad` items, and the 7-day Calendar + Task load.
-3. **Mac vs. iPhone parity (`Rule 5`):** Keep the Mac app optimized for dense tables, `ely::charts`, and side-panel editing. Phone `nsh_projects.rs` polish is parked while the phone UI migrates to shared GPUI ([Move the phone UI to GPUI](../tasks/gpui-phone-renderer.md)).
+3. **Mac and iPhone parity:** Keep dense tables and side-panel editing on Mac. Verify the shared Projects view at phone density and keep replica write restrictions in place ([phone renderer acceptance](../tasks/gpui-phone-renderer.md)).
 
 ## Related tasks
 

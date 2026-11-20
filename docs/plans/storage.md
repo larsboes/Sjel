@@ -50,7 +50,7 @@ Pending local writes are protected from pull. Captures remain create-only.
 
 ## 4. Full migration
 
-- [Remove the replica setup tab from the Mac app](../tasks/task-759d37d6-8ff9-41d6-a757-a8485d47df17.md).
+- [Verify Mac device pairing after removing replica setup](../tasks/task-759d37d6-8ff9-41d6-a757-a8485d47df17.md).
 - [Route reads through owners](../tasks/storage-owner-reads.md).
 - [Split capability databases](../tasks/storage-files.md).
 - [Move Health onto its own Turso WAL file](../tasks/task-8f68cb3e-631e-4646-a474-1b8a68ae447c.md).

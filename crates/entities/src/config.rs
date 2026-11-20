@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use sjel_config::{database_path, resolve_port};
 
+#[derive(Clone)]
 pub struct Config {
     pub database_path: PathBuf,
     pub port: u16,

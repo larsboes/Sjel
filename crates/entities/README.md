@@ -38,6 +38,10 @@ The server and its scheduled commands read `SJEL_ENTITIES_DB_PATH` when an owner
 configured. They use the shared store by default.
 The watchdog keeps the enabled owner available for Finder and phone mirror rebuilds.
 
+The Turso WAL build requires an owner-only database. Scheduled jobs and the snapshot command
+use the owner's private Unix socket. The backup contract packages a fresh closed snapshot from
+`data/entities/snapshots/entities.db`.
+
 Offline People uses a separate `offline_label` text field declared for people with data class
 `C0` or `C1`. Only people with a nonempty approved label enter the phone mirror.
 

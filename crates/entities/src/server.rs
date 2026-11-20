@@ -20,6 +20,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use entities::config::Config;
+
+#[cfg(feature = "turso-wal")]
+mod jobs;
 use entities::model::{located_on, FieldDef};
 use entities::places::{self, Resolved};
 use entities::store::{check_kind, check_new_fact, EntitiesStore, NewFact, Patch, StoreError};
@@ -806,7 +809,12 @@ fn linkedin_file(given: Option<&str>, name: &str) -> Result<std::path::PathBuf, 
 }
 
 /// Sets `last_contact` from `messages.csv`, when the export folder has one.
-fn run_linkedin_messages(store: &EntitiesStore, folder: &str, dry_run: bool) -> Result<(), String> {
+fn run_linkedin_messages(
+    store: &EntitiesStore,
+    folder: &str,
+    dry_run: bool,
+    output: &mut String,
+) -> Result<(), String> {
     let path = std::path::Path::new(folder).join("messages.csv");
     if !path.is_file() {
         return Ok(());
@@ -818,21 +826,21 @@ fn run_linkedin_messages(store: &EntitiesStore, folder: &str, dry_run: bool) -> 
         entities::linkedin::last_messages(&text).map_err(|e| format!("{}: {e}", path.display()))?;
     let report = entities::linkedin::apply_last_contact(store, &latest, dry_run)
         .map_err(|e| e.to_string())?;
-    println!(
-        "sync-linkedin messages{}: {} profiles, {} linked to a person, {} last contacts set",
+    output.push_str(&format!(
+        "sync-linkedin messages{}: {} profiles, {} linked to a person, {} last contacts set\n",
         if dry_run { " (dry run)" } else { "" },
         report.profiles,
         report.linked,
         report.updated,
-    );
+    ));
     let edges = entities::linkedin::apply_conversations(store, &found, dry_run)
         .map_err(|e| e.to_string())?;
-    println!(
-        "sync-linkedin conversations{}: {} group conversations, {} links between people",
+    output.push_str(&format!(
+        "sync-linkedin conversations{}: {} group conversations, {} links between people\n",
         if dry_run { " (dry run)" } else { "" },
         edges.groups,
         edges.edges,
-    );
+    ));
     Ok(())
 }
 
@@ -843,6 +851,7 @@ fn run_sync(
     system: &str,
     file: Option<&str>,
     dry_run: bool,
+    output: &mut String,
 ) -> Result<(), String> {
     let (records, managed): (Vec<entities::sync::Incoming>, &[&str]) = match system {
         "linkedin" => {
@@ -852,10 +861,10 @@ fn run_sync(
             let parsed =
                 entities::linkedin::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
             if parsed.skipped > 0 {
-                println!(
-                    "sync-linkedin: {} rows without a name or profile URL skipped",
+                output.push_str(&format!(
+                    "sync-linkedin: {} rows without a name or profile URL skipped\n",
                     parsed.skipped
-                );
+                ));
             }
             (parsed.records, entities::linkedin::MANAGED)
         }
@@ -864,10 +873,10 @@ fn run_sync(
             let skipped = people.len();
             let records: Vec<_> = people.iter().filter_map(entities::google::record).collect();
             if skipped > records.len() {
-                println!(
-                    "sync-google: {} contacts without a name skipped",
+                output.push_str(&format!(
+                    "sync-google: {} contacts without a name skipped\n",
                     skipped - records.len()
-                );
+                ));
             }
             (records, entities::google::MANAGED)
         }
@@ -882,8 +891,8 @@ fn run_sync(
         dry_run,
     )
     .map_err(|e| e.to_string())?;
-    println!(
-        "sync-{system}{}: {} records, {} created, {} linked by name, {} updated, {} unchanged, {} home bases set, {} excluded",
+    output.push_str(&format!(
+        "sync-{system}{}: {} records, {} created, {} linked by name, {} updated, {} unchanged, {} home bases set, {} excluded\n",
         if dry_run { " (dry run)" } else { "" },
         report.records,
         report.created,
@@ -892,11 +901,70 @@ fn run_sync(
         report.unchanged,
         report.homes_set,
         report.excluded,
-    );
+    ));
     for refused in &report.refused {
-        println!("  refused {refused}");
+        output.push_str(&format!("  refused {refused}\n"));
     }
     Ok(())
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+enum Job {
+    Names,
+    Journal {
+        dry_run: bool,
+    },
+    Google {
+        dry_run: bool,
+    },
+    LinkedIn {
+        file: String,
+        dry_run: bool,
+    },
+    #[cfg(feature = "turso-wal")]
+    Snapshot,
+}
+
+fn run_job(config: &Config, store: &EntitiesStore, job: Job) -> Result<String, String> {
+    let mut output = String::new();
+    match job {
+        Job::Names => {
+            let names = entities::names::from_store(store).map_err(|error| error.to_string())?;
+            return serde_json::to_string_pretty(&names).map_err(|error| error.to_string());
+        }
+        Job::Journal { dry_run } => {
+            let records = entities::journal::fetch(&config.projects_url)?;
+            let latest = entities::journal::last_contacts(&records);
+            let report = entities::journal::apply(store, &latest, dry_run)
+                .map_err(|error| error.to_string())?;
+            output = format!(
+                "sync-journal{}: {} people, {} with a Journal contact, {} updated",
+                if dry_run { " (dry run)" } else { "" },
+                report.people,
+                report.with_contact,
+                report.updated,
+            );
+        }
+        Job::Google { dry_run } => {
+            run_sync(config, store, "google", None, dry_run, &mut output)?;
+        }
+        Job::LinkedIn { file, dry_run } => {
+            run_sync(config, store, "linkedin", Some(&file), dry_run, &mut output)?;
+            if std::path::Path::new(&file).is_dir() {
+                run_linkedin_messages(store, &file, dry_run, &mut output)?;
+            }
+        }
+        #[cfg(feature = "turso-wal")]
+        Job::Snapshot => {
+            let directory = sjel_config::overlay_data_dir("entities")
+                .ok_or("Entities snapshot requires an overlay")?
+                .join("snapshots");
+            store
+                .snapshot(&config.database_path, &directory)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(output)
 }
 
 pub async fn serve(config: Config, store: EntitiesStore) {
@@ -905,83 +973,78 @@ pub async fn serve(config: Config, store: EntitiesStore) {
         places_url: config.places_url.clone(),
         model_url: config.model_url.clone(),
     });
-    sjel_server::serve_local("entities", config.port, router(state)).await;
+    let http = sjel_server::serve_local("entities", config.port, router(Arc::clone(&state)));
+    #[cfg(feature = "turso-wal")]
+    tokio::join!(http, jobs::serve_jobs(config, state));
+    #[cfg(not(feature = "turso-wal"))]
+    http.await;
+}
+
+fn fatal(error: impl std::fmt::Display) -> ! {
+    eprintln!("entities: {error}");
+    std::process::exit(1);
 }
 
 fn main() {
-    let config = Config::load();
-    let store = match EntitiesStore::open(&config.database_path) {
-        Ok(store) => store,
-        Err(error) => {
-            eprintln!("entities: cannot open store: {error}");
-            std::process::exit(1);
-        }
-    };
     let args: Vec<String> = std::env::args().skip(1).collect();
-    match args.first().map(String::as_str) {
-        Some("sync-google") => {
-            let dry_run = args.iter().any(|a| a == "--dry-run");
-            if let Err(error) = run_sync(&config, &store, "google", None, dry_run) {
-                eprintln!("entities: {error}");
-                std::process::exit(1);
-            }
-        }
+    let dry_run = args.iter().any(|arg| arg == "--dry-run");
+    let job = match args.first().map(String::as_str) {
+        Some("names") => Some(Job::Names),
+        Some("sync-journal") => Some(Job::Journal { dry_run }),
+        Some("sync-google") => Some(Job::Google { dry_run }),
         Some("sync-linkedin") => {
-            let dry_run = args.iter().any(|a| a == "--dry-run");
-            let file = args.iter().skip(1).find(|a| !a.starts_with("--"));
-            let file = file.map(String::as_str);
-            let result = run_sync(&config, &store, "linkedin", file, dry_run).and_then(|()| {
-                match file.filter(|f| std::path::Path::new(f).is_dir()) {
-                    Some(folder) => run_linkedin_messages(&store, folder, dry_run),
-                    None => Ok(()),
-                }
-            });
-            if let Err(error) = result {
-                eprintln!("entities: {error}");
-                std::process::exit(1);
-            }
-        }
-        Some("names") => match entities::names::from_store(&store) {
-            Ok(registry) => println!(
-                "{}",
-                serde_json::to_string_pretty(&registry).unwrap_or_default()
-            ),
-            Err(error) => {
-                eprintln!("entities: {error}");
-                std::process::exit(1);
-            }
-        },
-        Some("sync-journal") => {
-            let dry_run = args.iter().any(|a| a == "--dry-run");
-            let report = entities::journal::fetch(&config.projects_url)
-                .map(|records| entities::journal::last_contacts(&records))
-                .and_then(|latest| {
-                    entities::journal::apply(&store, &latest, dry_run).map_err(|e| e.to_string())
+            let file = args
+                .iter()
+                .skip(1)
+                .find(|arg| !arg.starts_with("--"))
+                .cloned()
+                .unwrap_or_else(|| {
+                    fatal("sync-linkedin needs an export folder or Connections.csv")
                 });
-            match report {
-                Ok(r) => println!(
-                    "sync-journal{}: {} people, {} with a Journal contact, {} updated",
-                    if dry_run { " (dry run)" } else { "" },
-                    r.people,
-                    r.with_contact,
-                    r.updated
-                ),
-                Err(error) => {
-                    eprintln!("entities: {error}");
-                    std::process::exit(1);
-                }
-            }
+            let file = std::path::Path::new(&file)
+                .canonicalize()
+                .unwrap_or_else(|error| fatal(error));
+            Some(Job::LinkedIn {
+                file: file.to_string_lossy().into_owned(),
+                dry_run,
+            })
         }
-        None => tokio::runtime::Runtime::new()
-            .expect("tokio runtime could not start")
-            .block_on(serve(config, store)),
+        #[cfg(feature = "turso-wal")]
+        Some("snapshot") => Some(Job::Snapshot),
+        None => None,
         Some(other) => {
             eprintln!(
                 "usage: entities-server [names | sync-journal|sync-google [--dry-run] | sync-linkedin <export folder|Connections.csv> [--dry-run]] (got {other:?})"
             );
             std::process::exit(64);
         }
+    };
+    #[cfg(feature = "turso-wal")]
+    if let Some(job) = job {
+        let output = jobs::submit_job(job).unwrap_or_else(|error| fatal(error));
+        if !output.is_empty() {
+            println!("{}", output.trim_end());
+        }
+        return;
     }
+    let config = Config::load();
+    #[cfg(feature = "turso-wal")]
+    if sjel_config::env_var("SJEL_ENTITIES_DB_PATH").map_or(true, |path| path.trim().is_empty()) {
+        fatal("Turso requires SJEL_ENTITIES_DB_PATH to name the separate owner file");
+    }
+    let store = EntitiesStore::open(&config.database_path)
+        .unwrap_or_else(|error| fatal(format!("cannot open store: {error}")));
+    #[cfg(not(feature = "turso-wal"))]
+    if let Some(job) = job {
+        let output = run_job(&config, &store, job).unwrap_or_else(|error| fatal(error));
+        if !output.is_empty() {
+            println!("{}", output.trim_end());
+        }
+        return;
+    }
+    tokio::runtime::Runtime::new()
+        .expect("tokio runtime could not start")
+        .block_on(serve(config, store));
 }
 
 #[cfg(test)]

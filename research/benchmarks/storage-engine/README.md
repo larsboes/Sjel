@@ -230,3 +230,15 @@ The probe extracts the nine Entities tables and recreates their indexes. SQLite 
 commit an entity, a sourced field value and revision 2 together, then roll back revision 3.
 The SQLite backup of the Turso-written file passes integrity and foreign-key checks and
 matches the SQLite control. The probe exercises SQL and recovery on a copy.
+
+To exercise the native service, build `sjel-entities` with
+`--no-default-features --features turso-wal` and run the job and backup rehearsal with the
+extracted owner file.
+
+```sh
+sh research/benchmarks/storage-engine/entities-native-rehearsal.sh "$owner_db" "$entities_bin" "$scratch/native"
+```
+
+The native owner acknowledges an HTTP create, answers the names job over its local socket,
+and exports a snapshot from the running process. The backup verifies and restores the archive
+against its receipt and finds the acknowledged entity in it.

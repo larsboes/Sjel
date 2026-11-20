@@ -82,6 +82,9 @@ shared-file path pointed at an absent file.
 
 The [Entities SQL rehearsal](../../research/benchmarks/storage-engine/README.md#entities-owner-only-rehearsal)
 matched the Turso WAL commit, rollback and SQLite restore against the SQLite control.
+The native store and SQLite control each passed the Entities API and store suites. The native
+rehearsal committed an HTTP write, ran a job through the private owner socket and recovered the
+acknowledged revision from a receipt-backed backup.
 
 The live gateway rebuilds the phone mirror from the Entities offline projection. A download
 matched the published digest, and a range response matched the requested bytes. The Entities

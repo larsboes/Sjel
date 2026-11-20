@@ -5725,6 +5725,7 @@ dependencies = [
  "axum",
  "civil-date",
  "entities-api",
+ "futures-executor",
  "markdown-root",
  "reqwest",
  "route-manifest",
@@ -5738,7 +5739,9 @@ dependencies = [
  "sjel-links",
  "sjel-server",
  "sjel-store",
+ "tempfile",
  "tokio",
+ "turso",
 ]
 
 [[package]]

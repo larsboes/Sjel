@@ -1,0 +1,6 @@
+kind                  = "data"
+name                  = "entities-wal-backup"
+requires              = ["entities"]
+backup_owner_snapshot = "entities"
+backup_sqlite_online  = "data/entities/snapshots/entities.db"
+backup_target         = "backup-target"

@@ -11,7 +11,7 @@ use std::fmt::Display;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use rusqlite::{params, Connection, OptionalExtension, Row};
+use crate::engine::{self, params, Connection, OptionalExtension, Row};
 use serde_json::Value;
 
 use crate::model::{
@@ -98,29 +98,77 @@ pub struct Patch {
 }
 
 pub struct EntitiesStore {
-    pool: sjel_store::Pool,
+    pool: engine::Pool,
     prefix: String,
 }
 
 impl EntitiesStore {
     pub fn open(database_path: &Path) -> std::result::Result<Self, Box<dyn std::error::Error>> {
-        let pool =
-            sjel_store::open_pool(database_path, PREFIX, |conn| Self::migrate(conn, PREFIX))?;
+        let pool = engine::open_pool(database_path, PREFIX, |conn| Self::migrate(conn, PREFIX))?;
         Ok(Self {
             pool,
             prefix: PREFIX.to_string(),
         })
     }
 
-    fn conn(&self) -> Result<sjel_store::PooledClient> {
+    fn conn(&self) -> Result<engine::PooledClient> {
         self.pool.get().map_err(db)
     }
 
     pub fn ping(&self) -> Result<()> {
         self.conn()?
-            .query_row("SELECT 1", [], |row| row.get::<_, i64>(0))
+            .query_row("SELECT 1", params![], |row| {
+                let value: i64 = row.get(0)?;
+                Ok(value)
+            })
             .map(|_| ())
             .map_err(db)
+    }
+
+    /// Export a closed native snapshot through the running owner.
+    ///
+    /// # Errors
+    /// Returns an error if Turso or the snapshot filesystem refuses the operation.
+    #[cfg(feature = "turso-wal")]
+    pub fn snapshot(
+        &self,
+        database_path: &Path,
+        directory: &Path,
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        std::fs::create_dir_all(directory)?;
+        let target = directory.canonicalize()?.join("entities.db");
+        let database_path = database_path.canonicalize()?;
+        if target == database_path
+            || target
+                .canonicalize()
+                .is_ok_and(|file| file == database_path)
+        {
+            return Err("Entities snapshot overlaps the owner database".into());
+        }
+        let stage = tempfile::tempdir_in(directory)?;
+        let file = stage.path().join("entities.db");
+        let path = file
+            .to_str()
+            .ok_or("Entities snapshot path must be UTF-8")?;
+        let delimiter = if !path.contains('\'') {
+            '\''
+        } else if !path.contains('"') {
+            '"'
+        } else {
+            return Err("Entities snapshot path contains both quote characters".into());
+        };
+        self.conn()
+            .map_err(|error| error.to_string())?
+            .execute(&format!("VACUUM INTO {delimiter}{path}{delimiter}"), ())?;
+        if std::fs::metadata(&file)?.len() == 0
+            || std::fs::metadata(file.with_extension("db-wal")).is_ok_and(|wal| wal.len() != 0)
+        {
+            return Err("Entities did not produce a closed snapshot".into());
+        }
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600))?;
+        std::fs::rename(&file, target)?;
+        Ok(())
     }
 
     fn migrate(
@@ -227,12 +275,12 @@ impl EntitiesStore {
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7)"
                 ),
                 params![
-                    def.kind,
-                    def.key,
-                    def.label,
-                    def.field_type,
+                    def.kind.as_str(),
+                    def.key.as_str(),
+                    def.label.as_str(),
+                    def.field_type.as_str(),
                     serde_json::to_string(&def.options)?,
-                    def.data_class,
+                    def.data_class.as_str(),
                     now()
                 ],
             )?;
@@ -254,6 +302,7 @@ impl EntitiesStore {
         let rows = stmt
             .query_map(params![kind], |row| {
                 let options: String = row.get(4)?;
+                let builtin: i64 = row.get(6)?;
                 Ok(FieldDef {
                     kind: row.get(0)?,
                     key: row.get(1)?,
@@ -261,7 +310,7 @@ impl EntitiesStore {
                     field_type: row.get(3)?,
                     options: serde_json::from_str(&options).unwrap_or_default(),
                     data_class: row.get(5)?,
-                    builtin: row.get::<_, i64>(6)? == 1,
+                    builtin: builtin == 1,
                 })
             })
             .map_err(db)?;
@@ -281,6 +330,7 @@ impl EntitiesStore {
             params![kind, key],
             |row| {
                 let options: String = row.get(2)?;
+                let builtin: i64 = row.get(4)?;
                 Ok(FieldDef {
                     kind: kind.into(),
                     key: key.into(),
@@ -288,7 +338,7 @@ impl EntitiesStore {
                     field_type: row.get(1)?,
                     options: serde_json::from_str(&options).unwrap_or_default(),
                     data_class: row.get(3)?,
-                    builtin: row.get::<_, i64>(4)? == 1,
+                    builtin: builtin == 1,
                 })
             },
         )
@@ -306,7 +356,8 @@ impl EntitiesStore {
         if self.field(&conn, &def.kind, &def.key)?.is_some() {
             return Err(StoreError::Invalid(format!(
                 "{} already has a field {:?}",
-                def.kind, def.key
+                def.kind.as_str(),
+                def.key
             )));
         }
         let p = &self.prefix;
@@ -317,12 +368,12 @@ impl EntitiesStore {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7)"
             ),
             params![
-                def.kind,
-                def.key,
-                def.label,
-                def.field_type,
+                def.kind.as_str(),
+                def.key.as_str(),
+                def.label.as_str(),
+                def.field_type.as_str(),
                 serde_json::to_string(&def.options).map_err(db)?,
-                def.data_class,
+                def.data_class.as_str(),
                 now()
             ],
         )
@@ -332,7 +383,7 @@ impl EntitiesStore {
 
     // ─── Entities ───
 
-    fn read_entity(&self, conn: &Connection, row: &Row<'_>) -> rusqlite::Result<Entity> {
+    fn read_entity(&self, conn: &Connection, row: &Row<'_>) -> engine::Result<Entity> {
         Ok(Entity {
             id: row.get(0)?,
             kind: row.get(1)?,
@@ -355,7 +406,7 @@ impl EntitiesStore {
         &self,
         conn: &Connection,
         id: &str,
-    ) -> rusqlite::Result<BTreeMap<String, FieldValue>> {
+    ) -> engine::Result<BTreeMap<String, FieldValue>> {
         let p = &self.prefix;
         let mut stmt = conn.prepare(&format!(
             "SELECT key, value, source, updated_at FROM {p}_values WHERE entity_id = ?1"
@@ -363,7 +414,7 @@ impl EntitiesStore {
         let rows = stmt.query_map(params![id], |row| {
             let raw: String = row.get(1)?;
             Ok((
-                row.get::<_, String>(0)?,
+                row.get(0)?,
                 FieldValue {
                     value: serde_json::from_str(&raw).unwrap_or(Value::Null),
                     source: row.get(2)?,
@@ -374,7 +425,7 @@ impl EntitiesStore {
         rows.collect()
     }
 
-    fn facts_of(&self, conn: &Connection, id: &str) -> rusqlite::Result<Vec<Fact>> {
+    fn facts_of(&self, conn: &Connection, id: &str) -> engine::Result<Vec<Fact>> {
         let p = &self.prefix;
         let mut stmt = conn.prepare(&format!(
             "SELECT id, entity_id, predicate, place, latitude, longitude, valid_from, valid_to,
@@ -404,37 +455,46 @@ impl EntitiesStore {
         "id, kind, name, note_ref, revision, created_at, updated_at";
 
     pub fn get(&self, id: &str) -> Result<Option<Entity>> {
-        let conn = self.conn()?;
+        let mut conn = self.conn()?;
+        let tx = engine::read_transaction(&mut conn).map_err(db)?;
         let p = &self.prefix;
-        conn.query_row(
-            &format!(
-                "SELECT {} FROM {p}_entities WHERE id = ?1",
-                Self::ENTITY_COLUMNS
-            ),
-            params![id],
-            |row| self.read_entity(&conn, row),
-        )
-        .optional()
-        .map_err(db)
+        let entity = tx
+            .query_row(
+                &format!(
+                    "SELECT {} FROM {p}_entities WHERE id = ?1",
+                    Self::ENTITY_COLUMNS
+                ),
+                params![id],
+                |row| self.read_entity(&tx, row),
+            )
+            .optional()
+            .map_err(db)?;
+        tx.commit().map_err(db)?;
+        Ok(entity)
     }
 
     /// Every entity of a kind (or all), name order. `q` matches the name, case-insensitive.
     pub fn list(&self, kind: Option<&str>, q: Option<&str>) -> Result<Vec<Entity>> {
-        let conn = self.conn()?;
+        let mut conn = self.conn()?;
+        let tx = engine::read_transaction(&mut conn).map_err(db)?;
         let p = &self.prefix;
         let pattern = q.map(|q| format!("%{}%", q.trim().to_lowercase()));
-        let mut stmt = conn
-            .prepare(&format!(
-                "SELECT {} FROM {p}_entities
+        let entities = {
+            let mut stmt = tx
+                .prepare(&format!(
+                    "SELECT {} FROM {p}_entities
                  WHERE (?1 IS NULL OR kind = ?1) AND (?2 IS NULL OR lower(name) LIKE ?2)
                  ORDER BY lower(name)",
-                Self::ENTITY_COLUMNS
-            ))
-            .map_err(db)?;
-        let rows = stmt
-            .query_map(params![kind, pattern], |row| self.read_entity(&conn, row))
-            .map_err(db)?;
-        rows.collect::<std::result::Result<_, _>>().map_err(db)
+                    Self::ENTITY_COLUMNS
+                ))
+                .map_err(db)?;
+            let rows = stmt
+                .query_map(params![kind, pattern], |row| self.read_entity(&tx, row))
+                .map_err(db)?;
+            rows.collect::<engine::Result<_>>().map_err(db)?
+        };
+        tx.commit().map_err(db)?;
+        Ok(entities)
     }
 
     /// Return up to five entity names containing every query word.
@@ -466,12 +526,15 @@ impl EntitiesStore {
             ))
             .map_err(db)?;
         let rows = statement
-            .query_map(rusqlite::params_from_iter(&words), |row| {
-                Ok(entities_api::EntityName {
-                    name: row.get(0)?,
-                    kind: row.get(1)?,
-                })
-            })
+            .query_map(
+                engine::params_from_iter(words.iter().map(String::as_str)),
+                |row| {
+                    Ok(entities_api::EntityName {
+                        name: row.get(0)?,
+                        kind: row.get(1)?,
+                    })
+                },
+            )
             .map_err(db)?;
         rows.collect::<std::result::Result<_, _>>().map_err(db)
     }
@@ -497,7 +560,7 @@ impl EntitiesStore {
             ))
             .map_err(db)?;
         let rows = statement
-            .query_map([], |row| {
+            .query_map(params![], |row| {
                 Ok(entities_api::OfflinePerson {
                     id: row.get(0)?,
                     label: row.get(1)?,
@@ -550,7 +613,7 @@ impl EntitiesStore {
             if value.is_null() {
                 tx.execute(
                     &format!("DELETE FROM {p}_values WHERE entity_id = ?1 AND key = ?2"),
-                    params![id, key],
+                    params![id, key.as_str()],
                 )
                 .map_err(db)?;
             } else {
@@ -562,7 +625,7 @@ impl EntitiesStore {
                             value = excluded.value, source = excluded.source,
                             updated_at = excluded.updated_at"
                     ),
-                    params![id, key, value.to_string(), source, at],
+                    params![id, key.as_str(), value.to_string(), source, at],
                 )
                 .map_err(db)?;
             }
@@ -588,14 +651,14 @@ impl EntitiesStore {
         let values = self.checked_values(&conn, kind, values)?;
         let id = new_id("ent");
         let at = now();
-        let tx = sjel_store::write_transaction(&mut conn).map_err(db)?;
+        let tx = engine::write_transaction(&mut conn).map_err(db)?;
         let p = &self.prefix;
         tx.execute(
             &format!(
                 "INSERT INTO {p}_entities (id, kind, name, note_ref, revision, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5)"
             ),
-            params![id, kind, name, note_ref, at],
+            params![id.as_str(), kind, name, note_ref, at.as_str()],
         )
         .map_err(db)?;
         self.write_values(&tx, &id, &values, source, &at)?;
@@ -625,7 +688,7 @@ impl EntitiesStore {
         let mut conn = self.conn()?;
         let values = self.checked_values(&conn, &current.kind, &patch.values)?;
         let at = now();
-        let tx = sjel_store::write_transaction(&mut conn).map_err(db)?;
+        let tx = engine::write_transaction(&mut conn).map_err(db)?;
         let p = &self.prefix;
         // The revision is compared again inside the write lock, so two writers that both
         // read revision 3 cannot both land.
@@ -644,7 +707,7 @@ impl EntitiesStore {
                     patch.name.as_deref().map(str::trim),
                     patch.note_ref.is_some(),
                     patch.note_ref.clone().flatten(),
-                    at,
+                    at.as_str(),
                     current.revision
                 ],
             )
@@ -673,7 +736,7 @@ impl EntitiesStore {
     pub fn delete(&self, id: &str) -> Result<bool> {
         let mut conn = self.conn()?;
         let p = &self.prefix;
-        let tx = sjel_store::write_transaction(&mut conn).map_err(db)?;
+        let tx = engine::write_transaction(&mut conn).map_err(db)?;
         tx.execute(
             &format!(
                 "INSERT OR IGNORE INTO {p}_excluded (system, external_id, name, excluded_at)
@@ -699,7 +762,7 @@ impl EntitiesStore {
     pub fn make_self(&self, id: &str) -> Result<Entity> {
         let mut conn = self.conn()?;
         let p = &self.prefix;
-        let tx = sjel_store::write_transaction(&mut conn).map_err(db)?;
+        let tx = engine::write_transaction(&mut conn).map_err(db)?;
         let kind: Option<String> = tx
             .query_row(
                 &format!("SELECT kind FROM {p}_entities WHERE id = ?1"),
@@ -720,7 +783,7 @@ impl EntitiesStore {
         let existing: Option<String> = tx
             .query_row(
                 &format!("SELECT id FROM {p}_entities WHERE kind = 'self'"),
-                [],
+                params![],
                 |row| row.get(0),
             )
             .optional()
@@ -765,7 +828,7 @@ impl EntitiesStore {
             .prepare(&format!("SELECT a, b FROM {p}_distinct"))
             .map_err(db)?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .query_map(params![], |row| Ok((row.get(0)?, row.get(1)?)))
             .map_err(db)?;
         rows.collect::<std::result::Result<_, _>>().map_err(db)
     }
@@ -814,7 +877,7 @@ impl EntitiesStore {
             let found: Option<String> = conn
                 .query_row(
                     &format!("SELECT kind FROM {p}_entities WHERE id = ?1"),
-                    params![id],
+                    params![id.as_str()],
                     |row| row.get(0),
                 )
                 .optional()
@@ -831,7 +894,15 @@ impl EntitiesStore {
                     at = CASE WHEN excluded.at > COALESCE(at, '') THEN excluded.at ELSE at END,
                     note = COALESCE(excluded.note, note)"
             ),
-            params![a, b, edge.kind, edge.source, edge.at, edge.note, now()],
+            params![
+                a.as_str(),
+                b.as_str(),
+                edge.kind.as_str(),
+                edge.source.as_str(),
+                edge.at.as_deref(),
+                edge.note.as_deref(),
+                now()
+            ],
         )
         .map_err(db)?;
         Ok(EntityEdge {
@@ -868,7 +939,7 @@ impl EntitiesStore {
             ))
             .map_err(db)?;
         let rows = statement
-            .query_map([], |row| {
+            .query_map(params![], |row| {
                 Ok(EntityEdge {
                     a: row.get(0)?,
                     b: row.get(1)?,
@@ -879,7 +950,7 @@ impl EntitiesStore {
                 })
             })
             .map_err(db)?;
-        rows.collect::<rusqlite::Result<_>>().map_err(db)
+        rows.collect::<engine::Result<_>>().map_err(db)
     }
 
     /// Merges `other` into `keep`, in one write transaction, and returns the kept entity.
@@ -927,54 +998,58 @@ impl EntitiesStore {
         let snapshot = serde_json::json!({ "entity": gone, "external": externals }).to_string();
         let mut conn = self.conn()?;
         let p = &self.prefix;
-        let tx = sjel_store::write_transaction(&mut conn).map_err(db)?;
-        let run = |sql: String, args: &[&dyn rusqlite::ToSql]| tx.execute(&sql, args).map_err(db);
-        run(
-            format!(
+        let tx = engine::write_transaction(&mut conn).map_err(db)?;
+        tx.execute(
+            &format!(
                 "INSERT INTO {p}_merges (id, kept_id, removed_id, snapshot, merged_at)
                  VALUES (?1, ?2, ?3, ?4, ?5)"
             ),
-            &[&new_id("merge"), &keep, &other, &snapshot, &now()],
-        )?;
-        run(
-            format!(
+            params![new_id("merge"), keep, other, snapshot, now()],
+        )
+        .map_err(db)?;
+        tx.execute(
+            &format!(
                 "INSERT OR IGNORE INTO {p}_values (entity_id, key, value, source, updated_at)
                  SELECT ?1, key, value, source, updated_at FROM {p}_values WHERE entity_id = ?2"
             ),
-            &[&keep, &other],
-        )?;
+            params![keep, other],
+        )
+        .map_err(db)?;
         // The fields the operator chose from the other record overwrite the kept ones, with
         // the other record's source, so the chosen value keeps following where it came from.
         for key in pick {
-            run(
-                format!(
+            tx.execute(
+                &format!(
                     "UPDATE {p}_values SET
                         value = (SELECT value FROM {p}_values WHERE entity_id = ?2 AND key = ?3),
                         source = (SELECT source FROM {p}_values WHERE entity_id = ?2 AND key = ?3),
                         updated_at = ?4
                      WHERE entity_id = ?1 AND key = ?3"
                 ),
-                &[&keep, &other, key, &now()],
-            )?;
+                params![keep, other, key.as_str(), now()],
+            )
+            .map_err(db)?;
         }
-        run(
-            format!("UPDATE {p}_facts SET entity_id = ?1 WHERE entity_id = ?2"),
-            &[&keep, &other],
-        )?;
-        run(
-            format!(
+        tx.execute(
+            &format!("UPDATE {p}_facts SET entity_id = ?1 WHERE entity_id = ?2"),
+            params![keep, other],
+        )
+        .map_err(db)?;
+        tx.execute(
+            &format!(
                 "DELETE FROM {p}_facts WHERE entity_id = ?1 AND id NOT IN (
                     SELECT MIN(id) FROM {p}_facts WHERE entity_id = ?1
                     GROUP BY predicate, lower(place), COALESCE(valid_from, ''), COALESCE(valid_to, ''))"
             ),
-            &[&keep],
-        )?;
-        run(
-            format!("UPDATE {p}_external SET entity_id = ?1 WHERE entity_id = ?2"),
-            &[&keep, &other],
-        )?;
-        run(
-            format!(
+            params![keep],
+        ).map_err(db)?;
+        tx.execute(
+            &format!("UPDATE {p}_external SET entity_id = ?1 WHERE entity_id = ?2"),
+            params![keep, other],
+        )
+        .map_err(db)?;
+        tx.execute(
+            &format!(
                 "UPDATE {p}_entities SET
                     note_ref = COALESCE(note_ref, ?2),
                     name = COALESCE(?3, name),
@@ -982,15 +1057,17 @@ impl EntitiesStore {
                     updated_at = ?4
                  WHERE id = ?1"
             ),
-            &[&keep, &gone.note_ref, &name.map(str::trim), &now()],
-        )?;
-        run(
-            format!("DELETE FROM {p}_distinct WHERE a = ?1 OR b = ?1"),
-            &[&other],
-        )?;
+            params![keep, gone.note_ref.as_deref(), name.map(str::trim), now()],
+        )
+        .map_err(db)?;
+        tx.execute(
+            &format!("DELETE FROM {p}_distinct WHERE a = ?1 OR b = ?1"),
+            params![other],
+        )
+        .map_err(db)?;
         // Edges move to `keep`; an edge between the two merged records disappears.
-        run(
-            format!(
+        tx.execute(
+            &format!(
                 "INSERT OR IGNORE INTO {p}_edges (a, b, kind, source, at, note, created_at)
                  SELECT CASE WHEN kind = 'introduced' THEN na ELSE min(na, nb) END,
                         CASE WHEN kind = 'introduced' THEN nb ELSE max(na, nb) END,
@@ -1001,9 +1078,14 @@ impl EntitiesStore {
                        FROM {p}_edges WHERE a = ?2 OR b = ?2)
                  WHERE na <> nb"
             ),
-            &[&keep, &other],
-        )?;
-        run(format!("DELETE FROM {p}_entities WHERE id = ?1"), &[&other])?;
+            params![keep, other],
+        )
+        .map_err(db)?;
+        tx.execute(
+            &format!("DELETE FROM {p}_entities WHERE id = ?1"),
+            params![other],
+        )
+        .map_err(db)?;
         tx.commit().map_err(db)?;
         drop(conn);
         self.get(keep)?
@@ -1042,16 +1124,16 @@ impl EntitiesStore {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
             ),
             params![
-                id,
+                id.as_str(),
                 entity_id,
-                new.predicate,
+                new.predicate.as_str(),
                 new.place.trim(),
                 new.latitude,
                 new.longitude,
-                new.valid_from,
-                new.valid_to,
+                new.valid_from.as_deref(),
+                new.valid_to.as_deref(),
                 new.note.as_deref().map(str::trim).filter(|n| !n.is_empty()),
-                new.source,
+                new.source.as_str(),
                 now()
             ],
         )
@@ -1226,7 +1308,7 @@ mod tests {
             .unwrap()
             .execute(
                 "UPDATE entities_fields SET data_class = 'C2' WHERE key = 'offline_label'",
-                [],
+                params![],
             )
             .unwrap();
         assert!(store.offline_people().unwrap().is_empty());
@@ -1613,7 +1695,9 @@ mod tests {
         assert!(!store.is_excluded("google", "people/c2").unwrap());
         let conn = store.conn().unwrap();
         let left: i64 = conn
-            .query_row("SELECT COUNT(*) FROM entities_facts", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM entities_facts", params![], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(left, 0, "facts go with their entity");
         let _ = std::fs::remove_dir_all(dir);

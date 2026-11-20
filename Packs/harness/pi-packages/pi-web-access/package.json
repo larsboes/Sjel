@@ -53,8 +53,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
     "@mozilla/readability": "^0.6.0",
-    "defuddle": "0.19.6",
-    "linkedom": "^0.16.0",
+    "defuddle": "0.19.7",
+    "linkedom": "^0.18.15",
     "p-limit": "^6.1.0",
     "promise.try": "^2.0.1",
     "turndown": "^7.2.5",

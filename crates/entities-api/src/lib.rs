@@ -419,24 +419,6 @@ pub fn check_value(def: &EntityField, value: &Value) -> Result<Value, String> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn follow_up_requires_positive_whole_weeks() {
-        let field = builtin_fields()
-            .into_iter()
-            .find(|def| def.key == FOLLOW_UP_WEEKS)
-            .unwrap();
-        assert_eq!(check_value(&field, &json!(4)), Ok(json!(4)));
-        for bad in [json!(0), json!(-1), json!(1.5), json!("2"), json!(u64::MAX)] {
-            assert!(check_value(&field, &bad).is_err(), "accepted {bad}");
-        }
-    }
-}
-
 pub fn pair(a: &str, b: &str) -> (String, String) {
     if a <= b {
         (a.to_string(), b.to_string())

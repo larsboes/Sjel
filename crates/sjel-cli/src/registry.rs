@@ -308,7 +308,7 @@ impl<'a> Ctx<'a> {
             .to_owned();
         }
         let external = scope == "external";
-        let fields = FIELDS
+        let mut fields: Vec<_> = FIELDS
             .iter()
             .map(|&k| {
                 // A manifest says how its OWNER runs the capability. On a machine that only
@@ -326,6 +326,20 @@ impl<'a> Ctx<'a> {
                 )
             })
             .collect();
+        if !external && kind == "process" {
+            let machine = self.table(&self.machine);
+            if let Some(port) = machine
+                .get("capability")
+                .and_then(|caps| caps.get(name))
+                .and_then(|cap| cap.get("port"))
+                .and_then(toml::Value::as_str)
+                .filter(|port| !port.is_empty())
+            {
+                if let Some((_, value)) = fields.iter_mut().find(|(key, _)| *key == "port") {
+                    port.clone_into(value);
+                }
+            }
+        }
         let (proxy_extra, requires) = if external {
             (Vec::new(), Vec::new())
         } else {
@@ -776,6 +790,38 @@ mod tests {
     #[test]
     fn an_empty_registry_keeps_the_shell_layout() {
         assert_eq!(json(&[]).unwrap(), "[\n  \n]\n");
+    }
+
+    #[test]
+    fn a_local_process_reports_its_configured_port() {
+        let dir = tempfile::tempdir().unwrap();
+        let machine = dir.path().join("machine.toml");
+        let manifest = dir.path().join("service.toml");
+        std::fs::write(&machine, "[capability.entities]\nport = \"9080\"\n").unwrap();
+        std::fs::write(&manifest, "kind = \"process\"\nport = \"8097\"\n").unwrap();
+        let paths = Paths {
+            root: dir.path().into(),
+            machine_toml: Some(machine),
+            overlay_root: None,
+            caps_dir: dir.path().into(),
+            overlay_caps_dir: None,
+        };
+        let ctx = Ctx::new(&paths).unwrap();
+        assert_eq!(
+            ctx.service("entities", Some(&manifest), "capability", "")
+                .field("port"),
+            "9080"
+        );
+        assert_eq!(
+            ctx.service(
+                "entities",
+                Some(&manifest),
+                "external",
+                "https://example.test"
+            )
+            .field("port"),
+            ""
+        );
     }
 
     #[test]

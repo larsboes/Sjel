@@ -64,3 +64,91 @@ fn decision_for_a_missing_record_is_rejected_atomically() {
     assert!(library.duplicate_decisions().unwrap().is_empty());
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn confirmed_group_archives_every_member_except_the_survivor() {
+    let (library, root) = scratch();
+    let Stored::New(survivor) = library
+        .intake("scan-a.txt", b"synthetic first scan")
+        .unwrap()
+    else {
+        panic!("expected a new record")
+    };
+    let Stored::New(copy) = library
+        .intake("scan-b.txt", b"synthetic second scan")
+        .unwrap()
+    else {
+        panic!("expected a new record")
+    };
+    let mut member_ids = vec![survivor.id.clone(), copy.id.clone()];
+    member_ids.sort();
+    let decision = DuplicateDecision {
+        candidate_key: format!("rescan:{}:{}", member_ids[0], member_ids[1]),
+        kind: CandidateKind::Rescan,
+        member_ids,
+        action: DecisionAction::ConfirmGroup {
+            survivor_id: survivor.id.clone(),
+        },
+    };
+
+    assert_eq!(
+        library.save_duplicate_decision(&decision).unwrap(),
+        vec![copy.id.clone()]
+    );
+
+    assert_eq!(library.get(&survivor.id).unwrap().unwrap(), survivor);
+    assert_eq!(library.get(&copy.id).unwrap().unwrap().status, "archived");
+    assert_eq!(library.bytes(&copy.id).unwrap(), b"synthetic second scan");
+    assert_eq!(
+        library.absorbed_ids().unwrap(),
+        std::iter::once(copy.id.clone()).collect()
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn folder_intake_of_known_bytes_reuses_the_existing_record() {
+    let (library, root) = scratch();
+    let Stored::New(first) = library.intake("invoice.pdf", b"synthetic invoice").unwrap() else {
+        panic!("expected a new record")
+    };
+    let Stored::Unchanged(again) = library
+        .intake_known("invoice-copy.pdf", b"synthetic invoice")
+        .unwrap()
+    else {
+        panic!("known bytes must not create a record")
+    };
+    assert_eq!(again.id, first.id);
+    assert_eq!(library.list(None).unwrap().len(), 1);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn merge_copies_previews_then_keeps_one_record_per_exact_copy_group() {
+    let (library, root) = scratch();
+    for name in ["a.pdf", "b.pdf", "c.pdf"] {
+        library.intake(name, b"synthetic shared bytes").unwrap();
+    }
+    library
+        .intake("other.pdf", b"synthetic other bytes")
+        .unwrap();
+    let run = |args: &[&str]| {
+        let mut out = Vec::new();
+        let args: Vec<String> = args.iter().map(|a| (*a).to_string()).collect();
+        documents::commands::run(&library, &args, &mut out).unwrap();
+        String::from_utf8(out).unwrap()
+    };
+
+    assert!(run(&["merge-copies"]).contains("1 exact-copy group(s); would archive 2 record(s)"));
+    assert_eq!(library.absorbed_ids().unwrap().len(), 0);
+    assert!(run(&["merge-copies", "--apply"]).contains("archived 2 record(s)"));
+    let active = library
+        .list(None)
+        .unwrap()
+        .into_iter()
+        .filter(|d| d.status != "archived")
+        .count();
+    assert_eq!(active, 2);
+    assert!(run(&["merge-copies"]).contains("0 exact-copy group(s)"));
+    fs::remove_dir_all(root).unwrap();
+}

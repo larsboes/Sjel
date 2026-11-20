@@ -38,6 +38,7 @@ remain with [Operations](../operations/index.md#cli-only-coding-installation).
 - [Make nested help read-only](../tasks/tool-nonmutating-help.md).
 - [Gate deployment by adoption status](../tasks/tool-component-eligibility.md).
 - [Accept the storage explorer](../tasks/tool-disk-acceptance.md).
+- [Measure split suggestions across the library](../tasks/task-b4a18c40-ae4b-4d1a-b8ec-97e94576d010.md).
 - [Decide the home of the Rex trial config](../tasks/tool-rex-trial-config.md).
 - [Trash verified import sources](../tasks/tool-import-disposal.md).
 - [Observe scratch retention recovery](../tasks/tool-scratch-expiry.md).

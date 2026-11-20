@@ -64,19 +64,13 @@ pub use documents_api::{
     SplitSuggestion,
 };
 
-/// Propose complete ranges only when OCR or a text layer exposes explicit page-one markers.
+/// Propose complete ranges from local page signals. Every boundary carries the signal that
+/// produced it and a quote, and the operator accepts or edits each cut before a split.
 pub fn suggest_ranges(pages: &[sjel_extraction::ExtractedPage]) -> SplitSuggestion {
     let page_count = u32::try_from(pages.len()).unwrap_or(u32::MAX);
     let boundaries = pages
-        .iter()
-        .filter(|page| page.page_number > 1)
-        .filter_map(|page| {
-            explicit_page_one_marker(&page.text).map(|(marker, quote)| BoundaryEvidence {
-                before_page: page.page_number,
-                marker: marker.to_owned(),
-                quote,
-            })
-        })
+        .windows(2)
+        .filter_map(|pair| boundary_before(&pair[0], &pair[1]))
         .collect::<Vec<_>>();
     if boundaries.is_empty()
         || pages
@@ -88,9 +82,7 @@ pub fn suggest_ranges(pages: &[sjel_extraction::ExtractedPage]) -> SplitSuggesti
             page_count,
             ranges: Vec::new(),
             boundaries,
-            abstention: Some(
-                "No complete partition is supported by explicit page-one markers.".into(),
-            ),
+            abstention: Some("No page signal marks where a new document starts.".into()),
         };
     }
 
@@ -115,6 +107,141 @@ pub fn suggest_ranges(pages: &[sjel_extraction::ExtractedPage]) -> SplitSuggesti
     }
 }
 
+/// Fraction of shared words below which two full pages read as different documents.
+/// My estimate, not measured.
+const VOCABULARY_SHIFT_MAX_JACCARD: f64 = 0.08;
+/// Pages with fewer words than this say too little to compare.
+const MIN_COMPARABLE_WORDS: usize = 30;
+/// Only the top of a page can open a document.
+const HEAD_LINES: usize = 15;
+
+/// The strongest signal that `page` starts a new document after `previous`.
+fn boundary_before(
+    previous: &sjel_extraction::ExtractedPage,
+    page: &sjel_extraction::ExtractedPage,
+) -> Option<BoundaryEvidence> {
+    let evidence = |marker: &str, quote: String| BoundaryEvidence {
+        before_page: page.page_number,
+        marker: marker.to_owned(),
+        quote,
+    };
+    if let Some((marker, quote)) = explicit_page_one_marker(&page.text) {
+        return Some(evidence(marker, quote));
+    }
+    if let Some(quote) = last_page_marker(&previous.text) {
+        return Some(evidence("last-page-marker", quote));
+    }
+    if let Some(quote) = document_opening(&page.text) {
+        return Some(evidence("document-opening", quote));
+    }
+    let date = head(&page.text).find(|line| has_date(line))?;
+    let similarity = word_jaccard(&previous.text, &page.text)?;
+    (similarity < VOCABULARY_SHIFT_MAX_JACCARD)
+        .then(|| evidence("vocabulary-shift-with-date", quote(date)))
+}
+
+fn head(text: &str) -> impl Iterator<Item = &str> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .take(HEAD_LINES)
+}
+
+fn quote(line: &str) -> String {
+    line.trim().chars().take(160).collect()
+}
+
+/// "Seite 3 von 3" or "Page 2 of 2" on the previous page: that document ended there.
+fn last_page_marker(text: &str) -> Option<String> {
+    text.lines()
+        .rev()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .take(HEAD_LINES)
+        .find_map(|line| {
+            let folded = line.to_lowercase();
+            ["seite ", "page "].iter().find_map(|word| {
+                let rest = &folded[folded.find(word)? + word.len()..];
+                let mut numbers = rest
+                    .split(|c: char| !c.is_ascii_digit())
+                    .filter(|part| !part.is_empty())
+                    .take(2)
+                    .map(str::parse::<u32>);
+                let (Some(Ok(current)), Some(Ok(total))) = (numbers.next(), numbers.next()) else {
+                    return None;
+                };
+                let joined = rest.contains(" von ") || rest.contains(" of ") || rest.contains('/');
+                (joined && total > 1 && current == total).then(|| quote(line))
+            })
+        })
+}
+
+/// A salutation, subject line or document title at the top of the page.
+fn document_opening(text: &str) -> Option<String> {
+    const OPENINGS: &[&str] = &[
+        "sehr geehrte",
+        "sehr geehrter",
+        "liebe ",
+        "lieber ",
+        "dear ",
+        "betreff:",
+        "subject:",
+        "rechnung nr",
+        "rechnungsnummer",
+        "invoice no",
+        "invoice number",
+        "kontoauszug",
+        "bescheid für",
+        "bescheid über",
+    ];
+    head(text).find_map(|line| {
+        let folded = line.to_lowercase();
+        OPENINGS
+            .iter()
+            .any(|opening| folded.starts_with(opening))
+            .then(|| quote(line))
+    })
+}
+
+/// A `dd.mm.yyyy` or `yyyy-mm-dd` date somewhere in the line.
+fn has_date(line: &str) -> bool {
+    let bytes = line.as_bytes();
+    let digits = |from: usize, count: usize| {
+        bytes
+            .get(from..from + count)
+            .is_some_and(|run| run.iter().all(u8::is_ascii_digit))
+    };
+    (0..bytes.len()).any(|i| {
+        (digits(i, 2)
+            && bytes.get(i + 2) == Some(&b'.')
+            && digits(i + 3, 2)
+            && bytes.get(i + 5) == Some(&b'.')
+            && digits(i + 6, 4))
+            || (digits(i, 4)
+                && bytes.get(i + 4) == Some(&b'-')
+                && digits(i + 5, 2)
+                && bytes.get(i + 7) == Some(&b'-')
+                && digits(i + 8, 2))
+    })
+}
+
+/// Shared-word fraction of two pages, or `None` when either says too little.
+fn word_jaccard(left: &str, right: &str) -> Option<f64> {
+    let words = |text: &str| {
+        text.to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|word| word.chars().count() >= 3)
+            .map(str::to_owned)
+            .collect::<std::collections::HashSet<_>>()
+    };
+    let (left, right) = (words(left), words(right));
+    if left.len() < MIN_COMPARABLE_WORDS || right.len() < MIN_COMPARABLE_WORDS {
+        return None;
+    }
+    let shared = left.intersection(&right).count();
+    Some(shared as f64 / (left.len() + right.len() - shared) as f64)
+}
+
 fn explicit_page_one_marker(text: &str) -> Option<(&'static str, String)> {
     for line in text.lines().take(12) {
         let folded = line.to_lowercase();
@@ -136,6 +263,74 @@ mod tests {
 
     fn range(first: u32, last: u32) -> PageRange {
         PageRange::new(first, last).unwrap()
+    }
+
+    fn page(page_number: u32, text: &str) -> sjel_extraction::ExtractedPage {
+        sjel_extraction::ExtractedPage {
+            page_number,
+            text: text.into(),
+            engine: "test".into(),
+            failure: None,
+        }
+    }
+
+    fn filler(topic: &str) -> String {
+        (0..40).map(|i| format!("{topic}{i} ")).collect()
+    }
+
+    #[test]
+    fn splits_at_last_page_markers_and_document_openings() {
+        let pages = [
+            page(
+                1,
+                &format!("Sehr geehrte Damen und Herren\n{}", filler("alpha")),
+            ),
+            page(2, &format!("{}\nSeite 2 von 2", filler("alpha"))),
+            page(3, &format!("Rechnung Nr. 4711\n{}", filler("beta"))),
+            page(
+                4,
+                &format!("Sehr geehrter Herr Muster\n{}", filler("gamma")),
+            ),
+        ];
+        let suggestion = suggest_ranges(&pages);
+        assert_eq!(suggestion.ranges, [range(1, 2), range(3, 3), range(4, 4)]);
+        let markers: Vec<_> = suggestion
+            .boundaries
+            .iter()
+            .map(|b| b.marker.as_str())
+            .collect();
+        assert_eq!(markers, ["last-page-marker", "document-opening"]);
+    }
+
+    #[test]
+    fn a_vocabulary_shift_needs_a_date_at_the_top() {
+        let without_date = [page(1, &filler("alpha")), page(2, &filler("beta"))];
+        assert!(suggest_ranges(&without_date).ranges.is_empty());
+        let with_date = [
+            page(1, &filler("alpha")),
+            page(2, &format!("Berlin, 03.04.2025\n{}", filler("beta"))),
+        ];
+        let suggestion = suggest_ranges(&with_date);
+        assert_eq!(suggestion.ranges, [range(1, 1), range(2, 2)]);
+        assert_eq!(
+            suggestion.boundaries[0].marker,
+            "vocabulary-shift-with-date"
+        );
+    }
+
+    #[test]
+    fn continuing_pages_of_one_letter_stay_together() {
+        let pages = [
+            page(1, &format!("Sehr geehrte Frau Muster\n{}", filler("alpha"))),
+            page(
+                2,
+                &format!("03.04.2025\n{}\nSeite 2 von 3", filler("alpha")),
+            ),
+            page(3, &format!("{}\nSeite 3 von 3", filler("alpha"))),
+        ];
+        let suggestion = suggest_ranges(&pages);
+        assert!(suggestion.ranges.is_empty());
+        assert!(suggestion.abstention.is_some());
     }
 
     #[test]

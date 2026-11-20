@@ -1,4 +1,5 @@
-//! Authenticated operator UI over the document library. No agent-token admission.
+//! Authenticated operator UI over the document library. Agent tokens reach the duplicate
+//! candidate read only (`AGENT_ROUTES`).
 
 use std::sync::Arc;
 
@@ -38,7 +39,7 @@ const ROUTES: &[route_manifest::Route] = &[
     route_manifest::get(
         "GET",
         "/routes",
-        "Describe the operator-only document API. Agent credentials are not admitted.",
+        "Describe the document API. Agent tokens reach only the duplicate candidate read.",
     ),
     route_manifest::get(
         "GET",
@@ -75,7 +76,7 @@ const ROUTES: &[route_manifest::Route] = &[
         method: "POST",
         path: "/api/documents/duplicates/review",
         request_schema: Some(route_manifest::schema_of::<DuplicateDecision>),
-        summary: "Persist an operator decision for a current duplicate candidate. Originals and records are retained.",
+        summary: "Persist an operator decision for a current duplicate candidate. A confirmed group archives every member except the survivor; originals, records and source paths are retained.",
     },
     route_manifest::Route {
         method: "POST",
@@ -118,6 +119,23 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/documents/{id}",
         "Archive a document record; retain its original and metadata. Refile to restore.",
     ),
+    route_manifest::get(
+        "GET",
+        "/api/documents/collections",
+        "List named document collections with their member ids, by name.",
+    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/documents/collections",
+        request_schema: Some(route_manifest::schema_of::<documents_api::DocumentCollectionCreate>),
+        summary: "Create an empty named collection with an optional category.",
+    },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/documents/collections/{id}/members",
+        request_schema: Some(route_manifest::schema_of::<documents_api::DocumentCollectionMembers>),
+        summary: "Add and remove collection members in one change. Membership never moves, files or archives a record.",
+    },
 ];
 
 fn binary_schema() -> Value {
@@ -150,7 +168,7 @@ fn summary_from_document(
         }),
         suggested_category: document.suggested_category.clone(),
         suggestion_reason: document.suggestion_reason.clone(),
-        data_class: "c2".to_string(),
+        data_class: crate::DATA_CLASS.to_string(),
         page_count: document.pages.len(),
         parent_id: document.parent_id.clone(),
         page_range: document.page_range,
@@ -349,14 +367,12 @@ async fn duplicate_candidates(
     };
     let offset = query.offset.unwrap_or(0);
     blocking(library, move |library| {
-        let documents = library.list(None)?;
-        let sources = library.sources()?;
         let reviewed: std::collections::HashSet<_> = library
             .duplicate_decisions()?
             .into_iter()
             .map(|decision| decision.candidate_key)
             .collect();
-        let candidates: Vec<_> = crate::duplicates::candidates(&documents, &sources)
+        let candidates: Vec<_> = open_candidates(library)?
             .into_iter()
             .filter(|candidate| !reviewed.contains(&candidate.candidate_key))
             .filter(|candidate| kind.is_none_or(|kind| candidate.kind == kind))
@@ -378,9 +394,7 @@ async fn review_duplicate(
         .validate()
         .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error.to_string()))?;
     blocking(library, move |library| {
-        let documents = library.list(None)?;
-        let sources = library.sources()?;
-        let candidate = crate::duplicates::candidates(&documents, &sources)
+        let candidate = open_candidates(library)?
             .into_iter()
             .find(|candidate| candidate.candidate_key == decision.candidate_key)
             .ok_or_else(|| {
@@ -405,10 +419,44 @@ async fn review_duplicate(
                 ));
             }
         }
-        library.save_duplicate_decision(&decision)?;
-        Ok(Json(json!({"decision": decision})))
+        let archived = library.save_duplicate_decision(&decision)?;
+        Ok(Json(json!({"decision": decision, "archived": archived})))
     })
     .await
+}
+
+async fn list_collections(State(library): State<Arc<Library>>) -> Result<Json<Value>, ApiError> {
+    blocking(library, |library| {
+        Ok(Json(json!({"collections": library.collections()?})))
+    })
+    .await
+}
+
+async fn create_collection(
+    State(library): State<Arc<Library>>,
+    Json(request): Json<documents_api::DocumentCollectionCreate>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    blocking(library, move |library| {
+        let collection = library.create_collection(&request.name, request.category.as_deref())?;
+        Ok((StatusCode::CREATED, Json(json!({"collection": collection}))))
+    })
+    .await
+}
+
+async fn update_collection(
+    State(library): State<Arc<Library>>,
+    Path(id): Path<String>,
+    Json(request): Json<documents_api::DocumentCollectionMembers>,
+) -> Result<Json<Value>, ApiError> {
+    blocking(library, move |library| {
+        let collection = library.update_collection(&id, &request.add, &request.remove)?;
+        Ok(Json(json!({"collection": collection})))
+    })
+    .await
+}
+
+fn open_candidates(library: &Library) -> Result<Vec<crate::review::ReviewCandidate>, ApiError> {
+    Ok(crate::duplicates::open_candidates(library)?)
 }
 
 async fn detail(
@@ -675,6 +723,14 @@ fn router(library: Arc<Library>) -> Router {
         .route("/api/documents/{id}/split", axum::routing::post(split))
         .route("/api/documents/duplicates", get(duplicate_candidates))
         .route(
+            "/api/documents/collections",
+            get(list_collections).post(create_collection),
+        )
+        .route(
+            "/api/documents/collections/{id}/members",
+            axum::routing::post(update_collection),
+        )
+        .route(
             "/api/documents/duplicates/review",
             axum::routing::post(review_duplicate),
         )
@@ -703,7 +759,14 @@ fn router(library: Arc<Library>) -> Router {
         .with_state(library)
 }
 
-/// Serve documents through Sjel's loopback credential gate, without agent-token access.
+/// The only route an agent token reaches. Every other Documents route stays operator-only.
+const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
+    sjel_server::agent_policy::AgentRoutes {
+        only: &[("GET", "/api/documents/duplicates")],
+        ..sjel_server::agent_policy::AgentRoutes::NONE
+    };
+
+/// Serve documents through Sjel's loopback credential gate. Agents read duplicate candidates only.
 ///
 /// # Errors
 /// The library or asynchronous runtime cannot be opened.
@@ -712,12 +775,15 @@ pub fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let port = sjel_config::resolve_port(None, None, DEFAULT_PORT);
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.spawn(proposal_backfill_worker(Arc::clone(&library)));
+    runtime.spawn(analysis_backfill_worker(Arc::clone(&library)));
     let http = sjel_server::serve(
         "documents",
         sjel_server::Reach::Loopback,
         port,
         router(Arc::clone(&library)),
-        sjel_server::InboundAuth::from_deployment().require_credential(),
+        sjel_server::InboundAuth::from_deployment()
+            .require_credential()
+            .admit_agents("documents", AGENT_ROUTES),
     );
     #[cfg(feature = "turso-wal")]
     runtime.block_on(async {
@@ -746,6 +812,78 @@ async fn proposal_backfill_worker(library: Arc<Library>) {
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
         }
+    }
+}
+
+/// Time between passes; a pass picks up documents imported since the last one.
+const ANALYSIS_PASS_INTERVAL: std::time::Duration = std::time::Duration::from_secs(6 * 60 * 60);
+/// Pause between two documents, so local OCR leaves the machine responsive.
+const ANALYSIS_PAUSE: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// Ids of active original PDFs that still need local extraction, minus those already tried.
+fn analysis_backlog(
+    library: &Library,
+    tried: &std::collections::HashSet<String>,
+) -> Result<Vec<String>, LibraryError> {
+    Ok(library
+        .list(None)?
+        .into_iter()
+        .filter(|document| document.status != "archived" && document.parent_id.is_none())
+        .filter(crate::workflow::has_analysis_gap)
+        .map(|document| document.id)
+        .filter(|id| !tried.contains(id))
+        .collect())
+}
+
+/// Run local extraction for every active PDF with an analysis gap, one at a time. A
+/// document is tried once per process; a restart tries the remaining gaps again.
+async fn analysis_backfill_worker(library: Arc<Library>) {
+    let mut tried = std::collections::HashSet::new();
+    loop {
+        let scan_library = Arc::clone(&library);
+        let snapshot = tried.clone();
+        let backlog =
+            match tokio::task::spawn_blocking(move || analysis_backlog(&scan_library, &snapshot))
+                .await
+            {
+                Ok(Ok(backlog)) => backlog,
+                Ok(Err(error)) => {
+                    eprintln!("documents: analysis backlog unreadable; retrying: {error}");
+                    Vec::new()
+                }
+                Err(error) => {
+                    eprintln!("documents: analysis worker failed; retrying: {error}");
+                    Vec::new()
+                }
+            };
+        if !backlog.is_empty() {
+            eprintln!(
+                "documents: analyzing {} document(s) in the background",
+                backlog.len()
+            );
+        }
+        let (mut analyzed, mut failed) = (0usize, 0usize);
+        for id in backlog {
+            tried.insert(id.clone());
+            let item_library = Arc::clone(&library);
+            let item = id.clone();
+            match tokio::task::spawn_blocking(move || item_library.analyze(&item)).await {
+                Ok(Ok(_)) => analyzed += 1,
+                Ok(Err(error)) => {
+                    failed += 1;
+                    eprintln!("documents: analysis of {id} failed: {error}");
+                }
+                Err(error) => {
+                    failed += 1;
+                    eprintln!("documents: analysis of {id} stopped: {error}");
+                }
+            }
+            tokio::time::sleep(ANALYSIS_PAUSE).await;
+        }
+        if analyzed + failed > 0 {
+            eprintln!("documents: analysis pass done: {analyzed} analyzed, {failed} failed");
+        }
+        tokio::time::sleep(ANALYSIS_PASS_INTERVAL).await;
     }
 }
 

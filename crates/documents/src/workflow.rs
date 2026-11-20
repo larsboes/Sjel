@@ -57,14 +57,7 @@ pub fn stage(document: &Document, has_pending_proposal: bool, has_children: bool
         return Stage::Split;
     }
 
-    let has_analysis_gap = document.media_type == "application/pdf"
-        && (document.pages.is_empty()
-            || document.pages.iter().any(|page| page.failure.is_some())
-            || document
-                .extracted_text
-                .as_deref()
-                .is_none_or(|text| text.chars().all(char::is_whitespace)));
-    if has_analysis_gap {
+    if has_analysis_gap(document) {
         return Stage::Analyze;
     }
 
@@ -79,4 +72,15 @@ pub fn stage(document: &Document, has_pending_proposal: bool, has_children: bool
     }
 
     Stage::File
+}
+
+/// A PDF without page evidence, with a failed page, or without any extracted text.
+pub fn has_analysis_gap(document: &Document) -> bool {
+    document.media_type == "application/pdf"
+        && (document.pages.is_empty()
+            || document.pages.iter().any(|page| page.failure.is_some())
+            || document
+                .extracted_text
+                .as_deref()
+                .is_none_or(|text| text.chars().all(char::is_whitespace)))
 }

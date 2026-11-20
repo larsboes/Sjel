@@ -182,6 +182,7 @@ pub fn candidates(documents: &[Document], sources: &[(String, String)]) -> Vec<R
             score: None,
             sha256: Some(group.sha256),
             part: None,
+            data_class: crate::DATA_CLASS.to_string(),
         });
     }
     for pair in report.rescans {
@@ -195,6 +196,7 @@ pub fn candidates(documents: &[Document], sources: &[(String, String)]) -> Vec<R
             score: Some(pair.score),
             sha256: None,
             part: None,
+            data_class: crate::DATA_CLASS.to_string(),
         });
     }
     for pair in report.parts {
@@ -211,6 +213,7 @@ pub fn candidates(documents: &[Document], sources: &[(String, String)]) -> Vec<R
                 part_id: pair.a,
                 parent_id: pair.b,
             }),
+            data_class: crate::DATA_CLASS.to_string(),
         });
     }
     candidates.sort_by(|left, right| left.candidate_key.cmp(&right.candidate_key));
@@ -233,6 +236,40 @@ fn shingles(text: &str) -> HashSet<u64> {
             hasher.finish()
         })
         .collect()
+}
+
+/// The record that keeps a group: filed before inbox before archived, then the earliest
+/// import, then the lowest id.
+pub fn preferred<'a>(documents: impl IntoIterator<Item = &'a Document>) -> Option<&'a Document> {
+    documents.into_iter().min_by(|left, right| {
+        let rank = |document: &Document| match document.status.as_str() {
+            "filed" => 0,
+            "inbox" => 1,
+            _ => 2,
+        };
+        (rank(left), &left.imported_at, &left.id).cmp(&(rank(right), &right.imported_at, &right.id))
+    })
+}
+
+/// Candidates over the library, without records that a confirmed group archived.
+///
+/// # Errors
+/// The library or its saved decisions cannot be read.
+pub fn open_candidates(
+    library: &crate::Library,
+) -> Result<Vec<ReviewCandidate>, crate::LibraryError> {
+    let absorbed = library.absorbed_ids()?;
+    let documents: Vec<_> = library
+        .list(None)?
+        .into_iter()
+        .filter(|document| !absorbed.contains(&document.id))
+        .collect();
+    let sources: Vec<_> = library
+        .sources()?
+        .into_iter()
+        .filter(|(id, _)| !absorbed.contains(id))
+        .collect();
+    Ok(candidates(&documents, &sources))
 }
 
 #[cfg(test)]

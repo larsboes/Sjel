@@ -11,7 +11,7 @@ macro_rules! line {
     };
 }
 
-pub const USAGE: &str = "usage: documents <command>\n  intake <file>                      add original bytes to the inbox\n  inbox <folder> [--limit N] [--dry-run] [--recursive] [--include-sensitive]\n                                     latest documents (default 100), local only\n  duplicates                         copies, rescans and split parts; changes nothing\n  watch <folder>                     poll all documents every 60 seconds\n  list [--status inbox|filed|archived]\n  next [--limit N] [--offset N]       show local review steps (default 100)\n  search <words...> [--status STATE] [--limit N] ranked local search; show matching pages\n  analyze <id>                       refresh page-level extraction locally\n  suggest-splits <id>                suggest explicit page-one boundaries\n  suggest-model <id>                 ask the configured local model for a review proposal\n  pages <id>                         show per-page extraction status without page text\n  split <id> <ranges>                store child PDFs in Sjel, e.g. 1-2,3-4\n  review <id> <category> [--project NAME]\n  archive <id>\n  export <id> <destination>      copy a stored PDF without overwriting\n  restore-index                      reconstruct missing rows from sidecars\n  verify                              hash-check every stored document";
+pub const USAGE: &str = "usage: documents <command>\n  intake <file>                      add original bytes to the inbox\n  inbox <folder> [--limit N] [--dry-run] [--recursive] [--include-sensitive]\n                                     latest documents (default 100), local only\n  duplicates                         copies, rescans and split parts; changes nothing\n  merge-copies [--apply]             keep one record per exact-copy group, archive the rest\n  collection list|show <name>|new <name> [--category C]|add <name> <id>...|remove <name> <id>...\n  watch <folder>                     poll all documents every 60 seconds\n  list [--status inbox|filed|archived]\n  next [--limit N] [--offset N]       show local review steps (default 100)\n  search <words...> [--status STATE] [--limit N] ranked local search; show matching pages\n  analyze <id>                       refresh page-level extraction locally\n  suggest-splits <id>                suggest explicit page-one boundaries\n  suggest-model <id>                 ask the configured local model for a review proposal\n  pages <id>                         show per-page extraction status without page text\n  split <id> <ranges>                store child PDFs in Sjel, e.g. 1-2,3-4\n  review <id> <category> [--project NAME]\n  archive <id>\n  export <id> <destination>      copy a stored PDF without overwriting\n  restore-index                      reconstruct missing rows from sidecars\n  verify                              hash-check every stored document";
 
 /// Run a local command using the owning library.
 ///
@@ -278,7 +278,7 @@ pub fn run(
                 for boundary in suggestion.boundaries {
                     line!(
                         out,
-                        "cut before page {} · explicit marker {}",
+                        "cut before page {} · signal {}",
                         boundary.before_page,
                         boundary.marker
                     );
@@ -365,6 +365,15 @@ pub fn run(
             file.write_all(&bytes)?;
             file.sync_all()?;
             line!(out, "exported {id} to {}", destination.display());
+        }
+        "collection" => collection(library, &args[1..], out)?,
+        "merge-copies" => {
+            let apply = match args.get(1).map(String::as_str) {
+                None => false,
+                Some("--apply") if args.len() == 2 => true,
+                _ => return Err(USAGE.into()),
+            };
+            merge_copies(library, apply, out)?;
         }
         "duplicates" => {
             let documents = library.list(None)?;
@@ -457,6 +466,113 @@ fn parse_ranges(value: &str) -> Result<Vec<(u32, u32)>, Box<dyn std::error::Erro
     Ok(ranges)
 }
 
+/// `collection list | show <name> | new <name> [--category C] | add|remove <name> <id>...`
+fn collection(
+    library: &Library,
+    args: &[String],
+    out: &mut impl Write,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let name = || args.get(1).map(String::as_str).ok_or(USAGE);
+    match args.first().map(String::as_str) {
+        Some("list") if args.len() == 1 => {
+            for collection in library.collections()? {
+                line!(
+                    out,
+                    "{}  {:3} member(s)  {}  [{}]",
+                    collection.id,
+                    collection.member_ids.len(),
+                    collection.name,
+                    collection.category.as_deref().unwrap_or("-")
+                );
+            }
+        }
+        Some("show") if args.len() == 2 => {
+            let collection = library.collection(name()?)?.ok_or("no such collection")?;
+            line!(
+                out,
+                "{} [{}]",
+                collection.name,
+                collection.category.as_deref().unwrap_or("-")
+            );
+            for id in &collection.member_ids {
+                let filename = library.get(id)?.map(|d| d.filename).unwrap_or_default();
+                line!(out, "{id}  {filename}");
+            }
+        }
+        Some("new") => {
+            let category = match &args[2..] {
+                [] => None,
+                [flag, category] if flag == "--category" => Some(category.as_str()),
+                _ => return Err(USAGE.into()),
+            };
+            let collection = library.create_collection(name()?, category)?;
+            line!(
+                out,
+                "created collection {} {}",
+                collection.id,
+                collection.name
+            );
+        }
+        Some(verb @ ("add" | "remove")) if args.len() > 2 => {
+            let ids = &args[2..];
+            let (add, remove): (&[String], &[String]) = if verb == "add" {
+                (ids, &[])
+            } else {
+                (&[], ids)
+            };
+            let collection = library.update_collection(name()?, add, remove)?;
+            line!(
+                out,
+                "{} now has {} member(s)",
+                collection.name,
+                collection.member_ids.len()
+            );
+        }
+        _ => return Err(USAGE.into()),
+    }
+    Ok(())
+}
+
+/// Confirm every open exact-copy group with the preferred record as survivor.
+fn merge_copies(
+    library: &Library,
+    apply: bool,
+    out: &mut impl Write,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let documents = library.list(None)?;
+    let (mut groups, mut archived) = (0, 0);
+    for candidate in crate::duplicates::open_candidates(library)? {
+        if candidate.kind != crate::review::CandidateKind::ExactCopy {
+            continue;
+        }
+        let members = documents
+            .iter()
+            .filter(|document| candidate.member_ids.contains(&document.id));
+        let survivor =
+            crate::duplicates::preferred(members).ok_or("exact-copy group has no stored member")?;
+        groups += 1;
+        if apply {
+            let decision = crate::review::DuplicateDecision {
+                candidate_key: candidate.candidate_key,
+                kind: candidate.kind,
+                member_ids: candidate.member_ids,
+                action: crate::review::DecisionAction::ConfirmGroup {
+                    survivor_id: survivor.id.clone(),
+                },
+            };
+            archived += library.save_duplicate_decision(&decision)?.len();
+        } else {
+            archived += candidate.member_ids.len() - 1;
+        }
+    }
+    let verb = if apply { "archived" } else { "would archive" };
+    line!(
+        out,
+        "{groups} exact-copy group(s); {verb} {archived} record(s); originals kept"
+    );
+    Ok(())
+}
+
 fn intake_folder(
     library: &Library,
     args: &[String],
@@ -488,9 +604,24 @@ fn intake_folder(
         plan.unready
     );
     if dry_run {
+        let (mut known, mut new, mut unreadable) = (0, 0, 0);
         for file in &plan.files {
-            line!(out, "would import {}", file.path().display());
+            let Ok(bytes) = file.read() else {
+                unreadable += 1;
+                continue;
+            };
+            let sha256 = crate::library::hex(&<sha2::Sha256 as sha2::Digest>::digest(&bytes));
+            if library.roots_by_hash(&sha256)?.is_empty() {
+                new += 1;
+                line!(out, "would import {}", file.path().display());
+            } else {
+                known += 1;
+            }
         }
+        line!(
+            out,
+            "{new} new, {known} already stored, {unreadable} unreadable"
+        );
         return Ok(());
     }
     import_plan(library, &plan, false, out)
@@ -506,7 +637,7 @@ fn import_plan(
     for file in &plan.files {
         match file
             .read()
-            .and_then(|bytes| library.intake(&file.filename, &bytes))
+            .and_then(|bytes| library.intake_known(&file.filename, &bytes))
         {
             Ok(stored) => {
                 let id = match &stored {

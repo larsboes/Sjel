@@ -19,6 +19,8 @@ use sjel_store as engine;
 use sql::{params, params_from_iter, Connection, OptionalExtension, Row};
 
 use crate::review::DuplicateDecision;
+
+mod collections;
 use sha2::{Digest, Sha256};
 
 const PREFIX: &str = "documents";
@@ -1322,6 +1324,38 @@ impl Library {
             .map(|document| self.with_configured_suggestion(document)))
     }
 
+    /// Root records (not split children) that store these bytes.
+    ///
+    /// # Errors
+    /// The digest is malformed or the table cannot be read.
+    pub fn roots_by_hash(&self, sha256: &str) -> Fallible<Vec<Document>> {
+        check_id(sha256)?;
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| LibraryError::Store(e.to_string()))?;
+        let mut statement = conn.prepare(
+            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items WHERE sha256 = ?1 AND parent_id IS NULL",
+        )?;
+        let rows = statement.query_map(params![sha256], read_document)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Intake for folder imports. Bytes the library already stores return the preferred
+    /// existing record as unchanged, so the caller records one more source path instead of
+    /// creating a second record. An explicit upload keeps [`Library::intake`].
+    ///
+    /// # Errors
+    /// As [`Library::intake`].
+    pub fn intake_known(&self, filename: &str, bytes: &[u8]) -> Fallible<Stored> {
+        let sha256 = hex(&Sha256::digest(bytes));
+        let roots = self.roots_by_hash(&sha256)?;
+        if let Some(existing) = crate::duplicates::preferred(&roots) {
+            return Ok(Stored::Unchanged(existing.clone()));
+        }
+        self.intake(filename, bytes)
+    }
+
     fn by_hash_and_name(&self, sha256: &str, filename: &str) -> Fallible<Option<Document>> {
         check_id(sha256)?;
         let conn = self
@@ -1412,11 +1446,13 @@ impl Library {
         .collect()
     }
 
-    /// Persist an operator decision without deleting or changing document records or originals.
+    /// Persist an operator decision. A confirmed group also archives every member except the
+    /// survivor, in the same transaction, and returns the archived ids. Originals, source
+    /// paths and records are never deleted.
     ///
     /// # Errors
     /// The decision is invalid, a referenced record is missing, or persistence fails.
-    pub fn save_duplicate_decision(&self, decision: &DuplicateDecision) -> Fallible<()> {
+    pub fn save_duplicate_decision(&self, decision: &DuplicateDecision) -> Fallible<Vec<String>> {
         decision
             .validate()
             .map_err(|error| LibraryError::Invalid(error.to_string()))?;
@@ -1454,8 +1490,33 @@ impl Library {
                 chrono::Utc::now().to_rfc3339()
             ],
         )?;
+        let absorbed = decision.absorbed_ids();
+        for id in &absorbed {
+            transaction.execute(
+                "UPDATE documents_items SET status = 'archived' WHERE id = ?1",
+                params![id.as_str()],
+            )?;
+        }
         transaction.commit()?;
-        Ok(())
+        for id in &absorbed {
+            let document = self
+                .get(id)?
+                .ok_or_else(|| LibraryError::Invalid("merged record disappeared".into()))?;
+            self.write_record(&document)?;
+        }
+        Ok(absorbed)
+    }
+
+    /// Ids that a confirmed group archived. They leave the duplicate review queue.
+    ///
+    /// # Errors
+    /// The review table cannot be read or a persisted decision is malformed.
+    pub fn absorbed_ids(&self) -> Fallible<std::collections::HashSet<String>> {
+        Ok(self
+            .duplicate_decisions()?
+            .iter()
+            .flat_map(DuplicateDecision::absorbed_ids)
+            .collect())
     }
 
     /// Read and verify the original bytes for one document id.
@@ -1605,6 +1666,7 @@ impl Library {
             }
         }
         self.restore_proposal_sidecars()?;
+        self.restore_collection_sidecars()?;
         self.backfill_rule_proposals()?;
         Ok((restored, unchanged))
     }
@@ -1879,32 +1941,9 @@ impl Library {
     }
 
     fn write_record(&self, document: &Document) -> Fallible<()> {
-        let path = self.record_path(&document.id);
-        let parent = path
-            .parent()
-            .ok_or_else(|| LibraryError::Invalid("metadata path has no parent".into()))?;
-        let stamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| LibraryError::Invalid(e.to_string()))?
-            .as_nanos();
-        let temp = parent.join(format!(
-            ".{}.{}.{}.tmp",
-            document.id,
-            std::process::id(),
-            stamp
-        ));
         let bytes =
             serde_json::to_vec(document).map_err(|e| LibraryError::Invalid(e.to_string()))?;
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&temp)?;
-        file.write_all(&bytes)?;
-        file.sync_all()?;
-        fs::rename(&temp, &path)?;
-        fs::File::open(parent)?.sync_all()?;
-        Ok(())
+        write_atomic(&self.record_path(&document.id), &bytes)
     }
 
     fn insert_record(&self, document: &Document) -> Fallible<()> {
@@ -2043,6 +2082,7 @@ fn migrate(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
             high_water_rowid INTEGER NOT NULL
         );",
     )?;
+    collections::migrate(conn)?;
     #[cfg(not(feature = "turso-wal"))]
     migrate_fts(conn)?;
     let proposal_columns = conn
@@ -2478,6 +2518,32 @@ fn check_id(id: &str) -> Fallible<()> {
             "document id must be a SHA-256 digest".into(),
         ))
     }
+}
+
+/// Write `bytes` to `path` through a synced temporary file in the same directory.
+fn write_atomic(path: &Path, bytes: &[u8]) -> Fallible<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| LibraryError::Invalid("metadata path has no parent".into()))?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| LibraryError::Invalid(e.to_string()))?
+        .as_nanos();
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| LibraryError::Invalid("metadata path has no file name".into()))?;
+    let temp = parent.join(format!(".{name}.{}.{stamp}.tmp", std::process::id()));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&temp)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    fs::rename(&temp, path)?;
+    fs::File::open(parent)?.sync_all()?;
+    Ok(())
 }
 
 pub(crate) fn hex(bytes: &[u8]) -> String {

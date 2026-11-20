@@ -8,8 +8,13 @@ and filename. New documents start in `inbox`; a human must choose a category bef
 
 The `documents` capability owns document records and originals. `projects` remains the owner of
 project/task records and attachments; a project label on a document is a reference only. The local
-CLI and authenticated desktop interface use the same library. The HTTP server does not admit agent
-credentials, preventing raw personal documents from entering autonomous agent tool contexts.
+CLI and authenticated desktop interface use the same library. Agent credentials reach one route,
+`GET /api/documents/duplicates`: member ids, kind, score, digest and pseudonymized source paths, with
+no extracted text and no originals. Every other route is operator-only.
+
+A confirmed duplicate group keeps the survivor and archives every other member in the same
+transaction. Archived records keep their originals, source paths and sidecars, and leave the
+duplicate review queue.
 
 ## Surface
 
@@ -27,6 +32,10 @@ documents split <id> <ranges>                                  # partition PDF i
 documents review <id> <category> [--project NAME]              # file document
 documents archive <id>                                         # archive document record
 documents duplicates                                           # inspect duplicate groups
+documents merge-copies [--apply]                               # keep one record per exact-copy group
+documents collection list|show <name>                          # named groups of document references
+documents collection new <name> [--category C]                 # create a collection
+documents collection add|remove <name> <id>...                 # change membership; records stay put
 documents verify                                               # verify blob digests
 ```
 
@@ -41,6 +50,8 @@ The `documents` service binds loopback on `SJEL_DOCUMENTS_PORT` (default 8104) b
 - `POST /api/documents/{id}/analyze` — re-run local text extraction and page segmentation.
 - `GET /api/documents/{id}/children` — list stored child records with parent page ranges.
 - `POST /api/documents/{id}/split` — partition PDF into standalone child documents for specified page ranges.
+- `GET|POST /api/documents/collections`, `POST /api/documents/collections/{id}/members` — named
+  collections of document references. A sidecar per collection lets `restore-index` rebuild them.
 - `POST /api/documents/{id}/proposals/model` — request local classification proposal from loopback inference role.
 - `POST /api/documents/{id}/proposals/{proposal_id}/review` — record operator feedback (`accepted`, `rejected`, `overridden`).
 - `PATCH /api/documents/{id}` — commit operator filing category and optional project reference.
@@ -54,7 +65,10 @@ Document storage and metadata analysis are colocated in Sjel:
    administration. Obsidian serves strictly as an academic and conceptual knowledge base (such as science,
    engineering, or philosophy). Personal documents and summaries never file into Obsidian.
 2. **Hash-addressed deduplication.** Source files are content-addressed by SHA-256 in `<overlay>/data/documents/blobs/`.
-   Duplicate imports reuse the stored payload while preserving separate filenames, dates, and filing lineages.
+   An explicit upload of known bytes under a new filename gets its own record that shares the payload.
+   A folder import (`inbox`, `watch`) adds the source path to the existing record instead, and its
+   `--dry-run` reports new and already-stored files by hash. `merge-copies` keeps the filed record,
+   else the inbox record, else the earliest import, and archives the other members.
 3. **Immutable originals.** Intake, segmentation, and enrichment never overwrite, move, or rename source
    bytes. Reanalysis is idempotent and safe to rerun.
 
@@ -75,11 +89,16 @@ Automated assistance proposes metadata but never commits actions unattended:
 
 Multi-page document handling preserves complete page lineage:
 
-1. **Per-page text and OCR provenance.** PDF pages are analyzed independently. Pages with sufficient
+1. **Per-page text and OCR provenance.** The running server analyzes every active original PDF that has
+   no page evidence, a failed page or no text, one at a time, and repeats the pass every six hours.
+   A document that fails is tried again only after a restart. PDF pages are analyzed independently. Pages with sufficient
    vector text use native extraction; scanned or image-heavy pages fall back to local OCR. Each page retains
    its engine version and error status.
 2. **Explicit partition splits.** When a mixed document contains multiple receipts or forms, `split`
    materializes standalone child PDFs for non-overlapping, complete page ranges using `lopdf`.
+   `suggest-splits` proposes cuts from local page signals: an explicit page-one marker, a last-page
+   marker on the previous page, a salutation, subject or invoice heading at the top, or a vocabulary
+   break with a date at the top. Each cut names its signal and quote; nothing splits without review.
 3. **Child independence.** Child documents receive distinct SHA-256 content IDs, retain extracted page text,
    and can be searched, reviewed, and exported independently while maintaining links to the parent original.
 
@@ -99,8 +118,13 @@ Desktop integration in GPUI provides direct document interaction:
   filing risks misplacing sensitive documents and obscuring low-confidence classifications.
 - **Filing personal documents into Obsidian.** Declined: Obsidian is reserved for subject knowledge notes;
   personal records and tax documents belong in Sjel's hash-addressed store and private overlay.
-- **Admitting agent credentials to the Documents HTTP API.** Declined: autonomous coding agents and external
-  tools must not have direct read access to personal financial, legal, or medical originals.
+- **Closing the owner socket to agent sessions.** Declined: `documents` commands reach the running owner
+  through a local socket that accepts any session holding the loopback credential, agent sessions
+  included, so an agent can run imports, merges and splits for the operator. The HTTP agent gate does
+  not apply there.
+- **Admitting agent credentials to the whole Documents HTTP API.** Declined: autonomous coding agents and
+  external tools must not have direct read access to personal financial, legal, or medical originals,
+  extracted text or metadata routes. Only the duplicate candidate read is admitted.
 - **Cloud-hosted OCR or classification endpoints.** Declined: documents are personal `c2` data by default;
   external transmission is prohibited.
 - **Standalone CLM model runtime.** Declined: evaluated on synthetic test corpora and rejected due to high

@@ -17,6 +17,9 @@ pub mod workflow;
 
 pub use library::{Document, Library, LibraryError, Review, Stored};
 
+/// The data class of every stored document.
+pub const DATA_CLASS: &str = "c2";
+
 /// Open the metadata store and the canonical document directory.
 ///
 /// # Errors

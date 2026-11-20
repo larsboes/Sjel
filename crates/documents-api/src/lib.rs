@@ -225,6 +225,37 @@ pub struct DocumentSplitSuggestion {
 
 pub type SplitSuggestion = DocumentSplitSuggestion;
 
+/// A named group of document references. Membership never moves or files a record.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct DocumentCollection {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub category: Option<String>,
+    pub created_at: String,
+    #[serde(default)]
+    pub member_ids: Vec<String>,
+}
+
+/// Create a collection.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentCollectionCreate {
+    pub name: String,
+    #[serde(default)]
+    pub category: Option<String>,
+}
+
+/// Add and remove collection members in one change.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentCollectionMembers {
+    #[serde(default)]
+    pub add: Vec<String>,
+    #[serde(default)]
+    pub remove: Vec<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct DocumentSplitChildInput {
     pub first: u32,
@@ -429,6 +460,9 @@ pub struct DuplicateCandidate {
     pub part: Option<DuplicatePartRelation>,
     #[serde(default)]
     pub locations: Vec<DuplicateSourceLocation>,
+    /// The highest data class among the members. The agent gate withholds a c3 candidate.
+    #[serde(default)]
+    pub data_class: String,
 }
 
 pub type ReviewCandidate = DuplicateCandidate;
@@ -506,6 +540,19 @@ impl DuplicateDecision {
     /// # Errors
     /// The candidate key or member ids are invalid, a selected record is not a member,
     /// or the split ranges do not form a strict partition.
+    /// The members a confirmed group archives: every member except the survivor.
+    pub fn absorbed_ids(&self) -> Vec<String> {
+        match &self.action {
+            DuplicateDecisionAction::ConfirmGroup { survivor_id } => self
+                .member_ids
+                .iter()
+                .filter(|id| *id != survivor_id)
+                .cloned()
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
     pub fn validate(&self) -> Result<(), DecisionError> {
         if self.candidate_key.is_empty() || self.candidate_key.len() > 256 {
             return Err(DecisionError::InvalidCandidateKey);

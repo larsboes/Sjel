@@ -14,6 +14,7 @@ crates/offers/offers list [--all]                # valid offers by last day
 crates/offers/offers show <thread-id>            # one offer with its evidence lines
 crates/offers/offers set <thread-id> used        # or active, dismissed
 crates/offers/offers reread                      # extract stored originals again
+crates/offers/offers page --open                 # index.html of valid offers
 crates/offers/offers released > released.json    # mail that may go
 comms mail cleanup --released released.json      # rules with "gate": "released"
 ```
@@ -28,8 +29,11 @@ comms mail cleanup --released released.json      # rules with "gate": "released"
 - **Release, not deletion.** `released` lists used, dismissed, `no-offer` and expired offers. An
   offer with no stated expiry stays valid for 30 days after the mail. Comms trashes only behind
   the owner's Allow.
+- **Only the mail's own pictures.** The largest picture embedded in the mail is kept as
+  `image.<ext>`. Linked pictures are never fetched, because loading one tells the sender the
+  mail was opened. The page loads nothing from the network.
 - **Files, not a database.** One folder per mail, the same contract shape as `posts`.
 
 ## Not yet
 
-No server route, no app page, and no link from an offer to a wish or a gift idea.
+No server route, no Mac app page, and no link from an offer to a wish or a gift idea.

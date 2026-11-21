@@ -65,6 +65,9 @@ pub struct Offer {
     /// `YYYY-MM-DD`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub valid_until: Option<Quoted>,
+    /// File name of the picture taken from inside the mail, beside `offer.toml`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
 }
 
 impl Offer {
@@ -180,9 +183,14 @@ fn import_one(from: &Path, target: &Path) -> Res<Offer> {
         code: found.code,
         discount: found.discount,
         valid_until: found.valid_until,
+        image: None,
     };
     fs::create_dir_all(target).map_err(|e| e.to_string())?;
     fs::write(target.join("original.eml"), &eml).map_err(|e| e.to_string())?;
+    let offer = Offer {
+        image: save_image(&eml, target)?,
+        ..offer
+    };
     write_offer(target, &offer)?;
     Ok(offer)
 }
@@ -251,6 +259,7 @@ pub fn reread(root: &Path) -> Res<usize> {
             code: found.code,
             discount: found.discount,
             valid_until: found.valid_until,
+            image: save_image(&eml, &folder)?,
             ..offer.clone()
         };
         if next != offer {
@@ -259,6 +268,145 @@ pub fn reread(root: &Path) -> Res<usize> {
         }
     }
     Ok(changed)
+}
+
+fn escape(text: &str) -> String {
+    text.chars()
+        .map(|c| match c {
+            '&' => "&amp;".into(),
+            '<' => "&lt;".into(),
+            '>' => "&gt;".into(),
+            '"' => "&quot;".into(),
+            '\'' => "&#39;".into(),
+            c => c.to_string(),
+        })
+        .collect()
+}
+
+/// The shop's display name from a `From` header: `Rituals Cosmetics <news@…>` gives `Rituals Cosmetics`.
+fn shop(from: Option<&str>) -> String {
+    let from = from.unwrap_or_default();
+    let name = from
+        .split('<')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .trim_matches('"');
+    if name.is_empty() {
+        from.trim_matches(['<', '>']).to_string()
+    } else {
+        name.to_string()
+    }
+}
+
+/// A self-contained page of the valid offers, soonest expiry first. It loads nothing from the
+/// network: pictures and mails are files beside it.
+pub fn page(offers: &[(String, Offer)], today: NaiveDate) -> String {
+    let mut valid: Vec<&(String, Offer)> =
+        offers.iter().filter(|(_, o)| !o.released(today)).collect();
+    valid.sort_by_key(|(_, o)| o.last_day());
+    let mut cards = String::new();
+    for (id, offer) in &valid {
+        let days = offer.last_day().map(|d| (d - today).num_days());
+        let left = match days {
+            Some(0) => "last day".to_string(),
+            Some(1) => "1 day left".to_string(),
+            Some(n) => format!("{n} days left"),
+            None => String::new(),
+        };
+        let until = match &offer.valid_until {
+            Some(q) => format!(
+                "<span title=\"{}\">until {}</span>",
+                escape(&q.evidence),
+                escape(&q.value)
+            ),
+            None => "no stated end".into(),
+        };
+        let image = offer.image.as_ref().map_or_else(
+            || "<div class=\"img none\"></div>".to_string(),
+            |name| {
+                format!(
+                    "<img class=\"img\" src=\"{}/{}\" alt=\"\">",
+                    escape(id),
+                    escape(name)
+                )
+            },
+        );
+        let discount = offer.discount.as_ref().map_or_else(String::new, |q| {
+            format!(
+                "<span class=\"badge\" title=\"{}\">−{}</span>",
+                escape(&q.evidence),
+                escape(&q.value)
+            )
+        });
+        let code = offer.code.as_ref().map_or_else(String::new, |q| {
+            format!(
+                "<button class=\"code\" title=\"{}\" onclick=\"copy(this)\">{}</button>",
+                escape(&q.evidence),
+                escape(&q.value)
+            )
+        });
+        let urgent = if days.is_some_and(|n| n <= 2) {
+            " urgent"
+        } else {
+            ""
+        };
+        cards.push_str(&format!(
+            "<article class=\"card\">{image}<div class=\"body\"><div class=\"shop\">{shop}</div>\
+             <h2>{subject}</h2><div class=\"row\">{discount}{code}</div>\
+             <div class=\"meta{urgent}\">{left} · {until}</div>\
+             <a class=\"open\" href=\"{id}/original.eml\">Open mail</a></div></article>\n",
+            shop = escape(&shop(offer.from.as_deref())),
+            subject = escape(offer.subject.as_deref().unwrap_or_default()),
+            id = escape(id),
+        ));
+    }
+    if valid.is_empty() {
+        cards.push_str("<p class=\"empty\">No valid offers.</p>");
+    }
+    format!(
+        r#"<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' file:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offers</title>
+<style>
+:root {{ color-scheme: light dark; --bg:#f6f5f2; --card:#fff; --ink:#1d1d1f; --mute:#6e6e73; --line:#e4e2dd; --accent:#2f6f4f; --warn:#b3261e; }}
+@media (prefers-color-scheme: dark) {{ :root {{ --bg:#161616; --card:#222; --ink:#f2f2f2; --mute:#a1a1a6; --line:#333; --accent:#7cc8a0; --warn:#ff8a80; }} }}
+body {{ margin:0; background:var(--bg); color:var(--ink); font:15px/1.4 -apple-system, system-ui, sans-serif; }}
+header {{ padding:28px 32px 8px; }} h1 {{ margin:0; font-size:26px; }} header p {{ margin:4px 0 0; color:var(--mute); }}
+main {{ display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:18px; padding:20px 32px 40px; }}
+.card {{ background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }}
+.img {{ width:100%; aspect-ratio:4/3; object-fit:cover; display:block; background:var(--line); }}
+.img.none {{ aspect-ratio:8/1; }}
+.body {{ padding:14px 16px 16px; display:flex; flex-direction:column; gap:8px; flex:1; }}
+.shop {{ color:var(--mute); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }}
+h2 {{ margin:0; font-size:16px; font-weight:600; }}
+.row {{ display:flex; gap:8px; flex-wrap:wrap; }}
+.badge {{ background:var(--accent); color:var(--card); border-radius:999px; padding:2px 10px; font-weight:600; }}
+.code {{ font:600 13px ui-monospace, monospace; border:1px dashed var(--accent); color:var(--accent); background:none; border-radius:8px; padding:2px 10px; cursor:pointer; }}
+.meta {{ color:var(--mute); font-size:13px; margin-top:auto; }} .meta.urgent {{ color:var(--warn); font-weight:600; }}
+.open {{ color:var(--accent); font-size:13px; text-decoration:none; }}
+.empty {{ color:var(--mute); }}
+</style></head><body>
+<header><h1>Offers</h1><p>{count} valid · built {today}</p></header>
+<main>
+{cards}</main>
+<script>
+function copy(el) {{
+  const text = el.textContent;
+  const done = () => {{ el.textContent = 'copied'; setTimeout(() => el.textContent = text, 1200); }};
+  if (navigator.clipboard) {{ navigator.clipboard.writeText(text).then(done, () => fallback(text, done)); }} else {{ fallback(text, done); }}
+}}
+function fallback(text, done) {{
+  const area = document.createElement('textarea'); area.value = text; document.body.appendChild(area);
+  area.select(); document.execCommand('copy'); area.remove(); done();
+}}
+</script></body></html>
+"#,
+        count = valid.len(),
+        today = today.format("%Y-%m-%d"),
+    )
 }
 
 /// Thread ids whose mail may go, for `comms mail cleanup --released`.
@@ -295,6 +443,50 @@ pub fn mail_text(eml: &[u8]) -> Res<String> {
         .map(|h| h.get_value())
         .unwrap_or_default();
     Ok(format!("{subject}\n{body}"))
+}
+
+/// Smallest picture kept. Smaller parts are tracking pixels, spacers and icons.
+const MIN_IMAGE_BYTES: usize = 8 * 1024;
+
+/// The largest picture carried inside the mail, as `(extension, bytes)`. Pictures the mail
+/// only links to are never fetched: loading them tells the sender the mail was opened.
+///
+/// # Errors
+/// The bytes are not a parseable mail.
+pub fn embedded_image(eml: &[u8]) -> Res<Option<(&'static str, Vec<u8>)>> {
+    let parsed = mailparse::parse_mail(eml).map_err(|e| e.to_string())?;
+    let mut best: Option<(&'static str, Vec<u8>)> = None;
+    walk_images(&parsed, &mut best);
+    Ok(best)
+}
+
+fn walk_images(part: &mailparse::ParsedMail<'_>, best: &mut Option<(&'static str, Vec<u8>)>) {
+    let ext = match part.ctype.mimetype.to_ascii_lowercase().as_str() {
+        "image/jpeg" | "image/jpg" => Some("jpg"),
+        "image/png" => Some("png"),
+        "image/webp" => Some("webp"),
+        "image/gif" => Some("gif"),
+        _ => None,
+    };
+    if let (Some(ext), Ok(bytes)) = (ext, part.get_body_raw()) {
+        let larger = best.as_ref().is_none_or(|(_, b)| bytes.len() > b.len());
+        if bytes.len() >= MIN_IMAGE_BYTES && larger {
+            *best = Some((ext, bytes));
+        }
+    }
+    for sub in &part.subparts {
+        walk_images(sub, best);
+    }
+}
+
+/// Write the mail's own picture as `image.<ext>` and return its file name.
+fn save_image(eml: &[u8], folder: &Path) -> Res<Option<String>> {
+    let Some((ext, bytes)) = embedded_image(eml)? else {
+        return Ok(None);
+    };
+    let name = format!("image.{ext}");
+    fs::write(folder.join(&name), bytes).map_err(|e| e.to_string())?;
+    Ok(Some(name))
 }
 
 fn collect(part: &mailparse::ParsedMail<'_>, plain: &mut Vec<String>, html: &mut Vec<String>) {
@@ -564,6 +756,7 @@ mod tests {
             code: None,
             discount: None,
             valid_until: None,
+            image: None,
         };
         assert!(!offer.released(d("2026-12-01")));
         assert!(offer.released(d("2026-12-02")));
@@ -575,6 +768,56 @@ mod tests {
         assert!(!offer.released(d("2026-11-10")));
         offer.status = Status::Used;
         assert!(offer.released(d("2026-11-02")));
+    }
+
+    #[test]
+    fn only_a_large_enough_embedded_picture_is_kept() {
+        use std::fmt::Write as _;
+        let big = "A".repeat(12 * 1024);
+        let mut eml = String::from("Subject: Sale\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related; boundary=b\r\n\r\n");
+        write!(
+            eml,
+            "--b\r\nContent-Type: text/html\r\n\r\n<img src=\"https://shop.example/x.jpg\">\r\n"
+        )
+        .unwrap();
+        write!(eml, "--b\r\nContent-Type: image/gif\r\n\r\nGIF89a\r\n").unwrap();
+        write!(
+            eml,
+            "--b\r\nContent-Type: image/png\r\n\r\n{big}\r\n--b--\r\n"
+        )
+        .unwrap();
+        let (ext, bytes) = embedded_image(eml.as_bytes()).unwrap().unwrap();
+        assert_eq!(ext, "png");
+        assert!(bytes.len() >= MIN_IMAGE_BYTES);
+        let none = b"Subject: x\r\nContent-Type: text/html\r\n\r\n<img src=\"https://shop.example/x.jpg\">\r\n";
+        assert!(embedded_image(none).unwrap().is_none());
+    }
+
+    #[test]
+    fn the_page_escapes_mail_text_and_loads_nothing_remote() {
+        let offer = Offer {
+            source: "gmail:a1".into(),
+            mail_date: "2026-11-20".into(),
+            from: Some("Shop <news@shop.example>".into()),
+            subject: Some("<script>alert(1)</script> Sale".into()),
+            status: Status::Active,
+            code: Some(Quoted {
+                value: "SAVE10".into(),
+                evidence: "Code \"SAVE10\"".into(),
+            }),
+            discount: None,
+            valid_until: Some(Quoted {
+                value: "2026-11-22".into(),
+                evidence: "bis 22.11.".into(),
+            }),
+            image: None,
+        };
+        let html = page(&[("a1".into(), offer)], d("2026-11-21"));
+        assert!(!html.contains("<script>alert"));
+        assert!(html.contains("&lt;script&gt;"));
+        assert!(html.contains("1 day left"));
+        assert!(html.contains("default-src 'none'"));
+        assert!(!html.contains("https://"));
     }
 
     #[test]

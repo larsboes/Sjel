@@ -6,6 +6,7 @@ const USAGE: &str = "usage: offers import <export-dir>      read what `comms mai
        offers list [--all]              valid offers by last day; --all adds released ones
        offers show <thread-id>          one offer with the line each value was read from
        offers set <thread-id> active|used|dismissed
+       offers page [--open]             write index.html of valid offers; --open shows it
        offers reread                    extract stored originals again; used/dismissed stay
        offers released                  JSON thread ids whose mail may go";
 
@@ -47,7 +48,10 @@ fn run(args: &[String]) -> offers::Res<()> {
                         .last_day()
                         .map_or("?".into(), |d| d.format("%Y-%m-%d").to_string())
                 } else {
-                    format!("{:?}", offer.status).to_lowercase()
+                    serde_json::to_value(offer.status)
+                        .ok()
+                        .and_then(|v| v.as_str().map(str::to_string))
+                        .unwrap_or_default()
                 };
                 println!(
                     "{}  {:<10}  {:<6} {:<12} {}  {}",
@@ -71,6 +75,19 @@ fn run(args: &[String]) -> offers::Res<()> {
         ["set", id, status] => {
             offers::set_status(&root, id, offers::Status::parse_settable(status)?)?;
             println!("{id}: {status}");
+        }
+        ["page", rest @ ..] if rest.is_empty() || rest == ["--open"] => {
+            std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+            let path = root.join("index.html");
+            std::fs::write(&path, offers::page(&offers::load(&root)?, today))
+                .map_err(|e| e.to_string())?;
+            println!("{}", path.display());
+            if !rest.is_empty() {
+                std::process::Command::new("open")
+                    .arg(&path)
+                    .status()
+                    .map_err(|e| e.to_string())?;
+            }
         }
         ["reread"] => println!("{} offer(s) changed", offers::reread(&root)?),
         ["released"] => {

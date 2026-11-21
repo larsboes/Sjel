@@ -83,3 +83,6 @@ Measured on 2026-11-21:
 - `tools/demo-shots up` started from cold without manual repair on 2026-11-21: with the target
   and registry volumes removed, it built, seeded and answered `/health` with 200 after 864 seconds
   at the default 3 CPUs.
+- `sjel testflight ship` for build 2384 (`ef53db5f`) took 342 seconds with the persistent archive
+  target: 81 seconds for the Rust release build, which still recompiled the Ely bump and the
+  changed UI crates, against 150 cold for build 2363.

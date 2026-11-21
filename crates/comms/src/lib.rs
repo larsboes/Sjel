@@ -39,6 +39,7 @@ pub mod mail_evidence;
 pub mod mail_evidence_eval;
 pub mod mail_evidence_scan;
 pub mod mail_evidence_source;
+pub mod mail_export;
 pub mod mail_model;
 pub mod mail_model_eval;
 pub mod mail_receipts;

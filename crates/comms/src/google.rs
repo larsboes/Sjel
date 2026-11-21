@@ -619,6 +619,39 @@ fn attachment_bytes(token: &str, message_id: &str, attachment_id: &str) -> Resul
     Ok(attachment.data.as_deref().and_then(decode_bytes))
 }
 
+#[derive(Deserialize)]
+struct RawMessage {
+    #[serde(default)]
+    raw: Option<String>,
+}
+
+/// The RFC 822 original of a thread's latest message, for hand-off to an owner that keeps
+/// originals. Nothing is persisted here. `None` for a missing thread or message.
+pub fn thread_latest_raw(token: &str, id: &str) -> Result<Option<Vec<u8>>> {
+    let Some(message_id) = latest_message(token, id)?.and_then(|message| message.id) else {
+        return Ok(None);
+    };
+    if !valid_thread_id(&message_id) {
+        return Ok(None);
+    }
+    let response = client()?
+        .get(format!("{}/messages/{message_id}", gmail_base()))
+        .bearer_auth(token)
+        .query(&[("format", "raw")])
+        .send()?;
+    if is_missing_thread_status(response.status().as_u16()) {
+        return Ok(None);
+    }
+    if !response.status().is_success() {
+        return Err(CommsError::Other(format!(
+            "raw message failed with HTTP {}",
+            response.status()
+        )));
+    }
+    let message: RawMessage = response.json()?;
+    Ok(message.raw.as_deref().and_then(decode_bytes))
+}
+
 /// A PDF attached to a message of a thread.
 pub struct PdfAttachment {
     /// Gmail's filename for the part, unsanitized.

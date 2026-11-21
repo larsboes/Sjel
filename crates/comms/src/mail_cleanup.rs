@@ -4,6 +4,8 @@
 //! `POST /triage/bulk` with `action: "trash"`, which waits for the owner's Allow. Receipts,
 //! tax mail, keepers and waiting threads are never selected, whatever a rule says.
 
+use std::collections::HashSet;
+
 use serde::Deserialize;
 
 use crate::store::TriageItem;
@@ -28,11 +30,20 @@ pub struct CleanupRule {
     pub subject_contains: Vec<String>,
     /// Only mail older than this many days.
     pub older_than_days: u32,
+    /// `released`: only threads the owner released (`--released <file>`). Absent: no gate,
+    /// for mail with no value.
+    #[serde(default)]
+    pub gate: Option<String>,
 }
 
 impl CleanupRule {
     /// A rule with no stream, sender or subject condition never fires.
-    fn selects(&self, item: &TriageItem, cutoff: &str) -> bool {
+    fn selects(&self, item: &TriageItem, cutoff: &str, released: Option<&HashSet<String>>) -> bool {
+        match self.gate.as_deref() {
+            None => {}
+            Some("released") if released.is_some_and(|set| set.contains(&item.id)) => {}
+            Some(_) => return false,
+        }
         if self.streams.is_empty()
             && self.from_contains.is_empty()
             && self.subject_contains.is_empty()
@@ -74,8 +85,14 @@ pub struct RuleMatches {
     pub ids: Vec<String>,
 }
 
-/// Each thread counts for the first rule that selects it.
-pub fn select(items: &[TriageItem], rules: &[CleanupRule], today: &str) -> Vec<RuleMatches> {
+/// Each thread counts for the first rule that selects it. `released` holds the thread ids
+/// owners released; a `released`-gated rule selects nothing without it.
+pub fn select(
+    items: &[TriageItem],
+    rules: &[CleanupRule],
+    today: &str,
+    released: Option<&HashSet<String>>,
+) -> Vec<RuleMatches> {
     let mut out: Vec<RuleMatches> = rules
         .iter()
         .map(|rule| RuleMatches {
@@ -93,7 +110,7 @@ pub fn select(items: &[TriageItem], rules: &[CleanupRule], today: &str) -> Vec<R
         if let Some(index) = rules
             .iter()
             .zip(&cutoffs)
-            .position(|(rule, cutoff)| rule.selects(item, cutoff))
+            .position(|(rule, cutoff)| rule.selects(item, cutoff, released))
         {
             let matches = &mut out[index];
             matches.count += 1;
@@ -253,8 +270,9 @@ mod tests {
             from_contains: vec![],
             subject_contains: vec![],
             older_than_days: 0,
+            gate: None,
         };
-        assert!(!rule.selects(&item("werbung", "2020-01-01"), "2030-01-01"));
+        assert!(!rule.selects(&item("werbung", "2020-01-01"), "2030-01-01", None));
     }
 
     #[test]
@@ -265,6 +283,7 @@ mod tests {
             from_contains: vec![],
             subject_contains: vec![],
             older_than_days: 30,
+            gate: None,
         };
         let mut keeper = item("werbung", "2020-01-01");
         keeper.status = "keeper".into();
@@ -277,8 +296,33 @@ mod tests {
             item("werbung", "2026-11-20"),
             item("werbung", "2020-01-01"),
         ];
-        let matches = select(&items, std::slice::from_ref(&rule), "2026-11-21");
+        let matches = select(&items, std::slice::from_ref(&rule), "2026-11-21", None);
         assert_eq!(matches[0].count, 1);
+    }
+
+    #[test]
+    fn a_released_gate_selects_only_released_threads() {
+        let rule = CleanupRule {
+            name: "offers".into(),
+            streams: vec!["sonstiges".into()],
+            from_contains: vec![],
+            subject_contains: vec![],
+            older_than_days: 0,
+            gate: Some("released".into()),
+        };
+        let items = [item("sonstiges", "2026-01-01")];
+        let rules = std::slice::from_ref(&rule);
+        assert_eq!(select(&items, rules, "2026-11-21", None)[0].count, 0);
+        let released = HashSet::from(["a1".to_string()]);
+        assert_eq!(
+            select(&items, rules, "2026-11-21", Some(&released))[0].count,
+            1
+        );
+        let other = HashSet::from(["b2".to_string()]);
+        assert_eq!(
+            select(&items, rules, "2026-11-21", Some(&other))[0].count,
+            0
+        );
     }
 
     fn item(stream: &str, date: &str) -> TriageItem {

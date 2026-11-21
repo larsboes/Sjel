@@ -1260,7 +1260,17 @@ fn cmd_mail_cleanup(args: &[String], cfg: &Config) {
         let days = i64::try_from(secs / 86_400).unwrap_or(0);
         comms::mail_cleanup::date_from_epoch_days(days)
     };
-    let matches = comms::mail_cleanup::select(&items, &cfg.cleanup, &today);
+    let released = arg_after(args, "--released").map(|path| {
+        let ids: Vec<String> = std::fs::read(path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_else(|| {
+                eprintln!("error: --released needs a JSON array of thread ids, as `offers released` prints");
+                std::process::exit(2);
+            });
+        ids.into_iter().collect::<std::collections::HashSet<_>>()
+    });
+    let matches = comms::mail_cleanup::select(&items, &cfg.cleanup, &today, released.as_ref());
     if let Some(rule) = arg_after(args, "--ids") {
         let Some(found) = matches.iter().find(|m| &m.rule == rule) else {
             eprintln!("error: no cleanup rule named {rule}");
@@ -1282,6 +1292,39 @@ fn cmd_mail_cleanup(args: &[String], cfg: &Config) {
         }
     }
     println!("{} stored threads read; nothing changed", items.len());
+}
+
+/// Export mail originals for an owner's import, for example `offers import <dir>`.
+fn cmd_mail_export(args: &[String], cfg: &Config) {
+    use comms::mail_export::{self, Selection};
+    let (Some(out), Some(from)) = (arg_after(args, "--out"), arg_after(args, "--from")) else {
+        eprintln!("error: comms mail export needs --out <dir> and --from <text>");
+        std::process::exit(2);
+    };
+    let limit = arg_after(args, "--limit")
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(500);
+    let items = open_store(cfg).list_triage(None).unwrap_or_else(|e| {
+        eprintln!("error: could not read triage: {e}");
+        std::process::exit(2);
+    });
+    let selection = Selection {
+        from: Some(from.as_str()),
+        stream: arg_after(args, "--stream").map(String::as_str),
+        since: arg_after(args, "--since").map(String::as_str),
+        limit,
+    };
+    let selected = mail_export::select(&items, &selection);
+    match mail_export::run(cfg, &selected, std::path::Path::new(out)) {
+        Ok(report) => println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("report serializes")
+        ),
+        Err(error) => {
+            eprintln!("error: {error}");
+            std::process::exit(2);
+        }
+    }
 }
 
 /// The largest senders among mail a cleanup rule may touch, for writing rules.
@@ -1374,13 +1417,15 @@ fn cmd_mail(args: &[String], cfg: &Config) {
         Some("attachments") => return cmd_mail_attachments(args, cfg),
         Some("cleanup") => return cmd_mail_cleanup(args, cfg),
         Some("senders") => return cmd_mail_senders(args, cfg),
+        Some("export") => return cmd_mail_export(args, cfg),
         _ => {
             eprintln!("error: usage: comms mail classify [--shadow|--apply] [--limit N] [--report] [--revert <id>|--revert-all]");
             eprintln!("              comms mail corpus --out <path> [--force]");
             eprintln!("              comms mail audit <thread-id>... [--no-model]");
             eprintln!("              comms mail attachments --out <dir> [--stream belege] [--since YYYY-MM-DD] [--limit N] [--dry-run]");
-            eprintln!("              comms mail cleanup [--ids <rule>]");
-            eprintln!("              comms mail senders [--limit N] [--examples N]\n");
+            eprintln!("              comms mail cleanup [--ids <rule>] [--released <file>]");
+            eprintln!("              comms mail senders [--limit N] [--examples N]");
+            eprintln!("              comms mail export --out <dir> --from <text> [--stream S] [--since YYYY-MM-DD] [--limit N]\n");
             std::process::exit(2);
         }
     }

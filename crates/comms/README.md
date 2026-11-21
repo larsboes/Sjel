@@ -14,8 +14,9 @@ The `comms` capability provides general observation intake across news, media, r
   - `comms summarize --pending` — generate summaries for items lacking digests.
   - `comms clips [--limit N]` — query captured Sjel Clipper documents via local Unix socket.
   - `comms mail attachments --out <dir> [--stream belege] [--since YYYY-MM-DD] [--limit N] [--dry-run]` — save the PDF attachments of every message in matching triage threads to `<dir>/<thread-id>/`, for `documents inbox <dir> --recursive`. Never overwrites a saved file; skips `c3` threads; lists threads whose receipt is body-only.
+  - `comms mail export --out <dir> --from <text> [--stream S] [--since YYYY-MM-DD] [--limit N]` — write the latest message of each matching thread as `<dir>/<thread-id>/original.eml` with `meta.json`, for an owner's import such as `offers import`. Skips exported threads and `c3` threads.
   - `comms mail senders [--limit N] [--examples N]` — the largest senders among mail a cleanup rule may touch, with their main stream, date range and newest subjects.
-  - `comms mail cleanup [--ids <rule>]` — what each rule in the overlay's `cleanup` list selects (stream, sender or subject, plus `older_than_days`). Changes nothing: `--ids` prints the ids for `POST /triage/bulk` with `action: "trash"`, which waits for the owner's Allow. Streams `belege` and `steuern`, keepers and waiting threads are never selected.
+  - `comms mail cleanup [--ids <rule>] [--released <file>]` — what each rule in the overlay's `cleanup` list selects (stream, sender or subject, plus `older_than_days`). Changes nothing: `--ids` prints the ids for `POST /triage/bulk` with `action: "trash"`, which waits for the owner's Allow. Streams `belege` and `steuern`, keepers and waiting threads are never selected. A rule with `"gate": "released"` selects only thread ids in the `--released` file, as `offers released` prints.
 - HTTP API: `comms-server` (`src/server/main.rs`), bound to loopback, default port **8083**:
   - `GET /feed` — list feed items with assigned trust classes.
   - `GET /clips` — list or search clip metadata, newest first, with numeric `id` handles.
@@ -53,7 +54,7 @@ Content marked `c3` is mechanically excluded from local model prompts (`content_
 
 Summaries persist as derived artifacts in `content_digests` (`src/digest.rs`), decoupled from raw source items.
 
-Mail message bodies fetched for summarization or event extraction are parsed in memory, evaluated against local models, and dropped immediately. Raw message bodies are never written to disk. Attachments are written only by the explicit `comms mail attachments` command: it stages PDFs into an operator-chosen overlay folder for the Documents owner (`crates/documents/README.md`), which keeps the originals.
+Mail message bodies fetched for summarization or event extraction are parsed in memory, evaluated against local models, and dropped immediately. Raw message bodies are never written to disk. Attachments and originals are written only by the explicit `comms mail attachments` and `comms mail export` commands: they stage files into an operator-chosen overlay folder for the owner that keeps them (`crates/documents/README.md`, `crates/offers/README.md`).
 
 Structured depth ladders (`crates/summarize`) adapt digest detail to content length, avoiding speculative generation or hallucinations on brief or empty items.
 

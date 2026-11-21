@@ -123,13 +123,16 @@ pub struct SenderCount {
     pub stream: String,
     pub oldest: String,
     pub newest: String,
+    /// The most recent subjects, newest first, up to the requested number.
+    pub examples: Vec<String>,
 }
 
 /// Senders by mail count, largest first, over eligible threads only.
-pub fn senders(items: &[TriageItem], limit: usize) -> Vec<SenderCount> {
+/// `items` must be newest first, as `Store::list_triage` returns them.
+pub fn senders(items: &[TriageItem], limit: usize, examples: usize) -> Vec<SenderCount> {
     use std::collections::BTreeMap;
-    let mut by: BTreeMap<String, (usize, BTreeMap<String, usize>, String, String)> =
-        BTreeMap::new();
+    type Tally = (usize, BTreeMap<String, usize>, String, String, Vec<String>);
+    let mut by: BTreeMap<String, Tally> = BTreeMap::new();
     for item in items.iter().filter(|item| eligible(item)) {
         let sender = crate::links::address_of(item.from_addr.as_deref().unwrap_or_default());
         let day = item
@@ -140,8 +143,14 @@ pub fn senders(items: &[TriageItem], limit: usize) -> Vec<SenderCount> {
             .to_string();
         let entry = by
             .entry(sender)
-            .or_insert_with(|| (0, BTreeMap::new(), day.clone(), day.clone()));
+            .or_insert_with(|| (0, BTreeMap::new(), day.clone(), day.clone(), Vec::new()));
         entry.0 += 1;
+        if entry.4.len() < examples {
+            entry.4.push(format!(
+                "{day} {}",
+                item.subject.as_deref().unwrap_or_default()
+            ));
+        }
         *entry.1.entry(item.stream.clone()).or_default() += 1;
         if day < entry.2 {
             entry.2.clone_from(&day);
@@ -152,17 +161,20 @@ pub fn senders(items: &[TriageItem], limit: usize) -> Vec<SenderCount> {
     }
     let mut out: Vec<SenderCount> = by
         .into_iter()
-        .map(|(sender, (count, streams, oldest, newest))| SenderCount {
-            sender,
-            count,
-            stream: streams
-                .into_iter()
-                .max_by_key(|(_, n)| *n)
-                .map(|(s, _)| s)
-                .unwrap_or_default(),
-            oldest,
-            newest,
-        })
+        .map(
+            |(sender, (count, streams, oldest, newest, examples))| SenderCount {
+                sender,
+                count,
+                stream: streams
+                    .into_iter()
+                    .max_by_key(|(_, n)| *n)
+                    .map(|(s, _)| s)
+                    .unwrap_or_default(),
+                oldest,
+                newest,
+                examples,
+            },
+        )
         .collect();
     out.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.sender.cmp(&b.sender)));
     out.truncate(limit);

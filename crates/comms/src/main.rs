@@ -1293,7 +1293,10 @@ fn cmd_mail_senders(args: &[String], cfg: &Config) {
         eprintln!("error: could not read triage: {e}");
         std::process::exit(2);
     });
-    for s in comms::mail_cleanup::senders(&items, limit) {
+    let examples = arg_after(args, "--examples")
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0);
+    for s in comms::mail_cleanup::senders(&items, limit, examples) {
         println!(
             "{:>5}  {:<10} {} .. {}  {}",
             s.count,
@@ -1302,6 +1305,9 @@ fn cmd_mail_senders(args: &[String], cfg: &Config) {
             s.newest,
             truncate(&s.sender, 60)
         );
+        for example in &s.examples {
+            println!("         {}", truncate(example, 110));
+        }
     }
 }
 
@@ -1374,7 +1380,7 @@ fn cmd_mail(args: &[String], cfg: &Config) {
             eprintln!("              comms mail audit <thread-id>... [--no-model]");
             eprintln!("              comms mail attachments --out <dir> [--stream belege] [--since YYYY-MM-DD] [--limit N] [--dry-run]");
             eprintln!("              comms mail cleanup [--ids <rule>]");
-            eprintln!("              comms mail senders [--limit N]\n");
+            eprintln!("              comms mail senders [--limit N] [--examples N]\n");
             std::process::exit(2);
         }
     }

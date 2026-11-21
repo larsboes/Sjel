@@ -10,7 +10,7 @@ pub mod inspector;
 use gpui_kit::{div, prelude::*, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::primitives::{card, note, pill_tab, placeholder, section};
+use crate::primitives::{card, note, placeholder, section};
 use crate::theme::ThemeContext;
 use sjel_gpui_core::self_model::{isolated_units, SelfModelResponse, SelfUnit};
 
@@ -137,17 +137,19 @@ impl gpui::Render for SelfPage {
             .map(|kind| {
                 let is_active = self.filter_kind == *kind;
                 let k = *kind;
-                pill_tab(
+                let label = if *kind == "all" { "All units" } else { *kind };
+                let on_toggle = cx.listener(move |page, _: &(), _, cx| {
+                    page.filter_kind = k;
+                    cx.notify();
+                });
+                crate::ely::buttons::ToggleButton::new(
                     SharedString::from(format!("filter-kind-{}", kind)),
-                    if *kind == "all" { "All units" } else { *kind },
-                    None,
+                    crate::ely::buttons::ToggleItem::new(*kind).label(label),
                     is_active,
-                    palette,
-                    cx.listener(move |page, _, _, cx| {
-                        page.filter_kind = k;
-                        cx.notify();
-                    }),
                 )
+                .size(crate::ely::theme::ControlSize::Sm)
+                .on_toggle(move |_, window, cx| on_toggle(&(), window, cx))
+                .into_any_element()
             })
             .collect();
 

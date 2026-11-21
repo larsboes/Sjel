@@ -10,7 +10,8 @@ use gpui_kit::{
 use super::tokens::FONT_MONO_TABULAR;
 use crate::ely::{
     buttons::{Button, ButtonVariant},
-    layout::Section,
+    layout::{Card, CardHeader, Section},
+    lists::List,
     primitives::Tooltip,
     theme::ControlSize,
 };
@@ -21,22 +22,14 @@ pub fn section(title: &'static str, body: AnyElement, _palette: Palette) -> impl
 }
 
 pub fn list(rows: Vec<AnyElement>, palette: Palette) -> AnyElement {
-    let count = rows.len();
-    let mut list = div()
-        .flex()
-        .flex_col()
+    div()
         .rounded(px(16.))
         .bg(rgba(palette.surface))
         .border_1()
         .border_color(rgba(palette.border))
-        .overflow_hidden();
-    for (index, row) in rows.into_iter().enumerate() {
-        list = list.child(row);
-        if index + 1 < count {
-            list = list.child(div().h(px(1.)).mx_4().bg(rgba(palette.border)));
-        }
-    }
-    list.into_any_element()
+        .overflow_hidden()
+        .child(List::new().divided().children(rows))
+        .into_any_element()
 }
 
 /// Virtualized vertical list with a bound scrollbar and flex height contract (`flex_1` + `min_h_0`).
@@ -81,40 +74,22 @@ pub fn surface_card(palette: Palette) -> gpui_kit::Div {
         .border_color(rgba(tint(palette.border, 0x77)))
 }
 
-pub fn card(body: AnyElement, palette: Palette) -> AnyElement {
-    surface_card(palette).p_4().child(body).into_any_element()
+pub fn card(body: AnyElement, _palette: Palette) -> AnyElement {
+    Card::new().child(body).into_any_element()
 }
 
-/// Framed chart card with uppercase title, optional subtitle, and elevated surface.
+/// Framed chart card with title, optional subtitle, and Ely card surface.
 pub fn chart_card(
     title: impl Into<SharedString>,
     subtitle: Option<SharedString>,
     body: AnyElement,
-    palette: Palette,
+    _palette: Palette,
 ) -> AnyElement {
-    surface_card(palette)
-        .p_4()
-        .flex()
-        .flex_col()
-        .gap_3()
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap_0p5()
-                .child(
-                    div()
-                        .text_xs()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(rgb(palette.muted))
-                        .child(title.into()),
-                )
-                .when_some(subtitle, |el, sub| {
-                    el.child(div().text_xs().text_color(rgb(palette.muted)).child(sub))
-                }),
-        )
-        .child(body)
-        .into_any_element()
+    let mut header = CardHeader::new(title);
+    if let Some(sub) = subtitle {
+        header = header.description(sub);
+    }
+    Card::new().header(header).child(body).into_any_element()
 }
 
 pub fn progress_bar(progress: f32, color: u32, palette: Palette) -> AnyElement {
@@ -486,74 +461,5 @@ pub fn quick_action_button(
                 .text_color(rgb(if active { accent } else { palette.muted }))
                 .child(label),
         )
-        .into_any_element()
-}
-
-/// Horizontal wrapping row of [`pill_tab`] controls.
-pub fn pill_tab_bar(tabs: Vec<AnyElement>) -> AnyElement {
-    div()
-        .flex()
-        .flex_wrap()
-        .items_center()
-        .gap_1p5()
-        .children(tabs)
-        .into_any_element()
-}
-
-/// High-contrast pill segment tab for view and timeline filtering.
-pub fn pill_tab(
-    id: impl Into<ElementId>,
-    label: impl Into<SharedString>,
-    count: Option<usize>,
-    active: bool,
-    palette: Palette,
-    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> AnyElement {
-    let active_fg = palette.surface >> 8;
-    div()
-        .id(id.into())
-        .flex()
-        .items_center()
-        .gap_1p5()
-        .px_3()
-        .py(px(5.))
-        .rounded_full()
-        .cursor_pointer()
-        .bg(if active {
-            rgb(palette.text)
-        } else {
-            rgba(palette.surface)
-        })
-        .border_1()
-        .border_color(if active {
-            rgb(palette.text)
-        } else {
-            rgba(tint(palette.border, 0x66))
-        })
-        .hover(move |s| {
-            if active {
-                s
-            } else {
-                s.bg(rgba(palette.raised))
-            }
-        })
-        .on_click(on_click)
-        .child(
-            div()
-                .text_xs()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(rgb(if active { active_fg } else { palette.muted }))
-                .child(label.into()),
-        )
-        .when_some(count, |el, n| {
-            el.child(
-                div()
-                    .text_xs()
-                    .font_family(FONT_MONO_TABULAR)
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(rgb(if active { active_fg } else { palette.muted }))
-                    .child(n.to_string()),
-            )
-        })
         .into_any_element()
 }

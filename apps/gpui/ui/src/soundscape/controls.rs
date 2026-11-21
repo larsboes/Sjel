@@ -8,7 +8,7 @@ use gpui_kit::component::IconName;
 use sjel_gpui_core::soundscape::{self, LayerName, Preset};
 
 use super::Soundscape;
-use crate::primitives::{mono_num, pill_tab, surface_card};
+use crate::primitives::{mono_num, surface_card};
 use crate::theme::tint;
 use crate::Palette;
 
@@ -148,14 +148,16 @@ impl Soundscape {
                 continue;
             };
             let is_active = preset == active;
-            row = row.child(pill_tab(
-                SharedString::from(format!("soundscape-preset-{key}")),
-                title_case(preset.key()),
-                None,
-                is_active,
-                palette,
-                cx.listener(move |view, _, _, cx| view.choose_preset(preset, cx)),
-            ));
+            let on_toggle = cx.listener(move |view, _: &(), _, cx| view.choose_preset(preset, cx));
+            row = row.child(
+                crate::ely::buttons::ToggleButton::new(
+                    SharedString::from(format!("soundscape-preset-{key}")),
+                    crate::ely::buttons::ToggleItem::new(key).label(title_case(preset.key())),
+                    is_active,
+                )
+                .size(crate::ely::theme::ControlSize::Sm)
+                .on_toggle(move |_, window, cx| on_toggle(&(), window, cx)),
+            );
         }
         surface_card(palette)
             .p_3()

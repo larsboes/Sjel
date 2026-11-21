@@ -8,6 +8,7 @@ use gpui_kit::{
 use super::tokens::RADIUS_SM;
 use crate::ely::{
     buttons::{ToggleButton, ToggleItem},
+    data_display::{Badge, Tone},
     feedback::InlineMessage,
     primitives::{Severity, Tooltip},
     theme::ControlSize,
@@ -64,113 +65,42 @@ pub fn filter_pill(
     .into_any_element()
 }
 
-pub fn priority_pill(priority: u8, palette: Palette) -> AnyElement {
-    let (bg_color, border_color, text_color, label) = match priority {
-        1 => (
-            tint(palette.red, 0x20),
-            tint(palette.red, 0x40),
-            palette.red,
-            "P1",
-        ),
-        2 => (
-            tint(palette.amber, 0x18),
-            tint(palette.amber, 0x35),
-            palette.amber,
-            "P2",
-        ),
-        _ => (palette.raised, palette.border, palette.muted, "P3"),
+pub fn priority_pill(priority: u8, _palette: Palette) -> AnyElement {
+    let (tone, label) = match priority {
+        1 => (Tone::Danger, "P1"),
+        2 => (Tone::Warning, "P2"),
+        _ => (Tone::Neutral, "P3"),
     };
-    div()
-        .px_2()
-        .py(px(1.5))
-        .rounded(px(8.))
-        .bg(rgba(bg_color))
-        .border_1()
-        .border_color(rgba(border_color))
-        .text_color(rgb(text_color))
-        .text_xs()
-        .font_weight(if priority == 1 {
-            FontWeight::SEMIBOLD
-        } else {
-            FontWeight::MEDIUM
-        })
-        .child(label)
-        .into_any_element()
+    Badge::new(label).tone(tone).into_any_element()
 }
 
 /// A task status as a pill: the label `tasks::status_label` gives it, coloured by how it stands.
-pub fn status_pill(status: &str, palette: Palette) -> AnyElement {
-    let color = match status {
-        "doing" => palette.accent,
-        "waiting" => palette.amber,
-        "blocked" => palette.red,
-        "done" => palette.green,
-        _ => palette.muted,
+pub fn status_pill(status: &str, _palette: Palette) -> AnyElement {
+    let label = crate::tasks::status_label(status);
+    let badge = match status {
+        "doing" => Badge::new(label).tone(Tone::Accent).dot(),
+        "waiting" => Badge::new(label).tone(Tone::Warning).dot(),
+        "blocked" => Badge::new(label).tone(Tone::Danger).dot(),
+        "done" => Badge::new(label).tone(Tone::Success).dot(),
+        _ => Badge::new(label).tone(Tone::Neutral),
     };
-    div()
-        .px_2()
-        .py(px(1.5))
-        .rounded(px(8.))
-        .bg(rgba(tint(color, 0x18)))
-        .border_1()
-        .border_color(rgba(tint(color, 0x35)))
-        .text_color(rgb(color))
-        .text_xs()
-        .font_weight(FontWeight::MEDIUM)
-        .when(status == "cancelled", |pill| pill.line_through())
-        .child(crate::tasks::status_label(status))
-        .into_any_element()
+    if status == "cancelled" {
+        div().line_through().child(badge).into_any_element()
+    } else {
+        badge.into_any_element()
+    }
 }
 
 pub fn due_badge(due: Option<&str>, done: bool, today: &str, palette: Palette) -> AnyElement {
     match due_status(due, done, today) {
-        DueStatus::Today => div()
-            .px_2()
-            .py(px(1.5))
-            .rounded(px(8.))
-            .bg(rgba(tint(palette.amber, 0x22)))
-            .border_1()
-            .border_color(rgba(tint(palette.amber, 0x38)))
-            .text_color(rgb(palette.amber))
-            .text_xs()
-            .font_weight(FontWeight::MEDIUM)
-            .child("Today")
+        DueStatus::Today => Badge::new("Today").tone(Tone::Warning).into_any_element(),
+        DueStatus::Tomorrow => Badge::new("Tomorrow")
+            .tone(Tone::Neutral)
             .into_any_element(),
-        DueStatus::Tomorrow => div()
-            .px_2()
-            .py(px(1.5))
-            .rounded(px(8.))
-            .bg(rgba(palette.raised))
-            .border_1()
-            .border_color(rgba(palette.border))
-            .text_color(rgb(palette.text))
-            .text_xs()
-            .font_weight(FontWeight::MEDIUM)
-            .child("Tomorrow")
+        DueStatus::Overdue(d) => Badge::new(format!("Overdue · {d}"))
+            .tone(Tone::Danger)
             .into_any_element(),
-        DueStatus::Overdue(d) => div()
-            .px_2()
-            .py(px(1.5))
-            .rounded(px(8.))
-            .bg(rgba(tint(palette.red, 0x22)))
-            .border_1()
-            .border_color(rgba(tint(palette.red, 0x38)))
-            .text_color(rgb(palette.red))
-            .text_xs()
-            .font_weight(FontWeight::SEMIBOLD)
-            .child(format!("Overdue · {d}"))
-            .into_any_element(),
-        DueStatus::Upcoming(d) => div()
-            .px_2()
-            .py(px(1.5))
-            .rounded(px(8.))
-            .bg(rgba(palette.raised))
-            .border_1()
-            .border_color(rgba(palette.border))
-            .text_color(rgb(palette.muted))
-            .text_xs()
-            .child(d)
-            .into_any_element(),
+        DueStatus::Upcoming(d) => Badge::new(d).tone(Tone::Neutral).into_any_element(),
         DueStatus::None => div()
             .text_sm()
             .text_color(rgb(palette.muted))

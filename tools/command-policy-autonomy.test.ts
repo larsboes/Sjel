@@ -87,13 +87,11 @@ describe("project autonomy", () => {
     expect(h.messages).toHaveLength(1);
   });
 
-  test("unavailable checkpoints also remain non-triggering advisories", async () => {
+  test("sessions outside a checkout post no checkpoint advisory", async () => {
     const h = setup(false, sibling);
     await h.handlers.get("before_agent_start")!({}, h.ctx);
     await h.handlers.get("agent_settled")!({}, h.ctx);
-    expect(h.messages).toHaveLength(1);
-    expect(h.messages[0].content).toContain("verification did not run");
-    expect(h.messageOptions[0]).toEqual({ triggerTurn: false });
+    expect(h.messages).toHaveLength(0);
   });
 
   test("one checkout admits routine writes from a subdirectory, not legacy roots", async () => {
@@ -183,7 +181,7 @@ describe("project autonomy", () => {
 
   test("protected paths remain gated even inside the working directory", async () => {
     const h = setup();
-    for (const path of ["AGENTS.md", "SKILL.md", ".pi/settings.json", ".obsidian/plugins/x.js", ".git/config", "extensions/policy.ts", "hooks/pre-commit", ".env", ".secrets", "key.pem"]) {
+    for (const path of ["AGENTS.md", "SKILL.md", ".pi/settings.json", ".obsidian/plugins/x.js", ".git/config", ".git/hooks/pre-commit", ".pi/extensions/policy.ts", ".githooks/pre-commit", ".husky/pre-commit", ".env", ".secrets", "key.pem"]) {
       expect(classifyWrite(join(project, path), scope, "edit").class).toBe("ask");
       expect(classify(`echo x > '${join(project, path)}'`, scope).class).toBe("ask");
       expect((await h.call("edit", { path: join(project, path) })).block).toBe(true);
@@ -192,6 +190,27 @@ describe("project autonomy", () => {
     expect(classifyWrite("/Volumes/unapproved/note.md", scope, "write").class).toBe("ask");
     await h.command(`auto ${project}`);
     expect((await h.call("write", { path: join(project, "AGENTS.md") })).block).toBe(true);
+  });
+
+  test("ordinary source folders named like agent components stay routine", () => {
+    for (const path of ["src/hooks/useAuth.ts", "src/prompts/welcome.ts", "Packs/x/extensions/tool.ts", "agents/reviewer.md"]) {
+      expect(classifyWrite(join(project, path), scope, "edit").class).toBe("allow");
+      expect(classify(`rm '${join(project, path)}'`, scope).class).toBe("allow");
+    }
+  });
+
+  test("an in-scope rm without a project grant asks instead of blocking", () => {
+    const paused = { ...scope, autonomy: { ...scope.autonomy!, writeRoots: [], disposableRoots: [] } };
+    expect(classify(`rm '${join(project, "build", "out.txt")}'`, paused)).toMatchObject({ class: "ask", rule: "A1" });
+    expect(classify(`rm '${join(sibling, "note.md")}'`, paused).class).toBe("block");
+    expect(classify(`rm '${join(project, ".env")}'`, paused).class).toBe("block");
+  });
+
+  test("vault_exec cannot use package or home fast paths", async () => {
+    const h = setup();
+    for (const cmd of ["npm add example", "touch ~/note.md", `rm "$HOME/x"`]) {
+      expect((await h.call("vault_exec", { cmd, env_file: ".env", keys: ["npm_config_prefix"] })).block).toBe(true);
+    }
   });
 
   test("symlink escapes, broken links and replaced roots never gain scope", () => {

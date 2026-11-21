@@ -84,28 +84,39 @@ export function releaseScratch(path: string) {
   }
 }
 
-/** Resolve the current worktree without allowing Git environment overrides to pick another. */
-export function checkoutRoot(scope: Scope): string | undefined {
-  try {
-    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
-    const result = execFileSync("git", ["-C", scope.cwd, "rev-parse", "--show-toplevel"], {
-      env, encoding: "utf8", timeout: 1000, stdio: ["ignore", "pipe", "pipe"],
-    }).trimEnd();
-    if (!isAbsolute(result)) return;
-    const root = resolvePath(result, scope);
-    if (root !== "/" && root !== resolvePath(scope.home, scope) && pinnedWithin(scope.cwd, scope, [root])) return root;
-  } catch {
-    return undefined;
-  }
+/** Discovery limits only narrow the search; every other GIT_ variable can point Git at another repository. */
+const GIT_DISCOVERY_LIMITS = new Set(["GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM"]);
+
+function gitEnv(): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") || GIT_DISCOVERY_LIMITS.has(key)));
 }
 
-/** Metadata-only Git checkpoint; failure is reported, not treated as a clean tree. */
-export function dirtyFiles(scope: Scope): Map<string, string | undefined> | undefined {
-  const root = checkoutRoot(scope);
+/** Git failed for a reason other than the directory not being a checkout. */
+export class GitUnavailable extends Error {}
+
+/** Resolve the current worktree without allowing Git environment overrides to pick another. */
+export function checkoutRoot(scope: Scope): string | undefined {
+  let result: string;
+  try {
+    result = execFileSync("git", ["-C", scope.cwd, "rev-parse", "--show-toplevel"], {
+      env: gitEnv(), encoding: "utf8", timeout: 1000, stdio: ["ignore", "pipe", "pipe"],
+    }).trimEnd();
+  } catch (error) {
+    const stderr = String((error as { stderr?: unknown }).stderr ?? "");
+    if ((error as { status?: unknown }).status === 128 && /not a git repository/i.test(stderr)) return undefined;
+    throw new GitUnavailable(stderr.trim() || (error as Error).message);
+  }
+  if (!isAbsolute(result)) return;
+  const root = resolvePath(result, scope);
+  if (root !== "/" && root !== resolvePath(scope.home, scope) && pinnedWithin(scope.cwd, scope, [root])) return root;
+}
+
+/** Metadata-only Git checkpoint of `root`; failure is reported, not treated as a clean tree. */
+export function dirtyFiles(scope: Scope, root: string | undefined): Map<string, string | undefined> | undefined {
   if (!root) return;
   try {
     const output = execFileSync("git", ["--no-optional-locks", "-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all"], {
-      encoding: "utf8", timeout: 2000, maxBuffer: 1024 * 1024,
+      env: gitEnv(), encoding: "utf8", timeout: 2000, maxBuffer: 1024 * 1024,
     });
     const entries = output.split("\0");
     const paths: string[] = [];
@@ -121,8 +132,8 @@ export function dirtyFiles(scope: Scope): Map<string, string | undefined> | unde
 }
 
 /** Postflight warnings are advisory and cannot roll back shell or external effects. */
-export function checkpointWarning(before: Map<string, string | undefined> | undefined, scope: Scope): string | undefined {
-  const after = dirtyFiles(scope);
+export function checkpointWarning(before: Map<string, string | undefined> | undefined, scope: Scope, root: string | undefined): string | undefined {
+  const after = dirtyFiles(scope, root);
   if (!after || !before) return "Git checkpoint unavailable; changed-file verification did not run. Verify the task diff before claiming completion.";
   const guarded = [...after].filter(([path, stamp]) => protectedTarget(path) && (!before.has(path) || before.get(path) !== stamp));
   if (!guarded.length) return undefined;

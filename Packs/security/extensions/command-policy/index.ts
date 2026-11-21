@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { classify, classifyWrite, resolvePath, type Scope, type Verdict } from "./classify.ts";
 import { loadProtectedRoots } from "./config.ts";
-import { checkoutRoot, checkpointWarning, createScratch, dirtyFiles, FileObservations, ownedProcessIds, releaseScratch } from "./runtime.ts";
+import { checkoutRoot, checkpointWarning, createScratch, dirtyFiles, FileObservations, GitUnavailable, ownedProcessIds, releaseScratch } from "./runtime.ts";
 import { powerDeferral } from "./power.ts";
 
 function logDecision(entry: Record<string, unknown>): void {
@@ -26,7 +26,10 @@ function scopeFor(cwd: string): Scope {
 
 function judge(toolName: string, input: Record<string, unknown>, scope: Scope): Verdict | null {
   if (toolName === "bash" && typeof input.command === "string") return classify(input.command, scope);
-  if (toolName === "vault_exec" && typeof input.cmd === "string") return classify(input.cmd, { ...scope, externalEnvironment: true });
+  if (toolName === "vault_exec" && typeof input.cmd === "string") {
+    const injected = Array.isArray(input.keys) && input.keys.length > 0;
+    return classify(input.cmd, { ...scope, externalEnvironment: true, packageEnvironment: injected });
+  }
   if ((toolName === "write" || toolName === "edit") && typeof input.path === "string") {
     return classifyWrite(input.path, scope, toolName);
   }
@@ -41,6 +44,7 @@ function preview(toolName: string, input: Record<string, unknown>): string {
 export default function commandPolicy(pi: ExtensionAPI) {
   const granted = new Set<string>();
   let project: string | undefined;
+  let gitFailed = false;
   let scratch: string | undefined;
   let protectedRoots: string[] = [];
   let observations = new FileObservations();
@@ -55,13 +59,30 @@ export default function commandPolicy(pi: ExtensionAPI) {
       protectedRoots,
     },
   });
-  const update = (ctx: ExtensionContext) => ctx.ui.setStatus?.("permissions", paused ? "permissions: paused" : undefined);
+  const update = (ctx: ExtensionContext) => ctx.ui.setStatus?.("permissions",
+    paused ? "permissions: paused" : gitFailed ? "permissions: no checkout grant" : undefined);
+  const warn = (ctx: ExtensionContext, warning: string) => {
+    if (ctx.hasUI) ctx.ui.notify(warning, "warning");
+    else console.error(warning);
+  };
+  const resolveProject = (ctx: ExtensionContext, scope: Scope) => {
+    try {
+      project = checkoutRoot(scope);
+      gitFailed = false;
+    } catch (error) {
+      if (!(error instanceof GitUnavailable)) throw error;
+      if (!gitFailed) warn(ctx, `Git did not resolve the checkout (${error.message}); project grants are off and retry before the next agent run.`);
+      project = undefined;
+      gitFailed = true;
+    }
+  };
 
   pi.on("session_start", (_event, ctx) => {
     generation++;
     granted.clear();
     paused = true;
     project = undefined;
+    gitFailed = false;
     protectedRoots = [];
     observations = new FileObservations();
     if (scratch) releaseScratch(scratch);
@@ -69,13 +90,11 @@ export default function commandPolicy(pi: ExtensionAPI) {
     try {
       const scope = scopeFor(ctx.cwd);
       protectedRoots = loadProtectedRoots(scope);
-      project = checkoutRoot(scope);
+      resolveProject(ctx, scope);
       scratch = resolvePath(createScratch(), scope);
       paused = false;
     } catch {
-      const warning = "Command-policy setup failed; automatic project and scratch grants are paused. Check the overlay restrictions and temporary-directory access.";
-      if (ctx.hasUI) ctx.ui.notify(warning, "warning");
-      else console.error(warning);
+      warn(ctx, "Command-policy setup failed; automatic project and scratch grants are paused. Check the overlay restrictions and temporary-directory access.");
     }
     update(ctx);
   });
@@ -101,11 +120,16 @@ export default function commandPolicy(pi: ExtensionAPI) {
   });
 
   pi.on("before_agent_start", (_event, ctx) => {
-    checkpoint = dirtyFiles(activeScope(ctx.cwd));
+    if (gitFailed && !paused) {
+      resolveProject(ctx, scopeFor(ctx.cwd));
+      update(ctx);
+    }
+    checkpoint = dirtyFiles(activeScope(ctx.cwd), project);
   });
 
   pi.on("agent_settled", (_event, ctx) => {
-    const warning = checkpointWarning(checkpoint, activeScope(ctx.cwd));
+    if (!project) return;
+    const warning = checkpointWarning(checkpoint, activeScope(ctx.cwd), project);
     if (warning) pi.sendMessage({ customType: "command-policy-checkpoint", content: warning, display: true }, { triggerTurn: false });
   });
 

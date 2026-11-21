@@ -441,7 +441,7 @@ export function pinnedWithin(raw: string, scope: Scope, roots: string[]): boolea
 export function protectedTarget(path: string): boolean {
   return /(?:^|\/)(?:\.ssh|\.aws|\.gnupg|\.kube|secrets|credentials|command-policy|\.git|\.pi|\.claude|\.codex|\.agents|\.gemini|\.obsidian)(?:\/|$)/i.test(path) ||
     /(?:^|\/)(?:\.env(?:\..*)?|\.secrets(?:\..*)?|auth\.json|credentials(?:\..*)?|secrets-guard\.[jt]s|AGENTS\.md|CLAUDE\.md|GEMINI\.md|SKILL\.md|copilot-instructions\.md)$/i.test(path) ||
-    /(?:^|\/)(?:extensions|agents|hooks|prompts)(?:\/|$)/i.test(path) || /\.(?:pem|key)$/i.test(path);
+    /(?:^|\/)(?:\.githooks|githooks|\.husky)(?:\/|$)/i.test(path) || /\.(?:pem|key)$/i.test(path);
 }
 
 function protectedWrite(raw: string, scope: Scope): boolean {
@@ -579,8 +579,11 @@ function classifyRm(args: Word[], scope: Scope, unknownArgs: boolean): Verdict {
     const path = resolvePath(t.text.replace(/[*?[].*$/, "") || ".", scope);
     if (protectedWrite(t.text, scope)) return verdict("block", "B1", "rm of a protected target", p);
     if (path === "/" || path === canonical(scope.home) || path === canonical(scope.cwd) ||
-        (scope.autonomy ? !routineWrite(t.text, scope) : !inScope(path, scope))) {
+        (!inScope(path, scope) && !routineWrite(t.text, scope))) {
       return verdict("block", "B1", `rm of ${t.text}`, p);
+    }
+    if (scope.autonomy && !routineWrite(t.text, scope)) {
+      return verdict("ask", "A1", `rm of ${t.text} outside approved roots`, p);
     }
   }
   return verdict("allow", "R4", "rm of a file in the working directory", p);

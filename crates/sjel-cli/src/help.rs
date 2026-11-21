@@ -20,7 +20,7 @@ Discover Sjel:
   update apply [--only <class>]  Move what Sjel owns, and delegate the rest
   app [update|install|status|open] [desktop|mac|all]
                                  Build, install, update or open native macOS applications
-  fda-launcher [status|install|verify|migrate|path]
+  fda-launcher [status|install|verify|migrate|path|app-path]
                                  Manage the signed macOS helper and migrate it out of the overlay
   testflight [ship|status]       Archive the iOS app, upload it and publish it to TestFlight
   demo up|mac <page>|down        Run the demo stack in a container and screenshot the app on it

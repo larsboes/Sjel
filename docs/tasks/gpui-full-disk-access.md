@@ -1,24 +1,34 @@
 ---
 id: "gpui-full-disk-access"
-title: "Accept Full Disk Access setup from Sjel Desktop"
+title: "Accept one branded Full Disk Access entry for Sjel"
 state: "verify"
 area: "gpui"
 kind: "maintenance"
 priority: 2
 ---
 
-# Accept Full Disk Access setup from Sjel Desktop
+# Accept one branded Full Disk Access entry for Sjel
 
 ## Outcome
 
-Sjel Desktop opens the Full Disk Access pane and offers the installed signed helper as a native file drag. Finder provides a fallback. Only macOS grants access.
+The menu-bar app opens the macOS permissions section of Sjel Desktop. Desktop opens System
+Settings and offers the signed background `Sjel.app` as a native file drag, with Finder as a
+fallback. Only macOS grants access. The UI apps are not granted Full Disk Access.
 
 ## Acceptance
 
-- With Sjel and System Settings visible side by side, drag the helper into the Full Disk Access list and confirm that the pane accepts the executable.
-- Confirm **Show in Finder** selects the same executable as `sjel fda-launcher path`. With no helper installed, the section shows the install command instead of a drag control.
-- With owner approval, enable the grant and confirm `sjel fda-launcher verify` succeeds. Do not change other grants or service routing.
+- Drag the bundle into the Full Disk Access list and confirm the entry appears as **Sjel**
+  with the Sjel icon. Confirm **Show in Finder** reveals the bundle from
+  `sjel fda-launcher app-path`. With no bundle installed, Desktop shows the install command.
+- Open **macOS Permissions…** from the menu-bar app and confirm it opens the same Desktop section.
+- Enable only the new **Sjel** entry. Run `sjel fda-launcher migrate` from a logged-in desktop
+  session. Confirm it proves protected-folder access under launchd and switches the existing
+  storage-history job, then remove the obsolete helper row. Leave other grants and job routing
+  unchanged.
 
 ## Evidence
 
-The desktop type check and five focused Settings and permissions tests pass, including headless drag initiation. The helper lifecycle and packaged path resolver tests pass. Installed-app placement, the System Settings drop, and the live grant probe remain unverified.
+The helper lifecycle and nine distribution tests pass. The installed background bundle passes
+strict signature verification, contains the menu-bar icon, and leaves the previous executable
+selected for persistence. The System Settings drop, displayed icon and name, and real launchd
+permission probe require live acceptance.

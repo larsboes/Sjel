@@ -386,6 +386,9 @@ struct SjelMenuBarView: View {
                     model.updateDesktopApp()
                 }
                 .disabled(model.isUpdatingDesktopApp)
+                Button("macOS Permissions…") {
+                    model.openDesktop(link: "sjel://settings/permissions")
+                }
                 Divider()
                 Button("Restart Running Capabilities") {
                     model.restart(upNames)

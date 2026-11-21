@@ -4,16 +4,22 @@ set -euo pipefail
 TOOLS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"
 IFS= read -r helper_path < "$TOOLS_DIR/fda-launcher/home-relative-path"
-BIN="${HOME:?HOME is required}/$helper_path"
-DIR="${BIN%/*}"
-RECEIPT="$BIN.receipt"
+BUNDLE="${HOME:?HOME is required}/$helper_path"
+DIR="${BUNDLE%/*}"
+MANIFEST="$TOOLS_DIR/fda-launcher/Info.plist"
+ICON="$SJEL_ROOT/apps/mac/Resources/AppIcon.icns"
+BIN="$BUNDLE/Contents/MacOS/sjel-fda-launcher"
+RECEIPT="$BUNDLE.receipt"
+ACTIVE="$DIR/.bundle-active"
+FLAT="$DIR/sjel-fda-launcher"
 LEGACY="${SJEL_OVERLAY_ROOT:-${SJEL_PERSONAL_ROOT:-}}/bin/sjel-fda-launcher"
-IDENTIFIER="dev.sjel.fda-launcher"
+IDENTIFIER="dev.sjel.access"
+LEGACY_IDENTIFIER="dev.sjel.fda-launcher"
 
 fail() { echo "fda-launcher: $*" >&2; return 1; }
 digest() { shasum -a 256 "$1" | awk '{print $1}'; }
 source_digest() {
-  { digest "$SJEL_ROOT/crates/fda-launcher/Cargo.toml"; digest "$SJEL_ROOT/crates/fda-launcher/src/main.rs"; } |
+  { digest "$SJEL_ROOT/crates/fda-launcher/Cargo.toml"; digest "$SJEL_ROOT/crates/fda-launcher/src/main.rs"; digest "$MANIFEST"; digest "$ICON"; } |
     shasum -a 256 | awk '{print $1}'
 }
 field() { awk -F= -v key="$1" '$1 == key {print $2}' "$RECEIPT"; }
@@ -21,12 +27,16 @@ signed() {
   local details
   codesign --verify --strict "$1" >/dev/null 2>&1 || return 1
   details="$(codesign -dv "$1" 2>&1)" || return 1
-  grep -Fxq "Identifier=$IDENTIFIER" <<< "$details"
+  grep -Fxq "Identifier=$2" <<< "$details"
 }
 state() {
-  if [ ! -e "$BIN" ] && [ ! -L "$BIN" ]; then echo missing; return; fi
-  if [ -L "$BIN" ] || [ ! -f "$BIN" ] || [ ! -f "$RECEIPT" ] || [ -L "$RECEIPT" ]; then echo unmanaged; return; fi
-  if [ "$(digest "$BIN")" != "$(field binary_sha256)" ] || ! signed "$BIN"; then echo modified; return; fi
+  if [ ! -e "$BUNDLE" ] && [ ! -L "$BUNDLE" ] && [ ! -e "$RECEIPT" ] && [ ! -L "$RECEIPT" ]; then
+    echo missing
+    return
+  fi
+  if [ -L "$BUNDLE" ] || [ ! -d "$BUNDLE" ] || [ -L "$BIN" ] || [ ! -x "$BIN" ] ||
+     [ ! -f "$RECEIPT" ] || [ -L "$RECEIPT" ]; then echo unmanaged; return; fi
+  if [ "$(digest "$BIN")" != "$(field binary_sha256)" ] || ! signed "$BUNDLE" "$IDENTIFIER"; then echo modified; return; fi
   if [ "$(source_digest)" != "$(field source_sha256)" ]; then echo stale; else echo current; fi
 }
 plist_program() {
@@ -36,24 +46,50 @@ plist_program() {
 status() {
   local current
   current="$(state)"
-  printf '%s\t%s\n' "$current" "$BIN"
+  printf '%s\t%s\n' "$current" "$BUNDLE"
   [ "$current" = current ]
 }
 
+active_path() {
+  local current old
+  if [ "${SJEL_FDA_MIGRATING:-}" = 1 ] || { [ -f "$ACTIVE" ] && [ ! -L "$ACTIVE" ] && grep -Fxq "$IDENTIFIER" "$ACTIVE"; }; then
+    current="$(state)"
+    case "$current" in
+      current|stale) printf '%s\n' "$BIN"; return ;;
+      *) fail "the Sjel app helper is $current; run sjel fda-launcher migrate"; return 1 ;;
+    esac
+  fi
+  for old in "$FLAT" "$LEGACY"; do
+    if [ -f "$old" ] && [ ! -L "$old" ] && [ -x "$old" ] && signed "$old" "$LEGACY_IDENTIFIER"; then
+      printf '%s\n' "$old"
+      return
+    fi
+  done
+  fail "no verified Sjel app helper; run sjel fda-launcher migrate"
+}
+
+is_old_program() { [ "$1" = "$FLAT" ] || [ "$1" = "$LEGACY" ]; }
+
+loaded_program() { awk 'sub(/^[[:space:]]*program = /, "") { print; exit }'; }
+
 install_helper() (
-  local current candidate receipt source_before
+  local current scratch candidate executable receipt source_before
   current="$(state)"
   case "$current" in
-    current) echo "fda-launcher: current, untouched: $BIN"; return ;;
+    current) echo "fda-launcher: current, untouched: $BUNDLE"; return ;;
     missing|stale) ;;
-    *) fail "refusing to overwrite $current installation: $BIN"; return 1 ;;
+    *) fail "refusing to overwrite $current installation: $BUNDLE"; return 1 ;;
   esac
   mkdir -p "$DIR"
   mkdir "$DIR/.fda-install.lock" || { fail "another installation holds the lock"; return 1; }
-  candidate="$DIR/.fda-launcher.$$.new"
-  receipt="$DIR/.fda-launcher.$$.receipt"
-  trap 'rm -f "$candidate" "$receipt"; rmdir "$DIR/.fda-install.lock"' EXIT
+  scratch=""
+  trap '[ -z "$scratch" ] || rm -rf "$scratch"; rmdir "$DIR/.fda-install.lock"' EXIT
+  scratch="$(mktemp -d "$DIR/.fda-install.XXXXXX")"
+  candidate="$scratch/Sjel.app"
+  executable="$candidate/Contents/MacOS/sjel-fda-launcher"
+  receipt="$scratch/receipt"
   source "$TOOLS_DIR/lib/local-build.sh"
+  source "$TOOLS_DIR/lib/replace-directory.sh"
   local admitted=0
   local_build_check || admitted=$?
   [ "$admitted" -ne 3 ] || return 3
@@ -61,14 +97,17 @@ install_helper() (
   (cd "$SJEL_ROOT" && CARGO_TARGET_DIR="$SJEL_RELEASE_TARGET" cargo build --locked --release -p sjel-fda-launcher)
   local target="$SJEL_RELEASE_TARGET"
   case "$target" in /*) ;; *) target="$SJEL_ROOT/$target" ;; esac
-  cp "$target/release/sjel-fda-launcher" "$candidate"
+  mkdir -p "$candidate/Contents/MacOS" "$candidate/Contents/Resources"
+  cp "$target/release/sjel-fda-launcher" "$executable"
+  cp "$MANIFEST" "$candidate/Contents/Info.plist"
+  cp "$ICON" "$candidate/Contents/Resources/AppIcon.icns"
   "$TOOLS_DIR/codesign-binary.sh" "$candidate" "$IDENTIFIER" --require-identity
-  signed "$candidate" || { fail "candidate signature did not verify"; return 1; }
+  signed "$candidate" "$IDENTIFIER" || { fail "candidate signature did not verify"; return 1; }
   [ "$(source_digest)" = "$source_before" ] || { fail "helper source changed during installation; retry"; return 1; }
-  printf 'source_sha256=%s\nbinary_sha256=%s\n' "$source_before" "$(digest "$candidate")" > "$receipt"
-  mv "$candidate" "$BIN"
+  printf 'source_sha256=%s\nbinary_sha256=%s\n' "$source_before" "$(digest "$executable")" > "$receipt"
+  sjel_replace_directory "$candidate" "$BUNDLE"
   mv "$receipt" "$RECEIPT"
-  echo "fda-launcher: installed: $BIN"
+  echo "fda-launcher: installed: $BUNDLE"
 )
 
 verify_helper() (
@@ -80,9 +119,12 @@ verify_helper() (
   scratch="$(mktemp -d "${TMPDIR:-/tmp}/sjel-fda-probe.XXXXXX")"
   label="dev.sjel.fda-probe.$$"
   trap 'launchctl remove "$label" >/dev/null 2>&1 || true; rm -rf "$scratch"' EXIT
-  launchctl submit -l "$label" -o "$scratch/out" -e "$scratch/err" -- \
+  if ! launchctl submit -l "$label" -o "$scratch/out" -e "$scratch/err" -- \
     "$BIN" /bin/sh -c 'printf "%s\n" sjel-fda-probe-started; if /bin/ls -A "$1" >/dev/null 2>&1; then printf "%s\n" sjel-fda-access-ok; else printf "%s\n" sjel-fda-access-denied; exit 3; fi' \
-    fda-probe "$protected"
+    fda-probe "$protected"; then
+    fail "launchd could not start the probe; permission is unverified. Retry from the logged-in desktop session."
+    return 1
+  fi
   result=0
   for _ in $(seq 1 50); do
     if [ -f "$scratch/out" ]; then
@@ -92,7 +134,7 @@ verify_helper() (
     sleep 0.1
   done
   if [ "$result" -eq 2 ]; then
-    echo "fda-launcher: launchd probe ran but protected-folder access was denied. Grant Full Disk Access to $BIN in System Settings, then run 'sjel fda-launcher verify'. No existing job was changed." >&2
+    echo "fda-launcher: launchd probe ran but protected-folder access was denied. Grant Full Disk Access to $BUNDLE in System Settings, then run 'sjel fda-launcher verify'. No existing job was changed." >&2
     return 3
   fi
   if [ "$result" -ne 1 ]; then
@@ -120,42 +162,50 @@ rollback() {
 migrate_helper() (
   install_helper
   verify_helper
-  local scratch plist program cap uid loaded label
+  local scratch plist program cap uid loaded label active_candidate=""
   local changed=()
+  mkdir "$DIR/.fda-migrate.lock" || { fail "another migration holds the lock"; return 1; }
+  scratch=""
+  trap '
+    rc=$?
+    if [ "$rc" -ne 0 ] && [ "${#changed[@]}" -gt 0 ]; then
+      rollback "$scratch" "${changed[@]}" || scratch=""
+    fi
+    [ -z "$scratch" ] || rm -rf "$scratch"
+    [ -z "$active_candidate" ] || rm -f "$active_candidate"
+    rmdir "$DIR/.fda-migrate.lock"
+  ' EXIT
   scratch="$(mktemp -d "${TMPDIR:-/tmp}/sjel-fda-migrate.XXXXXX")"
-  trap 'rm -rf "$scratch"' EXIT
   uid="$(id -u)"
   for plist in "$HOME"/Library/LaunchAgents/com.sjel.*.plist; do
     [ -f "$plist" ] || continue
     program="$(plist_program "$plist")" || { fail "cannot inspect managed job: $plist"; return 1; }
-    [ "$program" = "$LEGACY" ] || continue
+    is_old_program "$program" || continue
     cap="$(basename "$plist" .plist)"
     cap="${cap#com.sjel.}"
     case "$cap" in ""|*[!a-zA-Z0-9_-]*) fail "invalid capability label"; return 1 ;; esac
     cp "$plist" "$scratch/$(basename "$plist")"
     changed+=("$plist")
-    if ! "$TOOLS_DIR/service-runner.sh" install-persistence "$cap"; then
-      rollback "$scratch" "${changed[@]}" || { trap - EXIT; return 1; }
-      fail "job migration failed; original jobs restored and old helper retained"
+    if ! SJEL_FDA_MIGRATING=1 "$TOOLS_DIR/service-runner.sh" install-persistence "$cap"; then
+      fail "job migration failed; rolling back changed jobs"
       return 1
     fi
     loaded="$(launchctl print "gui/$uid/com.sjel.$cap")" || loaded=""
-    if ! grep -Fq "program = $BIN" <<< "$loaded"; then
-      rollback "$scratch" "${changed[@]}" || { trap - EXIT; return 1; }
-      fail "new helper was not loaded; original jobs restored and old helper retained"
+    if [ "$(loaded_program <<< "$loaded")" != "$BIN" ]; then
+      fail "new helper was not loaded; rolling back changed jobs"
       return 1
     fi
   done
-  # Check both installed and loaded jobs before removing the rollback executable.
+  # Check both installed and loaded jobs before retiring the previous routing.
   for plist in "$HOME"/Library/LaunchAgents/*.plist; do
     [ -f "$plist" ] || continue
     program="$(plist_program "$plist")" || continue
-    [ "$program" != "$LEGACY" ] || { fail "a job still uses the old helper: $plist"; return 1; }
+    if is_old_program "$program"; then fail "a job still uses the old helper: $plist"; return 1; fi
     if [ "$program" = "$BIN" ]; then
       cap="$(basename "$plist" .plist)"
       loaded="$(launchctl print "gui/$uid/$cap")" || { fail "helper job is not loaded: $cap"; return 1; }
-      if grep -Fq "program = $LEGACY" <<< "$loaded"; then
-        fail "loaded job still uses the old helper: $cap"; return 1
+      if [ "$(loaded_program <<< "$loaded")" != "$BIN" ]; then
+        fail "helper job is not using the Sjel app: $cap"; return 1
       fi
     fi
   done
@@ -170,31 +220,41 @@ migrate_helper() (
       fi
       continue
     fi
-    if grep -Fq "program = $LEGACY" <<< "$program"; then
+    if is_old_program "$(loaded_program <<< "$program")"; then
       fail "loaded job still uses the old helper: $label"; return 1
     fi
   done < <(printf '%s\n' "$loaded" | awk 'NR > 1 {print $3}')
   if [ -e "$LEGACY" ] || [ -L "$LEGACY" ]; then
-    [ -f "$LEGACY" ] && [ ! -L "$LEGACY" ] && signed "$LEGACY" || { fail "legacy helper is not the expected signed binary"; return 1; }
-    rm "$LEGACY"
-    echo "fda-launcher: removed the overlay installation"
+    [ -f "$LEGACY" ] && [ ! -L "$LEGACY" ] && signed "$LEGACY" "$LEGACY_IDENTIFIER" ||
+      { fail "legacy helper is not the expected signed binary"; return 1; }
   fi
-  echo "fda-launcher: migration complete"
+  if [ -e "$ACTIVE" ] || [ -L "$ACTIVE" ]; then
+    [ -f "$ACTIVE" ] && [ ! -L "$ACTIVE" ] || { fail "invalid activation receipt"; return 1; }
+  fi
+  active_candidate="$(mktemp "$DIR/.fda-active.XXXXXX")"
+  printf '%s\n' "$IDENTIFIER" > "$active_candidate"
+  mv "$active_candidate" "$ACTIVE"
+  changed=()
+  if [ -f "$LEGACY" ]; then
+    rm "$LEGACY" && echo "fda-launcher: removed the overlay installation"
+  fi
+  echo "fda-launcher: migration complete; remove old Full Disk Access entries in System Settings"
 )
 
 case "${1:-install}" in
-  path) [ "$#" -eq 1 ] || { fail "path takes no arguments"; exit 2; }; printf '%s\n' "$BIN"; exit 0 ;;
+  app-path) [ "$#" -eq 1 ] || { fail "app-path takes no arguments"; exit 2; }; printf '%s\n' "$BUNDLE"; exit 0 ;;
   -h|--help|help)
-    echo "Usage: sjel fda-launcher <status|install|verify|migrate|path>"
-    echo "install reconciles the signed helper; migrate verifies access, switches jobs, then removes the old helper."
+    echo "Usage: sjel fda-launcher <status|install|verify|migrate|path|app-path>"
+    echo "install prepares the signed Sjel app. Add it in System Settings, then migrate to verify access and switch jobs."
     exit 0 ;;
 esac
 [ "$#" -le 1 ] || { fail "expected one action"; exit 2; }
 [ "$(uname -s)" = Darwin ] || { echo "fda-launcher: macOS only"; exit 0; }
 case "${1:-install}" in
+  path) active_path ;;
   status) status ;;
   install) install_helper ;;
   verify) verify_helper ;;
   migrate) migrate_helper ;;
-  *) fail "expected status, install, verify, migrate, or path"; exit 2 ;;
+  *) fail "expected status, install, verify, migrate, path, or app-path"; exit 2 ;;
 esac

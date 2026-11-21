@@ -272,9 +272,11 @@ fn main_window(cx: &mut App) -> Option<(WindowHandle<Root>, WeakEntity<Workspace
 }
 
 fn open_link(url: &str, cx: &mut App) {
-    let Some(target) = route::parse_deep_link(url) else {
+    let permissions = url == "sjel://settings/permissions";
+    let target = route::parse_deep_link(url);
+    if !permissions && target.is_none() {
         return;
-    };
+    }
     let Some((window, workspace)) = main_window(cx) else {
         return;
     };
@@ -282,7 +284,13 @@ fn open_link(url: &str, cx: &mut App) {
         cx.activate(true);
     }
     let _ = window.update(cx, |_, window, cx| {
-        let _ = workspace.update(cx, |view, cx| view.open_target(target, window, cx));
+        let _ = workspace.update(cx, |view, cx| {
+            if permissions {
+                view.open_settings(Some(crate::settings::Section::Permissions), cx);
+            } else if let Some(target) = target {
+                view.open_target(target, window, cx);
+            }
+        });
     });
 }
 

@@ -1,57 +1,46 @@
-# Signed macOS helper
+# Signed Sjel background app
 
-`sjel fda-launcher` manages the helper used by capabilities whose service manifest declares
-`full_disk_access = "true"`. The helper remains a separate signed executable so granting it
-Full Disk Access does not grant that permission to every invocation of a general-purpose shell.
+Sjel's macOS jobs whose service manifest declares `full_disk_access = "true"` run through
+a separate signed app. System Settings displays it as **Sjel** with the Sjel icon. Neither
+Sjel Desktop nor the menu-bar app needs its own Full Disk Access grant. The background app
+does not have to be open for scheduled jobs to run.
 
-The installed executable lives at `$HOME/Library/Application Support/Sjel/helpers/sjel-fda-launcher`,
-with a sibling receipt containing source and signed-binary hashes. Installation is independent
-of the private overlay and the checkout's build output. `home-relative-path` supplies the location
-to the installer and Sjel Desktop. Persistence queries `tools/fda-launcher/install path`.
+The background app is installed at `~/Library/Application Support/Sjel/helpers/Sjel.app`.
+It is distinct from the menu-bar app at `~/Applications/Sjel.app`. A sibling receipt identifies
+the build inputs and installed executable. The installer reuses the menu-bar app's icon.
 
-## Commands
+## Set up or migrate
+
+1. Run `sjel fda-launcher install` to build, sign, and install the background app.
+2. Open **Settings → macOS permissions** in Sjel Desktop or **⋯ → macOS Permissions…** from
+   the menu-bar app. Drag **Sjel.app** into **Full Disk Access** and switch on **Sjel**.
+   If the list rejects the drop, use **Show in Finder** and add the revealed bundle using **+**.
+3. From the logged-in desktop session, run `sjel fda-launcher migrate`. It verifies access
+   from a disposable launchd job before switching the declared jobs. Only after it succeeds,
+   remove the previous `sjel-fda-launcher` entry in System Settings.
 
 | Command | Effect |
 |---|---|
-| `sjel fda-launcher` or `status` | Read-only signature, source freshness, and receipt check; nonzero if missing, stale, modified, or unmanaged |
-| `sjel fda-launcher install` | Build and sign a missing or stale helper; a current installation is untouched |
-| `sjel fda-launcher verify` | Run a disposable launchd job that attempts to enumerate the protected Mail directory; report probe status, never directory contents |
-| `sjel fda-launcher migrate` | Install, prove access, switch installed Sjel jobs, check loaded jobs, and remove the former overlay executable |
-| `sjel fda-launcher path` | Print the managed executable path |
+| `sjel fda-launcher status` | Check the bundle signature, build inputs, and receipt. Does not test access. |
+| `sjel fda-launcher install` | Install the signed bundle. A current installation is untouched. Does not change routing or grants. |
+| `sjel fda-launcher verify` | Probe access from launchd. Reports status without listing protected files. |
+| `sjel fda-launcher migrate` | Install, verify access, switch jobs, and record the selected helper. |
+| `sjel fda-launcher path` | Print the executable that persistence currently uses. |
+| `sjel fda-launcher app-path` | Print the bundle to add in System Settings. |
 
-Installation requires a real code-signing identity and uses `tools/codesign-binary.sh` in strict
-mode. It refuses unowned files, symlinks, and modified installations. Source changes during a
-build abort publication. A lock excludes concurrent installers, and candidates are signed and
-verified before replacing the executable. Local compilation follows the runtime power policy.
-Re-running `install` reconciles source updates; no private build or signing script is needed.
-Doctor reports helper freshness when an enabled capability declares Full Disk Access.
+Install requires a stable code-signing identity and refuses unowned, symlinked, or modified
+installations. Source changes during a build abort publication. The installer signs and checks
+the candidate before replacing the bundle.
 
-## Migration and permission
-
-macOS permission is verified, not inferred from a valid signature or a terminal invocation.
-`verify` runs the actual installed helper under launchd, outside a terminal's responsibility
-chain. It does not create or modify Mail data. An absent protected directory leaves access
-unverified rather than manufacturing a passing probe. An access denial is distinguished from
-an incomplete probe; a failed probe reports execution diagnostics without listing protected data.
-
-If macOS requires a new grant, add the managed executable under System Settings → Privacy &
-Security → Full Disk Access, then rerun `sjel fda-launcher migrate`. No existing job is changed
-before the probe passes. The former executable remains until installed and loaded jobs no
-longer use it. A failed job switch restores the changed job files and reloads them; if rollback
-fails, the command preserves its private temporary backup and reports the location. Loaded-job
-checks include GUI, user, and system launchd domains, regardless of the job label.
-
-Deleting a former executable does not remove its row from Full Disk Access. Remove obsolete
-rows in System Settings after migration; retain or re-add the managed executable and run
-`verify` again. Do not reset unrelated applications' privacy grants.
-
-The receipt proves installation integrity and source freshness, not a continuing permission
-grant. `verify` is the live permission check. Migration does not move personal configuration or
-capability data, and it does not publish installed executables.
+The live probe runs outside Terminal's responsibility chain. An access denial, a missing
+protected directory, and failure to start the launchd probe are distinct results.
+An unsuccessful migration restores changed jobs, preserves the previous helper, and leaves
+future job installs on the previous route. After migration, the prior flat executable
+remains available for recovery; the obsolete overlay executable is removed only after
+installed and loaded jobs stop using it. No command edits macOS privacy settings.
 
 ## Checks
 
-`tools/fda-launcher.test.sh` uses isolated homes and planted build, signing, and launchd commands.
-It covers idempotence, overwrite refusal, mandatory signing, the access gate, failed-job rollback,
-and removal only after a successful switch. No test requests a real privacy grant or starts a
-real capability. Real permission and service health must be checked separately during rollout.
+`tools/fda-launcher.test.sh` tests installation, signing, migration gating and rollback in an
+isolated home. Live acceptance must confirm the icon and name in System Settings and run the
+launchd probe on macOS.

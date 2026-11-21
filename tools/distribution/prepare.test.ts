@@ -199,9 +199,11 @@ describe("release preparation (no installation)", () => {
       mkdirSync(extracted);
       expect(Bun.spawnSync(["tar", "-xzf", join(output, archive.name), "-C", extracted]).exitCode).toBe(0);
       const home = join(scratch, "home");
-      const path = Bun.spawnSync(["bash", join(extracted, "sjel/tools/fda-launcher/install"), "path"], { env: { ...process.env, HOME: home, SJEL_ROOT: join(extracted, "sjel") }, stdout: "pipe", stderr: "pipe" });
+      const path = Bun.spawnSync(["bash", join(extracted, "sjel/tools/fda-launcher/install"), "app-path"], { env: { ...process.env, HOME: home, SJEL_ROOT: join(extracted, "sjel") }, stdout: "pipe", stderr: "pipe" });
       expect(path.exitCode).toBe(0);
-      expect(path.stdout.toString()).toBe(join(home, "Library/Application Support/Sjel/helpers/sjel-fda-launcher") + "\n");
+      expect(path.stdout.toString()).toBe(join(home, "Library/Application Support/Sjel/helpers/Sjel.app") + "\n");
+      expect(existsSync(join(extracted, "sjel/tools/fda-launcher/Info.plist"))).toBe(true);
+      expect(existsSync(join(extracted, "sjel/apps/mac/Resources/AppIcon.icns"))).toBe(true);
     } finally { rmSync(scratch, { recursive: true, force: true }); }
   }, 30_000);
 

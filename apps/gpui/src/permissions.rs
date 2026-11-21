@@ -15,7 +15,7 @@ pub(crate) enum HelperStatus {
 }
 
 impl HelperStatus {
-    /// Check for the installed file without following a replacement symlink.
+    /// Check for the installed bundle without following a replacement symlink.
     pub(crate) fn detect() -> Self {
         let helper = std::env::var_os("HOME").and_then(|home| installed_under(Path::new(&home)));
         helper.map_or(Self::Unavailable, Self::Installed)
@@ -29,7 +29,8 @@ fn installed_under(home: &Path) -> Option<PathBuf> {
     let path = home.join(HELPER_PATH.trim_end());
     std::fs::symlink_metadata(&path)
         .ok()
-        .filter(|metadata| metadata.is_file())
+        .filter(|metadata| metadata.is_dir())
+        .filter(|_| path.join("Contents/MacOS/sjel-fda-launcher").is_file())
         .map(|_| path)
 }
 
@@ -42,7 +43,7 @@ mod tests {
         let home = Path::new("/test home");
         assert_eq!(
             home.join(HELPER_PATH.trim_end()),
-            Path::new("/test home/Library/Application Support/Sjel/helpers/sjel-fda-launcher"),
+            Path::new("/test home/Library/Application Support/Sjel/helpers/Sjel.app"),
         );
         assert_eq!(installed_under(Path::new("")), None);
     }

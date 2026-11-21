@@ -30,7 +30,10 @@ cat > "$SCRATCH/mock/codesign" <<'SH'
 #!/bin/bash
 case "$1" in
   -dv)
-    echo 'Identifier=dev.sjel.fda-launcher' >&2
+    case "$2" in
+      *.app) echo 'Identifier=dev.sjel.access' >&2 ;;
+      *) echo 'Identifier=dev.sjel.fda-launcher' >&2 ;;
+    esac
     printf '%131072s\n' '' >&2
     ;;
   --force) [ ! -f "$MOCK_ROOT/sign-failure" ] ;;
@@ -74,6 +77,7 @@ cat > "$SCRATCH/mock/launchctl" <<'SH'
 #!/bin/bash
 case "$1" in
   submit)
+    [ ! -f "$MOCK_ROOT/probe-submit-failure" ] || exit 1
     [ ! -f "$MOCK_ROOT/probe-not-started" ] || exit 0
     shift
     while [ "$1" != -- ]; do
@@ -110,6 +114,8 @@ SH
 cat > "$SCRATCH/mock/cli" <<'SH'
 #!/bin/bash
 [ "$1" = service-runner.sh ] && [ "$2" = install-persistence ] || exit 2
+[ "${SJEL_FDA_MIGRATING:-}" = 1 ] || exit 2
+[ "$("$TEST_TOOL" path)" = "$EXPECTED_HELPER" ] || exit 2
 if [ -f "$MOCK_ROOT/migration-failure" ]; then
   echo broken > "$HOME/Library/LaunchAgents/com.sjel.example.plist"
   exit 1
@@ -119,26 +125,32 @@ printf '%s\n' "$EXPECTED_HELPER" > "$MOCK_ROOT/loaded"
 SH
 chmod +x "$SCRATCH/mock/"*
 export SJEL_CLI_BIN="$SCRATCH/mock/cli"
-export EXPECTED_HELPER="$HOME/Library/Application Support/Sjel/helpers/sjel-fda-launcher"
-[ "$("$TOOL" path)" = "$EXPECTED_HELPER" ] || fail "managed path must not depend on overlay"
+export TEST_TOOL="$TOOL"
+BUNDLE="$HOME/Library/Application Support/Sjel/helpers/Sjel.app"
+export EXPECTED_HELPER="$BUNDLE/Contents/MacOS/sjel-fda-launcher"
+FLAT="${BUNDLE%/*}/sjel-fda-launcher"
+[ "$("$TOOL" app-path)" = "$BUNDLE" ] || fail "managed app path must not depend on overlay"
 if "$TOOL" status >/dev/null; then fail "absent helper reported current"; fi
 "$TOOL" install
 "$TOOL" status
 "$TOOL" install
 [ "$(wc -l < "$SCRATCH/builds" | tr -d ' ')" = 1 ] || fail "current helper rebuilt"
 "$TOOL" verify
+[ -f "$BUNDLE/Contents/Info.plist" ] || fail "app metadata missing"
+[ -f "$BUNDLE/Contents/Resources/AppIcon.icns" ] || fail "app icon missing"
+if "$TOOL" path > /dev/null 2>&1; then fail "fresh install routed jobs before migration"; fi
 
 # A modified or unmanaged installation is not silently overwritten.
 echo changed >> "$EXPECTED_HELPER"
 if "$TOOL" install >/dev/null 2>&1; then fail "modified helper overwritten"; fi
-rm "$EXPECTED_HELPER" "$EXPECTED_HELPER.receipt"
-mkdir -p "$(dirname "$EXPECTED_HELPER")"
-printf 'unowned\n' > "$EXPECTED_HELPER"
+rm -rf "$BUNDLE"
+rm "$BUNDLE.receipt"
+mkdir -p "$BUNDLE"
 if "$TOOL" install >/dev/null 2>&1; then fail "unmanaged helper overwritten"; fi
-rm "$EXPECTED_HELPER"
-ln -s "$SCRATCH/no-target" "$EXPECTED_HELPER"
+rmdir "$BUNDLE"
+ln -s "$SCRATCH/no-target" "$BUNDLE"
 if "$TOOL" install >/dev/null 2>&1; then fail "helper symlink overwritten"; fi
-rm "$EXPECTED_HELPER"
+rm "$BUNDLE"
 touch "$SCRATCH/no-identity"
 if "$TOOL" install >/dev/null 2>&1; then fail "ad-hoc signing accepted"; fi
 [ ! -e "$EXPECTED_HELPER" ] || fail "unsigned helper installed"
@@ -152,6 +164,8 @@ rm "$SCRATCH/sign-failure"
 # Use a real plist parser, but fake the service manager and all signing/build operations.
 legacy="$SJEL_OVERLAY_ROOT/bin/sjel-fda-launcher"
 cp "$EXPECTED_HELPER" "$legacy"
+cp "$EXPECTED_HELPER" "$FLAT"
+[ "$("$TOOL" path)" = "$FLAT" ] || fail "install changed routing before proof"
 plist="$HOME/Library/LaunchAgents/com.sjel.example.plist"
 printf '<?xml version="1.0"?><plist version="1.0"><dict><key>Label</key><string>com.sjel.example</string><key>ProgramArguments</key><array><string>placeholder</string></array></dict></plist>\n' > "$plist"
 plutil -replace ProgramArguments.0 -string "$legacy" "$plist"
@@ -162,6 +176,11 @@ if "$TOOL" migrate > "$SCRATCH/probe-result" 2>&1; then fail "unproved access mi
 [ "$(plutil -extract ProgramArguments.0 raw -o - "$plist")" = "$legacy" ] || fail "job changed before proof"
 grep -Fq 'access was denied' "$SCRATCH/probe-result" || fail "access denial not distinguished"
 rm "$SCRATCH/deny-access"
+touch "$SCRATCH/probe-submit-failure"
+if "$TOOL" migrate > "$SCRATCH/submit-result" 2>&1; then fail "failed launchd submission migrated"; fi
+grep -Fq 'launchd could not start the probe' "$SCRATCH/submit-result" || fail "submission failure was silent"
+[ "$("$TOOL" path)" = "$FLAT" ] || fail "routing changed after failed submission"
+rm "$SCRATCH/probe-submit-failure"
 touch "$SCRATCH/probe-not-started"
 if "$TOOL" migrate > "$SCRATCH/probe-not-started-result" 2>&1; then fail "unfinished probe migrated"; fi
 grep -Fq 'not known to be denied' "$SCRATCH/probe-not-started-result" || fail "unfinished probe mistaken for denial"
@@ -179,14 +198,19 @@ printf '<?xml version="1.0"?><plist version="1.0"><dict><key>Program</key><strin
 uv run --no-project python -c 'import plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,"rb")); d["Program"]=sys.argv[2]; plistlib.dump(d,open(p,"wb"))' "$other" "$legacy"
 if "$TOOL" migrate > "$SCRATCH/program-only-result" 2>&1; then fail "Program-only consumer ignored"; fi
 [ -f "$legacy" ] || fail "old helper deleted with Program-only consumer"
+[ "$(plutil -extract ProgramArguments.0 raw -o - "$plist")" = "$legacy" ] || fail "job was not rolled back when another consumer blocked migration"
 rm "$other"
 printf '%s\n' "$legacy" > "$SCRATCH/extra-loaded"
 if "$TOOL" migrate > "$SCRATCH/extra-loaded-result" 2>&1; then fail "loaded non-Sjel consumer ignored"; fi
 [ -f "$legacy" ] || fail "old helper deleted with loaded non-Sjel consumer"
 rm "$SCRATCH/extra-loaded"
+plutil -replace ProgramArguments.0 -string "$FLAT" "$plist"
+printf '%s\n' "$FLAT" > "$SCRATCH/loaded"
 touch "$SCRATCH/user-domain-job"
 "$TOOL" migrate
-[ ! -e "$legacy" ] || fail "old helper retained after verified migration"
+[ "$("$TOOL" path)" = "$EXPECTED_HELPER" ] || fail "verified app not selected for future jobs"
+[ -x "$FLAT" ] || fail "previous managed helper was not retained"
+[ ! -e "$legacy" ] || fail "overlay helper retained after verified migration"
 [ "$(plutil -extract ProgramArguments.0 raw -o - "$plist")" = "$EXPECTED_HELPER" ] || fail "job did not move"
 "$TOOL" migrate
 printf 'FDA helper lifecycle tests passed\n'

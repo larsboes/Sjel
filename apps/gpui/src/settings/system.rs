@@ -127,7 +127,7 @@ pub(super) fn permissions(helper: &HelperStatus, palette: Palette) -> Vec<AnyEle
         HelperStatus::Installed(path) => {
             let reveal = path.clone();
             (
-                "Place the windows side by side, then drag the helper into the Full Disk Access list.",
+                "Drag Sjel.app into the Full Disk Access list, then switch on Sjel.",
                 div()
                     .flex()
                     .items_center()
@@ -143,7 +143,7 @@ pub(super) fn permissions(helper: &HelperStatus, palette: Palette) -> Vec<AnyEle
         }
         HelperStatus::Checking => ("Checking for the installed helper…", div()),
         HelperStatus::Unavailable => (
-            "The helper is unavailable. Run sjel fda-launcher install, then reopen this section.",
+            "Sjel.app is not installed for background access. Run sjel fda-launcher install, then reopen this section.",
             div(),
         ),
     };
@@ -152,14 +152,20 @@ pub(super) fn permissions(helper: &HelperStatus, palette: Palette) -> Vec<AnyEle
         vec![
             row(
                 "Storage history",
-                Some("The signed Sjel helper uses this grant to measure disk usage for Photos and Music."),
+                Some("One grant lets Sjel’s background job measure disk usage, even when both apps are closed."),
                 Button::new("open-fda-pane", "Open Full Disk Access")
                     .variant(ButtonVariant::Primary)
                     .size(ControlSize::Sm)
                     .on_click(|_, _, cx| cx.open_url(FULL_DISK_ACCESS_PANE)),
                 palette,
             ),
-            row("Add the Sjel helper", Some(detail), control, palette),
+            row("Add Sjel", Some(detail), control, palette),
+            row(
+                "Switch existing jobs",
+                Some("After enabling Sjel, run sjel fda-launcher migrate. Remove the old sjel-fda-launcher entry only after migration succeeds."),
+                div(),
+                palette,
+            ),
         ],
         palette,
     )]
@@ -176,7 +182,7 @@ fn helper_drag(path: PathBuf, palette: Palette) -> impl IntoElement {
         .external_drag_payload(|path: &PathBuf, _, _| {
             Some(ExternalDragPayload::Files(FileDragPaths::new([(
                 path.clone(),
-                false,
+                true,
             )])))
         })
 }
@@ -186,15 +192,15 @@ fn helper_token(palette: Palette) -> Div {
         .flex()
         .items_center()
         .gap_2()
-        .px_2()
-        .py_1()
+        .px_3()
+        .py_2()
         .rounded_md()
         .border_1()
         .border_color(rgba(palette.border))
         .bg(rgba(palette.surface))
         .text_sm()
         .child(Icon::new(IconName::GripVertical).size(IconSize::Sm))
-        .child("sjel-fda-launcher")
+        .child("Drag Sjel.app")
 }
 
 struct HelperDragPreview(Palette);
@@ -464,7 +470,7 @@ mod tests {
     impl Render for HelperDrag {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             div().child(helper_drag(
-                PathBuf::from("/fixture/sjel-fda-launcher"),
+                PathBuf::from("/fixture/Sjel.app"),
                 Palette::light(),
             ))
         }

@@ -193,7 +193,8 @@ function runtime(options: Options, stage: string) {
     copy(join(root, "tools", name), join(stage, "tools", name));
   }
   for (const name of ["lib", "templates"]) copyPublicTree(`tools/${name}`, join(stage, "tools", name));
-  for (const name of ["storage/storage", "capability-auth/capability-auth", "fda-launcher/install", "fda-launcher/home-relative-path"]) copy(join(root, "tools", name), join(stage, "tools", name));
+  for (const name of ["storage/storage", "capability-auth/capability-auth", "fda-launcher/install", "fda-launcher/home-relative-path", "fda-launcher/Info.plist"]) copy(join(root, "tools", name), join(stage, "tools", name));
+  copy(join(root, "apps/mac/Resources/AppIcon.icns"), join(stage, "apps/mac/Resources/AppIcon.icns"));
   copy(join(root, "toolchain.toml"), join(stage, "toolchain.toml"));
   for (const name of ["schemas", "docs"]) copyPublicTree(name, join(stage, name));
   writeFileSync(join(stage, "distribution.json"), JSON.stringify({ schema: 1, version: options.version, platform, core, source_builds: false }, null, 2) + "\n");

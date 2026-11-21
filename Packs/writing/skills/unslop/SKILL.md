@@ -1,18 +1,11 @@
 ---
 name: unslop
 description: >-
-  Strips the tells that make source code and web UI read as AI-generated and forces a
-  deliberate, project-specific choice instead of the model's default average. It writes
-  neither the code nor the design, and has no house style. Code: chat artifacts, placeholder
-  comments, emoji, swallowed errors, generic names like process_data, plus the structural
-  tells a linter passes (tutorial boilerplate, hallucinated APIs, over-engineering, ignoring
-  the surrounding repo). UI: default shadcn/Tailwind, AI-purple gradients, emoji-as-icons,
-  the hero-plus-three-cards skeleton, and the newer cream-serif-sage 'tasteful default'.
-  Use whenever writing, generating, reviewing,
-  refactoring, or auditing code or a web interface, especially when it 'looks AI-generated',
-  'reads like a tutorial', is 'too generic' or 'vibe-coded'. Trigger even if the request
-  never says AI tell. Do not use for prose a human reads (use human-writing), thesis text
-  (use academic-writing), or agent skills (use skill-creator).
+  Finds generic defaults, unnecessary complexity, and AI-generated tells in source code and
+  web UI. Use when a code or UI task calls for an audit of those issues, or when fixing code
+  or UI that looks AI-generated, tutorial-like, or generic. Do not use for routine
+  implementation, refactoring, debugging, or correctness-only review. Use human-writing
+  for general prose, academic-writing for theses and papers, and skill-creator for agent skills.
 allowed-tools: Read, Edit, Bash
 ---
 

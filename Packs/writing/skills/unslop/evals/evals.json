@@ -33,9 +33,12 @@
   "trigger_tests": {
     "should_trigger": [
       "Review this diff for unnecessary complexity.",
-      "What can we safely delete instead of adding another abstraction?"
+      "What can we safely delete instead of adding another abstraction?",
+      "This settings page looks like a generic template. Review it for AI defaults."
     ],
     "should_not_trigger": [
+      "Add a timeout option using the same pattern as the other CLI flags. (near-miss: routine implementation of a specified change)",
+      "Review this Rust retry logic for off-by-one errors only. (near-miss: effective-rust)",
       "Why did this production request time out? (near-miss: root-cause)",
       "Rewrite the README in a warmer voice. (near-miss: human-writing)"
     ]

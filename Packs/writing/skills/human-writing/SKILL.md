@@ -1,18 +1,11 @@
 ---
 name: human-writing
 description: >-
-  Drafts, edits, reviews, and audits prose so it reads as one deliberate human voice instead
-  of the model's default register. Combines a linter for the mechanical tells (em dash, "it's
-  not just X, it's Y" cadence, assistant boilerplate, diction memes, bold-bullet listicles), a
-  structural pass for the tells no regex catches (uniform rhythm, sycophancy, saying nothing
-  at length), and a guard against the over-corrected "trying not to sound like
-  AI" register that swaps one default for another. Facts, numbers, and citations stay
-  invariant. Use when writing, drafting, editing, rewriting, reviewing, or auditing prose for
-  a reader (post, email, essay, README, marketing copy), when text "sounds like
-  ChatGPT", "reads like AI", or "is too polished", and for "de-slop this" or "make it sound
-  like me". Trigger even if the request never says "AI tell". Do not use for authoring agent
-  skills (use skill-creator), thesis or paper prose (use academic-writing), source code or
-  web UI (use unslop).
+  Drafts and revises prose in a deliberate voice without changing facts, numbers, or citations.
+  Use when writing, editing, reviewing, or auditing prose for readers such as emails, posts,
+  essays, READMEs, or marketing copy, including requests to make text sound less like AI or
+  match a person's voice. Do not use for agent skills (use skill-creator), thesis or paper
+  prose (use academic-writing), source code or web UI (use unslop).
 allowed-tools: Read, Edit, Write, Bash, Glob, Grep
 ---
 

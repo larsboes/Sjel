@@ -66,7 +66,9 @@ the standalone entry point; its authenticated manual-download path remains below
 
 The [CLI distribution workflow](../../.github/workflows/cli-distribution.yml) builds these
 archives and rehearses the generated POSIX bootstrap, a compatible update and rollback in isolated
-homes. The existing draft filenames are:
+homes. Pushes and pull requests run the three-platform preview when a change affects the
+installer payload or its build inputs. Manual dispatch always builds a preview for the exact
+revision, including its corresponding source archive. The existing draft filenames are:
 
 | Host | Archive |
 | --- | --- |

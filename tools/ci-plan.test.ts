@@ -105,6 +105,40 @@ esac
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
+test("CLI preview includes failed pushes since the successful ancestor and always runs on dispatch", () => {
+  const f = fixture();
+  try {
+    f.put(".github/workflows/cli-distribution.yml", "installer workflow input\n");
+    f.git("add", "."); f.git("commit", "-qm", "unverified installer change");
+    const failed = f.git("rev-parse", "HEAD");
+    f.put("docs/guide.md", "Unrelated successor\n");
+    f.git("add", "."); f.git("commit", "-qm", "unrelated successor");
+    const runs = [workflowRun(2, failed, "failure"), workflowRun(1, f.base)];
+    f.put("bin/gh", `#!/bin/sh
+case "$2" in
+  */workflows/cli-distribution.yml/runs*) printf '%s' '${JSON.stringify({ workflow_runs: runs })}' ;;
+  *) exit 1 ;;
+esac
+`);
+    expect(Bun.spawnSync(["chmod", "+x", join(f.root, "bin/gh")]).exitCode).toBe(0);
+    const run = (event: string, ...args: string[]) => Bun.spawnSync(
+      ["bun", "--no-env-file", join(import.meta.dir, "ci-plan.ts"), "--root", f.root, "--workflow", "cli-distribution.yml", ...args],
+      { env: { ...process.env, PATH: `${join(f.root, "bin")}:${process.env.PATH}`, GITHUB_EVENT_NAME: event, GITHUB_EVENT_PATH: "", GITHUB_REPOSITORY: "example/fixture", GITHUB_STEP_SUMMARY: "" } },
+    );
+    const output = join(f.root, "plan-output");
+    const push = run("push", "--github-output", output);
+    expect(push.exitCode, push.stderr.toString()).toBe(0);
+    expect(push.stdout.toString()).toContain(".github/workflows/cli-distribution.yml affects preview configuration");
+    expect(readFileSync(output, "utf8")).toBe("cli=true\n");
+    const bad = run("pull_request", "--base", "not-a-ref");
+    expect(bad.exitCode, bad.stderr.toString()).toBe(0);
+    expect(bad.stdout.toString()).toContain("**run**. Comparison unavailable");
+    const manual = run("workflow_dispatch", "--base", f.git("rev-parse", "HEAD"));
+    expect(manual.exitCode, manual.stderr.toString()).toBe(0);
+    expect(manual.stdout.toString()).toContain("**run**. Full preview requested");
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test("CI triggers preserve an uncancelled daily full run and explicit reusable full mode", async () => {
   const workflow = Bun.YAML.parse(await Bun.file(join(import.meta.dir, "../.github/workflows/ci.yml")).text()) as any;
   expect(workflow.on.schedule).toEqual([{ cron: "23 3 * * *" }]);

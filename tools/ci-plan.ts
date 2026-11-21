@@ -179,18 +179,39 @@ async function main() {
   if (required) return requireFull(root, required);
   const event = process.env.GITHUB_EVENT_PATH ? JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")) : {};
   const eventName = process.env.GITHUB_EVENT_NAME;
+  const workflow = arg("--workflow") ?? "ci.yml";
   let full = args.includes("--full") || ["schedule", "release", "workflow_dispatch", "workflow_call"].includes(eventName ?? "");
   let base = arg("--base") ?? event.pull_request?.base?.sha;
   const notes: string[] = [];
   if (!full && !base && !args.includes("--local") && eventName === "push") {
     try {
-      const candidates = runs(root, repository(root), arg("--workflow") ?? "ci.yml");
+      const candidates = runs(root, repository(root), workflow);
       base = successfulBase(candidates, (sha) => Bun.spawnSync(["git", "merge-base", "--is-ancestor", sha, "HEAD"], { cwd: root }).exitCode === 0);
       notes.push(base ? "Compared against the last successful ancestor workflow run; cancelled and failed pushes remain in scope" : "No successful ancestor in the last 100 runs: full verification");
     } catch (error) {
       notes.push(`Baseline lookup unavailable: ${error}; full verification`);
       full = true;
     }
+  }
+  if (workflow === "cli-distribution.yml") {
+    let run = true;
+    let reason = full ? "Full preview requested." : "No verified comparison base.";
+    if (!full && base) {
+      try {
+        command(root, ["git", "merge-base", "--is-ancestor", base, "HEAD"]);
+        const { files, deleted } = changedFiles(root, base, false);
+        const { cliImpact } = await import("./distribution/cli-impact.ts");
+        ({ run, reason } = cliImpact(root, [...files].sort(), [...deleted]));
+      } catch (error) {
+        reason = `Comparison unavailable: ${error}`;
+      }
+    }
+    const githubOutput = arg("--github-output");
+    if (githubOutput) appendFileSync(githubOutput, `cli=${run}\n`);
+    const report = `CLI preview: **${run ? "run" : "skip"}**. ${reason}\n${notes.join("\n")}`.trimEnd();
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, report + "\n");
+    console.log(report);
+    return;
   }
   const plan = createPlan(root, base, full, args.includes("--local"));
   plan.reasons.unshift(...notes);

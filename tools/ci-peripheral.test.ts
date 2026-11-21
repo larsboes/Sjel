@@ -139,6 +139,22 @@ test("CodeQL skips an empty include matrix at job level, not after starting each
   }
 });
 
+test("CLI distribution plans before allocating runners and only cancels superseded PR previews", () => {
+  const { plan, cli } = cliDistribution.jobs;
+  expect(cliDistribution.on.push.paths).toBeUndefined();
+  expect(cliDistribution.on.pull_request?.paths).toBeUndefined();
+  expect(cliDistribution.concurrency.group).toContain("github.run_id");
+  expect(cliDistribution.concurrency["cancel-in-progress"]).toBe("${{ github.event_name == 'pull_request' }}");
+  expect(plan.permissions).toEqual({ contents: "read", actions: "read" });
+  expect(plan.steps[0].with).toEqual({ "fetch-depth": 0 });
+  expect(plan.outputs.cli).toBe("${{ steps.plan.outputs.cli }}");
+  expect(step(plan, "Plan CLI verification").run).toBe('bun tools/ci-plan.ts --workflow cli-distribution.yml --github-output "$GITHUB_OUTPUT"');
+  expect(cli.needs).toBe("plan");
+  expect(cli.if).toBe("needs.plan.outputs.cli == 'true'");
+  expect(cli.strategy.matrix.runner).toEqual(["ubuntu-24.04", "ubuntu-24.04-arm", "macos-15"]);
+  expect(cli["continue-on-error"]).toBeUndefined();
+});
+
 test("distribution requires successful full CI at the exact caller revision before preparing artifacts", () => {
   expect(Object.keys(distribution.on)).toEqual(["workflow_dispatch"]);
   const preflight = distribution.jobs.preflight;

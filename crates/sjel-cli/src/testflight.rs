@@ -120,9 +120,16 @@ fn ship(root: &Path, notes: Option<&str>) -> Result<(), String> {
         spec.version,
         out.display()
     );
+    // A persistent target keeps the release build incremental between ships. It is separate
+    // from the developer target, whose release binaries the services run.
+    let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is unset")?);
+    let target = home.join("Library/Caches/Sjel/ios-archive-target");
+    std::fs::create_dir_all(&target).map_err(|e| format!("{}: {e}", target.display()))?;
     let status = Command::new(root.join("tools/distribution/ios-archive"))
         .args(["--version", &spec.version, "--build", &number.to_string()])
-        .args(["--team", &api.team, "--upload", "--out"])
+        .args(["--team", &api.team, "--upload", "--target-dir"])
+        .arg(&target)
+        .arg("--out")
         .arg(&out)
         .status()
         .map_err(|e| format!("could not run ios-archive: {e}"))?;

@@ -58,6 +58,11 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: ". -> ../sjel-cli-build"
+          key: cli-release-${{ matrix.runner }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Validate preview version
         shell: bash
         run: '[[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]'
@@ -67,7 +72,7 @@ jobs:
       - name: Build CLI-only archive
         run: >-
           bun tools/distribution/prepare.ts cli --version "$RELEASE_VERSION"
-          --target-dir "$RUNNER_TEMP/sjel-cli-build" --out "$RUNNER_TEMP/sjel-cli-dist" --build
+          --target-dir "$GITHUB_WORKSPACE/../sjel-cli-build" --out "$RUNNER_TEMP/sjel-cli-dist" --build
       - name: Prepare a compatible update fixture from the same binaries
         shell: bash
         run: |
@@ -75,7 +80,7 @@ jobs:
           patch=${base##*.}
           next="v${base%.*}.$((10#$patch + 1))"
           bun tools/distribution/prepare.ts cli --version "$next" \
-            --target-dir "$RUNNER_TEMP/sjel-cli-build" --out "$RUNNER_TEMP/sjel-cli-update" --prepare-dependencies
+            --target-dir "$GITHUB_WORKSPACE/../sjel-cli-build" --out "$RUNNER_TEMP/sjel-cli-update" --prepare-dependencies
       - name: Rehearse POSIX bootstrap, update and rollback without developer tools
         shell: bash
         run: |

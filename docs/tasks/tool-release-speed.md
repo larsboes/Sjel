@@ -49,3 +49,11 @@ Measured on 2026-11-21:
   submission in `release.json`, and `tools/distribution/notarize.ts --dir OUTPUT` resumes to staple
   (exit 75 while pending). Covered by `tools/distribution/notarize.test.ts`. A cached signed DMG
   rebuild from a clean tag worktree took 95 seconds.
+- iOS smoke run 44892173162 took 15.5 minutes: 6.3 for cargo despite a full rust-cache hit,
+  6 for the Xcode build, about 1.5 for the tests. `run-sim` builds through `tools/cargo-hermetic`,
+  which writes under `CARGO_TARGET_DIR` or `$TMPDIR`, while the cache held `apps/gpui/target`.
+  The workflow now sets `CARGO_TARGET_DIR` and caches that directory. Not yet measured on CI.
+- CLI distribution run 44891247558: `Build CLI-only archive` took 599 seconds on `macos-15` with
+  no Cargo cache. The workflow now caches the release target per runner. Not yet measured.
+- `sjel testflight ship` for build 2363 took 384 seconds, 150 of them a cold release build in a
+  temporary target. Ship now reuses `~/Library/Caches/Sjel/ios-archive-target`. Not yet measured.

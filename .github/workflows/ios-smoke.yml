@@ -44,7 +44,10 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: apps/gpui
-          key: ios-simulator-smoke-xcode27
+          key: ios-simulator-smoke-xcode27-hermetic
+          # run-sim builds through tools/cargo-hermetic, which writes under CARGO_TARGET_DIR.
+          cache-targets: false
+          cache-directories: ${{ runner.temp }}/ios-target
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Prepare simulator build tools
         run: |
@@ -53,6 +56,7 @@ jobs:
       - name: Render Documents and Mail
         env:
           SJEL_IOS_RESULTS: ${{ runner.temp }}/ios-smoke
+          CARGO_TARGET_DIR: ${{ runner.temp }}/ios-target
           SJEL_ALLOW_LOCAL_BUILD: "1"
         run: apps/gpui/ios/run-sim --smoke
       - name: Retain screenshots and test results

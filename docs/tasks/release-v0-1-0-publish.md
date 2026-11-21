@@ -5,6 +5,7 @@ state: "ready"
 area: "tooling"
 kind: "maintenance"
 priority: 1
+blocked_by: "Apple notary service: submission f2ae86a2-3ce6-4fc2-959f-8c2f969dce69 is In Progress"
 ---
 
 # Publish the v0.1.0 artifacts
@@ -48,8 +49,10 @@ build from the same commit plus only the changes App Store Connect requires.
 
 ## Unrun
 
-- The DMG. Outputs are in `~/Library/Caches/Sjel/releases/v0.1.0/` (`macos/`, `cli/`). Run
-  `bun tools/distribution/notarize.ts --dir ~/Library/Caches/Sjel/releases/v0.1.0/macos` until it
-  exits 0, then `bun tools/distribution/publish-draft.ts --dir …/macos --include …/cli/sjel-cli-macos-15
+- The DMG and the receipt. The `v0.1.0` tag lists the DMG in `required_assets`, so
+  `tools/work receipt v0.1.0` refuses a CLI-only release. Outputs are in
+  `~/Library/Caches/Sjel/releases/v0.1.0/` (`macos/`, `cli/`). When
+  `bun tools/distribution/notarize.ts --dir ~/Library/Caches/Sjel/releases/v0.1.0/macos` exits 0, run
+  `bun tools/distribution/publish-draft.ts --dir …/macos --include …/cli/sjel-cli-macos-15
   --include …/cli/sjel-cli-ubuntu-24.04 --include …/cli/sjel-cli-ubuntu-24.04-arm --update-release`,
   remove the DMG sentence from the release notes, and commit `tools/work receipt v0.1.0`.

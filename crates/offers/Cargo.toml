@@ -1,0 +1,30 @@
+[package]
+name = "sjel-offers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Offers from mail: code, discount and expiry with quoted evidence, kept with the original until it expires."
+publish = false
+
+[lib]
+name = "offers"
+path = "src/lib.rs"
+
+# The `crates/offers/offers` launcher execs offers-cli.
+[[bin]]
+name = "offers-cli"
+path = "src/main.rs"
+
+[dependencies]
+sjel-config = { path = "../sjel-config" }
+chrono.workspace = true
+html2text = "0.17"
+mailparse = "0.18"
+regex.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

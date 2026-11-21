@@ -30,3 +30,12 @@ Documents. An offer worth keeping is kept as an `.eml` original until it expires
 - `comms mail cleanup` and `comms mail senders` select candidates from the overlay `cleanup`
   list; protected streams, keepers and waiting threads are never selected.
 - First rule (`no-value` in effect): marketplace saved-search alerts older than 7 days.
+- `crates/offers` stores offers with code, discount, expiry, evidence and the `.eml` original;
+  `offers released` gates the `"gate": "released"` cleanup rules. Live: 17 Rituals mails,
+  1 valid offer, 16 released.
+
+## Not yet done
+
+- Link an offer to a wish or gift idea in Inventory.
+- Gates for events (Calendar) and newsletters (clips).
+- `comms mail export` and the full sweep share Gmail's per-user rate limit; neither backs off.

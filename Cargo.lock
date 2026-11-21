@@ -5931,6 +5931,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-offers"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "html2text",
+ "mailparse",
+ "regex",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "toml",
+]
+
+[[package]]
 name = "sjel-operator-profile"
 version = "0.1.0"
 dependencies = [

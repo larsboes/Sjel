@@ -18,8 +18,7 @@ the waits and rebuilds that do not buy a check.
 
 - Record wall time per step for CI, the CLI workflow, iOS smoke, the Mac DMG with notarization,
   and the TestFlight upload, with the run or command that produced each number.
-- Let one release command run the gate, the tag, both artifact builds, the draft and TestFlight,
-  and resume after an interruption.
+- Run `tools/distribution/ship.ts` end to end on the next tag and record its wall time.
 - Decide whether `tools/release` should accept a full CI run on the tagged commit from any trigger,
   and whether the fast gate's `gpui fmt` check runs before commit instead of at push.
 - Fix or quarantine the flaky tests seen on 2026-11-21.
@@ -57,3 +56,10 @@ Measured on 2026-11-21:
   no Cargo cache. The workflow now caches the release target per runner. Not yet measured.
 - `sjel testflight ship` for build 2363 took 384 seconds, 150 of them a cold release build in a
   temporary target. Ship now reuses `~/Library/Caches/Sjel/ios-archive-target`. Not yet measured.
+- `tools/distribution/ship.ts vX.Y.Z` runs every step after a pushed tag and resumes from state in
+  `~/Library/Caches/Sjel/releases/<version>/`. The gate and the tag stay in `tools/release`, and
+  publication needs `--publish`. Covered by `tools/distribution/ship.test.ts`; not yet run on a
+  real tag.
+- The iOS smoke's Xcode app build took 30 seconds; the first `xcodebuild test` took 4.4 minutes
+  before its result bundle, which includes the simulator boot. `run-sim` now boots the simulator
+  before the Rust build. Locally the simulator was ready at 150 seconds, when the builds finished.

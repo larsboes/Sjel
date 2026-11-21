@@ -74,6 +74,14 @@ xcrun swiftc -typecheck -sdk "$sdk" -target "arm64-apple-ios${IPHONEOS_DEPLOYMEN
   -F "$platform/Developer/Library/Frameworks" -I "$platform/Developer/usr/lib" "$HOST"/UITests/*.swift
 if $typecheck_only; then exit 0; fi
 
+# Boot now so the simulator comes up while Rust and Xcode compile.
+booted_here=false
+if ! $build_only && ! xcrun simctl list devices | grep -q "$udid) (Booted)"; then
+  xcrun simctl boot "$udid" &
+  boot_pid=$!
+  booted_here=true
+fi
+
 # SJEL_IOS_FEATURES adds cargo features to the Rust library.
 (cd "$IOS_DIR" && "$root/tools/cargo-hermetic" build --locked --lib --target aarch64-apple-ios-sim ${SJEL_IOS_FEATURES:+--features "$SJEL_IOS_FEATURES"})
 target_dir="$(cd "$IOS_DIR" && "$root/tools/cargo-hermetic" metadata --locked --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
@@ -90,12 +98,10 @@ if $build_only; then
   exit 0
 fi
 
-booted_here=false
-if ! xcrun simctl list devices | grep -q "$udid) (Booted)"; then
-  xcrun simctl boot "$udid"
-  booted_here=true
-fi
+echo "ios/run-sim: builds done after ${SECONDS}s"
+if $booted_here; then wait "$boot_pid"; fi
 xcrun simctl bootstatus "$udid" -b >/dev/null
+echo "ios/run-sim: simulator ready after ${SECONDS}s"
 
 # The scanner asks for the camera the first time it opens. Answering that alert needs a hand on a
 # screen this script never opens, so the answer is given here instead: a granted camera is what a

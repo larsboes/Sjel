@@ -25,10 +25,10 @@ use std::process::{Command, ExitCode};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zeroize::Zeroizing;
 
-pub const USAGE: &str = "Usage: sjel testflight [ship] [--notes <text>]
+pub const USAGE: &str = "Usage: sjel testflight [ship] [--source <checkout>] [--notes <text>]
        sjel testflight app | profile | status | notes <text>
 
-  ship      Archive this checkout, upload it, wait until App Store Connect has processed it,
+  ship      Archive this checkout (or --source, such as a clean release worktree), upload it, wait until App Store Connect has processed it,
             then set its What to Test note (default: the latest commit subjects). The build
             number is the commit count, or one past the newest uploaded build if that is higher.
   app       Register the bundle ID; print the one manual step if the app record is missing
@@ -59,6 +59,8 @@ pub fn run(root: &Path, rest: &[String]) -> ExitCode {
         }
         [] | ["ship"] => ship(root, None),
         ["ship", "--notes", text] | ["--notes", text] => ship(root, Some(text)),
+        ["ship", "--source", source] => ship(Path::new(source), None),
+        ["ship", "--source", source, "--notes", text] => ship(Path::new(source), Some(text)),
         ["app"] => Spec::read(root).and_then(|spec| {
             let api = Api::new()?;
             api.app(&spec).map(|_| ())

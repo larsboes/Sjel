@@ -2,3 +2,4 @@
 host/SjelIOS.xcodeproj/
 host/build/
 host/Info.plist
+host/SjelIOS.entitlements

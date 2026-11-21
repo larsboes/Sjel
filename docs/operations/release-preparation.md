@@ -142,7 +142,23 @@ whose notarization is still pending. Those flags perform signing and a network s
 them out for an unsigned preparation build. Credentials stay in the owner's Keychain. Follow
 [Apple's notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow).
 
-`tools/release` continues to own version tags. After a tag exists, the separate command
+`tools/release` continues to own version tags. After the tag is pushed, one resumable command
+runs the rest:
+
+```bash
+bun tools/distribution/ship.ts vX.Y.Z --identity 'Developer ID Application: …' --notary-profile NAME
+bun tools/distribution/ship.ts vX.Y.Z             # rerun until exit 0; state is saved
+bun tools/distribution/ship.ts vX.Y.Z --publish   # after reviewing the draft
+```
+
+It keeps a clean worktree and its outputs in `~/Library/Caches/Sjel/releases/<version>/`. It
+dispatches the CLI workflow on the tag and downloads its artifacts, builds and signs the DMG,
+submits it for notarization, ships TestFlight from the same worktree, creates the draft, and
+records the receipt after publication. Exit 75 means a step waits on GitHub, Apple or your
+review. `--skip STEP` records a step done elsewhere. The steps below remain available
+individually.
+
+After a tag exists, the separate command
 `bun tools/distribution/publish-draft.ts --dir OUTPUT --include OTHER_OUTPUT --confirm-draft`
 combines catalogues, verifies file sizes and hashes, and creates a remote **draft** release.
 `--include` is optional and repeatable. Every input must have been rebuilt from the same clean

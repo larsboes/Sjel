@@ -218,7 +218,7 @@ TypeScript tooling and builds UI bundles.
 The Rust CLI and storage tools live in `crates/sjel-cli` and `crates/storage`; launchers live in `tools/`.
 
 Build artifacts are ephemeral. `sjel storage target` bounds debug-to-release ratio (`target/debug` within
-3× of `target/release`), verified by `tools/doctor`. Space is reclaimed via `sjel storage reclaim --repo`.
+3× of `target/release`), verified by `tools/doctor`. `sjel storage reclaim --repo` shows what it would remove; `--apply` removes it.
 
 ### Implementation languages and intelligence
 

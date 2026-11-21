@@ -19,7 +19,6 @@ the waits and rebuilds that do not buy a check.
 - Record wall time per step for CI, the CLI workflow, iOS smoke, the Mac DMG with notarization,
   and the TestFlight upload, with the run or command that produced each number.
 - Run `tools/distribution/ship.ts` end to end on the next tag and record its wall time.
-- Make `tools/demo-shots up` start from cold without manual repair.
 
 ## Evidence
 
@@ -81,3 +80,6 @@ Measured on 2026-11-21:
   format error stops the commit instead of the push. It reads staged blobs, so unstaged edits from
   other sessions do not block it. All 1094 tracked files outside `research/` pass; about 60 ms per
   file. Covered by `tools/staged-rustfmt.test.sh`.
+- `tools/demo-shots up` started from cold without manual repair on 2026-11-21: with the target
+  and registry volumes removed, it built, seeded and answered `/health` with 200 after 864 seconds
+  at the default 3 CPUs.

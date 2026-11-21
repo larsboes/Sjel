@@ -53,7 +53,7 @@ needs a guard.
 
 | Verb | Acts on | Answers |
 |---|---|---|
-| `reclaim [--dry-run] [--force] [--scheduled] [--only <class>]` | the policy's classes | each applicable class's reclaim, gated by its cap or its age, refusing anything a live process holds or the policy protects |
+| `reclaim [--apply] [--force] [--scheduled] [--only <class>]` | the policy's classes | alone, the plan only; with `--apply` or `--scheduled`, each applicable class's reclaim, gated by its cap or its age, refusing anything a live process holds or the policy protects |
 | `reclaim --repo [--incremental] [--target] [--node-modules]` | the checkout's build output | the same, for target dirs and `node_modules` |
 | `target [--json]` | nothing | the Cargo target dir per profile and bucket, the R6 ratio, and whether the artifacts match the installed rustc |
 

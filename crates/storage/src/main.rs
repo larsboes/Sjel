@@ -29,10 +29,11 @@ const HELP: &str = "sjel-storage — what is filling this disk, and what is safe
                                    free/used/total, every policy class, what is flagged.
                                    `--where` adds the largest directories no policy path
                                    names, which is where `unattributed` lives
-  sjel-storage reclaim [--dry-run] [--force] [--scheduled] [--only <class>]
+  sjel-storage reclaim [--apply] [--force] [--scheduled] [--only <class>]
                                    [--repo [--incremental [--profile NAME [--checkout-target]]]
                                            [--target] [--node-modules]]
-                                   the one verb that removes anything. Classes by
+                                   the one verb that removes anything. Alone it shows the
+                                   plan; `--apply` or `--scheduled` removes. Classes by
                                    default; `--repo` acts on the checkout's build
                                    output instead, and needs one of the three
   sjel-storage browse [--root PATH] [--top N] [--json]
@@ -127,7 +128,12 @@ fn main() -> ExitCode {
             reclaim::profile_options(&args).and_then(|(profile, checkout_target)| {
                 cmd_reclaim(
                     reclaim::Args {
-                        dry_run: has("--dry-run"),
+                        dry_run: previews(
+                            verb,
+                            has("--dry-run"),
+                            has("--apply"),
+                            has("--scheduled"),
+                        ),
                         force: has("--force"),
                         scheduled: has("--scheduled"),
                         only: value("--only"),
@@ -715,6 +721,13 @@ fn cmd_target(json: bool) -> Result<u8, String> {
 /// `alias` says the caller used `apply` or `prune`, which is what decides whether the checkout
 /// half and the policy half are in scope — see `reclaim::Args`. It is passed rather than
 /// inferred because "the user typed the old name" is not visible from the arguments.
+/// Whether a reclaim only shows its plan. A bare `reclaim` previews, because it is what a
+/// person types to see what would go. `--apply` and `--scheduled` remove, and so do the
+/// `apply` and `prune` spellings that callers already run unattended.
+fn previews(verb: &str, dry_run: bool, apply: bool, scheduled: bool) -> bool {
+    dry_run || (verb == "reclaim" && !apply && !scheduled)
+}
+
 fn cmd_reclaim(args: reclaim::Args, alias: bool) -> Result<u8, String> {
     let root = repo_root()?;
     let home = std::env::var("HOME").unwrap_or_default();
@@ -758,6 +771,9 @@ fn cmd_reclaim(args: reclaim::Args, alias: bool) -> Result<u8, String> {
             "directory bytes removed (may share filesystem blocks)"
         }
     );
+    if args.dry_run {
+        println!("  Nothing was removed. Run again with --apply to remove these.");
+    }
     if let Some((before, after)) = before.as_ref().zip(after.as_ref()) {
         if let Some(change) = measure::free_space_change(before, after) {
             println!(
@@ -1054,4 +1070,24 @@ fn cmd_installed(
     }
     installed::print(&inventory, top);
     Ok(EXIT_OK)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::previews;
+
+    #[test]
+    fn a_bare_reclaim_previews_and_apply_or_scheduled_removes() {
+        assert!(previews("reclaim", false, false, false));
+        assert!(!previews("reclaim", false, true, false));
+        assert!(!previews("reclaim", false, false, true));
+        assert!(previews("reclaim", true, true, false));
+    }
+
+    #[test]
+    fn the_apply_and_prune_spellings_keep_removing() {
+        assert!(!previews("apply", false, false, false));
+        assert!(!previews("prune", false, false, false));
+        assert!(previews("prune", true, false, false));
+    }
 }

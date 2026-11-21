@@ -26,10 +26,11 @@ pub mod pure;
 const HELP: &str = "tools/doctor — health checks for an already-set-up Sjel machine.
 
   tools/doctor            full report, offline (no GitHub calls)
-  tools/doctor --online   also probe declared systems and fetch origin/main
-  tools/doctor --version  installed vs origin/main version identity only
-                          (read-only, exits 0; add --online for a live fetch first)
-  tools/doctor -h         this help
+  tools/doctor --online       also probe declared systems and fetch origin/main
+  tools/doctor --persistence  boot persistence and deployment context only
+  tools/doctor --version      installed vs origin/main version identity only
+                              (read-only, exits 0; add --online for a live fetch first)
+  tools/doctor -h             this help
 ";
 
 /// What every check reads and writes, as doctor.ts's CheckContext held it. Output is
@@ -120,11 +121,21 @@ pub fn run(args: &[String]) -> ExitCode {
         failed: 0,
         out: String::new(),
     };
+    let persistence_only = has("--persistence");
     println!("Sjel doctor · {}", root.display());
-    checks::run_all(&mut ctx);
+    if persistence_only {
+        checks::run_persistence(&mut ctx);
+    } else {
+        checks::run_all(&mut ctx);
+    }
     println!();
     if ctx.failed == 0 {
-        println!("doctor: all checks passed");
+        let scope = if persistence_only {
+            "persistence"
+        } else {
+            "all"
+        };
+        println!("doctor: {scope} checks passed");
         ExitCode::SUCCESS
     } else {
         println!("doctor: {} check(s) failed", ctx.failed);

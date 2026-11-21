@@ -73,6 +73,7 @@ remain with [Operations](../operations/index.md#cli-only-coding-installation).
 - [Measure verification resource use](../tasks/tool-ci-resources.md).
 - [Report CI job time and cache hits](../tasks/tool-ci-timings.md).
 - [Select CLI installer previews by their inputs](../tasks/tool-cli-preview-selection.md).
+- [Reuse the Cargo test binary for persistence checks](../tasks/tool-persistence-test-reuse.md).
 - [Rehearse cross-archive restores](../tasks/tool-backup-rehearse.md).
 - [Review archive cleanup candidates](../tasks/tool-archive-cleanup-review.md).
 - [Resolve repository identity in worktrees](../tasks/tool-worktree-self.md).

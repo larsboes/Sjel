@@ -24,6 +24,7 @@ use super::{
 };
 
 type Check = fn(&mut Ctx);
+const BOOT_PERSISTENCE: &str = "Boot persistence (autostart + schedule set)";
 
 /// The report, in the order doctor.ts printed it. `Packs` stands for the per-harness Pack
 /// sections, however many installed harnesses they report.
@@ -54,7 +55,7 @@ const DEPLOYMENT: [&str; 23] = [
     "Copilot guard hook (sjel copilot)",
     "Capabilities (enabled set)",
     "Capabilities (external references)",
-    "Boot persistence (autostart + schedule set)",
+    BOOT_PERSISTENCE,
     "Running builds (service-runner.sh stale)",
     "Signed macOS helper",
     "Scheduled producers (did they run)",
@@ -88,10 +89,7 @@ fn entries() -> Vec<Entry> {
         One("Copilot guard hook (sjel copilot)", copilot_guard),
         One("Capabilities (enabled set)", enabled_set),
         One("Capabilities (external references)", external_refs),
-        One(
-            "Boot persistence (autostart + schedule set)",
-            boot_persistence,
-        ),
+        One(BOOT_PERSISTENCE, boot_persistence),
         One("Running builds (service-runner.sh stale)", running_builds),
         One("Signed macOS helper", fda_helper),
         One("Scheduled producers (did they run)", scheduled_producers),
@@ -228,6 +226,18 @@ pub fn run_all(ctx: &mut Ctx) {
         print!("{out}");
         ctx.failed += failed;
     }
+}
+
+/// Render persistence and the two context sections it reads.
+pub(super) fn run_persistence(ctx: &mut Ctx) {
+    for entry in [
+        Entry::One("Overlay", overlay),
+        Entry::One("Machine identity", machine_identity),
+        Entry::One(BOOT_PERSISTENCE, boot_persistence),
+    ] {
+        render(&entry, ctx);
+    }
+    print!("{}", std::mem::take(&mut ctx.out));
 }
 
 fn section(ctx: &mut Ctx, name: &str, f: impl FnOnce(&mut Ctx)) {

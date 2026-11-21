@@ -14,8 +14,7 @@
 # on a Linux runner as well as on the Mac they describe. A macOS-only assertion here would be one
 # that runs on one machine and is believed everywhere (tools/lib/test-support.sh says why).
 #
-# Driven against a real checkout, like tools/persistence-orphans.test.sh: a partial tree makes the
-# section return early on a failed registry call and every assertion would pass over an empty report.
+# A real checkout supplies the registry; without it the section returns early with no verdicts.
 set -uo pipefail
 
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"

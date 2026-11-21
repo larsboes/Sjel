@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { changedFiles, bunDiscovers, failedPackages, namedPaths, rustImpact, testScope, type Package } from "./ci-impact.ts";
+import { changedFiles, bunDiscovers, failedPackages, namedPaths, rootPackages, rustImpact, testScope, type Package } from "./ci-impact.ts";
 import { decide } from "./ci-changes.ts";
 
 const packages: Package[] = [
@@ -27,6 +27,15 @@ test("a build script, manifest or fixture selects its owner", () => {
   for (const file of ["libs/base/build.rs", "libs/base/Cargo.toml", "libs/base/fixture.json"]) {
     expect(rustImpact([file], packages).packages).toEqual(["app", "base", "top"]);
   }
+});
+
+test("persistence inputs retain required Cargo coverage for sjel-cli", () => {
+  const workspace = rootPackages(join(import.meta.dir, ".."));
+  for (const path of [
+    "tools/doctor", "tools/service-runner.sh", "tools/setup-tailnet-shell.sh", "tools/lib/paths.sh",
+    "crates/trips/service.toml", "services/example/service.toml", "schemas/service.toml.example",
+    "crates/sjel-cli/tests/persistence_orphans.rs",
+  ]) expect(rustImpact([path], workspace).packages, path).toContain("sjel-cli");
 });
 
 test("does not confuse sibling path prefixes", () => {

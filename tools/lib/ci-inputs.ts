@@ -30,7 +30,6 @@ export const GATES: Record<string, { cmd: string[]; inputs: string[]; cheap: boo
   "store-transactions": gate("check-store-transactions", ["**/*.rs"]),
   "obsidian-plugins": gate("check-obsidian-plugins", ["**/manifest.json", "**/main.js"]),
   self: { cmd: ["tools/self", "check"], inputs: SELF, cheap: false },
-  "persistence-orphans": { cmd: ["tools/persistence-orphans.test.sh"], inputs: ["tools/persistence-orphans.test.sh", "tools/doctor", "tools/service-runner.sh", "**/service.toml", "systems.toml", "schemas/**", ...CLI], cheap: false },
 };
 
 function gate(name: string, inputs: string[], cheap = true) {

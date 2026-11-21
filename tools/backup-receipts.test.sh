@@ -12,9 +12,7 @@
 # So every red path is planted here and watched. A freshness check nobody has seen fail is the
 # thing this file exists to prevent.
 #
-# Driven against a real checkout, like tools/persistence-orphans.test.sh: handing doctor a partial
-# tree makes the section return early on a failed registry call, and every "must be flagged"
-# assertion would then pass over an empty report.
+# A real checkout supplies the registry; without it the section returns early with no verdicts.
 set -uo pipefail
 
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"

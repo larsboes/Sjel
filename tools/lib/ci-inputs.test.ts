@@ -329,7 +329,7 @@ describe("gates and full verification", () => {
       "tools/check-doc-self-references.sh", "tools/check-doc-links.sh", "tools/check-skill-metadata.sh", "tools/check-skill-metadata.test.sh",
       "tools/check-presentations-theme-contract.sh", "tools/check-presentations-theme-contract.test.sh", "tools/skill-eval check --all",
       "tools/check-publication-hygiene.sh", "tools/check-bun-install-policy.sh", "tools/check-store-transactions.sh",
-      "tools/check-obsidian-plugins.sh", "tools/check-work.sh", "tools/self check", "tools/persistence-orphans.test.sh",
+      "tools/check-obsidian-plugins.sh", "tools/check-work.sh", "tools/self check",
     ].sort());
   });
 
@@ -340,7 +340,7 @@ describe("gates and full verification", () => {
     const plan = select(["docs/plans/unrelated.md"]);
     expect(plan.gates).toEqual(["doc-links", "doc-self-references", "publication-hygiene"]);
     expect(plan.bun).toEqual(["readers/doc.test.ts"]);
-    for (const id of ["architecture-fresh", "service-tomls", "store-transactions", "persistence-orphans", "self"]) {
+    for (const id of ["architecture-fresh", "service-tomls", "store-transactions", "self"]) {
       expect(plan.gates).not.toContain(id);
     }
   });
@@ -373,10 +373,9 @@ describe("gates and full verification", () => {
     expect(select(["tools/lib/toml.sh"]).gates).toEqual(Object.keys(GATES).sort());
   });
 
-  test("Cargo and sjel-cli implementation changes reach all CLI-backed gates", () => {
+  test("Cargo and sjel-cli implementation changes reach the CLI-backed self gate", () => {
     for (const file of ["Cargo.toml", "Cargo.lock", "crates/sjel-cli/src/main.rs", ".cargo/config.toml"]) {
-      const gates = select([file]).gates;
-      for (const id of ["self", "persistence-orphans"]) expect(gates).toContain(id);
+      expect(select([file]).gates).toContain("self");
     }
   });
 

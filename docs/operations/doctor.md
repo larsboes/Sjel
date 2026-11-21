@@ -4,12 +4,13 @@
 failures; it does not establish that every application workflow works.
 
 ```bash
-tools/doctor            # full report without GitHub calls
-tools/doctor --online   # also probe declared systems and fetch origin/main
-tools/doctor --version  # version identity only
+tools/doctor                # full report without GitHub calls
+tools/doctor --online       # also probe declared systems and fetch origin/main
+tools/doctor --persistence  # boot persistence and deployment context only
+tools/doctor --version      # version identity only
 ```
 
-The full report exits `0` when all checks pass and `1` when one or more checks fail.
+The full and persistence reports exit `0` when their checks pass and `1` when one or more fail.
 `--version` exits `0` and is not a health assertion. The current report sections are defined in
 [`doctor/checks.rs`](../../crates/sjel-cli/src/doctor/checks.rs).
 

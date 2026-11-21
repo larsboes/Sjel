@@ -435,6 +435,11 @@ fn latest_payload(token: &str, id: &str) -> Result<Option<MessagePayload>> {
 
 /// The latest message under `format=full`. `None` for a missing thread.
 fn latest_message(token: &str, id: &str) -> Result<Option<MessageDetail>> {
+    Ok(thread_messages(token, id)?.and_then(|messages| messages.into_iter().last()))
+}
+
+/// Every message of a thread under `format=full`, oldest first. `None` for a missing thread.
+fn thread_messages(token: &str, id: &str) -> Result<Option<Vec<MessageDetail>>> {
     std::thread::sleep(THREAD_FETCH_PAUSE);
     let http = client()?;
     let response = http
@@ -452,7 +457,7 @@ fn latest_message(token: &str, id: &str) -> Result<Option<MessageDetail>> {
         )));
     }
     let detail: ThreadDetail = response.json()?;
-    Ok(detail.messages.into_iter().last())
+    Ok(Some(detail.messages))
 }
 
 /// The latest message's `text/html` and `text/plain` parts, undecorated, for the
@@ -587,6 +592,12 @@ struct AttachmentResponse {
 
 /// One attachment's text. `None` when Gmail no longer has it or it is not UTF-8.
 fn attachment_text(token: &str, message_id: &str, attachment_id: &str) -> Result<Option<String>> {
+    Ok(attachment_bytes(token, message_id, attachment_id)?
+        .and_then(|bytes| String::from_utf8(bytes).ok()))
+}
+
+/// One attachment's raw bytes. `None` when Gmail no longer has it.
+fn attachment_bytes(token: &str, message_id: &str, attachment_id: &str) -> Result<Option<Vec<u8>>> {
     let attachment_id_valid = !attachment_id.is_empty()
         && attachment_id
             .bytes()
@@ -605,7 +616,79 @@ fn attachment_text(token: &str, message_id: &str, attachment_id: &str) -> Result
         return Ok(None);
     }
     let attachment: AttachmentResponse = response.json()?;
-    Ok(attachment.data.as_deref().and_then(decode_body))
+    Ok(attachment.data.as_deref().and_then(decode_bytes))
+}
+
+/// A PDF attached to a message of a thread.
+pub struct PdfAttachment {
+    /// Gmail's filename for the part, unsanitized.
+    pub filename: String,
+    pub bytes: Vec<u8>,
+}
+
+/// Largest PDF part read. Gmail caps a whole message at 25 MB.
+const PDF_PART_CAP: u64 = 25 * 1024 * 1024;
+/// Most PDF parts read from one message.
+const PDF_PART_LIMIT: usize = 8;
+
+/// The PDF attachments of every message in a thread, for hand-off to Documents. A reply
+/// rarely repeats the PDF its quoted message carried, so the latest message alone misses it.
+/// Nothing is persisted here. `None` for a missing thread; a part that cannot be read is skipped.
+pub fn thread_pdf_attachments(token: &str, id: &str) -> Result<Option<Vec<PdfAttachment>>> {
+    let Some(messages) = thread_messages(token, id)? else {
+        return Ok(None);
+    };
+    let mut parts = Vec::new();
+    for message in &messages {
+        if let Some(payload) = message.payload.as_ref() {
+            let mut found = Vec::new();
+            pdf_parts(payload, &mut found);
+            parts.extend(
+                found
+                    .into_iter()
+                    .map(|(name, body)| (name, body, &message.id)),
+            );
+        }
+    }
+    let mut out = Vec::new();
+    for (filename, body, message_id) in parts.into_iter().take(PDF_PART_LIMIT) {
+        let bytes = match (&body.data, &body.attachment_id, message_id) {
+            (Some(data), _, _) => decode_bytes(data),
+            (None, Some(attachment), Some(message_id)) => {
+                attachment_bytes(token, message_id, attachment)?
+            }
+            _ => None,
+        };
+        if let Some(bytes) = bytes.filter(|bytes| bytes.starts_with(b"%PDF")) {
+            out.push(PdfAttachment {
+                filename: filename.to_string(),
+                bytes,
+            });
+        }
+    }
+    Ok(Some(out))
+}
+
+/// Every part typed `application/pdf` or named `*.pdf`, within the size cap.
+fn pdf_parts<'a>(payload: &'a MessagePayload, out: &mut Vec<(&'a str, &'a MessageBody)>) {
+    let filename = payload.filename.as_deref().unwrap_or_default();
+    let pdf = payload
+        .mime_type
+        .as_deref()
+        .is_some_and(|mime| mime.eq_ignore_ascii_case("application/pdf"))
+        || filename.to_ascii_lowercase().ends_with(".pdf");
+    if pdf {
+        if let Some(body) = payload
+            .body
+            .as_ref()
+            .filter(|body| body.size.unwrap_or(0) <= PDF_PART_CAP)
+        {
+            out.push((filename, body));
+        }
+    }
+    for part in &payload.parts {
+        pdf_parts(part, out);
+    }
 }
 
 /// A message body and its stable Gmail identifier, kept only for local analysis.
@@ -728,11 +811,14 @@ fn collect_part(payload: &MessagePayload, want: &str) -> Option<String> {
 /// decode, or is not UTF-8, is skipped rather than returned as replacement
 /// characters — the next alternative is usually readable.
 fn decode_body(data: &str) -> Option<String> {
+    String::from_utf8(decode_bytes(data)?).ok()
+}
+
+fn decode_bytes(data: &str) -> Option<Vec<u8>> {
     use base64::Engine as _;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+    base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(data.trim_end_matches('='))
-        .ok()?;
-    String::from_utf8(bytes).ok()
+        .ok()
 }
 
 /// Compatibility helper for callers that require an existing thread.

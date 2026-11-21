@@ -13,6 +13,7 @@ The `comms` capability provides general observation intake across news, media, r
   - `comms keep <id> | dismiss <id>` — update triage state; optionally export distilled markdown note.
   - `comms summarize --pending` — generate summaries for items lacking digests.
   - `comms clips [--limit N]` — query captured Sjel Clipper documents via local Unix socket.
+  - `comms mail attachments --out <dir> [--stream belege] [--since YYYY-MM-DD] [--limit N] [--dry-run]` — save the PDF attachments of every message in matching triage threads to `<dir>/<thread-id>/`, for `documents inbox <dir> --recursive`. Never overwrites a saved file; skips `c3` threads; lists threads whose receipt is body-only.
 - HTTP API: `comms-server` (`src/server/main.rs`), bound to loopback, default port **8083**:
   - `GET /feed` — list feed items with assigned trust classes.
   - `GET /clips` — list or search clip metadata, newest first, with numeric `id` handles.
@@ -50,7 +51,7 @@ Content marked `c3` is mechanically excluded from local model prompts (`content_
 
 Summaries persist as derived artifacts in `content_digests` (`src/digest.rs`), decoupled from raw source items.
 
-Mail message bodies fetched for summarization or event extraction are parsed in memory, evaluated against local models, and dropped immediately. Raw message bodies and attachments are never written to disk.
+Mail message bodies fetched for summarization or event extraction are parsed in memory, evaluated against local models, and dropped immediately. Raw message bodies are never written to disk. Attachments are written only by the explicit `comms mail attachments` command: it stages PDFs into an operator-chosen overlay folder for the Documents owner (`crates/documents/README.md`), which keeps the originals.
 
 Structured depth ladders (`crates/summarize`) adapt digest detail to content length, avoiding speculative generation or hallucinations on brief or empty items.
 

@@ -1245,16 +1245,72 @@ fn cmd_mail_audit(args: &[String], cfg: &Config) {
     );
 }
 
+/// Save receipt-mail PDFs for `documents inbox <dir> --recursive`.
+fn cmd_mail_attachments(args: &[String], cfg: &Config) {
+    use comms::mail_attachments::{self, Selection};
+    let Some(out) = arg_after(args, "--out") else {
+        eprintln!("error: comms mail attachments needs --out <dir>");
+        std::process::exit(2);
+    };
+    let since = arg_after(args, "--since").map(String::as_str);
+    let is_day = |s: &str| {
+        s.len() == 10
+            && s.bytes().enumerate().all(|(i, b)| {
+                if i == 4 || i == 7 {
+                    b == b'-'
+                } else {
+                    b.is_ascii_digit()
+                }
+            })
+    };
+    if since.is_some_and(|s| !is_day(s)) {
+        eprintln!("error: --since takes YYYY-MM-DD");
+        std::process::exit(2);
+    }
+    let limit = match arg_after(args, "--limit").map(|n| n.parse::<usize>()) {
+        None => 200,
+        Some(Ok(n)) => n,
+        Some(Err(_)) => {
+            eprintln!("error: --limit takes a number");
+            std::process::exit(2);
+        }
+    };
+    let selection = Selection {
+        stream: arg_after(args, "--stream").map_or("belege", String::as_str),
+        since,
+        limit,
+    };
+    let store = open_store(cfg);
+    let items = store.list_triage(None).unwrap_or_else(|e| {
+        eprintln!("error: could not read triage: {e}");
+        std::process::exit(2);
+    });
+    let selected = mail_attachments::select(&items, &selection);
+    let dry_run = args.iter().any(|a| a == "--dry-run");
+    match mail_attachments::run(cfg, &selected, std::path::Path::new(out), dry_run) {
+        Ok(report) => println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("report serializes")
+        ),
+        Err(error) => {
+            eprintln!("error: {error}");
+            std::process::exit(2);
+        }
+    }
+}
+
 fn cmd_mail(args: &[String], cfg: &Config) {
     match args.get(2).map(String::as_str) {
         Some("classify") => {}
         Some("corpus") => return cmd_mail_corpus(args, cfg),
         Some("evidence") => return cmd_mail_evidence(args, cfg),
         Some("audit") => return cmd_mail_audit(args, cfg),
+        Some("attachments") => return cmd_mail_attachments(args, cfg),
         _ => {
             eprintln!("error: usage: comms mail classify [--shadow|--apply] [--limit N] [--report] [--revert <id>|--revert-all]");
             eprintln!("              comms mail corpus --out <path> [--force]");
-            eprintln!("              comms mail audit <thread-id>... [--no-model]\n");
+            eprintln!("              comms mail audit <thread-id>... [--no-model]");
+            eprintln!("              comms mail attachments --out <dir> [--stream belege] [--since YYYY-MM-DD] [--limit N] [--dry-run]\n");
             std::process::exit(2);
         }
     }

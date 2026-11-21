@@ -30,6 +30,7 @@ pub mod grounding;
 pub mod intake;
 pub mod links;
 pub mod local_gate;
+pub mod mail_attachments;
 pub mod mail_authenticity;
 pub mod mail_evaluation;
 pub mod mail_events;

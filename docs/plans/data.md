@@ -21,6 +21,7 @@ Registry-derived Mac and phone acceptance belongs to [derived views](gpui.md#der
 - [Preserve reviewed purchase corrections](../tasks/data-mail-lifecycle.md).
 - [Accept reviewed mail proposals](../tasks/data-mail-end-to-end.md).
 - [Join reviewed evidence through owner registries](../tasks/data-evidence-registry.md).
+- [Trash mail only after its owner holds the evidence](../tasks/data-mail-retention.md).
 
 <a id="1-import"></a>
 <a id="2-formats"></a>

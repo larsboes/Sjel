@@ -960,7 +960,7 @@ why = "The maintained fork supplies the iOS platform for GPUI views within the r
 url = "https://github.com/zed-industries/zed/tree/main/crates/gpui_ios"
 verdict = "watch"
 license = "Apache-2.0"
-summary = "Zed's own iOS platform for GPUI, published as gpui-pre-ios; the fallback if the gpui-mobile fork stops tracking GPUI"
+summary = "Zed's own iOS platform for GPUI; the fallback if the gpui-mobile fork falls behind"
 why = "Maintained in the Zed repository with native UIKit text input, and published at 0.3.11 since 2026-10-19. It owns UIApplication and the scene delegate, so Sjel's Swift host would invert: Rust starts the app and calls RoomPlan, audio and pairing through FFI."
 revisit = "Decide if gpui-mobile falls behind the gpui-pre snapshot that GPUI Kit pins."
 

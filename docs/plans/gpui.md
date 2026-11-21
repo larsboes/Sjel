@@ -31,6 +31,7 @@ boundaries. The [application README](../../apps/gpui/README.md) owns current int
 
 ## Mac daily workflows
 
+- [Accept Full Disk Access setup from Sjel Desktop](../tasks/gpui-full-disk-access.md).
 - [Accept the Mac Documents workflow](../tasks/gpui-documents-mac.md).
 - [Complete reviewable document decisions](../tasks/gpui-documents-decisions.md).
 - [Accept evidence-backed document proposals](../tasks/gpui-document-proposals.md).

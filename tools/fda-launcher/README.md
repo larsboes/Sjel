@@ -6,8 +6,8 @@ Full Disk Access does not grant that permission to every invocation of a general
 
 The installed executable lives at `$HOME/Library/Application Support/Sjel/helpers/sjel-fda-launcher`,
 with a sibling receipt containing source and signed-binary hashes. Installation is independent
-of the private overlay and the checkout's build output. `tools/fda-launcher/install path` owns
-that path; persistence generation queries it rather than maintaining a second path rule.
+of the private overlay and the checkout's build output. `home-relative-path` supplies the location
+to the installer and Sjel Desktop. Persistence queries `tools/fda-launcher/install path`.
 
 ## Commands
 

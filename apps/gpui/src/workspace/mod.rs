@@ -441,6 +441,7 @@ pub struct Workspace {
     ui_zoom_gesture: f32,
     /// The section Settings shows.
     pub settings_section: crate::settings::Section,
+    pub(crate) fda_helper: crate::permissions::HelperStatus,
     pub settings_feature_view: crate::settings::FeatureView,
     /// Search within Settings and show or hide its contents rail.
     pub settings_query: String,
@@ -619,11 +620,17 @@ impl Workspace {
                                 crate::settings::catalogue_matches(packages, &view.settings_query)
                             });
                     if !view.settings_query.trim().is_empty() {
+                        let previous_section = view.settings_section;
                         view.settings_section = crate::settings::search_section(
                             &view.settings_query,
                             catalogue_has_match,
                         )
                         .unwrap_or(crate::settings::Section::Shortcuts);
+                        if view.settings_section == crate::settings::Section::Permissions
+                            && previous_section != view.settings_section
+                        {
+                            view.check_fda_helper(cx);
+                        }
                         if view.settings_section == crate::settings::Section::Accounts {
                             let search_query = view.settings_query.clone();
                             view.accounts.update(cx, move |accounts, cx| {
@@ -716,6 +723,7 @@ impl Workspace {
             home_customize_open: false,
             ui_zoom_gesture: 0.,
             settings_section: crate::settings::Section::default(),
+            fda_helper: crate::permissions::HelperStatus::default(),
             settings_feature_view: crate::settings::FeatureView::default(),
             settings_query: String::new(),
             settings_shortcut_group: None,
@@ -1531,7 +1539,24 @@ impl Workspace {
         if section.unwrap_or(self.settings_section) == crate::settings::Section::Features {
             self.refresh_installed_features(cx);
         }
+        if self.settings_section == crate::settings::Section::Permissions {
+            self.check_fda_helper(cx);
+        }
         self.go(Page::Settings, cx);
+    }
+
+    fn check_fda_helper(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |workspace, cx| {
+            let status = cx
+                .background_executor()
+                .spawn(async { crate::permissions::HelperStatus::detect() })
+                .await;
+            let _ = workspace.update(cx, |view, cx| {
+                view.fda_helper = status;
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Saves `next` and applies it. A theme mode is forced on the window, so the native glass and

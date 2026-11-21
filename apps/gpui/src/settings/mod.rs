@@ -358,7 +358,7 @@ pub fn render(
         Section::Connection => system::connection(view, palette, cx),
         Section::Accounts => vec![view.accounts.clone().into_any_element()],
         Section::Clipper => vec![view.clipper_settings.clone().into_any_element()],
-        Section::Permissions => system::permissions(palette),
+        Section::Permissions => system::permissions(&view.fda_helper, palette),
         Section::General => system::updates(view, palette, cx),
         Section::Shortcuts => shortcuts::shortcuts(
             palette,

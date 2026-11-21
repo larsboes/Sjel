@@ -671,5 +671,6 @@ not a supported GPUI hosting API.
 Every page reads and writes through the capabilities' HTTP contracts. The app has no direct
 database access and holds no capability credentials.
 
-Settings → macOS permissions lists the privacy grants only the person can give, says why each is
-needed, and opens the pane where it is given (`src/permissions.rs`).
+Settings → macOS permissions opens the Full Disk Access pane and offers the installed
+[signed helper](../../tools/fda-launcher/README.md) as a draggable file. **Show in Finder** reveals
+the same executable for manual selection. System Settings controls approval.

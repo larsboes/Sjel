@@ -3,8 +3,9 @@
 set -euo pipefail
 TOOLS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"
-DIR="${HOME:?HOME is required}/Library/Application Support/Sjel/helpers"
-BIN="$DIR/sjel-fda-launcher"
+IFS= read -r helper_path < "$TOOLS_DIR/fda-launcher/home-relative-path"
+BIN="${HOME:?HOME is required}/$helper_path"
+DIR="${BIN%/*}"
 RECEIPT="$BIN.receipt"
 LEGACY="${SJEL_OVERLAY_ROOT:-${SJEL_PERSONAL_ROOT:-}}/bin/sjel-fda-launcher"
 IDENTIFIER="dev.sjel.fda-launcher"

@@ -1,13 +1,19 @@
 //! System and connectivity settings: Shell connection, macOS permissions, and app updates/rebuilding.
 
+use std::path::PathBuf;
+
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, IntoElement};
+use gpui_kit::{
+    div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, Div, ExternalDragPayload,
+    FileDragPaths, IntoElement, Window,
+};
 use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
-use sjel_gpui_ui::ely::primitives::Tooltip;
-use sjel_gpui_ui::ely::theme::ControlSize;
+use sjel_gpui_ui::ely::primitives::{Icon, IconName, Tooltip};
+use sjel_gpui_ui::ely::theme::{ControlSize, IconSize};
 use sjel_gpui_ui::theme::{tint, Palette};
 
 use super::{dot_value, group, row, value, BUILD_TIME, RUNNING_COMMIT};
+use crate::permissions::{HelperStatus, FULL_DISK_ACCESS_PANE};
 use crate::route::Page;
 use crate::update::RebuildState;
 use crate::workspace::Workspace;
@@ -107,38 +113,96 @@ pub(super) fn connection(
     ]
 }
 
-pub(super) fn permissions(palette: Palette) -> Vec<AnyElement> {
-    use crate::permissions::{installed, open_pane, reveal, GRANTS};
-    GRANTS
-        .iter()
-        .enumerate()
-        .map(|(index, grant)| {
-            let binary = installed(grant);
-            let state = match &binary {
-                Some(_) => value("Installed".into(), palette.muted),
-                None => value(
-                    "Not installed. Run tools/fda-launcher/install".into(),
-                    palette.amber,
-                ),
-            };
-            let mut control = div().flex().items_center().gap_2().child(state);
-            if let Some(path) = binary {
-                control = control.child(
-                    Button::new(("reveal", index), "Show in Finder")
-                        .variant(ButtonVariant::Ghost)
-                        .size(ControlSize::Sm)
-                        .on_click(move |_, _, _| reveal(&path)),
-                );
-            }
-            control = control.child(
-                Button::new(("open-pane", index), "Open System Settings")
+pub(super) fn permissions(helper: &HelperStatus, palette: Palette) -> Vec<AnyElement> {
+    if !cfg!(target_os = "macos") {
+        return vec![row(
+            "Full Disk Access",
+            Some("This permission is only available on macOS."),
+            div(),
+            palette,
+        )];
+    }
+
+    let (detail, control) = match helper {
+        HelperStatus::Installed(path) => {
+            let reveal = path.clone();
+            (
+                "Place the windows side by side, then drag the helper into the Full Disk Access list.",
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(helper_drag(path.clone(), palette))
+                    .child(
+                        Button::new("reveal-fda-helper", "Show in Finder")
+                            .variant(ButtonVariant::Ghost)
+                            .size(ControlSize::Sm)
+                            .on_click(move |_, _, cx| cx.reveal_path(&reveal)),
+                    ),
+            )
+        }
+        HelperStatus::Checking => ("Checking for the installed helper…", div()),
+        HelperStatus::Unavailable => (
+            "The helper is unavailable. Run sjel fda-launcher install, then reopen this section.",
+            div(),
+        ),
+    };
+    vec![group(
+        "FULL DISK ACCESS",
+        vec![
+            row(
+                "Storage history",
+                Some("The signed Sjel helper uses this grant to measure disk usage for Photos and Music."),
+                Button::new("open-fda-pane", "Open Full Disk Access")
                     .variant(ButtonVariant::Primary)
                     .size(ControlSize::Sm)
-                    .on_click(move |_, _, _| open_pane(&GRANTS[index])),
-            );
-            row(grant.title, Some(grant.why), control, palette)
+                    .on_click(|_, _, cx| cx.open_url(FULL_DISK_ACCESS_PANE)),
+                palette,
+            ),
+            row("Add the Sjel helper", Some(detail), control, palette),
+        ],
+        palette,
+    )]
+}
+
+fn helper_drag(path: PathBuf, palette: Palette) -> impl IntoElement {
+    helper_token(palette)
+        .id("drag-fda-helper")
+        .cursor_grab()
+        .hover(move |style| style.bg(rgba(palette.raised)))
+        .on_drag(path, move |_, _, _, cx| {
+            cx.new(|_| HelperDragPreview(palette))
         })
-        .collect()
+        .external_drag_payload(|path: &PathBuf, _, _| {
+            Some(ExternalDragPayload::Files(FileDragPaths::new([(
+                path.clone(),
+                false,
+            )])))
+        })
+}
+
+fn helper_token(palette: Palette) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .px_2()
+        .py_1()
+        .rounded_md()
+        .border_1()
+        .border_color(rgba(palette.border))
+        .bg(rgba(palette.surface))
+        .text_sm()
+        .child(Icon::new(IconName::GripVertical).size(IconSize::Sm))
+        .child("sjel-fda-launcher")
+}
+
+struct HelperDragPreview(Palette);
+
+impl Render for HelperDragPreview {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        helper_token(self.0)
+    }
 }
 
 pub(super) fn updates(
@@ -385,4 +449,56 @@ pub(super) fn updates(
         groups.push(group("NEWER COMMITS", commits, palette));
     }
     groups
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{
+        point, InputEvent as _, MouseButton, MouseDownEvent, MouseMoveEvent, TestAppContext,
+    };
+
+    use super::*;
+
+    struct HelperDrag;
+
+    impl Render for HelperDrag {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().child(helper_drag(
+                PathBuf::from("/fixture/sjel-fda-launcher"),
+                Palette::light(),
+            ))
+        }
+    }
+
+    #[gpui::test]
+    fn helper_starts_drag_on_mouse_move(cx: &mut TestAppContext) {
+        cx.update(sjel_gpui_ui::ely::init_for_tests);
+        let window = cx.add_window(|_, _| HelperDrag);
+        cx.update_window(window.into(), |_, window, cx| {
+            window.draw(cx).clear(cx);
+            window.dispatch_event(
+                MouseDownEvent {
+                    position: point(px(4.), px(8.)),
+                    button: MouseButton::Left,
+                    modifiers: Default::default(),
+                    click_count: 1,
+                    first_mouse: false,
+                }
+                .to_platform_input(),
+                cx,
+            );
+            assert!(!cx.has_active_drag());
+            window.dispatch_event(
+                MouseMoveEvent {
+                    position: point(px(20.), px(8.)),
+                    pressed_button: Some(MouseButton::Left),
+                    modifiers: Default::default(),
+                }
+                .to_platform_input(),
+                cx,
+            );
+            assert!(cx.has_active_drag());
+        })
+        .unwrap();
+    }
 }

@@ -30,9 +30,10 @@ build from the same commit.
 - CLI workflow run 44882362512 built `sjel-cli-v0.1.0-*` for `aarch64-apple-darwin`,
   `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, each with `release.json` recording
   a clean, rebuilt checkout at `2e06c4ee`. The run keeps its artifacts for 14 days.
-- The Mac DMG was built and signed with the Developer ID Application identity for team
-  `52Q4FQ5XN8`. Notary submission `f1131674-7147-4531-a85d-36382676cbe1` stayed `In Progress`
-  for over 36 minutes; the local wait was stopped, not the submission.
+- The first Mac DMG had no `release.json` because its blocking notary wait was stopped, so it
+  cannot be published. A second DMG was rebuilt and signed from a clean `v0.1.0` worktree
+  (`release.json` records `2e06c4ee`, `dirty: false`, `rebuilt: true`) and submitted with
+  `tools/distribution/notarize.ts`.
 
 ## Unrun
 

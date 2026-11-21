@@ -131,9 +131,15 @@ one exists. Copies of other releases stay in place; nothing removes them yet.
 
 For a later Mac release, provide a **Developer ID Application** identity and an existing
 notarytool Keychain profile using `--identity` and `--notary-profile`. The packager checks binary
-library paths, signs executable payloads and the app, submits the DMG, and staples and validates
-the notarization ticket. Those flags perform signing and a network submission; leave them out
-for an unsigned preparation build. Credentials stay in the owner's Keychain. Follow
+library paths, signs executable payloads and the app, signs and submits the DMG, and records the
+submission in the output's `release.json` without waiting for Apple. Run
+`bun tools/distribution/notarize.ts --dir OUTPUT` until it exits 0: exit 75 means the submission is
+still in progress, and exit 0 means the DMG is stapled and validated and `release.json` and
+`SHA256SUMS` describe the stapled image. A rejected submission prints the notary log and fails.
+An output built with `--identity` alone can be submitted later with
+`notarize.ts --dir OUTPUT --identity … --notary-profile NAME`. `publish-draft.ts` refuses an output
+whose notarization is still pending. Those flags perform signing and a network submission; leave
+them out for an unsigned preparation build. Credentials stay in the owner's Keychain. Follow
 [Apple's notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow).
 
 `tools/release` continues to own version tags. After a tag exists, the separate command

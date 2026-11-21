@@ -20,4 +20,4 @@ jobs:
           bun-version: latest
       - name: Test archive preparation and CLI lifecycle
         working-directory: tools/distribution
-        run: bun test prepare.test.ts cli-install.test.ts publish-draft.test.ts cli-notices.test.ts
+        run: bun test prepare.test.ts notarize.test.ts cli-install.test.ts publish-draft.test.ts cli-notices.test.ts

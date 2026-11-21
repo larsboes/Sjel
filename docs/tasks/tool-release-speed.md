@@ -18,8 +18,6 @@ the waits and rebuilds that do not buy a check.
 
 - Record wall time per step for CI, the CLI workflow, iOS smoke, the Mac DMG with notarization,
   and the TestFlight upload, with the run or command that produced each number.
-- Make notarization non-blocking: submit, persist the submission ID, and resume to staple, so a
-  slow Apple queue does not hold a terminal or a session.
 - Let one release command run the gate, the tag, both artifact builds, the draft and TestFlight,
   and resume after an interruption.
 - Decide whether `tools/release` should accept a full CI run on the tagged commit from any trigger,
@@ -47,3 +45,7 @@ Measured on 2026-11-21:
   three are fixed in `02e0ee21`; the cold Linux build of the capabilities still takes several
   minutes at three CPUs.
 - `tools/release` notes list upstream and toolchain changes only, not app changes.
+- Notarization no longer blocks: `prepare.ts macos --notary-profile` submits and records the
+  submission in `release.json`, and `tools/distribution/notarize.ts --dir OUTPUT` resumes to staple
+  (exit 75 while pending). Covered by `tools/distribution/notarize.test.ts`. A cached signed DMG
+  rebuild from a clean tag worktree took 95 seconds.

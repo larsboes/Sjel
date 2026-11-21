@@ -30,6 +30,7 @@ try {
       || catalogue.source.dirty !== false || catalogue.source.rebuilt !== true) {
       throw new Error("publication requires rebuilt artifacts from a clean release checkout");
     }
+    if (catalogue.notary !== undefined) throw new Error("notarization is pending; run tools/distribution/notarize.ts --dir on that output first");
     if (catalogue.version !== catalogues[0].version || catalogue.source.commit !== catalogues[0].source.commit) throw new Error("all artifacts must describe the same release commit");
     const tag = Bun.spawnSync(["git", "rev-list", "-n", "1", catalogue.version], { cwd: root, stdout: "pipe", stderr: "pipe" });
     if (tag.exitCode !== 0 || tag.stdout.toString().trim() !== catalogue.source.commit) throw new Error("artifact source does not match the release tag");

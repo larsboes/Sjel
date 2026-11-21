@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { cliBinaries, selectCliSources, standaloneInstaller, writeCliPayload } from "./cli-payload.ts";
 import { compiledRustSources, writeCorrespondingSource } from "./cli-notices.ts";
+import { notarize } from "./notarize.ts";
 
 const root = resolve(import.meta.dir, "../..");
 const core = ["sjel-status", "devices", "entities", "store"];
@@ -261,12 +262,6 @@ function macos(options: Options, stage: string) {
   run(["ln", "-s", "/Applications", join(stage, "Applications")]);
   const dmg = join(options.out, `Sjel-${options.version}-${platform}.dmg`);
   run(["hdiutil", "create", "-volname", "Sjel", "-srcfolder", stage, "-format", "UDZO", dmg]);
-  if (options.notary) {
-    run(["codesign", "--sign", options.identity, "--timestamp", dmg]);
-    run(["xcrun", "notarytool", "submit", dmg, "--keychain-profile", options.notary, "--wait"]);
-    run(["xcrun", "stapler", "staple", dmg]);
-    run(["xcrun", "stapler", "validate", dmg]);
-  }
 }
 
 function main() {
@@ -316,12 +311,13 @@ function main() {
       }))
       : [];
     const catalogue = { schema: 1, version: options.version, platform, source, friend_ready: false,
-      signed: Boolean(options.identity), notarized: Boolean(options.notary),
+      signed: Boolean(options.identity), notarized: false,
       assets: assets.map((name) => ({ name, bytes: statSync(join(options.out, name)).size, sha256: sha(join(options.out, name)) })),
       capabilities: capabilityPackages };
     writeFileSync(join(options.out, "release.json"), JSON.stringify(catalogue, null, 2) + "\n");
     writeFileSync(join(options.out, "SHA256SUMS"), assets.map((name) => `${sha(join(options.out, name))}  ${name}\n`).join(""));
     console.log(`Prepared ${assets.length} artifact(s) in ${options.out}; nothing installed or published.`);
+    if (options.kind === "macos" && options.notary) notarize(options.out, options.identity, options.notary);
   } finally { rmSync(stage, { recursive: true, force: true }); }
 }
 

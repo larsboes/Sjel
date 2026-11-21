@@ -11,6 +11,8 @@ existing task instead of creating another tracker.
 - [Accept clean-user Mac installation](../tasks/distribution-clean-mac.md).
 - [Install a capability from the app](../tasks/distribution-app-capabilities.md).
 - [Accept a reviewed TestFlight build](../tasks/distribution-testflight.md).
+- [Publish the v0.1.0 artifacts](../tasks/release-v0-1-0-publish.md).
+- [Shorten the path from commit to installed apps](../tasks/tool-release-speed.md).
 - [Accept installed CV discovery](../tasks/cv-cli-acceptance.md).
 
 No tag, public release, service start, credential generation or harness activation follows from

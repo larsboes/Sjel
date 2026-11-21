@@ -33,7 +33,7 @@ Make note rename and saves lossless through the existing owner, with implementat
 - Typing into the title lost every letter the Projects page binds (`b t f n j k l e`, space, `1`–`5`,
   `[`, `]`). Those bindings now use `Projects && !Input` (`apps/gpui/ui/src/projects/actions.rs`);
   `the_note_title_field_takes_letters_the_page_binds` fails without the change.
-- Paired iPhone (`interceptor ios`, installed build 2330): a tap on an open note's title opens no field.
+- Paired iPhone (`interceptor ios`, builds 2330 and 2357 from `ios/run-device`): a tap on an open note's title opens no field.
 - Esc reverts in the app. The workspace's window-wide `escape` skipped no field and won over the
   title's own; it now binds under `!Terminal && !(Projects > Input)` (`apps/gpui/src/workspace/mod.rs`),
   so the finder keeps it. The same test covers it with an equivalent outer binding.
@@ -42,4 +42,6 @@ Make note rename and saves lossless through the existing owner, with implementat
 
 ## Open
 
-- The phone check ran on the installed build; no fresh build was installed on the device.
+- Hub folder semantics: a hub rename keeps the folder, so the project keeps its old name in the
+  breadcrumb and list while the hub note shows the new title. Decide whether that is intended.
+- The missing list-row rename affordance still needs its separate review.

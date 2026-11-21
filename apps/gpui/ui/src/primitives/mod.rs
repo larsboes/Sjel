@@ -7,12 +7,12 @@ pub mod tokens;
 
 pub use badges::{
     due_badge, due_status, filter_pill, interactive_pill, mono_num, priority_pill, status_pill,
-    sync_status_badge, tone_chip, DueStatus,
+    sync_status_badge, DueStatus,
 };
 pub use cards::{
     back_button, card, chart_card, dashboard_metric_tile, list, progress_bar, quick_action_button,
-    row, row_for_density, section, stat_card, stat_card_interactive, stat_strip, surface_card,
-    virtual_list, InteractiveStatCard, QuickAction,
+    row, row_for_density, section, stat_card, stat_strip, surface_card, virtual_list,
+    InteractiveStatCard, QuickAction,
 };
 pub use chrome::{
     column_width, cycle_column_width, key_bar, shortcut_hint, sub_tabs, tabular_cell, SortOrder,

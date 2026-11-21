@@ -12,7 +12,7 @@ use sjel_gpui_core::{
     terminal::Host,
 };
 use sjel_gpui_ui::{
-    nsh_edge::{self, Seat},
+    phone_edge::{self, Seat},
     phone_calendar::{self, CalendarEvent},
     phone_today::{self, TodayEvent},
     AccentColor, AppearanceSettings, BackgroundTone, NotifyPrefs, SoundscapePrefs, TerminalFont,
@@ -141,8 +141,8 @@ enum Event {
     RefreshCopy,
     /// A refresh or a write on the Calendar screen (`sjel_gpui_ui::phone_calendar`).
     Calendar(CalendarEvent),
-    Map(sjel_gpui_ui::nsh_map::MapEvent),
-    Interior(sjel_gpui_ui::nsh_interior::InteriorEvent),
+    Map(sjel_gpui_ui::phone_map::MapEvent),
+    Interior(sjel_gpui_ui::phone_interior::InteriorEvent),
     #[cfg(target_os = "ios")]
     Retry,
     Zoom(i32),
@@ -223,11 +223,11 @@ pub fn start() {
         };
         phone_calendar::set_host(|event| announce(Event::Calendar(event)));
         phone_calendar::open_day(launch_day());
-        sjel_gpui_ui::nsh_map::set_host(|event| announce(Event::Map(event)));
-        sjel_gpui_ui::nsh_interior::set_host(|event| announce(Event::Interior(event)));
-        sjel_gpui_ui::nsh_terminal::set_unlock(unlock);
-        sjel_gpui_ui::nsh_terminal::set_zoom(|steps| announce(Event::Zoom(steps)));
-        nsh_edge::set_host(|seat| announce(Event::OpenEdge(seat)));
+        sjel_gpui_ui::phone_map::set_host(|event| announce(Event::Map(event)));
+        sjel_gpui_ui::phone_interior::set_host(|event| announce(Event::Interior(event)));
+        sjel_gpui_ui::phone_terminal::set_unlock(unlock);
+        sjel_gpui_ui::phone_terminal::set_zoom(|steps| announce(Event::Zoom(steps)));
+        phone_edge::set_host(|seat| announce(Event::OpenEdge(seat)));
         phone_today::set_host(|event| announce(Event::Today(event)));
         sjel_gpui_ui::phone_settings::set_host(|action| announce(Event::Settings(action)));
         sjel_gpui_ui::phone_people::set_refresh(|| announce(Event::RefreshCopy));
@@ -240,7 +240,7 @@ pub fn start() {
             sjel_gpui_ui::phone_people::open_named(&name);
         }
         let (control, visual) = audio::parts();
-        sjel_gpui_ui::nsh_soundscape::set_parts(control, visual, SoundscapePrefs::load());
+        sjel_gpui_ui::phone_soundscape::set_parts(control, visual, SoundscapePrefs::load());
         let initial = launch_tab();
         let sidebar = sjel_gpui_ui::SidebarPrefs::load();
         let initial_edge = if launch_edge_off() {
@@ -258,10 +258,10 @@ pub fn start() {
             let mut state = state;
             state.select_tab(initial);
             if std::env::var("SJEL_TAB").as_deref() == Ok("map") {
-                sjel_gpui_ui::nsh_travel::open(sjel_gpui_core::travel::TravelRoute::Map);
+                sjel_gpui_ui::phone_travel::open(sjel_gpui_core::travel::TravelRoute::Map);
             }
             if let Some(seat) = initial_edge {
-                nsh_edge::open(seat);
+                phone_edge::open(seat);
             }
             state.publish();
             while let Some(event) = rx.recv().await {
@@ -329,7 +329,7 @@ impl AppState {
                 }
             }
         }
-        nsh_edge::set_activity(nsh_edge::Activity {
+        phone_edge::set_activity(phone_edge::Activity {
             connection: vec![
                 self.status.clone(),
                 self.synced
@@ -339,8 +339,8 @@ impl AppState {
             ],
             reminders,
         });
-        sjel_gpui_ui::nsh_interior::set_status(self.roomplan_status.clone());
-        sjel_gpui_ui::nsh_terminal::set_appearance(self.appearance);
+        sjel_gpui_ui::phone_interior::set_status(self.roomplan_status.clone());
+        sjel_gpui_ui::phone_terminal::set_appearance(self.appearance);
         #[cfg(target_os = "ios")]
         phone_system::apply_appearance(&self.appearance);
     }

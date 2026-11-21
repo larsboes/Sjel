@@ -1,9 +1,6 @@
 //! Phone finance source and candidate decisions through the paired Mac.
 
-use std::{
-    collections::HashSet,
-    sync::{Mutex, OnceLock},
-};
+use std::{collections::HashSet, sync::OnceLock};
 
 use sjel_gpui_core::{
     context::format_money,
@@ -11,6 +8,8 @@ use sjel_gpui_core::{
     shell::{self, FinanceCandidate, FinanceDashboardProjection, SubscriptionRecord},
 };
 use tokio::sync::watch;
+
+use crate::phone_feed::{SourceFeed, SourceState};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum FinanceTab {
@@ -64,38 +63,21 @@ impl Default for Snapshot {
     }
 }
 
-struct State {
-    source: Option<Source>,
-    snap: Snapshot,
+fn feed() -> &'static SourceFeed<Snapshot> {
+    static FEED: OnceLock<SourceFeed<Snapshot>> = OnceLock::new();
+    FEED.get_or_init(SourceFeed::new)
 }
 
-struct Feed {
-    state: Mutex<State>,
-    tx: watch::Sender<Snapshot>,
+fn state() -> std::sync::MutexGuard<'static, SourceState<Snapshot>> {
+    feed().state()
 }
 
-fn feed() -> &'static Feed {
-    static FEED: OnceLock<Feed> = OnceLock::new();
-    FEED.get_or_init(|| {
-        let snap = Snapshot::default();
-        let (tx, _) = watch::channel(snap.clone());
-        Feed {
-            state: Mutex::new(State { source: None, snap }),
-            tx,
-        }
-    })
-}
-
-fn state() -> std::sync::MutexGuard<'static, State> {
-    feed().state.lock().unwrap_or_else(|e| e.into_inner())
-}
-
-fn publish(s: &State) {
-    feed().tx.send_replace(s.snap.clone());
+fn publish(s: &SourceState<Snapshot>) {
+    feed().publish(s);
 }
 
 pub(super) fn snapshots() -> &'static watch::Sender<Snapshot> {
-    &feed().tx
+    feed().snapshots()
 }
 
 /// Connects the phone Finance screen to the Mac's shell or paired device client.
@@ -248,7 +230,5 @@ pub(super) fn format_signed_cents(cents: i64, currency: &str) -> String {
     format_money(cents, code)
 }
 
-#[cfg(target_os = "ios")]
 mod view;
-#[cfg(target_os = "ios")]
 pub use view::PhoneFinance;

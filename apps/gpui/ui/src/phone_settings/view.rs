@@ -1,6 +1,8 @@
 //! The phone settings surface over the host's current state.
 
-use gpui::{div, prelude::*, rgb, rgba, Context, Div, FontWeight, SharedString, Task, Window};
+use gpui::{
+    div, prelude::*, rgb, rgba, AnyElement, Context, Div, FontWeight, SharedString, Task, Window,
+};
 
 use super::{send, snapshots, Choice, SettingsAction as Action, SettingsState};
 use crate::{
@@ -8,6 +10,7 @@ use crate::{
         buttons::{Button, ButtonVariant},
         theme::ControlSize,
     },
+    primitives::{note, surface_card},
     theme::{Palette, ThemeContext},
 };
 
@@ -135,7 +138,7 @@ impl Render for PhoneSettings {
             .id("settings-scroll")
             .size_full()
             .overflow_y_scroll()
-            .bg(rgba(palette.surface))
+            .bg(rgba(palette.window_tint))
             .text_color(rgb(palette.text))
             .child(
                 column()
@@ -261,10 +264,10 @@ fn action(
 }
 
 fn section(palette: Palette, title: &'static str) -> Div {
-    column()
-        .rounded_md()
-        .border_1()
-        .border_color(rgba(palette.border))
+    surface_card(palette)
+        .flex()
+        .flex_col()
+        .gap_2()
         .p_3()
         .child(div().font_weight(FontWeight::SEMIBOLD).child(title))
 }
@@ -273,9 +276,21 @@ fn column() -> Div {
     div().flex().flex_col().gap_2()
 }
 
-fn caption(palette: Palette, text: impl Into<SharedString>) -> Div {
-    div()
-        .text_sm()
-        .text_color(rgb(palette.muted))
-        .child(text.into())
+fn caption(palette: Palette, text: impl Into<SharedString>) -> AnyElement {
+    note(text, palette.muted)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn phone_settings_mounts_at_phone_viewport(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui::size(gpui::px(390.), gpui::px(844.))),
+            |_, cx| PhoneSettings::new(cx),
+        );
+        view.read_with(cx, |view, _| assert!(!view.settings.paired));
+    }
 }

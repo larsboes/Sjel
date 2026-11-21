@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use super::{
-    download, feed, load, nsh_map, open, resolve, search, suggest, travel, Plan, PlanExt, Query,
+    download, feed, load, phone_map, open, resolve, search, suggest, travel, Plan, PlanExt, Query,
     Snapshot, Station, TravelRoute, TripRead, TripSection,
 };
 use crate::{
@@ -378,7 +378,7 @@ impl PhoneTravel {
                                                                     id: id.clone(),
                                                                     section: TripSection::Map,
                                                                 });
-                                                                nsh_map::show(Some(at));
+                                                                phone_map::show(Some(at));
                                                             },
                                                         ),
                                                     )
@@ -419,7 +419,7 @@ impl PhoneTravel {
                                                                     id: id.clone(),
                                                                     section: TripSection::Map,
                                                                 });
-                                                                nsh_map::show(Some(at));
+                                                                phone_map::show(Some(at));
                                                             },
                                                         ),
                                                     )

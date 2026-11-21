@@ -64,25 +64,25 @@ pub mod music;
 pub mod nav;
 #[cfg(feature = "gpui")]
 #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-pub mod nsh_agent;
+pub mod phone_agent;
 #[cfg(feature = "gpui")]
 #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-pub mod nsh_edge;
+pub mod phone_edge;
 #[cfg(feature = "gpui")]
 #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-pub mod nsh_interior;
+pub mod phone_interior;
 #[cfg(feature = "gpui")]
 #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-pub mod nsh_map;
+pub mod phone_map;
 #[cfg(feature = "gpui")]
 #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-pub mod nsh_soundscape;
+pub mod phone_soundscape;
 #[cfg(feature = "gpui")]
 #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-pub mod nsh_terminal;
+pub mod phone_terminal;
 #[cfg(feature = "gpui")]
 #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-pub mod nsh_travel;
+pub mod phone_travel;
 #[cfg(feature = "gpui")]
 pub mod packs;
 #[cfg(feature = "gpui")]
@@ -95,6 +95,8 @@ pub mod phone_calendar;
 #[cfg(feature = "gpui")]
 #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod phone_capture;
+#[cfg(feature = "gpui")]
+mod phone_feed;
 #[cfg(feature = "gpui")]
 #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod phone_finance;
@@ -170,8 +172,7 @@ pub use primitives::{
     back_button, card, chart_card, column_width, cycle_column_width, dashboard_metric_tile, dot,
     due_badge, due_status, filter_pill, interactive_pill, key_bar, list, mono_num, note,
     placeholder, priority_pill, progress_bar, quick_action_button, row, row_for_density, section,
-    shortcut_hint, stat_card, stat_card_interactive, stat_strip, status_pill, sub_tabs,
-    surface_card, sync_status_badge, tabular_cell, tone_chip, virtual_list, DueStatus, QuickAction,
+    shortcut_hint, stat_card, stat_strip, status_pill, sub_tabs, surface_card, sync_status_badge, tabular_cell, virtual_list, DueStatus, QuickAction,
     SortOrder, RADIUS_LG, RADIUS_MD, RADIUS_SM,
 };
 #[cfg(feature = "gpui")]

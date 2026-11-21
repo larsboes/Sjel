@@ -5,14 +5,13 @@ use gpui_kit::{
 };
 use sjel_gpui_core::scratchpad::{now_unix_secs, ScratchTarget};
 use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
+use sjel_gpui_ui::ely::data_display::{Badge, Tone};
 use sjel_gpui_ui::ely::primitives::Tooltip;
 use sjel_gpui_ui::ely::theme::ControlSize;
 
 use crate::route::Page;
 use crate::workspace::Workspace;
-use sjel_gpui_ui::primitives::{
-    list, mono_num, progress_bar, row, section, surface_card, tone_chip,
-};
+use sjel_gpui_ui::primitives::{list, mono_num, progress_bar, row, section, surface_card};
 use sjel_gpui_ui::theme::{tint, Palette};
 
 /// Prompts an agent drafted for you to paste elsewhere. Copy empties the card; none draws nothing.
@@ -281,7 +280,7 @@ pub fn inbox_triage_card(
                         .text_color(rgb(palette.text))
                         .child(label),
                 )
-                .when_some(tag, |el, t| el.child(tone_chip(t, palette.accent)))
+                .when_some(tag, |el, t| el.child(Badge::new(t).tone(Tone::Accent)))
                 .into_any_element()
         })
         .collect();
@@ -435,8 +434,10 @@ pub fn scratchpad_card(
                         .child("Daily Scratchpad"),
                 )
                 .child(match countdown {
-                    Some(label) => tone_chip(label, palette.amber),
-                    None => tone_chip("24h auto-sort", palette.muted),
+                    Some(label) => Badge::new(label).tone(Tone::Warning).into_any_element(),
+                    None => Badge::new("24h auto-sort")
+                        .tone(Tone::Neutral)
+                        .into_any_element(),
                 }),
         )
         .child(

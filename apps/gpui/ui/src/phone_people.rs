@@ -309,9 +309,7 @@ pub(crate) fn place_fields(place: &Place) -> Vec<(String, String)> {
     fields
 }
 
-#[cfg(all(feature = "gpui", target_os = "ios"))]
 mod view;
-#[cfg(all(feature = "gpui", target_os = "ios"))]
 pub use view::PhonePeople;
 
 #[cfg(test)]

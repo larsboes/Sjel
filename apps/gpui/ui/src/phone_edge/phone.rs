@@ -58,7 +58,7 @@ impl Render for PhoneActivity {
             .id("phone-activity-scroll")
             .size_full()
             .overflow_y_scroll()
-            .bg(rgba(palette.surface))
+            .bg(rgba(palette.window_tint))
             .child(
                 panel(palette)
                     .child(heading("Activity"))
@@ -75,7 +75,7 @@ fn panel(palette: Palette) -> Div {
         .flex_col()
         .gap_3()
         .p_4()
-        .bg(rgba(palette.surface))
+        .bg(rgba(palette.window_tint))
         .text_color(rgb(palette.text))
 }
 

@@ -196,9 +196,7 @@ pub(crate) fn second_line(capture: &LocalCapture, refusal: Option<&String>) -> S
     parts.join(" · ")
 }
 
-#[cfg(all(feature = "gpui", target_os = "ios"))]
 mod view;
-#[cfg(all(feature = "gpui", target_os = "ios"))]
 pub use view::PhoneCapture;
 
 #[cfg(test)]

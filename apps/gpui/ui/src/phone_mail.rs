@@ -402,7 +402,5 @@ pub(super) fn closable() -> bool {
         .is_some()
 }
 
-#[cfg(target_os = "ios")]
 mod view;
-#[cfg(target_os = "ios")]
 pub use view::PhoneMail;

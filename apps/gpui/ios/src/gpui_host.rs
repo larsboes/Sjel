@@ -16,15 +16,17 @@ use sjel_gpui_ui::{
     calendar::PhoneCalendar,
     ely::{
         buttons::{Button, ButtonVariant},
-        theme::ControlSize,
+        primitives::{Icon, IconName},
+        theme::{ControlSize, IconSize},
     },
-    nsh_agent::PhoneAgent,
-    nsh_edge::{self, PhoneActivity, PhoneScratchpad, Seat},
-    nsh_interior::PhoneInterior,
-    nsh_map::PhoneMap,
-    nsh_soundscape::PhoneSoundscape,
-    nsh_terminal::PhoneTerminal,
-    nsh_travel::PhoneTravel,
+    primitives::back_button,
+    phone_agent::PhoneAgent,
+    phone_edge::{self, PhoneActivity, PhoneScratchpad, Seat},
+    phone_interior::PhoneInterior,
+    phone_map::PhoneMap,
+    phone_soundscape::PhoneSoundscape,
+    phone_terminal::PhoneTerminal,
+    phone_travel::PhoneTravel,
     phone_capture::PhoneCapture,
     phone_finance::PhoneFinance,
     phone_inventory::PhoneInventory,
@@ -152,21 +154,22 @@ impl Render for PhoneRoot {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgba(palette.surface))
+            .bg(rgba(palette.window_tint))
             .text_color(rgb(palette.text))
             .when(panel, |shell| {
                 shell.child(
                     div()
                         .flex()
+                        .bg(rgba(palette.surface))
                         .border_b_1()
                         .border_color(rgba(palette.border))
                         .children(Seat::ALL.map(|seat| {
-                            nav_cell(seat.label(), self.seat == seat, palette)
-                                .on_click(move |_, _, _| nsh_edge::open(seat))
+                            nav_cell(seat_icon(seat), seat.label(), self.seat == seat, palette)
+                                .on_click(move |_, _, _| phone_edge::open(seat))
                         }))
                         .child(
-                            nav_cell("Close panel", false, palette)
-                                .on_click(|_, _, _| nsh_edge::close()),
+                            nav_cell(IconName::X, "Close", false, palette)
+                                .on_click(|_, _, _| phone_edge::close()),
                         ),
                 )
             })
@@ -182,9 +185,11 @@ impl Render for PhoneRoot {
                             | Page::Documents
                     ),
                 |shell| {
-                    shell.child(div().px_3().child(
-                        nav_button("Back", false).on_click(|_, _, _| phone_navigation::back()),
-                    ))
+                    shell.child(div().px_3().py_1().child(back_button(
+                        "Back",
+                        |_, _, _| phone_navigation::back(),
+                        palette,
+                    )))
                 },
             )
             .child(
@@ -203,76 +208,113 @@ impl Render for PhoneRoot {
                             div()
                                 .flex()
                                 .flex_wrap()
-                                .p_2()
-                                .gap_1()
+                                .p_3()
+                                .gap_2()
+                                .bg(rgba(palette.raised))
                                 .border_t_1()
                                 .border_color(rgba(palette.border))
                                 .children(TABS[5..].iter().copied().map(|(tab, label)| {
-                                    nav_button(label, active(tab, self.page)).on_click(cx.listener(
-                                        move |root, _, _, cx| {
+                                    nav_button(tab_icon(tab), label, active(tab, self.page))
+                                        .on_click(cx.listener(move |root, _, _, cx| {
                                             root.menu = false;
                                             announce(Event::SelectTab(tab));
                                             cx.notify();
-                                        },
-                                    ))
+                                        }))
                                 })),
                         )
                     })
                     .child(
                         div()
                             .flex()
+                            .bg(rgba(palette.surface))
                             .border_t_1()
                             .border_color(rgba(palette.border))
                             .children(TABS[..5].iter().copied().map(|(tab, label)| {
-                                nav_cell(label, active(tab, self.page), palette).on_click(
-                                    cx.listener(move |root, _, _, cx| {
+                                nav_cell(tab_icon(tab), label, active(tab, self.page), palette)
+                                    .on_click(cx.listener(move |root, _, _, cx| {
                                         root.menu = false;
                                         announce(Event::SelectTab(tab));
                                         cx.notify();
-                                    }),
-                                )
+                                    }))
                             }))
                             .child(
-                                nav_cell("Agent", false, palette)
-                                    .on_click(|_, _, _| nsh_edge::open(Seat::Agent)),
+                                nav_cell(IconName::Bot, "Agent", false, palette)
+                                    .on_click(|_, _, _| phone_edge::open(Seat::Agent)),
                             )
-                            .child(nav_cell("More", self.menu, palette).on_click(cx.listener(
-                                |root, _, _, cx| {
+                            .child(nav_cell(IconName::Ellipsis, "More", self.menu, palette).on_click(
+                                cx.listener(|root, _, _, cx| {
                                     root.menu = !root.menu;
                                     cx.notify();
-                                },
-                            ))),
+                                }),
+                            )),
                     )
             })
     }
 }
 
+fn tab_icon(tab: Tab) -> IconName {
+    match tab {
+        Tab::Today => IconName::House,
+        Tab::Mail => IconName::Mail,
+        Tab::Documents => IconName::FileText,
+        Tab::Calendar => IconName::Calendar,
+        Tab::Travel => IconName::Compass,
+        Tab::Projects => IconName::Folder,
+        Tab::People => IconName::Users,
+        Tab::Inbox => IconName::Inbox,
+        Tab::Interior => IconName::House,
+        Tab::Finance => IconName::Wallet,
+        Tab::Inventory => IconName::Heart,
+        Tab::Settings => IconName::Settings,
+    }
+}
+
+fn seat_icon(seat: Seat) -> IconName {
+    match seat {
+        Seat::Soundscape => IconName::AudioLines,
+        Seat::Activity => IconName::Activity,
+        Seat::Agent => IconName::Bot,
+        Seat::Scratchpad => IconName::Pencil,
+        Seat::Terminal => IconName::Terminal,
+    }
+}
+
 fn nav_cell(
+    icon: IconName,
     label: &'static str,
     active: bool,
     palette: Palette,
 ) -> gpui_kit::Stateful<gpui_kit::Div> {
+    let color = rgb(if active {
+        palette.accent
+    } else {
+        palette.muted
+    });
     div()
         .id(label)
         .flex_1()
         .min_w_0()
-        .h(px(44.))
+        .min_h(px(50.))
+        .py_1()
         .flex()
+        .flex_col()
         .items_center()
         .justify_center()
-        .text_xs()
-        .text_color(rgb(if active { palette.accent } else { palette.text }))
+        .gap_0p5()
+        .text_color(color)
         .when(active, |cell| cell.bg(rgba(palette.raised)))
-        .child(div().truncate().child(label))
+        .child(Icon::new(icon).size(IconSize::Sm).color(color))
+        .child(div().text_xs().truncate().child(label))
 }
 
-fn nav_button(label: &'static str, active: bool) -> Button {
+fn nav_button(icon: IconName, label: &'static str, active: bool) -> Button {
     Button::new(label, label)
+        .icon(icon)
         .size(ControlSize::Sm)
         .variant(if active {
             ButtonVariant::Primary
         } else {
-            ButtonVariant::Ghost
+            ButtonVariant::Secondary
         })
 }
 
@@ -297,7 +339,7 @@ fn active(tab: Tab, page: Page) -> bool {
 impl PhoneRoot {
     fn new(cx: &mut Context<Self>) -> Self {
         let mut pages = phone_navigation::subscribe();
-        let mut seats = nsh_edge::seat_updates();
+        let mut seats = phone_edge::seat_updates();
         let page = *pages.borrow_and_update();
         let seat = seats.borrow_and_update().seat;
         let navigation = cx.spawn(async move |root, cx| loop {

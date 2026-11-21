@@ -96,7 +96,7 @@ pub(crate) fn render_matrix_table(
                     .child("·")
                     .into_any_element(),
                 "outdated" | "missing" if !h.write_supported => {
-                    pill(palette.amber, status.to_string())
+                    pill(crate::ely::data_display::Tone::Warning, status.to_string())
                 }
                 "outdated" | "missing" => {
                     let is_missing = status == "missing";
@@ -115,12 +115,12 @@ pub(crate) fn render_matrix_table(
                     }))
                     .into_any_element()
                 }
-                "drifted" => pill(palette.amber, "drifted".to_string()),
+                "drifted" => pill(crate::ely::data_display::Tone::Warning, "drifted".to_string()),
                 "not-deployed" => div()
                     .text_color(rgb(palette.muted))
                     .child("-")
                     .into_any_element(),
-                other => pill(palette.red, other.to_string()),
+                other => pill(crate::ely::data_display::Tone::Danger, other.to_string()),
             };
 
             row = row.child(column(harness_col, HARNESS_MIN, cell));

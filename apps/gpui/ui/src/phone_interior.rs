@@ -435,7 +435,5 @@ fn plan(kind: PlanningKind, refs: Vec<String>) {
     });
 }
 
-#[cfg(target_os = "ios")]
 mod phone;
-#[cfg(target_os = "ios")]
 pub use phone::PhoneInterior;

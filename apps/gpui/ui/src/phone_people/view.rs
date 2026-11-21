@@ -16,6 +16,7 @@ use crate::{
     ely::{
         buttons::{Button, ButtonVariant},
         forms::{Input, InputEvent, TextInput},
+        layout::{Card as ElyCard, CardHeader, Section as ElySection},
         theme::ControlSize,
     },
     theme::ThemeContext,
@@ -171,7 +172,7 @@ impl Render for PhonePeople {
             .flex_col()
             .gap_2()
             .p_4()
-            .bg(rgba(palette.surface))
+            .bg(rgba(palette.window_tint))
             .text_color(rgb(palette.text));
         if let Some(Card {
             name,
@@ -191,47 +192,48 @@ impl Render for PhonePeople {
                             cx.notify();
                         })),
                 )
-                .child(
+                .child({
+                    let mut header = CardHeader::new(name);
+                    if !subtitle.is_empty() {
+                        header = header.description(subtitle);
+                    }
+                    let linked_body = if linked.is_empty() {
+                        div()
+                            .text_sm()
+                            .text_color(rgb(palette.muted))
+                            .child("None linked")
+                            .into_any_element()
+                    } else {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .children(linked.into_iter().map(|label| div().text_sm().child(label)))
+                            .into_any_element()
+                    };
                     div()
                         .id("people-place-card")
                         .flex_1()
                         .min_h_0()
                         .overflow_y_scroll()
-                        .flex()
-                        .flex_col()
-                        .gap_3()
                         .child(
-                            div()
-                                .text_xl()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(name),
+                            ElyCard::new()
+                                .header(header)
+                                .children(fields.into_iter().map(|(label, value)| {
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .child(
+                                            div()
+                                                .text_sm()
+                                                .text_color(rgb(palette.muted))
+                                                .child(label),
+                                        )
+                                        .child(value)
+                                }))
+                                .child(ElySection::new(relation).child(linked_body)),
                         )
-                        .when(!subtitle.is_empty(), |card| {
-                            card.child(
-                                div()
-                                    .text_sm()
-                                    .text_color(rgb(palette.muted))
-                                    .child(subtitle),
-                            )
-                        })
-                        .children(fields.into_iter().map(|(label, value)| {
-                            div()
-                                .flex()
-                                .flex_col()
-                                .child(div().text_sm().text_color(rgb(palette.muted)).child(label))
-                                .child(value)
-                        }))
-                        .child(div().font_weight(FontWeight::SEMIBOLD).child(relation))
-                        .when(linked.is_empty(), |card| {
-                            card.child(
-                                div()
-                                    .text_sm()
-                                    .text_color(rgb(palette.muted))
-                                    .child("None linked"),
-                            )
-                        })
-                        .children(linked.into_iter().map(|label| div().text_sm().child(label))),
-                );
+                });
         }
 
         let switches = [

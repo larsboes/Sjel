@@ -9,9 +9,13 @@ use super::{headline, keep, load, preview_label, second_line, subscribe, Snapsho
 use crate::{
     ely::{
         buttons::{Button, ButtonVariant},
+        feedback::{EmptyState, InlineMessage},
         forms::{Input, InputEvent, TextInput},
+        lists::List,
+        primitives::{IconName, Severity},
         theme::ControlSize,
     },
+    primitives::surface_card,
     theme::ThemeContext,
 };
 
@@ -98,38 +102,42 @@ impl Render for PhoneCapture {
                     cx.notify();
                 }))
         });
-        let rows = self.snapshot.captures.iter().map(|capture| {
-            let refusal = self
-                .snapshot
-                .refusals
-                .iter()
-                .find_map(|(id, reason)| (id == &capture.id).then_some(reason));
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .py_3()
-                .border_b_1()
-                .border_color(rgba(palette.border))
-                .child(headline(capture))
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(rgb(if refusal.is_some() {
-                            palette.red
-                        } else {
-                            palette.muted
-                        }))
-                        .child(second_line(capture, refusal)),
-                )
-        });
+        let rows: Vec<_> = self
+            .snapshot
+            .captures
+            .iter()
+            .map(|capture| {
+                let refusal = self
+                    .snapshot
+                    .refusals
+                    .iter()
+                    .find_map(|(id, reason)| (id == &capture.id).then_some(reason));
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .py_3()
+                    .child(headline(capture))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(if refusal.is_some() {
+                                palette.red
+                            } else {
+                                palette.muted
+                            }))
+                            .child(second_line(capture, refusal)),
+                    )
+                    .into_any_element()
+            })
+            .collect();
         div()
             .size_full()
             .flex()
             .flex_col()
             .gap_2()
             .p_4()
-            .bg(rgba(palette.surface))
+            .bg(rgba(palette.window_tint))
             .text_color(rgb(palette.text))
             .child(
                 div()
@@ -138,37 +146,44 @@ impl Render for PhoneCapture {
                     .child("Capture"),
             )
             .child(
-                div()
+                surface_card(palette)
+                    .p_3()
                     .flex()
+                    .flex_col()
                     .gap_2()
-                    .items_center()
-                    .child(div().flex_1().child(Input::new(&self.draft)))
                     .child(
-                        Button::new(
-                            "capture-keep",
-                            if self.snapshot.saving {
-                                "Saving…"
-                            } else {
-                                "Keep"
-                            },
-                        )
-                        .primary()
-                        .size(ControlSize::Lg)
-                        .disabled(self.snapshot.saving)
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            keep(view.draft.read(cx).text().to_owned(), view.tag)
-                        })),
+                        div()
+                            .flex()
+                            .gap_2()
+                            .items_center()
+                            .child(div().flex_1().child(Input::new(&self.draft)))
+                            .child(
+                                Button::new(
+                                    "capture-keep",
+                                    if self.snapshot.saving {
+                                        "Saving…"
+                                    } else {
+                                        "Keep"
+                                    },
+                                )
+                                .primary()
+                                .size(ControlSize::Lg)
+                                .disabled(self.snapshot.saving)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    keep(view.draft.read(cx).text().to_owned(), view.tag)
+                                })),
+                            ),
+                    )
+                    .child(div().flex().flex_wrap().gap_1().children(tags))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(palette.muted))
+                            .child(preview),
                     ),
             )
-            .child(div().flex().flex_wrap().gap_1().children(tags))
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(rgb(palette.muted))
-                    .child(preview),
-            )
             .when_some(self.snapshot.error.clone(), |body, error| {
-                body.child(div().text_sm().text_color(rgb(palette.red)).child(error))
+                body.child(InlineMessage::new(Severity::Danger, error))
             })
             .child(div().text_sm().text_color(rgb(palette.muted)).child(status))
             .child(
@@ -177,7 +192,16 @@ impl Render for PhoneCapture {
                     .flex_1()
                     .min_h_0()
                     .overflow_y_scroll()
-                    .children(rows),
+                    .child(if rows.is_empty() {
+                        EmptyState::new(
+                            "capture-empty",
+                            IconName::Inbox,
+                            "Nothing captured on this phone yet.",
+                        )
+                        .into_any_element()
+                    } else {
+                        List::new().divided().children(rows).into_any_element()
+                    }),
             )
     }
 }

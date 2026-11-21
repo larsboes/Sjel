@@ -1,7 +1,7 @@
 //! Phone finance dashboard, registers, and import review.
 
 use gpui::{
-    div, prelude::*, relative, rgb, rgba, Context, Div, Entity, Focusable, FontWeight,
+    div, prelude::*, rgb, rgba, AnyElement, Context, Div, Entity, Focusable, FontWeight,
     SharedString, Subscription, Task, Window,
 };
 use sjel_gpui_core::{
@@ -18,9 +18,13 @@ use super::{
 use crate::{
     ely::{
         buttons::{Button, ButtonVariant},
+        data_display::Meter,
+        feedback::InlineMessage,
         forms::{Input, InputEvent, TextInput},
+        primitives::Severity,
         theme::ControlSize,
     },
+    primitives::{note, stat_card, surface_card},
     theme::{Palette, ThemeContext},
 };
 
@@ -115,10 +119,7 @@ impl PhoneFinance {
             ),
         ];
         let mut overview = column().children(metrics.map(|(label, value, note)| {
-            card(palette)
-                .child(caption(palette, label))
-                .child(title(value))
-                .child(caption(palette, note))
+            stat_card(label, value, Some(note.into()), palette.text, palette)
         }));
         if let Some(planning) = dashboard
             .planning
@@ -133,23 +134,18 @@ impl PhoneFinance {
                         0.
                     };
                     column()
-                        .child(label_value(
-                            goal.label.clone(),
-                            format!(
+                        .child(
+                            Meter::new(
+                                SharedString::from(format!("spend-goal-{}", goal.label)),
+                                goal.label.clone(),
+                                progress,
+                            )
+                            .detail(format!(
                                 "{} / {}",
                                 money(goal.spent_cents, &goal.currency),
                                 money(goal.target_cents, &goal.currency)
-                            ),
-                        ))
-                        .child(div().h_1().rounded_sm().bg(rgba(palette.border)).child(
-                            div().h_full().w(relative(progress)).rounded_sm().bg(rgb(
-                                if goal.met {
-                                    palette.green
-                                } else {
-                                    palette.accent
-                                },
                             )),
-                        ))
+                        )
                         .child(caption(
                             palette,
                             format!(
@@ -344,7 +340,7 @@ impl Render for PhoneFinance {
         column()
             .size_full()
             .p_4()
-            .bg(rgba(palette.surface))
+            .bg(rgba(palette.window_tint))
             .text_color(rgb(palette.text))
             .child(
                 div()
@@ -387,7 +383,7 @@ impl Render for PhoneFinance {
                 screen.child(Input::new(&self.search))
             })
             .when_some(self.snapshot.error.clone(), |screen, error| {
-                screen.child(div().text_sm().text_color(rgb(palette.red)).child(error))
+                screen.child(InlineMessage::new(Severity::Danger, error))
             })
             .child(
                 div()
@@ -405,22 +401,15 @@ fn column() -> Div {
 }
 
 fn card(palette: Palette) -> Div {
-    column()
-        .rounded_md()
-        .border_1()
-        .border_color(rgba(palette.border))
-        .p_3()
+    surface_card(palette).flex().flex_col().gap_2().p_3()
 }
 
 fn title(text: impl Into<SharedString>) -> Div {
     div().font_weight(FontWeight::SEMIBOLD).child(text.into())
 }
 
-fn caption(palette: Palette, text: impl Into<SharedString>) -> Div {
-    div()
-        .text_sm()
-        .text_color(rgb(palette.muted))
-        .child(text.into())
+fn caption(palette: Palette, text: impl Into<SharedString>) -> AnyElement {
+    note(text, palette.muted)
 }
 
 fn choice(
@@ -456,4 +445,19 @@ fn transaction(palette: Palette, tx: &FinanceTransaction) -> Div {
             palette,
             format!("{} · {} · {}", tx.date, tx.account, tx.category),
         ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn phone_finance_mounts_at_phone_viewport(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui::size(gpui::px(390.), gpui::px(844.))),
+            |window, cx| PhoneFinance::new(window, |_| {}, cx),
+        );
+        view.read_with(cx, |view, _| assert!(view.tab == FinanceTab::Overview));
+    }
 }

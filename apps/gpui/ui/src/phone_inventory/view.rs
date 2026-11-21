@@ -1,7 +1,8 @@
 //! Phone wishlist, owned assets, and alternative comparisons.
 
 use gpui::{
-    div, prelude::*, rgb, rgba, Context, Div, Focusable, FontWeight, Subscription, Task, Window,
+    div, prelude::*, rgb, rgba, AnyElement, Context, Div, Focusable, FontWeight, Subscription,
+    Task, Window,
 };
 use sjel_gpui_core::inventory::{
     budget_of, counted, filter_inventory, format_cents, format_dimensions, group_of, months_to_pay,
@@ -12,9 +13,12 @@ use super::{format_item_price, load, snapshots, InventoryTab, Snapshot};
 use crate::{
     ely::{
         buttons::{Button, ButtonVariant},
+        feedback::InlineMessage,
         forms::{Input, InputEvent, TextInput},
+        primitives::Severity,
         theme::ControlSize,
     },
+    primitives::{note, surface_card},
     theme::{Palette, ThemeContext},
 };
 
@@ -264,7 +268,7 @@ impl Render for PhoneInventory {
             .flex_col()
             .gap_2()
             .p_4()
-            .bg(rgba(palette.surface))
+            .bg(rgba(palette.window_tint))
             .text_color(rgb(palette.text))
             .child(
                 div()
@@ -304,7 +308,7 @@ impl Render for PhoneInventory {
                 body.child(Input::new(&self.search))
             })
             .when_some(self.snapshot.error.clone(), |body, error| {
-                body.child(div().text_sm().text_color(rgb(palette.red)).child(error))
+                body.child(InlineMessage::new(Severity::Danger, error))
             })
             .child(
                 div()
@@ -335,22 +339,12 @@ fn title(text: impl Into<gpui::SharedString>) -> Div {
     div().font_weight(FontWeight::SEMIBOLD).child(text.into())
 }
 
-fn caption(palette: Palette, text: impl Into<gpui::SharedString>) -> Div {
-    div()
-        .text_sm()
-        .text_color(rgb(palette.muted))
-        .child(text.into())
+fn caption(palette: Palette, text: impl Into<gpui::SharedString>) -> AnyElement {
+    note(text, palette.muted)
 }
 
 fn card(palette: Palette) -> Div {
-    div()
-        .flex()
-        .flex_col()
-        .gap_1()
-        .rounded_md()
-        .border_1()
-        .border_color(rgba(palette.border))
-        .p_3()
+    surface_card(palette).flex().flex_col().gap_1().p_3()
 }
 
 fn item_summary(item: &InventoryItem) -> String {
@@ -373,4 +367,19 @@ fn item_card(palette: Palette, item: &InventoryItem, details: String) -> Div {
                 .child(format_item_price(item)),
         )
         .child(caption(palette, details))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn phone_inventory_mounts_at_phone_viewport(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui::size(gpui::px(390.), gpui::px(844.))),
+            |window, cx| PhoneInventory::new(window, |_| {}, cx),
+        );
+        view.read_with(cx, |view, _| assert!(view.tab == InventoryTab::Wishlist));
+    }
 }

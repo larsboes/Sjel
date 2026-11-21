@@ -1,7 +1,7 @@
 //! Phone travel reads, saved trips, itinerary and connection search, independent of GPUI.
 use crate::phone_navigation::{open as set_nsh_page, Page as NshPage};
 
-use crate::nsh_map::{self, MapEvent, MapScene};
+use crate::phone_map::{self, MapEvent, MapScene};
 use sjel_gpui_core::{
     shell,
     travel::{
@@ -103,7 +103,7 @@ pub fn open(route: TravelRoute) {
             }
     ) {
         sync_map();
-        nsh_map::show(None);
+        phone_map::show(None);
     } else {
         set_nsh_page(NshPage::Travel);
     }
@@ -375,7 +375,7 @@ fn sync_map() {
             loading: s.snap.loading,
         }
     };
-    nsh_map::set_scene(scene);
+    phone_map::set_scene(scene);
 }
 
 /// Handles the map's actions after Travel no longer has a GPUI controller.
@@ -475,7 +475,5 @@ fn search(query: Query) {
     });
 }
 
-#[cfg(target_os = "ios")]
 mod phone;
-#[cfg(target_os = "ios")]
 pub use phone::PhoneTravel;

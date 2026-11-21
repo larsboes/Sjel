@@ -307,9 +307,7 @@ pub(crate) fn rest_line(rest: usize) -> Option<String> {
     (rest > 0).then(|| format!("{rest} more in Projects"))
 }
 
-#[cfg(all(feature = "gpui", target_os = "ios"))]
 mod view;
-#[cfg(all(feature = "gpui", target_os = "ios"))]
 pub use view::PhoneToday;
 
 #[cfg(test)]

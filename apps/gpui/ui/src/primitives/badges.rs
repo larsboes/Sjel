@@ -1,19 +1,15 @@
 //! Status badges, pills, and indicator chips.
 
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, ElementId, FontWeight,
-    SharedString, Window,
-};
+use gpui_kit::{div, prelude::*, rgb, AnyElement, App, ClickEvent, ElementId, SharedString, Window};
 
-use super::tokens::RADIUS_SM;
 use crate::ely::{
-    buttons::{ToggleButton, ToggleItem},
+    buttons::{Button, ButtonVariant, ToggleButton, ToggleItem},
     data_display::{Badge, Tone},
     feedback::InlineMessage,
     primitives::{Severity, Tooltip},
     theme::ControlSize,
 };
-use crate::theme::{tint, Palette};
+use crate::theme::Palette;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DueStatus {
@@ -121,22 +117,6 @@ pub fn sync_status_badge(pending: usize, syncing: bool, _palette: Palette) -> An
     InlineMessage::new(severity, text).into_any_element()
 }
 
-/// Semantic tone chip (`text` on `tint(tone, 0x20)` background with `tint(tone, 0x38)` border).
-pub fn tone_chip(text: impl Into<SharedString>, tone: u32) -> AnyElement {
-    div()
-        .px_2()
-        .py(px(1.5))
-        .rounded(RADIUS_SM)
-        .bg(rgba(tint(tone, 0x20)))
-        .border_1()
-        .border_color(rgba(tint(tone, 0x38)))
-        .text_xs()
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(rgb(tone))
-        .child(text.into())
-        .into_any_element()
-}
-
 /// Right-aligned monospace text for tabular numerical alignment (amounts, dates, counts, sizes).
 pub fn mono_num(text: impl Into<SharedString>, color: u32) -> gpui_kit::Div {
     div()
@@ -150,28 +130,19 @@ pub fn mono_num(text: impl Into<SharedString>, color: u32) -> gpui_kit::Div {
 pub fn interactive_pill(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
-    tone: u32,
+    _tone: u32,
     tooltip: impl Into<SharedString>,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> AnyElement {
+    let id = id.into();
     div()
-        .id(id.into())
-        .flex()
-        .items_center()
-        .gap_1p5()
-        .px_2p5()
-        .py(px(3.))
-        .rounded_full()
-        .bg(rgba(tint(tone, 0x20)))
-        .border_1()
-        .border_color(rgba(tint(tone, 0x48)))
-        .text_xs()
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(rgb(tone))
-        .cursor_pointer()
+        .id((id.clone(), "tip"))
         .tooltip(Tooltip::text(tooltip.into()))
-        .hover(move |s| s.opacity(0.85))
-        .on_click(on_click)
-        .child(label.into())
+        .child(
+            Button::new(id, label)
+                .variant(ButtonVariant::Secondary)
+                .size(ControlSize::Sm)
+                .on_click(on_click),
+        )
         .into_any_element()
 }

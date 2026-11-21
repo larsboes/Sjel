@@ -110,11 +110,11 @@ impl AppState {
             }
             Event::RoomplanResult(text) => {
                 self.roomplan_status = text;
-                sjel_gpui_ui::nsh_interior::load();
+                sjel_gpui_ui::phone_interior::load();
                 load_roomplan_archive();
             }
-            Event::RoomplanArchive(records) => sjel_gpui_ui::nsh_interior::set_local(records),
-            Event::RoomplanLive(live) => sjel_gpui_ui::nsh_interior::set_live(live),
+            Event::RoomplanArchive(records) => sjel_gpui_ui::phone_interior::set_local(records),
+            Event::RoomplanLive(live) => sjel_gpui_ui::phone_interior::set_live(live),
             Event::HealthState(state) => self.health = state,
             Event::HealthUpload(body) => {
                 let Some(client) = self.client.clone() else {
@@ -172,12 +172,12 @@ impl AppState {
                 match DeviceClient::new(node, Arc::new(identity::sign)) {
                     Ok(client) => {
                         let client = Arc::new(client);
-                        sjel_gpui_ui::nsh_travel::connect(sjel_gpui_core::travel::Source::Device(
+                        sjel_gpui_ui::phone_travel::connect(sjel_gpui_core::travel::Source::Device(
                             client.clone(),
                         ));
-                        sjel_gpui_ui::nsh_interior::connect(RoomPlanSource::Device(client.clone()));
-                        sjel_gpui_ui::nsh_agent::connect(Host::Device(client.clone()));
-                        sjel_gpui_ui::nsh_terminal::connect(Host::Device(client.clone()));
+                        sjel_gpui_ui::phone_interior::connect(RoomPlanSource::Device(client.clone()));
+                        sjel_gpui_ui::phone_agent::connect(Host::Device(client.clone()));
+                        sjel_gpui_ui::phone_terminal::connect(Host::Device(client.clone()));
                         #[cfg(target_os = "ios")]
                         crate::documents::connect(client.clone());
                         sjel_gpui_ui::phone_mail::connect(sjel_gpui_core::device::Source::Device(
@@ -256,11 +256,11 @@ impl AppState {
             Event::NotifyOpen(link) => self.open_link(&link),
             Event::Background => {
                 self.terminal_unlocked = false;
-                sjel_gpui_ui::nsh_terminal::set_unlocked(false);
+                sjel_gpui_ui::phone_terminal::set_unlocked(false);
             }
             Event::Unlocked(ok) => {
                 self.terminal_unlocked = ok;
-                sjel_gpui_ui::nsh_terminal::set_unlocked(ok);
+                sjel_gpui_ui::phone_terminal::set_unlocked(ok);
             }
             Event::Foreground => {
                 load_roomplan_archive();
@@ -279,11 +279,11 @@ impl AppState {
                         && relative > 0.
                         && (relative >= 1.12 || relative <= 1. / 1.12 || ended)
                     {
-                        sjel_gpui_ui::nsh_map::pinch(relative.log2(), _location);
+                        sjel_gpui_ui::phone_map::pinch(relative.log2(), _location);
                         self.pinch_base = scale;
                     }
                 }
-                if current_page() == PhonePage::Edge && nsh_edge::is_terminal() {
+                if current_page() == PhonePage::Edge && phone_edge::is_terminal() {
                     if relative >= 1.2 {
                         self.handle(Event::Zoom(1));
                         self.pinch_base = scale;
@@ -307,11 +307,11 @@ impl AppState {
             Event::OpenEdge(seat) => {
                 if seat == Seat::Soundscape && !self.audio_started {
                     self.audio_started = true;
-                    sjel_gpui_ui::nsh_soundscape::set_device(audio::start());
+                    sjel_gpui_ui::phone_soundscape::set_device(audio::start());
                 }
                 if seat == Seat::Terminal {
                     if self.terminal_unlocked {
-                        sjel_gpui_ui::nsh_terminal::refresh();
+                        sjel_gpui_ui::phone_terminal::refresh();
                     } else if self.client.is_some() {
                         unlock();
                     }
@@ -330,10 +330,10 @@ impl AppState {
                 }
             }
             Event::Calendar(CalendarEvent::Wrote) => self.maybe_sync(),
-            Event::Map(event) => sjel_gpui_ui::nsh_travel::map_event(event),
+            Event::Map(event) => sjel_gpui_ui::phone_travel::map_event(event),
             Event::Settings(action) => self.on_settings(action),
             Event::Interior(event) => {
-                use sjel_gpui_ui::nsh_interior::InteriorEvent;
+                use sjel_gpui_ui::phone_interior::InteriorEvent;
                 match event {
                     InteriorEvent::Capture => present_roomplan(),
                     InteriorEvent::Sync => load_roomplan_upload(),

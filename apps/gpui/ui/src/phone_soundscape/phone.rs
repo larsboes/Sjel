@@ -85,7 +85,7 @@ impl Render for PhoneSoundscape {
             .id("soundscape-scroll")
             .size_full()
             .overflow_y_scroll()
-            .bg(rgba(palette.surface))
+            .bg(rgba(palette.window_tint))
             .text_color(rgb(palette.text))
             .child(
                 div()

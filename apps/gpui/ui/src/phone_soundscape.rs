@@ -1,9 +1,7 @@
 //! Native soundscape controls over the same audio-thread atomics as the desktop drawer.
 use crate::theme::SoundscapePrefs;
 
-#[cfg(target_os = "ios")]
 mod phone;
-#[cfg(target_os = "ios")]
 pub use phone::PhoneSoundscape;
 use sjel_gpui_core::{
     shell,

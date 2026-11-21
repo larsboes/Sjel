@@ -555,9 +555,7 @@ mod tests {
     }
 }
 
-#[cfg(target_os = "ios")]
 mod phone;
-#[cfg(target_os = "ios")]
 pub use phone::PhoneTerminal;
 fn cell_size(snap: &Snapshot) -> (f32, f32) {
     let font = f32::from(snap.font_size.max(1));

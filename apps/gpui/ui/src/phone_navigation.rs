@@ -64,7 +64,7 @@ pub fn open(target: Page) {
 pub fn back() {
     let previous = page();
     if previous == Page::Edge {
-        crate::nsh_edge::close();
+        crate::phone_edge::close();
         return;
     }
     let target = router()
@@ -75,16 +75,16 @@ pub fn back() {
         .unwrap_or_default();
     change(previous, target);
     if target == Page::Map {
-        crate::nsh_map::show(None);
+        crate::phone_map::show(None);
     }
 }
 
 fn change(previous: Page, target: Page) {
     if previous == Page::Edge && target != Page::Edge {
-        crate::nsh_edge::leaving();
+        crate::phone_edge::leaving();
     }
     if previous == Page::Map && target != Page::Map {
-        crate::nsh_map::hide();
+        crate::phone_map::hide();
     }
     router().page.send_replace(target);
 }

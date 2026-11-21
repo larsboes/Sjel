@@ -28,7 +28,7 @@ These are revision-specific facts. Confirm them at the selected source revision 
 The operating system draws the chrome, and GPUI draws the content (`apps/gpui/README.md`, "Native renderers, shared models"):
 
 - macOS: AppKit owns the sidebar, toolbar, menus and glass. GPUI renders the views inside the window. `apps/gpui/src/macos_glass.rs` is the narrow AppKit bridge. The resolved GPUI has no general child-view host, so keep the bridge opt-in with a GPUI fallback.
-- iOS: Sjel's phone does not use GPUI. NSH draws every phone screen with UIKit views (`apps/gpui/ui/src/nsh_*.rs`, `docs/plans/gpui.md` section 11). For phone work, read NSH's documentation at the revision `apps/gpui/Cargo.toml` pins, not this skill.
+- iOS: Sjel's phone runs the shared GPUI renderer (`apps/gpui/ios`). Its screens are the `apps/gpui/ui/src/phone_*.rs` views at mobile density.
 
 ## Local verification
 

@@ -6,9 +6,14 @@ use super::{due_label, emit, rest_line, spot_label, subscribe, toggle, Snapshot,
 use crate::{
     ely::{
         buttons::{Button, ButtonVariant},
+        data_display::{Badge, Tone},
         forms::Checkbox,
+        layout::Section as ElySection,
+        lists::List,
+        primitives::IconName,
         theme::ControlSize,
     },
+    primitives::{sub_tabs, surface_card},
     theme::{Palette, ThemeContext},
 };
 
@@ -68,10 +73,11 @@ impl PhoneToday {
     }
 }
 
-fn action(label: &'static str, event: TodayEvent) -> Button {
+fn action(label: &'static str, icon: IconName, event: TodayEvent) -> Button {
     Button::new(label, label)
-        .size(ControlSize::Lg)
-        .variant(ButtonVariant::Ghost)
+        .icon(icon)
+        .size(ControlSize::Md)
+        .variant(ButtonVariant::Secondary)
         .on_click(move |_, _, _| emit(event.clone()))
 }
 
@@ -87,16 +93,20 @@ fn section(
     empty: &'static str,
     rows: Vec<AnyElement>,
     palette: Palette,
-) -> gpui::Div {
-    div()
-        .flex()
-        .flex_col()
-        .gap_2()
-        .child(heading(title))
-        .when(rows.is_empty(), |section| {
-            section.child(div().text_sm().text_color(rgb(palette.muted)).child(empty))
-        })
-        .children(rows)
+) -> AnyElement {
+    let body = if rows.is_empty() {
+        div()
+            .text_sm()
+            .text_color(rgb(palette.muted))
+            .child(empty)
+            .into_any_element()
+    } else {
+        List::new().divided().children(rows).into_any_element()
+    };
+    surface_card(palette)
+        .p_3()
+        .child(ElySection::new(title).child(body))
+        .into_any_element()
 }
 
 impl Render for PhoneToday {
@@ -104,25 +114,17 @@ impl Render for PhoneToday {
         let palette = ThemeContext::of(window, cx).palette;
         let snap = &self.snapshot;
         let day = snap.view.as_ref().map(|today| today.day);
-        let mut content = div()
+        let hero = surface_card(palette)
+            .p_4()
             .flex()
             .flex_col()
-            .gap_3()
-            .p_4()
-            .child(
-                div().flex().h(gpui::px(48.)).items_center().children(
-                    [
-                        ("Soundscape", TodayEvent::Soundscape),
-                        ("Activity", TodayEvent::Activity),
-                        ("Settings", TodayEvent::Settings),
-                    ]
-                    .map(|(label, event)| div().flex_1().child(action(label, event).full_width())),
-                ),
-            )
+            .gap_2()
             .child(heading("TODAY"))
             .child(
                 Button::new("today-calendar", snap.headline.clone())
+                    .icon(IconName::Calendar)
                     .size(ControlSize::Lg)
+                    .full_width()
                     .disabled(day.is_none())
                     .on_click(move |_, _, _| {
                         if let Some(day) = day {
@@ -145,45 +147,69 @@ impl Render for PhoneToday {
             })
             .when_some(snap.travel.clone(), |body, (message, pending)| {
                 body.child(
-                    div()
-                        .text_sm()
-                        .text_color(rgb(if pending {
-                            palette.amber
-                        } else {
-                            palette.muted
-                        }))
-                        .child(message),
+                    Badge::new(message).tone(if pending { Tone::Warning } else { Tone::Neutral }),
                 )
             })
             .when(snap.show_pair, |body| {
                 body.child(action(
                     "Pair this phone with your Mac",
+                    IconName::Settings,
                     TodayEvent::Settings,
                 ))
             })
-            .child(action("Capture note, link or task", TodayEvent::Capture))
-            .child(div().flex().flex_wrap().gap_1().children([
-                action("People & Places", TodayEvent::People),
-                action("Documents", TodayEvent::Documents),
-                action("Project hubs", TodayEvent::Projects),
-                action("Interior", TodayEvent::Interior),
-                action("Finance", TodayEvent::Finance),
-                action("Wishlist", TodayEvent::Inventory),
-            ]))
-            .child(div().flex().flex_wrap().gap_1().children(Section::TABS.map(
-                |(section, label)| {
-                    Button::new(format!("today-section-{label}"), label)
-                        .variant(if section == self.section {
-                            ButtonVariant::Primary
-                        } else {
-                            ButtonVariant::Ghost
-                        })
-                        .on_click(cx.listener(move |view, _, _, cx| {
-                            view.section = section;
-                            cx.notify();
-                        }))
-                },
-            )))
+            .child(
+                Button::new("today-capture", "Capture note, link or task")
+                    .icon(IconName::Pencil)
+                    .variant(ButtonVariant::Primary)
+                    .size(ControlSize::Lg)
+                    .full_width()
+                    .on_click(|_, _, _| emit(TodayEvent::Capture)),
+            );
+
+        let mut content = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_4()
+            .child(
+                div().flex().gap_2().items_center().children(
+                    [
+                        ("Soundscape", IconName::AudioLines, TodayEvent::Soundscape),
+                        ("Activity", IconName::Activity, TodayEvent::Activity),
+                        ("Settings", IconName::Settings, TodayEvent::Settings),
+                    ]
+                    .map(|(label, icon, event)| {
+                        div().flex_1().child(action(label, icon, event).full_width())
+                    }),
+                ),
+            )
+            .child(hero)
+            .child(
+                div().flex().flex_wrap().gap_2().children([
+                    action("People & Places", IconName::Users, TodayEvent::People),
+                    action("Documents", IconName::FileText, TodayEvent::Documents),
+                    action("Project hubs", IconName::Folder, TodayEvent::Projects),
+                    action("Interior", IconName::House, TodayEvent::Interior),
+                    action("Finance", IconName::Wallet, TodayEvent::Finance),
+                    action("Wishlist", IconName::Heart, TodayEvent::Inventory),
+                ]),
+            )
+            .child({
+                let on_select = cx.listener(|view, idx: &usize, _, cx| {
+                    if let Some((sec, _)) = Section::TABS.get(*idx) {
+                        view.section = *sec;
+                        cx.notify();
+                    }
+                });
+                sub_tabs(
+                    "today-section",
+                    Section::TABS
+                        .iter()
+                        .map(|(sec, label)| (*label, None, *sec == self.section))
+                        .collect(),
+                    move |idx, window, cx| on_select(&idx, window, cx),
+                )
+            })
             .when(snap.busy.is_some(), |body| {
                 body.child(div().text_sm().child("Saving…"))
             });
@@ -243,7 +269,7 @@ impl Render for PhoneToday {
                         .when_some(rest_line(today.rest), |body, rest| {
                             body.child(div().text_sm().child(rest))
                         })
-                        .child(action("Refresh", TodayEvent::Refresh))
+                        .child(action("Refresh", IconName::Activity, TodayEvent::Refresh))
                 })
                 .when(self.section.shows(Section::Projects), |body| {
                     let rows = today
@@ -269,7 +295,22 @@ impl Render for PhoneToday {
             .size_full()
             .overflow_y_scroll()
             .text_color(rgb(palette.text))
-            .bg(gpui::rgba(palette.surface))
+            .bg(gpui::rgba(palette.window_tint))
             .child(content)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn phone_today_mounts_at_phone_viewport(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui::size(gpui::px(390.), gpui::px(844.))),
+            |_, cx| PhoneToday::new(cx),
+        );
+        view.read_with(cx, |view, _| assert!(view.section == Section::Overview));
     }
 }

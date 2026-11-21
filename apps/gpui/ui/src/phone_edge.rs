@@ -3,12 +3,9 @@ use crate::phone_navigation::{open as set_nsh_page, page as nsh_page, Page as Ns
 use std::sync::{Mutex, OnceLock};
 use tokio::sync::watch;
 
-#[cfg(target_os = "ios")]
 mod phone;
-#[cfg(target_os = "ios")]
 pub use phone::{PhoneActivity, PhoneScratchpad};
 
-#[cfg(target_os = "ios")]
 pub fn seat_updates() -> watch::Receiver<Snapshot> {
     feed().tx.subscribe()
 }
@@ -66,9 +63,9 @@ pub fn open(seat: Seat) {
         state.seat = seat;
         feed().tx.send_replace(state.clone());
     }
-    crate::nsh_soundscape::show(seat == Seat::Soundscape);
+    crate::phone_soundscape::show(seat == Seat::Soundscape);
     if seat == Seat::Agent {
-        crate::nsh_agent::refresh();
+        crate::phone_agent::refresh();
     }
     if let Some(host) = feed()
         .host
@@ -83,23 +80,23 @@ pub fn open(seat: Seat) {
 }
 /// Closes the panel and pauses audio; changing seats leaves the sound playing.
 pub fn close() {
-    crate::nsh_soundscape::show(false);
-    crate::nsh_soundscape::pause();
+    crate::phone_soundscape::show(false);
+    crate::phone_soundscape::pause();
     let previous = feed()
         .state
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .previous;
     if previous == NshPage::Map {
-        crate::nsh_map::show(None);
+        crate::phone_map::show(None);
     } else {
         set_nsh_page(previous);
     }
 }
 /// Stops seat polling and playback whenever navigation leaves the panel.
 pub fn leaving() {
-    crate::nsh_soundscape::show(false);
-    crate::nsh_soundscape::pause();
+    crate::phone_soundscape::show(false);
+    crate::phone_soundscape::pause();
     let seat = feed().state.lock().unwrap_or_else(|e| e.into_inner()).seat;
     save(false, seat);
 }

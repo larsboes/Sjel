@@ -20,8 +20,11 @@ use crate::{
     doc_view::text_view_style,
     ely::{
         buttons::{Button, ButtonVariant},
+        feedback::EmptyState,
+        primitives::IconName,
         theme::ControlSize,
     },
+    primitives::sub_tabs,
     theme::{Palette, ThemeContext},
 };
 
@@ -133,30 +136,31 @@ impl PhoneMail {
         column()
             .flex_1()
             .min_h_0()
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .gap_1()
-                    .children(StatusFilter::ALL.map(|status| {
-                        let count = self
-                            .snapshot
-                            .rows
-                            .iter()
-                            .filter(|row| status.matches(&row.status))
-                            .count();
-                        control(
-                            status.label(),
-                            format!("{} ({count})", status.label()),
-                            status == self.status,
-                        )
-                        .on_click(cx.listener(move |view, _, _, cx| {
-                            view.status = status;
-                            view.refilter();
-                            cx.notify();
-                        }))
-                    })),
-            )
+            .child({
+                let on_select = cx.listener(|view, idx: &usize, _, cx| {
+                    if let Some(&status) = StatusFilter::ALL.get(*idx) {
+                        view.status = status;
+                        view.refilter();
+                        cx.notify();
+                    }
+                });
+                sub_tabs(
+                    "phone-mail-status",
+                    StatusFilter::ALL
+                        .iter()
+                        .map(|status| {
+                            let count = self
+                                .snapshot
+                                .rows
+                                .iter()
+                                .filter(|row| status.matches(&row.status))
+                                .count();
+                            (status.label(), Some(count), *status == self.status)
+                        })
+                        .collect(),
+                    move |idx, window, cx| on_select(&idx, window, cx),
+                )
+            })
             .child(
                 div().id("mail-categories").overflow_x_scroll().child(
                     div().flex().gap_1().children(
@@ -191,7 +195,11 @@ impl PhoneMail {
                 ),
             )
             .when(visible.is_empty(), |body| {
-                body.child(caption(palette, "No threads match these filters"))
+                body.child(EmptyState::new(
+                    "phone-mail-empty",
+                    IconName::Mail,
+                    "No threads match these filters",
+                ))
             })
             .child(
                 uniform_list(
@@ -512,7 +520,7 @@ impl Render for PhoneMail {
         column()
             .size_full()
             .p_3()
-            .bg(rgba(palette.surface))
+            .bg(rgba(palette.window_tint))
             .text_color(rgb(palette.text))
             .child(
                 div()
@@ -562,4 +570,19 @@ fn caption(palette: Palette, label: impl Into<SharedString>) -> Div {
         .text_sm()
         .text_color(rgb(palette.muted))
         .child(label.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn phone_mail_mounts_at_phone_viewport(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui::size(gpui::px(390.), gpui::px(844.))),
+            |_, cx| PhoneMail::new(cx),
+        );
+        view.read_with(cx, |view, _| assert!(view.visible.is_empty()));
+    }
 }

@@ -118,7 +118,5 @@ pub(super) fn snapshots() -> &'static watch::Sender<SettingsState> {
     &feed().state
 }
 
-#[cfg(target_os = "ios")]
 mod view;
-#[cfg(target_os = "ios")]
 pub use view::PhoneSettings;

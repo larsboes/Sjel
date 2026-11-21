@@ -4,37 +4,29 @@ use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString
 use sjel_gpui_core::self_model::{unit_degree, unit_liveness, SelfModelResponse, SelfUnit};
 
 use super::SelfPage;
-use crate::primitives::{chart_card, dot, stat_card, stat_strip};
+use crate::ely::data_display::{KpiCard, Statistic};
+use crate::primitives::{chart_card, dot, stat_strip};
 use crate::theme::{Density, Palette};
 
-pub fn stats_summary(res: &SelfModelResponse, palette: Palette) -> AnyElement {
+pub fn stats_summary(res: &SelfModelResponse, _palette: Palette) -> AnyElement {
     let model = &res.model;
-    let units_count = model.units.len();
-    let coupling_count = model.coupling.len();
-    let upstreams_count = model.upstreams.len();
+    let units_count = model.units.len() as f64;
+    let coupling_count = model.coupling.len() as f64;
+    let upstreams_count = model.upstreams.len() as f64;
 
     stat_strip(vec![
-        stat_card(
-            "UNITS",
-            units_count.to_string(),
-            None,
-            palette.text,
-            palette,
-        ),
-        stat_card(
-            "COUPLINGS",
-            coupling_count.to_string(),
-            None,
-            palette.text,
-            palette,
-        ),
-        stat_card(
-            "UPSTREAMS",
-            upstreams_count.to_string(),
-            None,
-            palette.text,
-            palette,
-        ),
+        KpiCard::new(Statistic::new("self-units", "UNITS", units_count))
+            .flex_1()
+            .min_w(px(120.))
+            .into_any_element(),
+        KpiCard::new(Statistic::new("self-couplings", "COUPLINGS", coupling_count))
+            .flex_1()
+            .min_w(px(120.))
+            .into_any_element(),
+        KpiCard::new(Statistic::new("self-upstreams", "UPSTREAMS", upstreams_count))
+            .flex_1()
+            .min_w(px(120.))
+            .into_any_element(),
     ])
 }
 

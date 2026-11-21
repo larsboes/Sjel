@@ -3,6 +3,7 @@
 
 use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::charts::{Bullet, BulletChart};
+use crate::ely::data_display::{Badge, Tone};
 use crate::ely::forms::{Input, TextInput};
 use crate::ely::layout::Collapsible;
 use crate::ely::theme::ControlSize;
@@ -13,7 +14,7 @@ use gpui_kit::{
 use sjel_gpui_core::finance::format_exact_money;
 use sjel_gpui_core::shell::{self, FinanceIdea, FinanceIdeaDraft, FinanceIdeaTrigger, ShellError};
 
-use crate::primitives::{sub_tabs, tone_chip};
+use crate::primitives::sub_tabs;
 use crate::theme::Palette;
 
 use super::{FinancePage, IdeaDetailTab};
@@ -72,12 +73,12 @@ fn price_text(idea: &FinanceIdea) -> Option<String> {
     Some(format!("{text} on {}", price.observed_on))
 }
 
-fn stance_tone(stance: &str, palette: Palette) -> u32 {
+fn stance_tone(stance: &str) -> Tone {
     match stance {
-        "enter" => palette.green,
-        "exit" => palette.red,
-        "watch" => palette.accent,
-        _ => palette.muted,
+        "enter" => Tone::Success,
+        "exit" => Tone::Danger,
+        "watch" => Tone::Accent,
+        _ => Tone::Neutral,
     }
 }
 
@@ -410,14 +411,14 @@ impl FinancePage {
                         .justify_between()
                         .gap_2()
                         .child(div().text_sm().child(idea.current.label.clone()))
-                        .child(tone_chip(
-                            if closed {
+                        .child(
+                            Badge::new(if closed {
                                 "closed".to_string()
                             } else {
                                 idea.current.stance.clone()
-                            },
-                            stance_tone(&idea.current.stance, palette),
-                        )),
+                            })
+                            .tone(stance_tone(&idea.current.stance)),
+                        ),
                 )
                 .child(div().text_xs().text_color(rgb(palette.muted)).child(detail))
         });
@@ -883,11 +884,11 @@ impl FinancePage {
     }
 }
 
-fn action_tone(action: &str, palette: Palette) -> u32 {
+fn action_tone(action: &str) -> Tone {
     match action {
-        "enter" => palette.green,
-        "exit" => palette.red,
-        _ => palette.muted,
+        "enter" => Tone::Success,
+        "exit" => Tone::Danger,
+        _ => Tone::Neutral,
     }
 }
 
@@ -979,10 +980,7 @@ impl FinancePage {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(tone_chip(
-                        latest.action.clone(),
-                        action_tone(&latest.action, palette),
-                    ))
+                    .child(Badge::new(latest.action.clone()).tone(action_tone(&latest.action)))
                     .child(
                         div()
                             .text_xs()

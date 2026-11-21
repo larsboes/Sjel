@@ -64,7 +64,7 @@ impl AppState {
                 PhonePage::People
             }
             Tab::Interior => {
-                sjel_gpui_ui::nsh_interior::load();
+                sjel_gpui_ui::phone_interior::load();
                 load_roomplan_archive();
                 PhonePage::Interior
             }
@@ -73,7 +73,7 @@ impl AppState {
                 PhonePage::Capture
             }
             Tab::Travel => {
-                sjel_gpui_ui::nsh_travel::open(sjel_gpui_core::travel::TravelRoute::Trips);
+                sjel_gpui_ui::phone_travel::open(sjel_gpui_core::travel::TravelRoute::Trips);
                 PhonePage::Travel
             }
             Tab::Settings => {
@@ -100,8 +100,8 @@ impl AppState {
         } else if let Some(screen) = phone_link(link) {
             match screen {
                 Screen::Tab(tab) => self.select_tab(tab),
-                Screen::Travel(route) => sjel_gpui_ui::nsh_travel::open(route),
-                Screen::Terminal => nsh_edge::open(Seat::Terminal),
+                Screen::Travel(route) => sjel_gpui_ui::phone_travel::open(route),
+                Screen::Terminal => phone_edge::open(Seat::Terminal),
                 Screen::Mac(page) => {
                     self.select_tab(Tab::Today);
                     phone_today::set_note(Some(format!("{page} opens on the Mac.")));
@@ -123,8 +123,8 @@ impl AppState {
                 self.select_tab(Tab::Projects);
             }
             TodayEvent::Settings => self.select_tab(Tab::Settings),
-            TodayEvent::Soundscape => nsh_edge::open(Seat::Soundscape),
-            TodayEvent::Activity => nsh_edge::open(Seat::Activity),
+            TodayEvent::Soundscape => phone_edge::open(Seat::Soundscape),
+            TodayEvent::Activity => phone_edge::open(Seat::Activity),
             TodayEvent::Refresh => {
                 if self.board.is_some() {
                     self.maybe_sync();

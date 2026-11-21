@@ -10,9 +10,7 @@ use sjel_gpui_core::{
 use std::sync::{Mutex, OnceLock};
 use tokio::sync::watch;
 
-#[cfg(target_os = "ios")]
 mod phone;
-#[cfg(target_os = "ios")]
 pub use phone::PhoneAgent;
 
 #[derive(Clone, Default)]

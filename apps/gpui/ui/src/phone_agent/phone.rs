@@ -13,7 +13,9 @@ use crate::{
     doc_view::render_markdown,
     ely::{
         buttons::{Button, ButtonVariant},
+        feedback::InlineMessage,
         forms::{Input, InputEvent, TextInput},
+        primitives::Severity,
         theme::ControlSize,
     },
     theme::{Palette, ThemeContext},
@@ -184,19 +186,22 @@ impl Render for PhoneAgent {
         let theme = ThemeContext::of(window, cx);
         let palette = theme.palette;
         let snapshot = &self.snapshot;
-        let status = snapshot.error.clone().unwrap_or_else(|| {
-            if !snapshot.connected {
-                "Pair this phone with the Mac to use Agent.".into()
-            } else if snapshot.busy {
-                "Sending…".into()
-            } else {
-                snapshot.status.clone()
-            }
-        });
+        let (severity, status) = if let Some(error) = &snapshot.error {
+            (Severity::Danger, error.clone())
+        } else if !snapshot.connected {
+            (
+                Severity::Warning,
+                "Pair this phone with the Mac to use Agent.".into(),
+            )
+        } else if snapshot.busy {
+            (Severity::Info, "Sending…".into())
+        } else {
+            (Severity::Info, snapshot.status.clone())
+        };
         column()
             .size_full()
             .p_3()
-            .bg(rgba(palette.surface))
+            .bg(rgba(palette.window_tint))
             .text_color(rgb(palette.text))
             .child(
                 div()
@@ -210,7 +215,9 @@ impl Render for PhoneAgent {
                             .on_click(|_, _, _| refresh()),
                     ),
             )
-            .child(caption(palette, status))
+            .when(!status.is_empty(), |col| {
+                col.child(InlineMessage::new(severity, status))
+            })
             .child(
                 div()
                     .id("phone-agent-transcript")

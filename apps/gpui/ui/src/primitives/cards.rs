@@ -10,6 +10,7 @@ use gpui_kit::{
 use super::tokens::FONT_MONO_TABULAR;
 use crate::ely::{
     buttons::{Button, ButtonVariant},
+    data_display::{Badge, Tone},
     layout::{Card, CardHeader, Section},
     lists::List,
     primitives::Tooltip,
@@ -130,42 +131,39 @@ pub fn stat_card(
     tone: u32,
     palette: Palette,
 ) -> AnyElement {
-    div()
+    Card::new()
         .flex_1()
         .min_w(px(120.))
-        .px_4()
-        .py_3p5()
-        .rounded(px(14.))
-        .bg(rgba(palette.surface))
-        .border_1()
-        .border_color(rgba(tint(palette.border, 0x77)))
-        .flex()
-        .flex_col()
-        .gap_1p5()
         .child(
             div()
-                .text_xs()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(rgb(palette.muted))
-                .child(label.into()),
+                .flex()
+                .flex_col()
+                .gap_1p5()
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(rgb(palette.muted))
+                        .child(label.into()),
+                )
+                .child(
+                    div()
+                        .text_2xl()
+                        .font_weight(FontWeight::BOLD)
+                        .font_family(FONT_MONO_TABULAR)
+                        .text_color(rgb(tone))
+                        .child(value.into()),
+                )
+                .when_some(detail, |el, det| {
+                    el.child(
+                        div()
+                            .truncate()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(det),
+                    )
+                }),
         )
-        .child(
-            div()
-                .text_2xl()
-                .font_weight(FontWeight::BOLD)
-                .font_family(FONT_MONO_TABULAR)
-                .text_color(rgb(tone))
-                .child(value.into()),
-        )
-        .when_some(detail, |el, det| {
-            el.child(
-                div()
-                    .truncate()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(det),
-            )
-        })
         .into_any_element()
 }
 
@@ -178,102 +176,6 @@ pub struct InteractiveStatCard {
     pub tone: u32,
     pub active: bool,
     pub palette: Palette,
-}
-
-/// Render an interactive horizontal metric cell.
-pub fn stat_card_interactive(
-    card: InteractiveStatCard,
-    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> AnyElement {
-    let InteractiveStatCard {
-        id,
-        label,
-        value,
-        detail,
-        tone,
-        active,
-        palette,
-    } = card;
-    div()
-        .id(id)
-        .flex_1()
-        .min_w(px(120.))
-        .p_3()
-        .rounded(px(12.))
-        .bg(rgba(if active {
-            tint(palette.accent, 0x18)
-        } else {
-            palette.surface
-        }))
-        .border_1()
-        .border_color(if active {
-            rgb(palette.accent)
-        } else {
-            rgba(tint(palette.border, 0x66))
-        })
-        .cursor_pointer()
-        .hover(move |s| {
-            s.bg(rgba(if active {
-                tint(palette.accent, 0x24)
-            } else {
-                palette.raised
-            }))
-            .border_color(if active {
-                rgb(palette.accent)
-            } else {
-                rgba(tint(palette.accent, 0x44))
-            })
-        })
-        .on_click(on_click)
-        .flex()
-        .flex_col()
-        .gap_1()
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_xs()
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(rgb(if active {
-                            palette.accent
-                        } else {
-                            palette.muted
-                        }))
-                        .child(label),
-                )
-                .when(active, |el| {
-                    el.child(
-                        div()
-                            .px_1()
-                            .py(px(1.))
-                            .rounded(px(4.))
-                            .bg(rgba(tint(palette.accent, 0x24)))
-                            .text_xs()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(rgb(palette.accent))
-                            .child("Filtered"),
-                    )
-                }),
-        )
-        .child(
-            div()
-                .text_lg()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(rgb(tone))
-                .child(value),
-        )
-        .when_some(detail, |el, det| {
-            el.child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(if active { palette.text } else { palette.muted }))
-                    .child(det),
-            )
-        })
-        .into_any_element()
 }
 
 /// Horizontal strip of [`stat_card`] metrics.
@@ -352,19 +254,7 @@ pub fn dashboard_metric_tile(
                         }))
                         .child(label),
                 )
-                .when(active, |el| {
-                    el.child(
-                        div()
-                            .px_1p5()
-                            .py(px(1.))
-                            .rounded_full()
-                            .bg(rgba(tint(palette.accent, 0x26)))
-                            .text_xs()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(rgb(palette.accent))
-                            .child("Active"),
-                    )
-                }),
+                .when(active, |el| el.child(Badge::new("Active").tone(Tone::Accent))),
         )
         .child(
             div()

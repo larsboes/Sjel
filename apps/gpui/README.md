@@ -81,7 +81,7 @@ timestamps. Open a trip while connected once to retain its items for offline rea
 failures keep the previous answer visible.
 
 Both clients draw OpenStreetMap raster tiles and labelled stops in GPUI, using the same
-projection, tile loader and disk cache. The phone reads trips through `ui/src/nsh_travel.rs`;
+projection, tile loader and disk cache. The phone reads trips through `ui/src/phone_travel.rs`;
 desktop editing stays in GPUI Travel. On the Mac, drag to pan; the scroll wheel and a trackpad pinch zoom,
 both about the pointer rather than the centre. Fit trip and the zoom buttons sit on the map. The map takes the
 wheel while the pointer is over it, so the page scrolls when the pointer is anywhere else. On
@@ -311,13 +311,13 @@ unchanged records and empty project identities. Missing metadata and queued proj
 object browsing until synchronization completes; the task and note editor remains available.
 
 **The side panel** holds Scratchpad, Agent, Terminal, Soundscape and Activity. The Mac uses
-`ui/src/sidebar/`; the phone uses `ui/src/nsh_edge.rs`, with a close action that restores the
+`ui/src/sidebar/`; the phone uses `ui/src/phone_edge.rs`, with a close action that restores the
 previous page. Its open state and selected seat are persisted in `sidebar.json`. Terminal access
 requires Face ID or the device passcode, and background entry locks the terminal and clears its
 visible grid.
 
 **Soundscape** is the first seat: the note in Today's header opens the edge on it, and it holds the
-transport, the six presets, the volume and a mixer of five layers (`ui/src/soundscape/` on Mac, `ui/src/nsh_soundscape.rs` on phone). The engine
+transport, the six presets, the volume and a mixer of five layers (`ui/src/soundscape/` on Mac, `ui/src/phone_soundscape.rs` on phone). The engine
 is the Mac's own (`core/src/soundscape`, platform-free); the difference is who drives the clock. On the
 Mac a CPAL stream asks for frames; on the phone `AVAudioSourceNode` does (`ios/host/Audio.swift`,
 `ios/src/audio.rs`), on a `.playback` session that mixes with whatever else is playing. The seat keeps

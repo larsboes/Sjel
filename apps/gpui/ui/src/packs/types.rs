@@ -6,7 +6,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::{div, px, relative, AnyElement, IntoElement};
 use sjel_gpui_core::packs::MatrixRow;
 
-use crate::primitives::tone_chip;
+use crate::ely::data_display::{Badge, Tone};
 
 /// The payload's reductions, kept until a new measurement settles.
 pub(crate) struct Derived {
@@ -32,6 +32,6 @@ pub(crate) fn column(basis: f32, min: f32, inner: AnyElement) -> impl IntoElemen
 }
 
 /// A status chip: the tone says what the value means, the label names it.
-pub(crate) fn pill(tone: u32, label: String) -> AnyElement {
-    tone_chip(label, tone)
+pub(crate) fn pill(tone: Tone, label: String) -> AnyElement {
+    Badge::new(label).tone(tone).into_any_element()
 }

@@ -6,6 +6,7 @@
 //! remaining notes into a dated daily note in Projects.
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::data_display::{Badge, Tone};
 use crate::ely::feedback::Toast;
 use crate::ely::primitives::Severity;
 use crate::ely::theme::ControlSize;
@@ -23,7 +24,6 @@ use sjel_gpui_core::scratchpad::{
 use sjel_gpui_core::shell;
 
 use crate::data::Repo;
-use crate::primitives::tone_chip;
 use crate::theme::{tint, Palette, ThemeContext};
 
 pub enum ScratchpadEvent {
@@ -369,8 +369,10 @@ impl Render for ScratchpadSeat {
                     .items_center()
                     .gap_2()
                     .child(match countdown {
-                        Some(label) => tone_chip(label, palette.amber),
-                        None => tone_chip("24h auto-sort", palette.muted),
+                        Some(label) => Badge::new(label).tone(Tone::Warning).into_any_element(),
+                        None => Badge::new("24h auto-sort")
+                            .tone(Tone::Neutral)
+                            .into_any_element(),
                     })
                     .when(has_content, |el| {
                         el.child(
@@ -497,38 +499,44 @@ impl Render for ScratchpadSeat {
         if has_content {
             let mut summary_chips = div().flex().flex_wrap().items_center().gap_1p5();
             if tasks_n > 0 {
-                summary_chips = summary_chips.child(tone_chip(
-                    format!("{tasks_n} {}", if tasks_n == 1 { "task" } else { "tasks" }),
-                    palette.accent,
-                ));
+                summary_chips = summary_chips.child(
+                    Badge::new(format!(
+                        "{tasks_n} {}",
+                        if tasks_n == 1 { "task" } else { "tasks" }
+                    ))
+                    .tone(Tone::Accent),
+                );
             }
             if links_n > 0 {
-                summary_chips = summary_chips.child(tone_chip(
-                    format!("{links_n} {}", if links_n == 1 { "link" } else { "links" }),
-                    palette.accent,
-                ));
+                summary_chips = summary_chips.child(
+                    Badge::new(format!(
+                        "{links_n} {}",
+                        if links_n == 1 { "link" } else { "links" }
+                    ))
+                    .tone(Tone::Accent),
+                );
             }
             if wishes_n > 0 {
-                summary_chips =
-                    summary_chips.child(tone_chip(format!("{wishes_n} wishlist"), palette.amber));
+                summary_chips = summary_chips
+                    .child(Badge::new(format!("{wishes_n} wishlist")).tone(Tone::Warning));
             }
             if places_n > 0 {
-                summary_chips = summary_chips.child(tone_chip(
-                    format!(
+                summary_chips = summary_chips.child(
+                    Badge::new(format!(
                         "{places_n} {}",
                         if places_n == 1 { "place" } else { "places" }
-                    ),
-                    palette.green,
-                ));
+                    ))
+                    .tone(Tone::Success),
+                );
             }
             if notes_n > 0 {
-                summary_chips = summary_chips.child(tone_chip(
-                    format!(
+                summary_chips = summary_chips.child(
+                    Badge::new(format!(
                         "{notes_n} note {}",
                         if notes_n == 1 { "line" } else { "lines" }
-                    ),
-                    palette.muted,
-                ));
+                    ))
+                    .tone(Tone::Neutral),
+                );
             }
 
             let rows = targets

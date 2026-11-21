@@ -165,7 +165,10 @@ combines catalogues, verifies file sizes and hashes, and creates a remote **draf
 checkout and match the release tag; prebuilt-only or dirty-worktree inventories cannot be
 published. The command never publishes a public release. It uses the maintainer's existing
 `gh` authentication; preparation does not require it. Do not replace an existing release's
-assets with unreviewed preparation files.
+assets with unreviewed preparation files. To add an output to a published release, such as a DMG
+whose notarization finished late, pass every output the release holds and end with
+`--update-release` instead of `--confirm-draft`. It runs the same checks, uploads only the missing
+assets, and replaces `release.json` and `SHA256SUMS`.
 
 Native iOS archive and TestFlight upload:
 

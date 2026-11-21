@@ -13,15 +13,13 @@ priority: 1
 
 The v0.1.0 tag has a published GitHub release with every asset that
 [`docs/releases/v0.1.0.md`](../releases/v0.1.0.md) requires, a committed receipt, and a TestFlight
-build from the same commit.
+build from the same commit plus only the changes App Store Connect requires.
 
 ## Acceptance
 
 - Staple a notarized `Sjel-v0.1.0-aarch64-apple-darwin.dmg` built from the clean tag.
-- Run `tools/distribution/publish-draft.ts` with the Mac output and the three CLI outputs, review
-  the draft, then publish it.
+- Add the stapled DMG to the published release with `publish-draft.ts --update-release`.
 - Commit `docs/releases/receipts/v0.1.0.json` from `tools/work receipt v0.1.0`.
-- Upload a TestFlight build from `v0.1.0` with `sjel testflight ship`.
 
 ## Evidence
 
@@ -34,7 +32,19 @@ build from the same commit.
   cannot be published. A second DMG was rebuilt and signed from a clean `v0.1.0` worktree
   (`release.json` records `2e06c4ee`, `dirty: false`, `rebuilt: true`) and submitted with
   `tools/distribution/notarize.ts`.
+- TestFlight build 2363 is processed and on the "Team" group. App Store Connect refused the tag
+  itself for a missing `NSHealthUpdateUsageDescription`, so the build comes from
+  `release/v0.1.0-ios` at `7c4f1af9`: `v0.1.0` plus only that plist key (`f875e59e` on main).
+  `sjel testflight ship` took 384 seconds.
+
+- Published at 2026-11-21 11:14 UTC with the three CLI builds and their source archives, before
+  the DMG, because notarization of both submissions stayed `In Progress` for over three hours.
+  The release notes say the DMG follows.
 
 ## Unrun
 
-- Stapling, the draft release, publication, the receipt and the TestFlight upload.
+- The DMG. Outputs are in `~/Library/Caches/Sjel/releases/v0.1.0/` (`macos/`, `cli/`). Run
+  `bun tools/distribution/notarize.ts --dir ~/Library/Caches/Sjel/releases/v0.1.0/macos` until it
+  exits 0, then `bun tools/distribution/publish-draft.ts --dir …/macos --include …/cli/sjel-cli-macos-15
+  --include …/cli/sjel-cli-ubuntu-24.04 --include …/cli/sjel-cli-ubuntu-24.04-arm --update-release`,
+  remove the DMG sentence from the release notes, and commit `tools/work receipt v0.1.0`.

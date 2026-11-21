@@ -8,11 +8,14 @@ import { join, resolve } from "node:path";
 const args = process.argv.slice(2);
 if (args.includes("--help")) {
   console.log("bun tools/distribution/publish-draft.ts --dir OUTPUT [--include OUTPUT] --confirm-draft");
+  console.log("  --update-release instead of --confirm-draft adds missing assets to the existing release and");
+  console.log("  replaces its release.json and SHA256SUMS. Pass every output the release holds.");
   process.exit(0);
 }
 try {
-  if (args.length < 3 || args[0] !== "--dir" || args.at(-1) !== "--confirm-draft") {
-    throw new Error("usage: --dir OUTPUT --confirm-draft (creates a remote draft release)");
+  const update = args.at(-1) === "--update-release";
+  if (args.length < 3 || args[0] !== "--dir" || !(update || args.at(-1) === "--confirm-draft")) {
+    throw new Error("usage: --dir OUTPUT --confirm-draft (creates a remote draft release) or --update-release");
   }
   const dir = resolve(args[1]);
   const directories = [dir];
@@ -100,10 +103,22 @@ try {
     const version = catalogues[0].version;
     writeFileSync(join(stage, "release.json"), JSON.stringify({ schema: 1, version, source: catalogues[0].source, friend_ready: false, assets, capabilities }, null, 2) + "\n");
     writeFileSync(join(stage, "SHA256SUMS"), assets.map((asset) => `${asset.sha256}  ${asset.name}\n`).join(""));
-    const result = Bun.spawnSync(["gh", "release", "create", version, "--draft", "--verify-tag",
-      "--title", `Sjel ${version} — preparation`, "--notes-file", join(dir, "READINESS.txt"),
-      ...paths, join(stage, "release.json"), join(stage, "SHA256SUMS")], { cwd: root, stdout: "inherit", stderr: "inherit" });
-    process.exitCode = result.exitCode;
+    if (update) {
+      const view = Bun.spawnSync(["gh", "release", "view", version, "--json", "assets"], { cwd: root, stdout: "pipe", stderr: "inherit" });
+      if (view.exitCode !== 0) throw new Error(`no release ${version} to update`);
+      const present = new Set((JSON.parse(view.stdout.toString()).assets as Array<{ name: string }>).map((asset) => asset.name));
+      const unknown = [...present].filter((name) => !names.has(name) && !["release.json", "SHA256SUMS"].includes(name));
+      if (unknown.length) throw new Error(`release holds assets no output describes: ${unknown.join(", ")}`);
+      const missing = paths.filter((path) => !present.has(path.split("/").at(-1)!));
+      const result = Bun.spawnSync(["gh", "release", "upload", version, "--clobber", ...missing,
+        join(stage, "release.json"), join(stage, "SHA256SUMS")], { cwd: root, stdout: "inherit", stderr: "inherit" });
+      process.exitCode = result.exitCode;
+    } else {
+      const result = Bun.spawnSync(["gh", "release", "create", version, "--draft", "--verify-tag",
+        "--title", `Sjel ${version} — preparation`, "--notes-file", join(dir, "READINESS.txt"),
+        ...paths, join(stage, "release.json"), join(stage, "SHA256SUMS")], { cwd: root, stdout: "inherit", stderr: "inherit" });
+      process.exitCode = result.exitCode;
+    }
   } finally { rmSync(stage, { recursive: true, force: true }); }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

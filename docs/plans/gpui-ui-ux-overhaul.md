@@ -194,7 +194,6 @@ Upgrade `ComponentKind::TextField` in [`live_view.rs`](../../apps/gpui/ui/src/li
 - [Prove read-only Ely Mail parity](../tasks/gpui-mail-adapter.md).
 - [Evaluate block editor round-trip parity](../tasks/gpui-editor-adapter.md).
 - [Accept task and project controls](../tasks/gpui-project-tasks.md).
-- [Fit shared views to the phone width](../tasks/gpui-phone-polish.md).
 - [Validate A2UI view documents against the registry in Rust](../tasks/task-336bf8f4-9597-436e-84bb-ef6ff052ce59.md).
 - [Render live views in the agent panel](../tasks/gpui-live-views.md).
 - [Reload saved views without a model](../tasks/gpui-saved-views.md).

@@ -19,22 +19,22 @@ use sjel_gpui_ui::{
         primitives::{Icon, IconName},
         theme::{ControlSize, IconSize},
     },
-    primitives::back_button,
     phone_agent::PhoneAgent,
-    phone_edge::{self, PhoneActivity, PhoneScratchpad, Seat},
-    phone_interior::PhoneInterior,
-    phone_map::PhoneMap,
-    phone_soundscape::PhoneSoundscape,
-    phone_terminal::PhoneTerminal,
-    phone_travel::PhoneTravel,
     phone_capture::PhoneCapture,
+    phone_edge::{self, PhoneActivity, PhoneScratchpad, Seat},
     phone_finance::PhoneFinance,
+    phone_interior::PhoneInterior,
     phone_inventory::PhoneInventory,
     phone_mail::PhoneMail,
+    phone_map::PhoneMap,
     phone_navigation::{self, Page},
     phone_people::PhonePeople,
     phone_settings::PhoneSettings,
+    phone_soundscape::PhoneSoundscape,
+    phone_terminal::PhoneTerminal,
     phone_today::PhoneToday,
+    phone_travel::PhoneTravel,
+    primitives::back_button,
     theme::{self, Palette, ThemeContext},
 };
 
@@ -241,12 +241,14 @@ impl Render for PhoneRoot {
                                 nav_cell(IconName::Bot, "Agent", false, palette)
                                     .on_click(|_, _, _| phone_edge::open(Seat::Agent)),
                             )
-                            .child(nav_cell(IconName::Ellipsis, "More", self.menu, palette).on_click(
-                                cx.listener(|root, _, _, cx| {
-                                    root.menu = !root.menu;
-                                    cx.notify();
-                                }),
-                            )),
+                            .child(
+                                nav_cell(IconName::Ellipsis, "More", self.menu, palette).on_click(
+                                    cx.listener(|root, _, _, cx| {
+                                        root.menu = !root.menu;
+                                        cx.notify();
+                                    }),
+                                ),
+                            ),
                     )
             })
     }

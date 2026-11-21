@@ -146,9 +146,11 @@ impl Render for PhoneToday {
                 body.child(div().text_sm().child(note))
             })
             .when_some(snap.travel.clone(), |body, (message, pending)| {
-                body.child(
-                    Badge::new(message).tone(if pending { Tone::Warning } else { Tone::Neutral }),
-                )
+                body.child(Badge::new(message).tone(if pending {
+                    Tone::Warning
+                } else {
+                    Tone::Neutral
+                }))
             })
             .when(snap.show_pair, |body| {
                 body.child(action(
@@ -179,21 +181,21 @@ impl Render for PhoneToday {
                         ("Settings", IconName::Settings, TodayEvent::Settings),
                     ]
                     .map(|(label, icon, event)| {
-                        div().flex_1().child(action(label, icon, event).full_width())
+                        div()
+                            .flex_1()
+                            .child(action(label, icon, event).full_width())
                     }),
                 ),
             )
             .child(hero)
-            .child(
-                div().flex().flex_wrap().gap_2().children([
-                    action("People & Places", IconName::Users, TodayEvent::People),
-                    action("Documents", IconName::FileText, TodayEvent::Documents),
-                    action("Project hubs", IconName::Folder, TodayEvent::Projects),
-                    action("Interior", IconName::House, TodayEvent::Interior),
-                    action("Finance", IconName::Wallet, TodayEvent::Finance),
-                    action("Wishlist", IconName::Heart, TodayEvent::Inventory),
-                ]),
-            )
+            .child(div().flex().flex_wrap().gap_2().children([
+                action("People & Places", IconName::Users, TodayEvent::People),
+                action("Documents", IconName::FileText, TodayEvent::Documents),
+                action("Project hubs", IconName::Folder, TodayEvent::Projects),
+                action("Interior", IconName::House, TodayEvent::Interior),
+                action("Finance", IconName::Wallet, TodayEvent::Finance),
+                action("Wishlist", IconName::Heart, TodayEvent::Inventory),
+            ]))
             .child({
                 let on_select = cx.listener(|view, idx: &usize, _, cx| {
                     if let Some((sec, _)) = Section::TABS.get(*idx) {

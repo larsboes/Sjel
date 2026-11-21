@@ -191,8 +191,7 @@ fn keys_typed_in_the_terminal_do_not_drive_the_page(cx: &mut TestAppContext) {
     let (view, cx) = open(cx);
     let terminal = view.update_in(cx, |view, window, cx| {
         let shell = std::sync::Arc::new(
-            sjel_gpui_core::shell::Shell::new("http://127.0.0.1:9")
-                .expect("a loopback endpoint"),
+            sjel_gpui_core::shell::Shell::new("http://127.0.0.1:9").expect("a loopback endpoint"),
         );
         let peer = sjel_gpui_core::terminal::Terminal {
             id: "t1".into(),

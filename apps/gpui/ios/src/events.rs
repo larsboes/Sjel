@@ -172,10 +172,12 @@ impl AppState {
                 match DeviceClient::new(node, Arc::new(identity::sign)) {
                     Ok(client) => {
                         let client = Arc::new(client);
-                        sjel_gpui_ui::phone_travel::connect(sjel_gpui_core::travel::Source::Device(
+                        sjel_gpui_ui::phone_travel::connect(
+                            sjel_gpui_core::travel::Source::Device(client.clone()),
+                        );
+                        sjel_gpui_ui::phone_interior::connect(RoomPlanSource::Device(
                             client.clone(),
                         ));
-                        sjel_gpui_ui::phone_interior::connect(RoomPlanSource::Device(client.clone()));
                         sjel_gpui_ui::phone_agent::connect(Host::Device(client.clone()));
                         sjel_gpui_ui::phone_terminal::connect(Host::Device(client.clone()));
                         #[cfg(target_os = "ios")]

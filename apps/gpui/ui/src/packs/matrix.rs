@@ -115,7 +115,10 @@ pub(crate) fn render_matrix_table(
                     }))
                     .into_any_element()
                 }
-                "drifted" => pill(crate::ely::data_display::Tone::Warning, "drifted".to_string()),
+                "drifted" => pill(
+                    crate::ely::data_display::Tone::Warning,
+                    "drifted".to_string(),
+                ),
                 "not-deployed" => div()
                     .text_color(rgb(palette.muted))
                     .child("-")

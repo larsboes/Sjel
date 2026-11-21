@@ -1,6 +1,8 @@
 //! Status badges, pills, and indicator chips.
 
-use gpui_kit::{div, prelude::*, rgb, AnyElement, App, ClickEvent, ElementId, SharedString, Window};
+use gpui_kit::{
+    div, prelude::*, rgb, AnyElement, App, ClickEvent, ElementId, SharedString, Window,
+};
 
 use crate::ely::{
     buttons::{Button, ButtonVariant, ToggleButton, ToggleItem},

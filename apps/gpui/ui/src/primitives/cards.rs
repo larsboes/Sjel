@@ -254,7 +254,9 @@ pub fn dashboard_metric_tile(
                         }))
                         .child(label),
                 )
-                .when(active, |el| el.child(Badge::new("Active").tone(Tone::Accent))),
+                .when(active, |el| {
+                    el.child(Badge::new("Active").tone(Tone::Accent))
+                }),
         )
         .child(
             div()

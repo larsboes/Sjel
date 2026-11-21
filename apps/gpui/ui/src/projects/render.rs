@@ -3,7 +3,11 @@
 use super::*;
 
 impl Projects {
-    pub(super) fn render_body(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_body(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let cols = self.columns();
         let palette = self
             .palette
@@ -644,11 +648,13 @@ impl Projects {
                                 )
                                 .size(crate::ely::theme::ControlSize::Sm)
                                 .variant(crate::ely::buttons::ButtonVariant::Ghost)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.put_away_editor(cx);
-                                    view.project_section = ProjectSection::Notes;
-                                    cx.notify();
-                                })),
+                                .on_click(cx.listener(
+                                    |view, _, _, cx| {
+                                        view.put_away_editor(cx);
+                                        view.project_section = ProjectSection::Notes;
+                                        cx.notify();
+                                    },
+                                )),
                             )
                             .child(
                                 crate::ely::buttons::Button::new(
@@ -853,9 +859,11 @@ impl Projects {
                                     )
                                     .size(crate::ely::theme::ControlSize::Sm)
                                     .variant(crate::ely::buttons::ButtonVariant::Ghost)
-                                    .on_click(cx.listener(move |view, _, window, cx| {
-                                        view.open_note(rel_path.clone(), true, window, cx);
-                                    }))
+                                    .on_click(cx.listener(
+                                        move |view, _, window, cx| {
+                                            view.open_note(rel_path.clone(), true, window, cx);
+                                        },
+                                    ))
                                 })),
                         )
                     });
@@ -1082,4 +1090,3 @@ impl Projects {
             .into_any_element()
     }
 }
-

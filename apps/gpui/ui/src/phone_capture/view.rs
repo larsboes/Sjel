@@ -169,9 +169,11 @@ impl Render for PhoneCapture {
                                 .primary()
                                 .size(ControlSize::Lg)
                                 .disabled(self.snapshot.saving)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    keep(view.draft.read(cx).text().to_owned(), view.tag)
-                                })),
+                                .on_click(cx.listener(
+                                    |view, _, _, cx| {
+                                        keep(view.draft.read(cx).text().to_owned(), view.tag)
+                                    },
+                                )),
                             ),
                     )
                     .child(div().flex().flex_wrap().gap_1().children(tags))

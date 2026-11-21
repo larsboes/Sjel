@@ -19,14 +19,22 @@ pub fn stats_summary(res: &SelfModelResponse, _palette: Palette) -> AnyElement {
             .flex_1()
             .min_w(px(120.))
             .into_any_element(),
-        KpiCard::new(Statistic::new("self-couplings", "COUPLINGS", coupling_count))
-            .flex_1()
-            .min_w(px(120.))
-            .into_any_element(),
-        KpiCard::new(Statistic::new("self-upstreams", "UPSTREAMS", upstreams_count))
-            .flex_1()
-            .min_w(px(120.))
-            .into_any_element(),
+        KpiCard::new(Statistic::new(
+            "self-couplings",
+            "COUPLINGS",
+            coupling_count,
+        ))
+        .flex_1()
+        .min_w(px(120.))
+        .into_any_element(),
+        KpiCard::new(Statistic::new(
+            "self-upstreams",
+            "UPSTREAMS",
+            upstreams_count,
+        ))
+        .flex_1()
+        .min_w(px(120.))
+        .into_any_element(),
     ])
 }
 

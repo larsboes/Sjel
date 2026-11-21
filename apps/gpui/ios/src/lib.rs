@@ -12,8 +12,8 @@ use sjel_gpui_core::{
     terminal::Host,
 };
 use sjel_gpui_ui::{
-    phone_edge::{self, Seat},
     phone_calendar::{self, CalendarEvent},
+    phone_edge::{self, Seat},
     phone_today::{self, TodayEvent},
     AccentColor, AppearanceSettings, BackgroundTone, NotifyPrefs, SoundscapePrefs, TerminalFont,
     ThemeMode, WindowOpacity, TERMINAL_FONT_SIZES,

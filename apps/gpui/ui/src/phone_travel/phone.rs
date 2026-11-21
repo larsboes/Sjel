@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use super::{
-    download, feed, load, phone_map, open, resolve, search, suggest, travel, Plan, PlanExt, Query,
+    download, feed, load, open, phone_map, resolve, search, suggest, travel, Plan, PlanExt, Query,
     Snapshot, Station, TravelRoute, TripRead, TripSection,
 };
 use crate::{

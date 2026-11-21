@@ -14,6 +14,8 @@ The `comms` capability provides general observation intake across news, media, r
   - `comms summarize --pending` — generate summaries for items lacking digests.
   - `comms clips [--limit N]` — query captured Sjel Clipper documents via local Unix socket.
   - `comms mail attachments --out <dir> [--stream belege] [--since YYYY-MM-DD] [--limit N] [--dry-run]` — save the PDF attachments of every message in matching triage threads to `<dir>/<thread-id>/`, for `documents inbox <dir> --recursive`. Never overwrites a saved file; skips `c3` threads; lists threads whose receipt is body-only.
+  - `comms mail senders [--limit N]` — the largest senders among mail a cleanup rule may touch, with their main stream and date range.
+  - `comms mail cleanup [--ids <rule>]` — what each rule in the overlay's `cleanup` list selects (stream, sender or subject, plus `older_than_days`). Changes nothing: `--ids` prints the ids for `POST /triage/bulk` with `action: "trash"`, which waits for the owner's Allow. Streams `belege` and `steuern`, keepers and waiting threads are never selected.
 - HTTP API: `comms-server` (`src/server/main.rs`), bound to loopback, default port **8083**:
   - `GET /feed` — list feed items with assigned trust classes.
   - `GET /clips` — list or search clip metadata, newest first, with numeric `id` handles.

@@ -1245,6 +1245,66 @@ fn cmd_mail_audit(args: &[String], cfg: &Config) {
     );
 }
 
+/// Show what each cleanup rule selects. Changes nothing; the trash goes through
+/// `POST /triage/bulk`, which waits for the owner's Allow.
+fn cmd_mail_cleanup(args: &[String], cfg: &Config) {
+    let store = open_store(cfg);
+    let items = store.list_triage(None).unwrap_or_else(|e| {
+        eprintln!("error: could not read triage: {e}");
+        std::process::exit(2);
+    });
+    let today = {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let days = i64::try_from(secs / 86_400).unwrap_or(0);
+        comms::mail_cleanup::date_from_epoch_days(days)
+    };
+    let matches = comms::mail_cleanup::select(&items, &cfg.cleanup, &today);
+    if let Some(rule) = arg_after(args, "--ids") {
+        let Some(found) = matches.iter().find(|m| &m.rule == rule) else {
+            eprintln!("error: no cleanup rule named {rule}");
+            std::process::exit(2);
+        };
+        println!(
+            "{}",
+            serde_json::to_string(&found.ids).expect("ids serialize")
+        );
+        return;
+    }
+    if cfg.cleanup.is_empty() {
+        println!("no cleanup rules in the overlay's comms.json `cleanup` list");
+    }
+    for found in &matches {
+        println!("── {} ({}) ──", found.rule, found.count);
+        for example in &found.examples {
+            println!("  {}", truncate(example, 120));
+        }
+    }
+    println!("{} stored threads read; nothing changed", items.len());
+}
+
+/// The largest senders among mail a cleanup rule may touch, for writing rules.
+fn cmd_mail_senders(args: &[String], cfg: &Config) {
+    let limit = arg_after(args, "--limit")
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(40);
+    let items = open_store(cfg).list_triage(None).unwrap_or_else(|e| {
+        eprintln!("error: could not read triage: {e}");
+        std::process::exit(2);
+    });
+    for s in comms::mail_cleanup::senders(&items, limit) {
+        println!(
+            "{:>5}  {:<10} {} .. {}  {}",
+            s.count,
+            s.stream,
+            s.oldest,
+            s.newest,
+            truncate(&s.sender, 60)
+        );
+    }
+}
+
 /// Save receipt-mail PDFs for `documents inbox <dir> --recursive`.
 fn cmd_mail_attachments(args: &[String], cfg: &Config) {
     use comms::mail_attachments::{self, Selection};
@@ -1306,11 +1366,15 @@ fn cmd_mail(args: &[String], cfg: &Config) {
         Some("evidence") => return cmd_mail_evidence(args, cfg),
         Some("audit") => return cmd_mail_audit(args, cfg),
         Some("attachments") => return cmd_mail_attachments(args, cfg),
+        Some("cleanup") => return cmd_mail_cleanup(args, cfg),
+        Some("senders") => return cmd_mail_senders(args, cfg),
         _ => {
             eprintln!("error: usage: comms mail classify [--shadow|--apply] [--limit N] [--report] [--revert <id>|--revert-all]");
             eprintln!("              comms mail corpus --out <path> [--force]");
             eprintln!("              comms mail audit <thread-id>... [--no-model]");
-            eprintln!("              comms mail attachments --out <dir> [--stream belege] [--since YYYY-MM-DD] [--limit N] [--dry-run]\n");
+            eprintln!("              comms mail attachments --out <dir> [--stream belege] [--since YYYY-MM-DD] [--limit N] [--dry-run]");
+            eprintln!("              comms mail cleanup [--ids <rule>]");
+            eprintln!("              comms mail senders [--limit N]\n");
             std::process::exit(2);
         }
     }

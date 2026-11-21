@@ -281,6 +281,8 @@ struct FileConfig {
     inbox_sweep_quiet_hours: Option<String>,
     #[serde(default)]
     rules: Vec<Rule>,
+    #[serde(default)]
+    cleanup: Vec<crate::mail_cleanup::CleanupRule>,
     keeper_export_dir: Option<String>,
     relevance: Option<RelevanceConfig>,
     travel_context: Option<TravelContextConfig>,
@@ -402,6 +404,8 @@ pub struct Config {
     /// Config-driven classification rules (first match wins, before built-in
     /// heuristics). Empty = built-in heuristics only.
     pub rules: Vec<Rule>,
+    /// Rules that select old mail for the reviewed bulk trash. Empty selects nothing.
+    pub cleanup: Vec<crate::mail_cleanup::CleanupRule>,
     /// Optional directory to export distilled keeper notes into on `comms keep`.
     pub keeper_export_dir: Option<PathBuf>,
     pub relevance: RelevanceConfig,
@@ -614,6 +618,7 @@ impl Config {
             inbox_sweep_quiet_hours,
             inference,
             rules: file.rules,
+            cleanup: file.cleanup,
             keeper_export_dir,
             relevance,
             travel_context,

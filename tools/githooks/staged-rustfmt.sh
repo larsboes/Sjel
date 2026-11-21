@@ -1,5 +1,5 @@
 #!/bin/bash
-# check-staged-rustfmt.sh — refuse a commit whose staged Rust files rustfmt would change.
+# staged-rustfmt.sh — refuse a commit whose staged Rust files rustfmt would change.
 #
 # Reads the staged blob, not the working tree, so unstaged edits from another session never
 # block this commit. Each file takes the edition of its nearest Cargo.toml and the toolchain of
@@ -9,7 +9,7 @@ set -u
 
 root="$(git rev-parse --show-toplevel)"
 if ! command -v rustfmt >/dev/null 2>&1; then
-  echo "check-staged-rustfmt: rustfmt is not installed — staged Rust was NOT format-checked" >&2
+  echo "staged-rustfmt: rustfmt is not installed — staged Rust was NOT format-checked" >&2
   exit 0
 fi
 
@@ -43,7 +43,7 @@ check() {
   if ! (cd "$dir" && rustfmt --edition "$(edition_for "$file")" --emit stdout) \
       < "$scratch/staged.rs" > "$scratch/formatted.rs" 2>/dev/null \
     || ! cmp -s "$scratch/staged.rs" "$scratch/formatted.rs"; then
-    echo "check-staged-rustfmt: $file is not formatted — run: rustfmt --edition $(edition_for "$file") $file" >&2
+    echo "staged-rustfmt: $file is not formatted — run: rustfmt --edition $(edition_for "$file") $file" >&2
     status=1
   fi
 }

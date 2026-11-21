@@ -1,9 +1,9 @@
 #!/bin/bash
-# Regression tests for tools/check-staged-rustfmt.sh: it judges the staged blob, takes the
+# Regression tests for tools/githooks/staged-rustfmt.sh: it judges the staged blob, takes the
 # edition from the nearest Cargo.toml, and ignores files that are not staged Rust.
 set -uo pipefail
 
-CHECK="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/check-staged-rustfmt.sh"
+CHECK="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/githooks/staged-rustfmt.sh"
 command -v rustfmt >/dev/null 2>&1 || { echo "skip: rustfmt is not installed"; exit 0; }
 
 SCRATCH="$(mktemp -d)"
@@ -55,5 +55,5 @@ git add research/probe.rs
 run
 [ "$status" -eq 0 ] || fail "research/ is outside the CI format check, got $status"
 
-[ "$fails" -eq 0 ] && echo "check-staged-rustfmt: all cases pass"
+[ "$fails" -eq 0 ] && echo "staged-rustfmt: all cases pass"
 exit "$fails"

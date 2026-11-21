@@ -23,7 +23,7 @@ if ! SJEL_PUBLICATION_ROOT="$repo_root" "$repo_root/tools/check-publication-hygi
 fi
 
 # Format here, not at push: a push refusal comes after every commit in it is already made.
-if ! "$repo_root/tools/check-staged-rustfmt.sh"; then
+if ! "$repo_root/tools/githooks/staged-rustfmt.sh"; then
   echo "pre-commit: format the named Rust files, stage them, and commit again" >&2
   exit 1
 fi

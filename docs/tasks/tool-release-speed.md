@@ -77,7 +77,7 @@ Measured on 2026-11-21:
   from push CI being affected-only. `tools/release --run-ci` now dispatches full CI on main when
   it is missing and waits (`tools/ci-plan.ts --ensure-full`, covered in `tools/ci-run.test.ts`).
   A live run for `fe44e22a` dispatched run 44917093903 and passed after 4.9 minutes.
-- The pre-commit hook now runs `tools/check-staged-rustfmt.sh` on the staged Rust files only, so a
+- The pre-commit hook now runs `tools/githooks/staged-rustfmt.sh` on the staged Rust files only, so a
   format error stops the commit instead of the push. It reads staged blobs, so unstaged edits from
   other sessions do not block it. All 1094 tracked files outside `research/` pass; about 60 ms per
-  file. Covered by `tools/check-staged-rustfmt.test.sh`.
+  file. Covered by `tools/staged-rustfmt.test.sh`.

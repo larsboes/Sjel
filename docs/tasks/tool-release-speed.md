@@ -53,7 +53,7 @@ Measured on 2026-11-21:
   which writes under `CARGO_TARGET_DIR` or `$TMPDIR`, while the cache held `apps/gpui/target`.
   The workflow now sets `CARGO_TARGET_DIR` and caches that directory. Not yet measured on CI.
 - CLI distribution run 44891247558: `Build CLI-only archive` took 599 seconds on `macos-15` with
-  no Cargo cache. The workflow now caches the release target per runner. Not yet measured.
+  no Cargo cache. The workflow now caches the release target per runner.
 - `sjel testflight ship` for build 2363 took 384 seconds, 150 of them a cold release build in a
   temporary target. Ship now reuses `~/Library/Caches/Sjel/ios-archive-target`. Not yet measured.
 - `tools/distribution/ship.ts vX.Y.Z` runs every step after a pushed tag and resumes from state in
@@ -61,5 +61,10 @@ Measured on 2026-11-21:
   publication needs `--publish`. Covered by `tools/distribution/ship.test.ts`; not yet run on a
   real tag.
 - The iOS smoke's Xcode app build took 30 seconds; the first `xcodebuild test` took 4.4 minutes
-  before its result bundle, which includes the simulator boot. `run-sim` now boots the simulator
-  before the Rust build. Locally the simulator was ready at 150 seconds, when the builds finished.
+  before its result bundle, which includes the simulator boot. Booting the simulator before the Rust build
+  helped locally (ready at 150 seconds, when the builds finished) but slowed CI: run
+  44897910641 (cold cache) took 39 minutes with 31.7 for cargo, and run 44904259833 (full cache
+  hit, 37 workspace crates rebuilt) took 22.5 minutes with 14.1 for cargo. `run-sim` now boots
+  early only outside CI. rust-cache drops workspace crates, so those 37 always rebuild.
+- CLI distribution with the release-target cache: 12 minutes cold (run 44897383236), then 9 and
+  5 (runs 44897910615, 44898513558).

@@ -74,9 +74,11 @@ xcrun swiftc -typecheck -sdk "$sdk" -target "arm64-apple-ios${IPHONEOS_DEPLOYMEN
   -F "$platform/Developer/Library/Frameworks" -I "$platform/Developer/usr/lib" "$HOST"/UITests/*.swift
 if $typecheck_only; then exit 0; fi
 
-# Boot now so the simulator comes up while Rust and Xcode compile.
+# Boot now so the simulator comes up while Rust and Xcode compile. Not on CI: a small runner
+# slows the Rust build more than the overlap saves.
 booted_here=false
-if ! $build_only && ! xcrun simctl list devices | grep -q "$udid) (Booted)"; then
+boot_pid=""
+if ! $build_only && [ -z "${CI:-}" ] && ! xcrun simctl list devices | grep -q "$udid) (Booted)"; then
   xcrun simctl boot "$udid" &
   boot_pid=$!
   booted_here=true
@@ -99,7 +101,12 @@ if $build_only; then
 fi
 
 echo "ios/run-sim: builds done after ${SECONDS}s"
-if $booted_here; then wait "$boot_pid"; fi
+if [ -n "$boot_pid" ]; then
+  wait "$boot_pid"
+elif ! xcrun simctl list devices | grep -q "$udid) (Booted)"; then
+  xcrun simctl boot "$udid"
+  booted_here=true
+fi
 xcrun simctl bootstatus "$udid" -b >/dev/null
 echo "ios/run-sim: simulator ready after ${SECONDS}s"
 

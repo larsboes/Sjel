@@ -66,5 +66,7 @@ Measured on 2026-11-21:
   44897910641 (cold cache) took 39 minutes with 31.7 for cargo, and run 44904259833 (full cache
   hit, 37 workspace crates rebuilt) took 22.5 minutes with 14.1 for cargo. `run-sim` now boots
   early only outside CI. rust-cache drops workspace crates, so those 37 always rebuild.
+  With the boot after the builds and a warm cache, run 44907167760 took 13.4 minutes: 1.8 for
+  cargo, 220 seconds for both builds, 177 seconds for the simulator boot, then the tests.
 - CLI distribution with the release-target cache: 12 minutes cold (run 44897383236), then 9 and
   5 (runs 44897910615, 44898513558).

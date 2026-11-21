@@ -155,9 +155,12 @@ pub fn check_name(name: &str) -> Result<&str, String> {
     if name.is_empty() || name.chars().count() > MAX_TITLE_CHARS {
         return Err(format!("a name needs 1 to {MAX_TITLE_CHARS} characters"));
     }
-    if name.starts_with('.') || name.contains(['/', '\\', '"']) || name.contains(char::is_control) {
+    if name.starts_with('.')
+        || name.contains(['/', '\\', '"', '#', '|', '[', ']'])
+        || name.contains(char::is_control)
+    {
         return Err(format!(
-            "{name:?}: a name cannot start with '.' or contain / \\ \", a line break or another control character"
+            "{name:?}: a name cannot start with '.' or contain / \\ \" # | [ ], a line break or another control character"
         ));
     }
     Ok(name)
@@ -580,6 +583,10 @@ mod tests {
     fn check_name_refuses_path_characters() {
         assert!(check_name("a/b").is_err());
         assert!(check_name(".x").is_err());
+        // A wikilink reads these as a heading, an alias or its own end.
+        for name in ["Draft #2", "a|b", "[x]"] {
+            assert!(check_name(name).is_err(), "{name}");
+        }
         assert_eq!(check_name("  Ablauf  ").unwrap(), "Ablauf");
     }
 }

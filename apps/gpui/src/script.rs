@@ -3,7 +3,8 @@
 //! system's accessibility tools cannot type into it.
 //!
 //! Steps are separated by `;`: `wait 1500` pauses in milliseconds, `keys cmd-k enter` sends
-//! keystrokes in GPUI's notation, and `type Köln Hbf` types the text as written.
+//! keystrokes in GPUI's notation, `type Köln Hbf` types the text as written, and `click 320 96`
+//! moves the pointer to that point in window pixels and clicks there.
 //!
 //! ```sh
 //! SJEL_GPUI_OPEN=sjel://travel/connections \
@@ -12,12 +13,19 @@
 
 use std::time::Duration;
 
-use gpui::{AnyWindowHandle, App, AppContext, Keystroke, Modifiers, OperatingSystem};
+use gpui::{
+    px, AnyWindowHandle, App, AppContext, Keystroke, Modifiers, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, OperatingSystem, PlatformInput, Point,
+};
+
+/// About two frames at 60 Hz.
+const KEY_GAP: Duration = Duration::from_millis(30);
 
 #[derive(Clone, Debug, PartialEq)]
 enum Step {
     Wait(u64),
     Keys(Vec<Keystroke>),
+    Click(f32, f32),
 }
 
 /// The script's steps, or the first step it cannot read.
@@ -40,7 +48,22 @@ fn parse(script: &str, os: OperatingSystem) -> Result<Vec<Step>, String> {
                     .collect::<Result<_, _>>()?,
             ),
             "type" => Step::Keys(rest.chars().map(typed).collect()),
-            _ => return Err(format!("unknown step {step:?}: use wait, keys or type")),
+            "click" => {
+                let point: Vec<f32> = rest
+                    .split_whitespace()
+                    .map(str::parse)
+                    .collect::<Result<_, _>>()
+                    .map_err(|_| format!("click needs x and y in pixels: {step:?}"))?;
+                match point[..] {
+                    [x, y] => Step::Click(x, y),
+                    _ => return Err(format!("click needs x and y in pixels: {step:?}")),
+                }
+            }
+            _ => {
+                return Err(format!(
+                    "unknown step {step:?}: use wait, keys, type or click"
+                ))
+            }
         });
     }
     Ok(steps)
@@ -56,6 +79,32 @@ fn typed(c: char) -> Keystroke {
             key_char: Some(c.to_string()),
         },
     }
+}
+
+/// A pointer move to the point, so hover state settles, then a left press and release there.
+fn click(x: f32, y: f32) -> [PlatformInput; 3] {
+    let position = Point::new(px(x), px(y));
+    let modifiers = Modifiers::default();
+    [
+        PlatformInput::MouseMove(MouseMoveEvent {
+            position,
+            pressed_button: None,
+            modifiers,
+        }),
+        PlatformInput::MouseDown(MouseDownEvent {
+            button: MouseButton::Left,
+            position,
+            modifiers,
+            click_count: 1,
+            first_mouse: false,
+        }),
+        PlatformInput::MouseUp(MouseUpEvent {
+            button: MouseButton::Left,
+            position,
+            modifiers,
+            click_count: 1,
+        }),
+    ]
 }
 
 /// Starts the script in `SJEL_GPUI_KEYS`, if there is one. A script that cannot be read is
@@ -89,6 +138,16 @@ pub fn run_from_env(cx: &mut App) {
                     for key in keys {
                         let _ = cx.update_window(window, |_, window, cx| {
                             window.dispatch_keystroke(key, cx);
+                        });
+                        // A field takes typed text through the input handler of the last frame,
+                        // so each key waits for the next one.
+                        cx.background_executor().timer(KEY_GAP).await;
+                    }
+                }
+                Step::Click(x, y) => {
+                    for event in click(x, y) {
+                        let _ = cx.update_window(window, |_, window, cx| {
+                            window.dispatch_event(event, cx);
                         });
                     }
                 }
@@ -125,6 +184,11 @@ mod tests {
         assert_eq!(chars, ["K", "ö", "", "l"]);
         assert_eq!(typed[2].key, "space");
         assert!(parse("wait soon", OperatingSystem::Mac).is_err());
-        assert!(parse("click 3 4", OperatingSystem::Mac).is_err());
+        assert_eq!(
+            parse("click 320 96.5", OperatingSystem::Mac).unwrap(),
+            [Step::Click(320., 96.5)]
+        );
+        assert!(parse("click 3", OperatingSystem::Mac).is_err());
+        assert!(parse("tap 3 4", OperatingSystem::Mac).is_err());
     }
 }

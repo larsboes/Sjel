@@ -253,7 +253,8 @@ pub fn bind_keys(cx: &mut App) {
         // Inside the terminal the same key starts a new one (`ui/src/terminal.rs`).
         KeyBinding::new("cmd-t", OpenTerminal, None),
         KeyBinding::new("cmd-[", ClearSelection, None),
-        KeyBinding::new("escape", DismissOverlay, Some("!Terminal")),
+        // A field on the Projects page takes escape itself, to put its old text back.
+        KeyBinding::new("escape", DismissOverlay, Some("!Terminal && !(Projects > Input)")),
         // Tabs inside the open area, the way Safari and Xcode step tabs
         KeyBinding::new("cmd-alt-right", NextPage, None),
         KeyBinding::new("shift-cmd-]", NextPage, None),

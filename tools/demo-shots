@@ -10,6 +10,8 @@
 #
 #   tools/demo-shots up                      build, start and seed the demo node
 #   tools/demo-shots app [page]              run the Mac app against the node, to work with
+#                                            (SJEL_GPUI_KEYS, if set, replays into it: apps/gpui/src/script.rs)
+#   tools/demo-shots shot [out.png]          capture the app that `app` started
 #   tools/demo-shots mac <page> [light|dark] [out.png]   capture one page of the Mac app
 #   tools/demo-shots down                    stop the node
 set -euo pipefail
@@ -27,6 +29,8 @@ FROM rust:1-bookworm
 COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
 RUN apt-get update && apt-get install -y --no-install-recommends lsof socat \
     && rm -rf /var/lib/apt/lists/*
+# rust-toolchain.toml names `stable`. Installed here, not by the first of several parallel builds.
+RUN rustup toolchain install stable --profile minimal -c clippy -c rustfmt
 DOCKERFILE
 }
 
@@ -105,8 +109,20 @@ launch() {
 # The app as a working copy against synthetic data. HOME persists between launches; `up` reseeds.
 app() {
   local home="${TMPDIR:-/tmp}/sjel-demo-app-home"
-  launch "$home" SJEL_ENV=dev ${1:+SJEL_GPUI_OPEN="sjel://$1"}
+  launch "$home" SJEL_ENV=dev SJEL_GPUI_NO_ACTIVATE=1 SJEL_GPUI_FLOAT=1 SJEL_GPUI_NO_AUDIO=1 \
+    ${1:+SJEL_GPUI_OPEN="sjel://$1"} ${SJEL_GPUI_KEYS:+SJEL_GPUI_KEYS="$SJEL_GPUI_KEYS"}
   echo "demo-shots: app on the demo node (pid $!, log $home/app.log)"
+}
+
+shot() {
+  local out="${1:-${TMPDIR:-/tmp}/sjel-demo-app.png}" shot
+  [ "$(pgrep -x sjel-gpui | wc -l | tr -d ' ')" = 1 ] \
+    || { echo "demo-shots: run exactly one sjel-gpui (demo-shots app) before a shot" >&2; return 1; }
+  shot="$(cd "${TMPDIR:-/tmp}" && interceptor --ws macos screenshot --app sjel-gpui --save --format png \
+    | sed -n 's/.*"filePath": "\([^"]*\)".*/\1/p')"
+  [ -n "$shot" ] || { echo "demo-shots: the capture failed" >&2; return 1; }
+  mv "$shot" "$out"
+  echo "$out"
 }
 
 mac() {
@@ -144,6 +160,7 @@ case "${1:-}" in
   up) up ;;
   app) shift; app "$@" ;;
   mac) shift; mac "$@" ;;
+  shot) shift; shot "$@" ;;
   down) down ;;
-  *) echo "usage: demo-shots up | app [page] | mac <page> [light|dark] [out.png] | down" >&2; exit 2 ;;
+  *) echo "usage: demo-shots up | app [page] | shot [out.png] | mac <page> [light|dark] [out.png] | down" >&2; exit 2 ;;
 esac

@@ -1558,4 +1558,28 @@ mod tests {
         assert!(projects.get("W/Vier.md").await.unwrap().is_some());
         fs::remove_dir_all(dir).unwrap();
     }
+
+    #[tokio::test]
+    async fn a_hub_note_rename_keeps_its_project_folder_and_rewrites_links() {
+        let (projects, dir) = scratch("hub-rename").await;
+        let hub = "W/W.md";
+        let note = "W/Ref.md";
+        add_project(&projects, "W", "").await.unwrap();
+        save(&projects, note, "---\ntype: note\n---\n\nSee [[W]]\n", None)
+            .await
+            .unwrap();
+
+        let renamed = rename(&projects, hub, "Overview").await.unwrap();
+        assert_eq!(renamed.path, "W/Overview.md");
+        assert_eq!(renamed.title, "Overview");
+        assert_eq!(renamed.links, vec![note.to_string()]);
+        assert!(renamed.failed.is_empty());
+        assert!(projects.get("W/Overview.md").await.unwrap().is_some());
+        assert!(projects.get(hub).await.unwrap().is_none());
+        assert_eq!(
+            fs::read_to_string(projects.root().join(note)).unwrap(),
+            "---\ntype: note\n---\n\nSee [[Overview]]\n"
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
 }

@@ -55,6 +55,14 @@ CAPABILITIES="$(toml_array capabilities "$SJEL_MACHINE_TOML")"
 # its own connection string; they share one file now, and cross-capability joins in the
 # recorded corpus depend on that being true here too.
 export SJEL_DB_PATH="$DEMO_DB_PATH"
+# Owners on native Turso WAL keep a separate file each and refuse to start without one, as the
+# overlay's machine.toml declares for a real node.
+DEMO_OWNERS="calendar documents entities finance health inventory places projects punctuality software transit"
+for owner in $DEMO_OWNERS; do
+  upper="$(printf '%s' "$owner" | tr '[:lower:]' '[:upper:]')"
+  export "SJEL_${upper}_DB_PATH=$DEMO_STATE/$owner.db"
+done
+export SJEL_INVENTORY_SNAPSHOT_DIR="$DEMO_STATE/inventory-snapshots"
 # One date for the whole run: the seeder and the origin each load the manifest.
 export SJEL_DEMO_ANCHOR="${SJEL_DEMO_ANCHOR:-$(date +%F)}"
 # Finance keeps four things outside its database, each behind its own env var, and every one
@@ -297,7 +305,10 @@ refuse_if_running() {
 # wants the database gone without a restart.
 reset_database() {
   rm -f "$DEMO_DB_PATH" "$DEMO_DB_PATH-wal" "$DEMO_DB_PATH-shm"
-  echo "demo-up: deleted $DEMO_DB_PATH"
+  for owner in $DEMO_OWNERS; do
+    rm -f "$DEMO_STATE/$owner.db" "$DEMO_STATE/$owner.db-wal" "$DEMO_STATE/$owner.db-shm"
+  done
+  echo "demo-up: deleted $DEMO_DB_PATH and the owner files beside it"
 }
 
 start_stack() {
@@ -305,8 +316,10 @@ start_stack() {
   # Cleared, not reused. A journal left over from a previous run would be appended to, and the
   # demo's whole claim is that its numbers descend from one fixed seed. Ahead of the origin
   # rather than after it, because the origin logs in here.
-  rm -rf "$DEMO_STATE" "$SJEL_OVERLAY_ROOT/data/documents"
+  rm -rf "$DEMO_STATE" "$SJEL_OVERLAY_ROOT/data/documents" "$SJEL_OVERLAY_ROOT/data/projects"
   mkdir -p "$DEMO_STATE"
+  # Projects opens only an owner file that exists. An empty file is an empty database.
+  : >"$SJEL_PROJECTS_DB_PATH"
   write_scouting_source
   write_comms_config
   write_finance_targets

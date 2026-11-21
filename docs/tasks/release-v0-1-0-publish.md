@@ -37,4 +37,3 @@ build from the same commit.
 ## Unrun
 
 - Stapling, the draft release, publication, the receipt and the TestFlight upload.
-- Dependabot PR #292 was updated from main; its checks had not rerun.

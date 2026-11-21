@@ -21,7 +21,6 @@ the waits and rebuilds that do not buy a check.
 - Run `tools/distribution/ship.ts` end to end on the next tag and record its wall time.
 - Decide whether `tools/release` should accept a full CI run on the tagged commit from any trigger,
   and whether the fast gate's `gpui fmt` check runs before commit instead of at push.
-- Fix or quarantine the flaky tests seen on 2026-11-21.
 - Make `tools/demo-shots up` start from cold without manual repair.
 
 ## Evidence
@@ -36,9 +35,15 @@ Measured on 2026-11-21:
 - `tools/release` refused the tag twice: once for a missing release record, once for missing full
   CI at the commit. The second was overridden with `--force`; full CI then passed.
 - The pre-push hook rejected a push for `gpui fmt` after six commits were already made.
-- Flaky: `soundscape::slideover::tests::clicking_the_dark_bedside_surface_reveals_controls`
-  failed 1 of 3 local runs; `ext::mcp::tests::stdio_mcp_times_out_when_call_exceeds_timeout`
-  failed once in CI on PR #292.
+- Flaky `ext::mcp::tests::stdio_mcp_times_out_when_call_exceeds_timeout` (PR #292): its 1-second
+  timeout also bounded the mock server's `initialize`, so a slow Python start failed the
+  handshake. The test now gives 3 seconds against a 10-second call; 3 of 3 local runs passed.
+- Flaky `soundscape::slideover::tests::clicking_the_dark_bedside_surface_reveals_controls`: GPUI's
+  test scheduler panics ("Your test is not deterministic") when a tokio worker wakes one of its
+  tasks, and every view that reads through `data::read_repo` hops through `shell::run` onto the
+  HTTP runtime. On `HEAD` the full `sjel-gpui-ui` suite failed 1 of 5 runs. With core's
+  `test-support` feature, `shell::run` now finishes the work on the calling thread: 0 of 15 runs
+  failed, and the GPUI workspace tests pass.
 - `tools/demo-shots up` failed on a cold start three times before it ran: Turso owners without a
   database path, a rustup install race between parallel builds, and leftover seeded notes. All
   three are fixed in `02e0ee21`; the cold Linux build of the capabilities still takes several

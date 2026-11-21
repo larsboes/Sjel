@@ -991,6 +991,7 @@ fn body(request: &impl serde::Serialize) -> ShellResult<serde_json::Value> {
 }
 
 /// Runs `work` on the HTTP runtime; the returned future can be awaited from GPUI.
+#[cfg(not(feature = "test-support"))]
 pub fn run<T: Send + 'static>(
     work: impl Future<Output = T> + Send + 'static,
 ) -> impl Future<Output = Option<T>> {
@@ -999,6 +1000,15 @@ pub fn run<T: Send + 'static>(
         let _ = tx.send(work.await);
     });
     async move { rx.await.ok() }
+}
+
+/// Runs `work` to completion before it returns. GPUI's test scheduler fails a test when a
+/// runtime thread wakes one of its tasks, so test builds keep the wake on the calling thread.
+#[cfg(feature = "test-support")]
+pub fn run<T: Send + 'static>(
+    work: impl Future<Output = T> + Send + 'static,
+) -> impl Future<Output = Option<T>> {
+    std::future::ready(Some(runtime().block_on(work)))
 }
 
 /// Runs `work` on the HTTP runtime with nothing waiting for its answer, for a connection that

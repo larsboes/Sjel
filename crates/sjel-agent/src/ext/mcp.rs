@@ -499,7 +499,7 @@ for line in sys.stdin:
         tool_name = params.get("name")
         args = params.get("arguments", {})
         if tool_name == "slow":
-            time.sleep(3)
+            time.sleep(args.get("seconds", 3))
             print(json.dumps({
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -563,7 +563,7 @@ for line in sys.stdin:
                     "-c".to_string(),
                     MOCK_SERVER_SCRIPT.to_string(),
                 ],
-                timeout: 1, // 1 second timeout
+                timeout: 3,
                 ..Default::default()
             },
         );
@@ -578,15 +578,15 @@ for line in sys.stdin:
             .expect("slow tool exists");
 
         let start = Instant::now();
-        let res = slow_tool.run(&json!({}));
+        let res = slow_tool.run(&json!({"seconds": 10}));
         let elapsed = start.elapsed();
 
         assert!(res.is_err(), "should time out");
         let err = res.unwrap_err();
         assert!(err.contains("timed out"), "err was: {err}");
         assert!(
-            elapsed < Duration::from_secs(3),
-            "timed out around 1s, took {elapsed:?}"
+            elapsed < Duration::from_secs(6),
+            "timed out around 3s, took {elapsed:?}"
         );
     }
 

@@ -50,6 +50,9 @@ targets:
         NSFaceIDUsageDescription: Sjel confirms it is you before it opens a terminal on your Mac.
         # Apple Health, read-only: daily values and sleep go to the health capability on the Mac.
         NSHealthShareUsageDescription: Sjel reads your sleep, activity, heart and body data and keeps a daily copy on your Mac.
+        # App Store upload requires this key for requestAuthorization(toShare:read:), even when
+        # nothing is shared.
+        NSHealthUpdateUsageDescription: Sjel does not write to Apple Health. It only reads the data you allow.
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

@@ -24,7 +24,7 @@ agentbox boundary.
 The shared [case table](../../Packs/security/extensions/command-policy/cases.toml) owns the
 Pi/Rust baseline; the Rust classifier is `crates/sjel-agent/src/ext/policy.rs`.
 The [security Pack](../../Packs/security/README.md#pi-session-permissions) owns Pi-specific
-routine-root exceptions, configuration and limits.
+project scope, approval controls and limits.
 
 Classification splits shell compounds, unwraps command wrappers and recursively classifies
 shell strings. It checks substitutions, redirects and resolved paths; the strictest part wins.

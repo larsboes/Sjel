@@ -73,8 +73,8 @@ export function registerWebToolActivation(pi: ExtensionAPI, tools: ReadonlyArray
 	pi.registerTool<typeof parameters, Record<string, unknown>>({
 		name: LOADER_NAME,
 		label: "Enable Web Access",
-		description: "Enable configured pi-web-access tools for web research and content retrieval. Does not search or fetch. Enabled tools are available on the next model request; disabled capabilities remain unavailable.",
-		promptSnippet: `If tools for ${capabilities} are not already available, call web_enable first whenever current, external, or linked information could help; the tools appear on the next model request.`,
+		description: "Enable configured tools for public web lookups, ordinary URL or media retrieval, and stored results. Does not search or fetch. Enabled tools are available on the next model request.",
+		promptSnippet: `For public lookups, ordinary URL or media retrieval, and stored results, call web_enable if the required tools are inactive (${capabilities}). When Interceptor is available, use it first for signed-in pages, live browser state, browser actions, screenshots, and native macOS actions. Use the interceptor-research skill for deep multi-source investigations when it is available. Enabled tools appear on the next model request.`,
 		parameters,
 		async execute() {
 			const registered = new Set(pi.getAllTools().map(tool => tool.name));

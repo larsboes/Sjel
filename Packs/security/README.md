@@ -18,96 +18,53 @@ differ from Pi's tool-call interception and `vault_exec`; it is not a Pi extensi
 
 ## Pi session permissions
 
-Machine-local grants live in `<overlay>/config/command-policy.json`, resolved from
-`SJEL_OVERLAY_ROOT` with `SJEL_PERSONAL_ROOT` as fallback. Project settings cannot grant access.
-The extension loads and pins canonical roots at session start and reload:
+Pi approves routine direct file edits and recognized shell file operations inside the active Git
+checkout or the session scratch directory. The checkout is fixed at session start, including
+when Pi starts in a subdirectory. Outside a checkout, only scratch is automatic. Writes to
+other checkouts and vault directories outside the active checkout require approval.
 
-```json
-{
-  "markdown_write_roots": [],
-  "write_roots": ["/absolute/path/to/development", "/absolute/path/to/knowledge"],
-  "disposable_roots": [],
-  "protected_roots": ["/absolute/path/to/private-overlay"]
-}
-```
-
-Each root must be an existing absolute directory other than home or filesystem root.
-Missing config grants nothing. Invalid or unreadable config disables all persistent grants
-and emits a warning; unknown keys are invalid. Symlink escapes, dangling links and replaced
-root paths do not gain a grant. The optional arrays default to empty; `markdown_write_roots`
-is required for compatibility with Markdown-only configurations.
+The overlay is protected even when it contains a checkout. Credentials, Git internals, agent
+instructions, hooks, harness configuration and other protected paths never inherit a project grant.
+The optional `protected_roots` array in `<overlay>/config/command-policy.json` can only add
+restrictions. Invalid restrictions pause project and scratch grants. Legacy
+`write_roots`, `markdown_write_roots` and `disposable_roots` no longer grant access.
 
 ### Routine work
 
-`write_roots` admits recognized file operations, direct edits, ordinary moves, redirects and
-compound commands across the named directories. Routine application configuration qualifies;
-credentials, Git internals, agent instructions, harness configuration, extensions, hooks,
-prompts and `protected_roots` do not. Protected effects cannot inherit a legacy file-scope grant.
-Writes outside approved roots, the initial working directory and temporary directories remain gated.
+- Local dependency changes qualify for npm, pnpm, Yarn, Bun, uv, Cargo and Go when the project
+  manifest and destination resolve within scope. Global installs, unverified destination
+  overrides and downloaded executors require approval. Package scripts can still execute code.
+- Standalone local branch creation qualifies at the checkout root with its own `.git` directory.
+  Standalone `git worktree add` qualifies for a new, unprotected destination in scope.
+  `git worktree list` is routine. Git overrides, publishing and destructive operations retain
+  the baseline decision.
+- Recursive `rm` qualifies only for literal paths in the private session scratch directory.
+  Shared build trees and source directories never qualify. Empty scratch is removed at shutdown;
+  nonempty scratch remains, but a new session creates a new directory.
+- A positive PID qualifies for automatic `kill` only while it is a live descendant of Pi.
+  Process groups, unrelated processes and container mutations still require approval.
 
-Project-local dependency restores, additions and upgrades run without approval when the
-working directory has the corresponding `package.json`, `pyproject.toml`, `Cargo.toml` or
-`go.mod`. Supported managers are npm, pnpm, Yarn, Bun, uv, Cargo and Go. Explicit
-`npm --prefix`, `uv --project` and `cargo --manifest-path` selectors also qualify when a single
-literal destination and its manifest resolve inside an approved, unprotected root. Split and
-`--option=value` forms work before or after the operation. Global installs, configuration
-overrides, other destination flags, dynamic or duplicate selectors, unverified flags, linking
-and downloaded executors (`npx`, `bunx`, `uvx`) retain approval. A single static `cd <directory> && ...` is supported;
-other directory-changing control flow requires an explicit working directory. Package scripts
-and configuration can execute arbitrary code: this grant accepts dependency execution risk,
-not containment of its effects.
+### Controls and limits
 
-Recursive `rm` qualifies only for literal paths under `disposable_roots` or the private scratch
-directory created for the current extension lifetime. Configured disposable roots must lie
-strictly below a write root and cannot overlap protected roots or name live build trees.
-The machine owner must identify genuinely disposable output; a directory name is not proof.
-Shared build trees, source deletion, globs, dynamic targets and `find -delete` stay gated.
-Empty scratch is removed on shutdown; nonempty scratch remains available. Reload creates new scratch.
+`/permissions` shows the checkout and scratch paths. `/permissions off` clears exact-call
+grants and pauses automatic project and scratch grants until reload or session change.
+There is no command to add another directory to the session.
 
-`kill` of positive PIDs qualifies only while each PID is a live descendant of this Pi process.
-Process groups, unrelated or reparented processes, `pkill`, `killall` and container mutations
-remain gated. Privilege escalation, destructive history changes, secrets, publishing and
-recognized network writes retain their existing guards. The separate secrets guard and
-runtime-profile build policy remain active.
+Existing files must be read before an automatic direct edit. A changed file must be reread.
+This metadata check is not atomic and does not cover shell writes. The Git checkpoint reports
+changes to protected paths without starting another model turn.
 
-### Checkpoints
+Approval cards wait for an explicit decision. **Allow once** applies only to the current call.
+Ask rules also accept an exact-call grant bound to the working directory and session. Block rules
+never gain a session grant. Cancellation leaves no pending action. Without a UI, Ask and Block
+refuse immediately.
 
-Permission status is available through `/permissions`. The extension does not inject grant
-details into model requests. Execution permission does not authorize new tasks or waive
-repository and vault rules.
-
-Direct writes to existing files require a successful current read. A changed inode, size or
-timestamp requires a reread and reconciliation, without an approval card. Successful direct
-writes update the observation. These metadata checks are best-effort, not atomic file locks;
-shell writes and changes between preflight and execution are not covered.
-A Git checkpoint records pre-existing dirty paths and warns after a run changes protected
-paths. An unavailable checkpoint is reported rather than treated as a clean tree. Ignored
-files and external effects are outside that checkpoint.
-
-The classifier is not a sandbox. Arbitrary scripts, package hooks and unrecognized programs
-can have effects the filter cannot inspect. `tools/pi` retains the existing provider-specific
-containment; its trusted profile denies selected private paths, not all writes outside these
-roots or all network egress. Neither context nor postflight checks can undo a disclosure.
-
-### Controls and exceptional approvals
-
-`/permissions` shows active roots. `/permissions off` clears
-session grants and suppresses all persistent grants until reload or session change.
-`/permissions auto <directory>` retains the narrower legacy grant: direct writes, simple
-`cp -n` (optionally `-p`) to an explicit file, `mkdir` (optionally `-p`) and flag-free `touch`.
-It grants no dependency, publishing, process-control or recursive-cleanup permission.
-
-Only consequential exceptions need approval cards. Cards wait for explicit approval, denial
-or cancellation, without an idle timeout, deferred queue or retry tokens. **Allow once** applies
-only to the current call. Ask rules also support an exact-call grant bound to the working
-directory and session; Block rules never gain a session grant. Cancellation executes nothing
-and stores no action. Without a UI, Ask and Block refuse immediately. The agent continues
-independent approved work and never treats silence as consent.
-Session grants and observations clear on reload or session change. Persistent roots load again
-from machine config. Original tool calls remain in the session transcript.
+The classifier is not a sandbox. Unknown programs, arbitrary scripts and package hooks can
+have effects it cannot inspect. The separate secrets guard, runtime build policy and launcher
+containment remain in force. An approval does not authorize unrelated work.
 
 Verification: `bun test tools/command-policy*.test.ts tools/pack-extensions.test.ts` covers
-the shared baseline, relaxed policy, lifecycle and installed Pi types.
+the shared baseline, project scope, lifecycle and installed Pi types.
 
 ## The problem
 

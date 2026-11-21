@@ -1,6 +1,6 @@
 # See schemas/pack.toml.example for the field reference.
 name        = "security"
-description = "Run routine local work across configured roots without approval, with guards for destructive commands, privilege, secrets and external writes. Pi extensions provide safe credential use and resolve provider keys from the OS keychain. Claude Code receives the secrets-guard workflow; vendor-audit vets third-party software before it runs; threat-model maps what a compromised asset exposes and keeps a private risk register."
+description = "Run routine work in the active checkout and session scratch without approval, with guards for destructive commands, privilege, secrets and external writes. Pi extensions provide safe credential use and resolve provider keys from the OS keychain. Claude Code receives the secrets-guard workflow; vendor-audit vets third-party software before it runs; threat-model maps what a compromised asset exposes and keeps a private risk register."
 skills      = ["secrets-guard", "vendor-audit", "threat-model"]
 personal    = ["config/secrets-guard.toml", "config/command-policy.json"]
 license     = "MIT"

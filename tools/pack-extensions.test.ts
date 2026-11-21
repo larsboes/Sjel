@@ -450,17 +450,24 @@ describe.skipIf(!piConfigured)("pack extensions", () => {
     const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = await import(join(piInstall.packageDir, "dist", "index.js"));
     const fixture = mkdtempSync(join(tmpdir(), "pi-policy-session-"));
     const project = join(fixture, "project");
-    const cleanup = join(project, "disposable");
+    const legacyCleanup = join(project, "disposable");
+    const scratchParent = join(fixture, "tmp");
     const notes = join(fixture, "knowledge");
     const overlay = join(fixture, "private");
     const previousOverlay = process.env.SJEL_OVERLAY_ROOT;
     const previousPersonal = process.env.SJEL_PERSONAL_ROOT;
+    const previousTmp = process.env.TMPDIR;
     let session: any;
-    for (const path of [cleanup, notes, join(overlay, "config")]) mkdirSync(path, { recursive: true });
+    for (const path of [legacyCleanup, scratchParent, notes, join(overlay, "config")]) mkdirSync(path, { recursive: true });
     writeFileSync(join(project, "package.json"), "{}");
-    writeFileSync(join(overlay, "config", "command-policy.json"), JSON.stringify({ markdown_write_roots: [], write_roots: [project, notes], disposable_roots: [cleanup], protected_roots: [overlay] }));
+    writeFileSync(join(overlay, "config", "command-policy.json"), JSON.stringify({ markdown_write_roots: [notes], write_roots: [project, notes], disposable_roots: [legacyCleanup], protected_roots: [overlay] }));
+    const initialized = spawnSync("git", ["init", "--quiet", "--template=", project], { encoding: "utf8" });
+    expect(initialized.status).toBe(0);
+    const committed = spawnSync("git", ["-C", project, "-c", "user.name=Pi Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--quiet", "--no-gpg-sign", "--allow-empty", "-m", "fixture"], { encoding: "utf8" });
+    expect(committed.status).toBe(0);
     process.env.SJEL_OVERLAY_ROOT = overlay;
     delete process.env.SJEL_PERSONAL_ROOT;
+    process.env.TMPDIR = scratchParent;
     try {
       const agentDir = join(fixture, "agent");
       const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } });
@@ -482,7 +489,12 @@ describe.skipIf(!piConfigured)("pack extensions", () => {
       const errors: unknown[] = [];
       runner.onError((error: unknown) => errors.push(error));
       const tools = runner.createToolContext("policy-acceptance", undefined);
-      const note = join(notes, "note.md");
+      const [scratchName] = readdirSync(scratchParent).filter((name) => name.startsWith("pi-task-"));
+      expect(scratchName).toBeDefined();
+      const cleanup = join(scratchParent, scratchName!);
+      const note = join(project, "note.md");
+      expect((await tools.executeTool("write", { path: join(notes, "outside.md"), content: "refuse" })).isError).toBe(true);
+      expect(existsSync(join(notes, "outside.md"))).toBe(false);
       const created = await tools.executeTool("write", { path: note, content: "original" });
       if (created.isError) throw new Error(JSON.stringify(created.result));
       expect((await tools.executeTool("read", { path: note })).isError).toBe(false);
@@ -490,9 +502,16 @@ describe.skipIf(!piConfigured)("pack extensions", () => {
       writeFileSync(note, "concurrent");
       expect((await tools.executeTool("write", { path: note, content: "lost work" })).isError).toBe(true);
       expect(readFileSync(note, "utf8")).toBe("concurrent");
-      expect((await tools.executeTool("bash", { command: `mkdir -p '${notes}/nested' && touch '${notes}/nested/a'` })).isError).toBe(false);
+      expect((await tools.executeTool("bash", { command: `mkdir -p nested && touch nested/a` })).isError).toBe(false);
+      expect((await tools.executeTool("bash", { command: `touch '${notes}/outside.txt'` })).isError).toBe(true);
       expect(await runner.emitToolCall({ type: "tool_call", toolName: "bash", toolCallId: "local-install", input: { command: "npm add example" } })).toBeUndefined();
       expect((await runner.emitToolCall({ type: "tool_call", toolName: "bash", toolCallId: "global-install", input: { command: "npm install -g example" } })).block).toBe(true);
+      expect((await tools.executeTool("bash", { command: "git branch fixture-topic" })).isError).toBe(false);
+      expect((await tools.executeTool("bash", { command: `git worktree add '${join(project, "fixture-worktree")}' fixture-topic` })).isError).toBe(false);
+      expect(existsSync(join(project, "fixture-worktree", ".git"))).toBe(true);
+      const push = await tools.executeTool("bash", { command: "git push origin fixture-topic" });
+      expect(push.isError).toBe(true);
+      expect(JSON.stringify(push.result)).toContain("Command policy A2");
       expect((await tools.executeTool("bash", { command: `rm -rf '${notes}'` })).isError).toBe(true);
       expect(readFileSync(note, "utf8")).toBe("concurrent");
       expect((await tools.executeTool("write", { path: join(project, "AGENTS.md"), content: "weaken guards" })).isError).toBe(true);
@@ -500,6 +519,7 @@ describe.skipIf(!piConfigured)("pack extensions", () => {
       const next = [...first, { role: "user", content: "Continue", timestamp: Date.now() }];
       expect(await runner.emitContext(first)).toEqual(first);
       expect(await runner.emitContext(next)).toEqual(next);
+      expect((await tools.executeTool("bash", { command: `rm -rf '${legacyCleanup}'` })).isError).toBe(true);
       expect((await tools.executeTool("bash", { command: `mkdir -p '${cleanup}/output' && touch '${cleanup}/output/a' && rm -rf '${cleanup}/output'` })).isError).toBe(false);
       await runner.emit({ type: "session_shutdown" });
       expect(errors).toEqual([]);
@@ -507,6 +527,7 @@ describe.skipIf(!piConfigured)("pack extensions", () => {
       session?.dispose();
       if (previousOverlay === undefined) delete process.env.SJEL_OVERLAY_ROOT; else process.env.SJEL_OVERLAY_ROOT = previousOverlay;
       if (previousPersonal === undefined) delete process.env.SJEL_PERSONAL_ROOT; else process.env.SJEL_PERSONAL_ROOT = previousPersonal;
+      if (previousTmp === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = previousTmp;
       rmSync(fixture, { recursive: true, force: true });
     }
   }, 30_000);

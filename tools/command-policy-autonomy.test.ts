@@ -4,7 +4,6 @@ import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, 
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { classify, classifyWrite, resolvePath, type Scope } from "../Packs/security/extensions/command-policy/classify.ts";
-import { loadMachinePolicy } from "../Packs/security/extensions/command-policy/config.ts";
 import commandPolicy from "../Packs/security/extensions/command-policy/index.ts";
 import { FileObservations } from "../Packs/security/extensions/command-policy/runtime.ts";
 
@@ -18,7 +17,7 @@ let previousOverlay: string | undefined;
 let previousPersonal: string | undefined;
 let shutdowns: (() => void)[];
 const configure = (extra: Record<string, unknown> = {}) => writeFileSync(join(overlay, "config", "command-policy.json"), JSON.stringify({
-  markdown_write_roots: [], write_roots: [root], disposable_roots: [scratch], protected_roots: [overlay], ...extra,
+  markdown_write_roots: [sibling], write_roots: [root], disposable_roots: [scratch], protected_roots: [overlay], ...extra,
 }));
 
 beforeEach(() => {
@@ -32,8 +31,9 @@ beforeEach(() => {
   for (const name of ["package.json", "pyproject.toml", "Cargo.toml", "go.mod"]) writeFileSync(join(project, name), "");
   process.env.SJEL_OVERLAY_ROOT = overlay;
   delete process.env.SJEL_PERSONAL_ROOT;
+  execFileSync("git", ["init", "-q", project]);
   configure();
-  scope = { cwd: project, home: homedir(), writable: [tmpdir()], autonomy: loadMachinePolicy({ cwd: project, home: homedir(), writable: [] }) };
+  scope = { cwd: project, home: homedir(), writable: [], autonomy: { writeRoots: [project], disposableRoots: [scratch], protectedRoots: [overlay] } };
 });
 afterEach(() => {
   for (const shutdown of shutdowns) shutdown();
@@ -42,7 +42,7 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-function setup(hasUI = false) {
+function setup(hasUI = false, cwd = project) {
   const handlers = new Map<string, (...args: any[]) => any>();
   const notifications: string[] = [];
   const messages: any[] = [];
@@ -54,7 +54,7 @@ function setup(hasUI = false) {
     registerCommand: (_name: string, cmd: any) => { command = cmd.handler; },
     sendMessage: (message: any, options: any) => { messages.push(message); messageOptions.push(options); },
   } as never);
-  const ctx = { cwd: project, hasUI, ui: { setStatus: () => {}, notify: (s: string) => notifications.push(s), select: async () => { prompts++; return "Deny"; } } };
+  const ctx = { cwd, hasUI, ui: { setStatus: () => {}, notify: (s: string) => notifications.push(s), select: async () => { prompts++; return "Deny"; } } };
   const start = () => handlers.get("session_start")!({}, ctx);
   start();
   shutdowns.push(() => handlers.get("session_shutdown")!({}, ctx));
@@ -68,7 +68,7 @@ function setup(hasUI = false) {
   return { ctx, call, read, handlers, command: (args: string) => command(args, ctx), start, notifications, messages, messageOptions, prompts: () => prompts };
 }
 
-describe("machine-local autonomy", () => {
+describe("project autonomy", () => {
   test("checkpoint warnings wait for settlement and never queue another model turn", async () => {
     execFileSync("git", ["init", "-q", project]);
     const h = setup();
@@ -88,7 +88,7 @@ describe("machine-local autonomy", () => {
   });
 
   test("unavailable checkpoints also remain non-triggering advisories", async () => {
-    const h = setup();
+    const h = setup(false, sibling);
     await h.handlers.get("before_agent_start")!({}, h.ctx);
     await h.handlers.get("agent_settled")!({}, h.ctx);
     expect(h.messages).toHaveLength(1);
@@ -96,18 +96,25 @@ describe("machine-local autonomy", () => {
     expect(h.messageOptions[0]).toEqual({ triggerTurn: false });
   });
 
-  test("routine sibling writes, moves and compounds need no cards", async () => {
-    const h = setup(true);
-    for (const path of [join(sibling, "note.md"), join(sibling, "note.txt"), join(project, "config", "app.toml")]) {
-      expect(await h.call("write", { path })).toBeUndefined();
-    }
+  test("one checkout admits routine writes from a subdirectory, not legacy roots", async () => {
+    const subdir = join(project, "subdir");
+    mkdirSync(subdir);
+    const h = setup(true, subdir);
+    expect(await h.call("write", { path: join(project, "config", "app.toml") })).toBeUndefined();
     for (const command of [
-      `mkdir -p '${sibling}/new' && touch '${sibling}/new/a.txt'`,
-      `cp '${project}/a' '${sibling}/a' && mv '${sibling}/a' '${sibling}/b'`,
-      `echo note > '${sibling}/note.md'`,
-      `rm -f '${sibling}/old.txt'`,
+      "mkdir -p ../new && touch ../new/a.txt",
+      "cp ../a ./a && mv ./a ./b",
+      "echo note > ../note.md",
+      "rm -f ../old.txt",
     ]) expect(await h.call("bash", { command })).toBeUndefined();
     expect(h.prompts()).toBe(0);
+    for (const path of [join(sibling, "note.md"), join(sibling, "note.txt"), join(tmpdir(), "shared-output.txt")]) {
+      expect((await h.call("write", { path })).block).toBe(true);
+      expect((await h.call("bash", { command: `touch '${path}'` })).block).toBe(true);
+    }
+    await h.command(`auto ${sibling}`);
+    expect((await h.call("write", { path: join(sibling, "note.md") })).block).toBe(true);
+    expect((await h.call("bash", { command: `rm -rf '${scratch}'` })).block).toBe(true);
   });
 
   test("project-local dependency changes work with no UI", async () => {
@@ -202,6 +209,68 @@ describe("machine-local autonomy", () => {
     } finally { rmSync(outside, { recursive: true, force: true }); }
   });
 
+  test("literal local branch and worktree creation need no cards", async () => {
+    execFileSync("git", ["init", "-q", project]);
+    const h = setup(true);
+    for (const command of [
+      "git branch topic",
+      "git branch topic refs/heads/main",
+      "git worktree list --porcelain",
+      "git worktree add ./new-worktree",
+      "git worktree add -b topic ./topic-worktree HEAD",
+      "git worktree add --detach ./detached-worktree HEAD",
+    ]) expect(await h.call("bash", { command })).toBeUndefined();
+    expect(h.prompts()).toBe(0);
+
+    await h.command("off");
+    expect((await h.call("bash", { command: "git branch topic" })).block).toBe(true);
+  });
+
+  test("local Git grants require a plain call and never authorize existing or protected destinations", async () => {
+    execFileSync("git", ["init", "-q", project]);
+    symlinkSync(overlay, join(project, "overlay-link"));
+    const h = setup();
+    for (const command of [
+      "git branch -f topic",
+      "git branch -d topic",
+      "git branch \"$BRANCH\"",
+      "git -C . branch topic",
+      "GIT_DIR=repo.git git branch topic",
+      "export GIT_DIR=repo.git; git branch topic",
+      "git worktree add --force ../new-worktree",
+      "git worktree add -B topic ../new-worktree",
+      "git worktree add ../outside-project",
+      "git worktree add .cache",
+      "git worktree add ../new-worktree/*",
+      "git worktree add ../private/new-worktree",
+      "git worktree add overlay-link/new-worktree",
+      "git worktree add .pi/new-worktree",
+      "git worktree add ../../outside-worktree",
+      "git worktree remove ../worktree",
+      "git clean -ffdx",
+      "git reset --hard",
+      "git push origin main",
+      "git branch topic && git push origin main",
+    ]) {
+      expect(classify(command, scope).class).not.toBe("allow");
+      expect((await h.call("bash", { command })).block).toBe(true);
+    }
+    expect(classify("git branch topic", { ...scope, cwd: sibling }).class).toBe("ask");
+    expect((await h.call("vault_exec", { cmd: "git branch topic" })).block).toBe(true);
+    const editor = process.env.GIT_EDITOR;
+    process.env.GIT_EDITOR = "true";
+    expect(classify("git branch topic", scope).class).toBe("allow");
+    process.env.GIT_DIR = join(project, ".git");
+    try {
+      expect(classify("git branch topic", scope).class).not.toBe("allow");
+    } finally {
+      delete process.env.GIT_DIR;
+      if (editor === undefined) delete process.env.GIT_EDITOR; else process.env.GIT_EDITOR = editor;
+    }
+    writeFileSync(join(sibling, ".git"), `gitdir: ${join(project, ".git")}\n`);
+    expect(classify("git branch topic", { ...scope, cwd: sibling }).class).toBe("ask");
+  });
+
   test("recursive cleanup is limited to declared disposable output", () => {
     expect(classify(`rm -rf '${scratch}'`, scope).class).toBe("allow");
     expect(classify(`rm -rf '${scratch}/nested' && git status`, scope).class).toBe("allow");
@@ -226,35 +295,51 @@ describe("machine-local autonomy", () => {
     }
   });
 
-  test("invalid configuration never partially activates roots", () => {
-    for (const extra of [{ write_roots: [homedir()] }, { write_roots: ["relative"] }, { disposable_roots: [root] }, { disposable_roots: [overlay] }, { unexpected: [] }, { protected_roots: "bad" }]) {
-      configure(extra);
-      expect(() => loadMachinePolicy(scope)).toThrow();
-      const h = setup(true);
-      expect(h.notifications[0]).toContain("invalid or unreadable");
+  test("project defaults need no configuration and never grant overlay writes", async () => {
+    rmSync(join(overlay, "config", "command-policy.json"));
+    const h = setup();
+    expect(await h.call("write", { path: join(project, "file.txt") })).toBeUndefined();
+    execFileSync("git", ["init", "-q", overlay]);
+    const inOverlay = setup(false, overlay);
+    expect((await inOverlay.call("write", { path: join(overlay, "file.txt") })).block).toBe(true);
+  });
+
+  test("additional restrictions only narrow the defaults and invalid restrictions pause grants", async () => {
+    configure({ protected_roots: [scratch] });
+    const h = setup(true);
+    expect((await h.call("write", { path: join(scratch, "file.txt") })).block).toBe(true);
+    expect(await h.call("write", { path: join(project, "file.txt") })).toBeUndefined();
+    for (const protected_roots of ["bad", ["relative"], [join(root, "missing")]]) {
+      configure({ protected_roots });
+      h.start();
+      expect(h.notifications.at(-1)).toContain("grants are paused");
+      expect((await h.call("write", { path: join(project, "file.txt") })).block).toBe(true);
     }
   });
 
-  test("permission status is UI-only and reload restores suppressed grants", async () => {
+  test("permission status is UI-only and reload restores paused grants", async () => {
     const h = setup(true);
     expect(h.handlers.has("context")).toBe(false);
     expect(h.handlers.has("context_with_system")).toBe(false);
     await h.command("status");
-    expect(h.notifications.at(-1)).toContain(`Routine roots: ${resolvePath(root, scope)}.`);
-    expect(h.notifications.at(-1)).toMatch(/Disposable roots: .*pi-task-/);
+    expect(h.notifications.at(-1)).toContain(`Project: ${resolvePath(project, scope)}.`);
+    const sessionScratch = h.notifications.at(-1)?.split("Session scratch: ")[1]?.split(". Use")[0];
+    expect(sessionScratch).toMatch(/pi-task-/);
+    expect(await h.call("bash", { command: `rm -rf '${sessionScratch}/output'` })).toBeUndefined();
     await h.command("off");
     await h.command("status");
-    expect(h.notifications.at(-1)).toContain("suppressed until reload/session change");
-    expect((await h.call("write", { path: join(sibling, "a.txt") })).block).toBe(true);
+    expect(h.notifications.at(-1)).toContain("paused until reload or session change");
+    expect((await h.call("write", { path: join(project, "a.txt") })).block).toBe(true);
+    expect((await h.call("bash", { command: `rm -rf '${sessionScratch}/output'` })).block).toBe(true);
     h.start();
-    expect(await h.call("write", { path: join(sibling, "a.txt") })).toBeUndefined();
+    expect(await h.call("write", { path: join(project, "a.txt") })).toBeUndefined();
+    expect((await h.call("write", { path: join(sibling, "a.txt") })).block).toBe(true);
     expect(readFileSync(join(overlay, "config", "command-policy.json"), "utf8")).toContain("write_roots");
-    await h.handlers.get("session_shutdown")!({}, h.ctx);
   });
 
   test("direct writes require a successful current read and stale files need reconciliation", async () => {
     const h = setup();
-    const path = join(sibling, "existing.md");
+    const path = join(project, "existing.md");
     writeFileSync(path, "original");
     expect((await h.call("write", { path })).reason).toContain("Read the existing file");
     await h.read(path, true);

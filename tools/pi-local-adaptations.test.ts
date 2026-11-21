@@ -5,6 +5,7 @@ import { resolveModel } from '../Packs/harness/pi-packages/pi-subagents/src/mode
 import { extractContent } from '../Packs/harness/pi-packages/pi-web-access/extract';
 import { formatSearchResultsAsAnswer } from '../Packs/harness/pi-packages/pi-web-access/search-answer-formatting';
 import { findModelWithProviderRouting } from '../Packs/harness/pi-packages/pi-web-access/summary-model-scope';
+import { registerWebToolActivation } from '../Packs/harness/pi-packages/pi-web-access/tool-activation';
 
 const models = [
   { provider: 'router-a', id: 'vendor/model', name: 'Model' },
@@ -170,6 +171,27 @@ async function extractWith(html: string, url: string): Promise<Awaited<ReturnTyp
     globalThis.fetch = realFetch;
   }
 }
+
+test('web activation distinguishes public lookup from live browser work and deep research', () => {
+  type Host = Parameters<typeof registerWebToolActivation>[0];
+  type Tool = Pick<Parameters<Host['registerTool']>[0], 'name' | 'promptSnippet'>;
+  const registered: Tool[] = [];
+  const host = {
+    getAllTools: () => registered,
+    getActiveTools: () => [],
+    setActiveTools: () => {},
+    on: () => () => {},
+    registerTool: (tool: Tool) => registered.push(tool),
+  } as unknown as Host;
+
+  registerWebToolActivation(host, [{ name: 'web_search', capability: 'search' }], 'dynamic');
+
+  expect(registered.map(tool => tool.name)).toEqual(['web_enable']);
+  const prompt = registered[0].promptSnippet;
+  expect(prompt).toMatch(/public lookups.*call web_enable if the required tools are inactive/);
+  expect(prompt).toMatch(/When Interceptor is available, use it first for signed-in pages/);
+  expect(prompt).toMatch(/interceptor-research skill for deep multi-source investigations/);
+});
 
 describe('web content and attribution', () => {
   test('retains short HTML content and resolves links against the final page URL', async () => {

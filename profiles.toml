@@ -14,6 +14,7 @@
 claude = ["harness/agents/", "writing/agents/"]
 pi = [
     "harness/pi-packages/accordion",
+    "security/skills/secrets-guard",
     "writing/agents/",
 ]
 codex = ["writing/skill-creator"]

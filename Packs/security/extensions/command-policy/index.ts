@@ -1,13 +1,12 @@
-/** Machine-local autonomy, live guidance and approval gates for consequential effects. */
+/** Project-scoped autonomy and approval gates for consequential effects. */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { appendFileSync, mkdirSync, statSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { classify, classifyWrite, resolvePath, type Scope, type Verdict } from "./classify.ts";
-import { loadMachinePolicy, scopedMarkdownWrite, type MachinePolicy } from "./config.ts";
-import { checkpointWarning, createScratch, dirtyFiles, FileObservations, ownedProcessIds, releaseScratch } from "./runtime.ts";
+import { loadProtectedRoots } from "./config.ts";
+import { checkoutRoot, checkpointWarning, createScratch, dirtyFiles, FileObservations, ownedProcessIds, releaseScratch } from "./runtime.ts";
 import { powerDeferral } from "./power.ts";
-import { scopedCommand, scopedWrite } from "./scoped.ts";
 
 function logDecision(entry: Record<string, unknown>): void {
   const overlay = process.env.SJEL_OVERLAY_ROOT ?? process.env.SJEL_PERSONAL_ROOT;
@@ -22,12 +21,12 @@ function logDecision(entry: Record<string, unknown>): void {
 }
 
 function scopeFor(cwd: string): Scope {
-  return { cwd, home: homedir(), writable: [...new Set([tmpdir(), "/tmp"])] };
+  return { cwd, home: homedir(), writable: [] };
 }
 
 function judge(toolName: string, input: Record<string, unknown>, scope: Scope): Verdict | null {
   if (toolName === "bash" && typeof input.command === "string") return classify(input.command, scope);
-  if (toolName === "vault_exec" && typeof input.cmd === "string") return classify(input.cmd, scope);
+  if (toolName === "vault_exec" && typeof input.cmd === "string") return classify(input.cmd, { ...scope, externalEnvironment: true });
   if ((toolName === "write" || toolName === "edit") && typeof input.path === "string") {
     return classifyWrite(input.path, scope, toolName);
   }
@@ -41,45 +40,40 @@ function preview(toolName: string, input: Record<string, unknown>): string {
 
 export default function commandPolicy(pi: ExtensionAPI) {
   const granted = new Set<string>();
-  const roots = new Set<string>();
-  let markdownRoots: string[] = [];
-  let machine: MachinePolicy = { markdownRoots: [], writeRoots: [], disposableRoots: [], protectedRoots: [] };
+  let project: string | undefined;
   let scratch: string | undefined;
+  let protectedRoots: string[] = [];
   let observations = new FileObservations();
   let checkpoint: ReturnType<typeof dirtyFiles>;
-  let persistentOff = false;
-  const activeScope = (cwd: string): Scope => {
-    const scope = scopeFor(cwd);
-    scope.writable = scope.writable.map((root) => resolvePath(root, scope));
-    if (!persistentOff && machine.writeRoots.length) scope.autonomy = {
-      writeRoots: [...machine.writeRoots, ...(scratch ? [scratch] : [])],
-      disposableRoots: [...machine.disposableRoots, ...(scratch ? [scratch] : [])],
-      protectedRoots: machine.protectedRoots,
-    };
-    return scope;
-  };
+  let paused = true;
   let generation = 0;
-  const update = (ctx: ExtensionContext) => ctx.ui.setStatus?.("permissions", roots.size || markdownRoots.length
-    || machine.writeRoots.length ? `permissions: ${persistentOff ? "off" : machine.writeRoots.length} routine roots · ${roots.size} session scopes · ${persistentOff ? "off" : markdownRoots.length} Markdown scopes` : undefined);
+  const activeScope = (cwd: string): Scope => ({
+    ...scopeFor(cwd),
+    autonomy: {
+      writeRoots: paused ? [] : [project, scratch].filter((path): path is string => path !== undefined),
+      disposableRoots: !paused && scratch ? [scratch] : [],
+      protectedRoots,
+    },
+  });
+  const update = (ctx: ExtensionContext) => ctx.ui.setStatus?.("permissions", paused ? "permissions: paused" : undefined);
 
   pi.on("session_start", (_event, ctx) => {
     generation++;
     granted.clear();
-    roots.clear();
-    persistentOff = false;
-    markdownRoots = [];
-    machine = { markdownRoots: [], writeRoots: [], disposableRoots: [], protectedRoots: [] };
+    paused = true;
+    project = undefined;
+    protectedRoots = [];
     observations = new FileObservations();
     if (scratch) releaseScratch(scratch);
     scratch = undefined;
     try {
-      machine = loadMachinePolicy(scopeFor(ctx.cwd));
-      markdownRoots = machine.markdownRoots;
-      if (machine.writeRoots.length) scratch = resolvePath(createScratch(), scopeFor(ctx.cwd));
+      const scope = scopeFor(ctx.cwd);
+      protectedRoots = loadProtectedRoots(scope);
+      project = checkoutRoot(scope);
+      scratch = resolvePath(createScratch(), scope);
+      paused = false;
     } catch {
-      machine = { markdownRoots: [], writeRoots: [], disposableRoots: [], protectedRoots: [] };
-      markdownRoots = [];
-      const warning = "Command-policy machine config is invalid or unreadable; no persistent Markdown grants or routine roots loaded. Check <overlay>/config/command-policy.json.";
+      const warning = "Command-policy setup failed; automatic project and scratch grants are paused. Check the overlay restrictions and temporary-directory access.";
       if (ctx.hasUI) ctx.ui.notify(warning, "warning");
       else console.error(warning);
     }
@@ -87,36 +81,18 @@ export default function commandPolicy(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("permissions", {
-    description: "Show routine roots. auto <directory>, off, status. Off suppresses all machine grants until reload/session change.",
+    description: "Show the active checkout and session scratch. Off pauses scoped grants until reload or session change.",
     handler: async (args, ctx) => {
       if (!ctx.hasUI || ctx.signal?.aborted) return;
-      const text = args.trim();
-      if (text.startsWith("auto ")) {
-        const scope = scopeFor(ctx.cwd);
-        const path = resolvePath(text.slice(5).trim(), scope);
-        if (path === "/" || path === resolvePath(scope.home, scope)) {
-          ctx.ui.notify("Choose a task directory, not the whole account or filesystem.", "warning");
-          return;
-        }
-        try {
-          if (!statSync(path).isDirectory()) throw new Error("not a directory");
-        } catch {
-          ctx.ui.notify("The file scope must name an existing directory.", "error");
-          return;
-        }
-        roots.add(path);
-        update(ctx);
-        ctx.ui.notify(`File scope enabled: ${path}. Routine write/edit, cp -n, mkdir and touch only. Sensitive/config/agent-policy targets still ask. Cleared on reload or session change.`, "info");
-      } else if (text === "off") {
+      if (args.trim() === "off") {
         generation++;
-        roots.clear();
-        persistentOff = true;
+        paused = true;
         granted.clear();
         update(ctx);
-        ctx.ui.notify("All session permission grants cleared; persistent Markdown grants and routine roots suppressed until reload or session change.", "info");
-      } else {
-        ctx.ui.notify(`Session file scopes: ${[...roots].join(", ") || "none"}. Persistent Markdown roots (${persistentOff ? "suppressed until reload/session change" : "active"}): ${markdownRoots.join(", ") || "none"}. Routine roots: ${machine.writeRoots.join(", ") || "none"}. Disposable roots: ${activeScope(ctx.cwd).autonomy?.disposableRoots.join(", ") || "none"}. Use /permissions auto <directory>, off, or status.`, "info");
       }
+      const status = paused ? "Scoped grants paused until reload or session change."
+        : `Project: ${project ?? "none"}. Session scratch: ${scratch ?? "none"}.`;
+      ctx.ui.notify(`${status} Use /permissions or /permissions off.`, "info");
     },
   });
 
@@ -129,13 +105,11 @@ export default function commandPolicy(pi: ExtensionAPI) {
   });
 
   pi.on("agent_settled", (_event, ctx) => {
-    if (!activeScope(ctx.cwd).autonomy) return;
     const warning = checkpointWarning(checkpoint, activeScope(ctx.cwd));
     if (warning) pi.sendMessage({ customType: "command-policy-checkpoint", content: warning, display: true }, { triggerTurn: false });
   });
 
   pi.on("tool_result", (event, ctx) => {
-    if (!activeScope(ctx.cwd).autonomy) return;
     if (event.toolName === "read") observations.finishRead(event.toolCallId, !!event.isError);
     if (!event.isError && (event.toolName === "write" || event.toolName === "edit") && typeof event.input.path === "string") {
       observations.finishWrite(resolvePath(event.input.path, activeScope(ctx.cwd)));
@@ -146,10 +120,10 @@ export default function commandPolicy(pi: ExtensionAPI) {
     const epoch = generation;
     const input = (event.input ?? {}) as Record<string, unknown>;
     const scope = activeScope(ctx.cwd ?? process.cwd());
-    if (scope.autonomy && event.toolName === "read" && typeof input.path === "string") {
+    if (event.toolName === "read" && typeof input.path === "string") {
       observations.read(event.toolCallId, resolvePath(input.path, scope));
     }
-    if (scope.autonomy && (event.toolName === "bash" || event.toolName === "vault_exec") && /\bkill\b/.test(String(input.command ?? input.cmd))) {
+    if (!paused && (event.toolName === "bash" || event.toolName === "vault_exec") && /\bkill\b/.test(String(input.command ?? input.cmd))) {
       scope.ownedPids = ownedProcessIds();
     }
     const v = judge(event.toolName, input, scope);
@@ -158,9 +132,8 @@ export default function commandPolicy(pi: ExtensionAPI) {
     const cwd = resolvePath(scope.cwd, scope);
     const key = `${cwd}\u0000${event.toolName}\u0000${JSON.stringify(input)}`;
 
-
     if (v.class === "allow") {
-      if (scope.autonomy && (event.toolName === "write" || event.toolName === "edit") && typeof input.path === "string") {
+      if ((event.toolName === "write" || event.toolName === "edit") && typeof input.path === "string") {
         const reason = observations.beforeWrite(resolvePath(input.path, scope));
         if (reason) {
           logDecision({ ...base, rule: "C1", decision: "stale-or-unread" });
@@ -180,22 +153,6 @@ export default function commandPolicy(pi: ExtensionAPI) {
     if (v.class === "ask" && granted.has(key)) {
       logDecision({ ...base, decision: "exact-grant" });
       return undefined;
-    }
-    if (v.class === "ask" && v.rule === "A1" && !v.protected && !persistentOff &&
-      (event.toolName === "write" || event.toolName === "edit") &&
-      scopedMarkdownWrite(String(input.path), scope, markdownRoots)) {
-      logDecision({ ...base, decision: "persistent-markdown-scope" });
-      return undefined;
-    }
-    if (v.class === "ask" && v.rule === "A1" && !v.protected && roots.size) {
-      const paths = [...roots];
-      const auto = (event.toolName === "write" || event.toolName === "edit")
-        ? scopedWrite(String(input.path), scope, paths)
-        : event.toolName === "bash" && scopedCommand(String(input.command), scope, paths);
-      if (auto) {
-        logDecision({ ...base, decision: "task-file-scope" });
-        return undefined;
-      }
     }
     if (!ctx.hasUI) {
       logDecision({ ...base, decision: "refused-no-ui" });

@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { protectedTarget, resolvePath, type Scope } from "./classify.ts";
+import { isAbsolute, join } from "node:path";
+import { pinnedWithin, protectedTarget, resolvePath, type Scope } from "./classify.ts";
 
 function fingerprint(path: string): string | undefined {
   try {
@@ -84,12 +84,26 @@ export function releaseScratch(path: string) {
   }
 }
 
+/** Resolve the current worktree without allowing Git environment overrides to pick another. */
+export function checkoutRoot(scope: Scope): string | undefined {
+  try {
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
+    const result = execFileSync("git", ["-C", scope.cwd, "rev-parse", "--show-toplevel"], {
+      env, encoding: "utf8", timeout: 1000, stdio: ["ignore", "pipe", "pipe"],
+    }).trimEnd();
+    if (!isAbsolute(result)) return;
+    const root = resolvePath(result, scope);
+    if (root !== "/" && root !== resolvePath(scope.home, scope) && pinnedWithin(scope.cwd, scope, [root])) return root;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Metadata-only Git checkpoint; failure is reported, not treated as a clean tree. */
 export function dirtyFiles(scope: Scope): Map<string, string | undefined> | undefined {
+  const root = checkoutRoot(scope);
+  if (!root) return;
   try {
-    const root = execFileSync("git", ["-C", scope.cwd, "rev-parse", "--show-toplevel"], {
-      encoding: "utf8", timeout: 1000, stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
     const output = execFileSync("git", ["--no-optional-locks", "-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all"], {
       encoding: "utf8", timeout: 2000, maxBuffer: 1024 * 1024,
     });

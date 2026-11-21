@@ -1,4 +1,4 @@
-/** Shell/write classification with optional machine-local autonomy; not a sandbox. */
+/** Shell/write classification with optional project autonomy; not a sandbox. */
 import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 
@@ -12,7 +12,6 @@ export interface Verdict {
   why: string;
   /** Program names seen, for the log. Never arguments: they can carry secrets. */
   programs: string[];
-  protected?: boolean;
 }
 
 export interface Scope {
@@ -20,15 +19,16 @@ export interface Scope {
   home: string;
   /** Directories a write may target besides cwd, e.g. the temp directory. */
   writable: string[];
-  /** Machine-local permissions; absent for the shared baseline classifier. */
+  /** Project permissions; absent for the shared baseline classifier. */
   autonomy?: Autonomy;
   /** Wrappers or assignments may change package-manager destinations. */
   packageEnvironment?: boolean;
   taskRoot?: string;
   ownedPids?: number[];
+  externalEnvironment?: boolean;
 }
 
-/** Pi-specific machine grants layered over the shared baseline. */
+/** Pi project grants layered over the shared baseline. */
 export interface Autonomy {
   writeRoots: string[];
   disposableRoots: string[];
@@ -48,7 +48,7 @@ export function strictest(verdicts: Verdict[]): Verdict {
     for (const p of v.programs) programs.add(p);
     if (RANK[v.class] > RANK[worst.class]) worst = v;
   }
-  return { ...worst, programs: [...programs], ...(verdicts.some((v) => v.protected) ? { protected: true } : {}) };
+  return { ...worst, programs: [...programs] };
 }
 
 // ---- lexer -------------------------------------------------------------------------------
@@ -455,6 +455,39 @@ function routineWrite(raw: string, scope: Scope): boolean {
   return !!scope.autonomy && !protectedWrite(raw, scope) && pinnedWithin(raw, scope, scope.autonomy.writeRoots);
 }
 
+/** Git variables that pick an editor, pager or prompt; every other GIT_ variable can redirect the repository. */
+const GIT_UI_ENV = new Set(["GIT_EDITOR", "GIT_SEQUENCE_EDITOR", "GIT_PAGER", "GIT_TERMINAL_PROMPT"]);
+
+function localGit(tokens: Token[], scope: Scope): Verdict | undefined {
+  if (!scope.autonomy || scope.externalEnvironment ||
+      !tokens.every((token): token is Word => token.kind === "word" && !token.dynamic)) return;
+  const [git, sub, ...args] = tokens.map((token) => token.text);
+  if (git !== "git" || (sub !== "branch" && sub !== "worktree") ||
+      Object.keys(process.env).some((key) => key.startsWith("GIT_") && !GIT_UI_ENV.has(key))) return;
+  const literalRef = (ref: string) => /^[A-Za-z0-9_][A-Za-z0-9_./-]*$/.test(ref);
+  if (sub === "worktree" && args[0] === "list" && args.slice(1).every((arg) => arg === "--porcelain" || arg === "-z")) {
+    return verdict("allow", "R2", "git lists local worktrees", [git]);
+  }
+  if (!routineWrite(scope.cwd, scope)) return;
+  const cwd = resolvePath(scope.cwd, scope);
+  if (!lstatSync(resolve(cwd, ".git"), { throwIfNoEntry: false })?.isDirectory()) return;
+  if (sub === "branch" && args.length >= 1 && args.length <= 2 && args.every(literalRef)) {
+    return verdict("allow", "R2", "git creates a local branch without replacing it", [git]);
+  }
+  if (sub !== "worktree" || args[0] !== "add") return;
+  const rest = args.slice(1);
+  if (rest[0] === "-b") {
+    rest.shift();
+    if (!literalRef(rest.shift() ?? "")) return;
+  } else if (rest[0] === "--detach") rest.shift();
+  const [destination, start, ...extra] = rest;
+  if (!destination || /^[-~]/.test(destination) || /[*?\[\]{}]/.test(destination) ||
+      destination.replace(/^(?:\.\.?\/)+/, "").split("/").includes("..") ||
+      extra.length || (start !== undefined && !literalRef(start)) || !routineWrite(destination, scope) ||
+      lstatSync(resolve(cwd, destination), { throwIfNoEntry: false })) return;
+  return verdict("allow", "R2", "git adds a worktree at a new path in session scope", [git]);
+}
+
 function disposableTarget(raw: string, scope: Scope): boolean {
   if (!scope.autonomy || /[*?\[\]{}]/.test(raw) || protectedWrite(raw, scope)) return false;
   const path = resolvePath(raw, scope);
@@ -511,9 +544,9 @@ function writeTarget(raw: Word, scope: Scope, program: string): Verdict | null {
   if (NO_WRITE_TARGETS.has(raw.text)) return null;
   const target = raw.text.replace(/[*?[].*$/, "") || ".";
   const path = resolvePath(target, scope);
-  if (protectedWrite(target, scope)) return { ...verdict("ask", "A1", `${program} changes a protected target`, [program]), protected: true };
+  if (protectedWrite(target, scope)) return verdict("ask", "A1", `${program} changes a protected target`, [program]);
   if (routineWrite(target, scope)) return verdict("allow", "R4", `${program} writes inside configured roots`, [program]);
-  if (homeOutsideScope(path, scope) || scope.autonomy && !inScope(path, scope)) {
+  if (scope.autonomy || homeOutsideScope(path, scope)) {
     return verdict("ask", "A1", `${program} writes outside approved roots (${raw.text})`, [program]);
   }
   return verdict("allow", "R4", `${program} writes ${raw.text}`, [program]);
@@ -545,7 +578,8 @@ function classifyRm(args: Word[], scope: Scope, unknownArgs: boolean): Verdict {
     if (t.dynamic) return verdict("ask", "A6", "rm of a path only known when it runs", p);
     const path = resolvePath(t.text.replace(/[*?[].*$/, "") || ".", scope);
     if (protectedWrite(t.text, scope)) return verdict("block", "B1", "rm of a protected target", p);
-    if (path === "/" || path === canonical(scope.home) || path === canonical(scope.cwd) || !(inScope(path, scope) || routineWrite(t.text, scope))) {
+    if (path === "/" || path === canonical(scope.home) || path === canonical(scope.cwd) ||
+        (scope.autonomy ? !routineWrite(t.text, scope) : !inScope(path, scope))) {
       return verdict("block", "B1", `rm of ${t.text}`, p);
     }
   }
@@ -918,15 +952,16 @@ export function classify(command: string, scope: Scope, depth = 0): Verdict {
   }
   const commands = parse(tokens);
   if (!commands.length) return verdict("allow", "R1", "empty command");
-  return strictest(commands.map((c) => classifySimple(c, scope, depth)));
+  const routineGit = depth === 0 ? localGit(tokens, scope) : undefined;
+  return routineGit ?? strictest(commands.map((c) => classifySimple(c, scope, depth)));
 }
 
 /** A write through pi's `write` or `edit` tool, judged by step 4 like a shell write. */
 export function classifyWrite(path: string, scope: Scope, tool: string): Verdict {
   const resolved = resolvePath(path, scope);
-  if (protectedWrite(path, scope)) return { ...verdict("ask", "A1", `${tool} changes a protected target`, [tool]), protected: true };
+  if (protectedWrite(path, scope)) return verdict("ask", "A1", `${tool} changes a protected target`, [tool]);
   if (routineWrite(path, scope)) return verdict("allow", "R4", `${tool} inside configured roots`, [tool]);
-  if (homeOutsideScope(resolved, scope) || scope.autonomy && !inScope(resolved, scope)) {
+  if (scope.autonomy || homeOutsideScope(resolved, scope)) {
     return verdict("ask", "A1", `${tool} outside approved roots (${path})`, [tool]);
   }
   return verdict("allow", "R4", `${tool} ${inScope(resolved, scope) ? "inside" : "outside"} the working directory`, [tool]);

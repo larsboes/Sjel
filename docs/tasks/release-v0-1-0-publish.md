@@ -40,6 +40,11 @@ build from the same commit plus only the changes App Store Connect requires.
 - Published at 2026-11-21 11:14 UTC with the three CLI builds and their source archives, before
   the DMG, because notarization of both submissions stayed `In Progress` for over three hours.
   The release notes say the DMG follows.
+- The hold is on the notary account, not the DMG: a signed 16 KB probe binary
+  (`7e64caa1-7334-41e4-823f-49984f228791`, 12:05 UTC) also stayed `In Progress` past a 10-minute
+  wait. All four submissions of 2026-11-21 under team `52Q4FQ5XN8` were `In Progress` at 12:16 UTC.
+  If they are still pending on 2026-11-22, contact Apple Developer Support with
+  `f2ae86a2-3ce6-4fc2-959f-8c2f969dce69`.
 
 ## Unrun
 

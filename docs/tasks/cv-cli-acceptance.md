@@ -1,11 +1,13 @@
 ---
 id: cv-cli-acceptance
 title: "Accept installed CV discovery"
-state: verify
+state: "done"
 area: tooling
 kind: maintenance
 priority: 2
 spec: docs/plans/tooling.md
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept installed CV discovery

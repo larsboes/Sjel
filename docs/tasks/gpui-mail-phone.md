@@ -1,12 +1,14 @@
 ---
 id: "gpui-mail-phone"
 title: "Accept phone Mail replay and attachments"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "maintenance"
 priority: 4
 depends_on: ["gpui-mail-mac"]
 spec: "docs/architecture/native-ui-boundaries.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept phone Mail replay and attachments

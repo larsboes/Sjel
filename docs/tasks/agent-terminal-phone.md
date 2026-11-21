@@ -1,12 +1,14 @@
 ---
 id: "agent-terminal-phone"
 title: "Accept paired-phone terminal sessions"
-state: "verify"
+state: "done"
 area: "agent"
 kind: "maintenance"
 priority: 4
 depends_on: ["agent-terminal-mac"]
 spec: "docs/architecture/agent-sessions.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept paired-phone terminal sessions

@@ -1,11 +1,13 @@
 ---
 id: "agent-policy-acceptance"
 title: "Accept live command-policy boundaries"
-state: "verify"
+state: "done"
 area: "agent"
 kind: "maintenance"
 priority: 3
 spec: "docs/architecture/agent-sessions.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept live command-policy boundaries

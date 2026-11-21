@@ -1,11 +1,13 @@
 ---
 id: "gpui-project-tasks"
 title: "Accept task and project controls"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "maintenance"
 priority: 2
 spec: "docs/architecture/native-ui-boundaries.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept task and project controls

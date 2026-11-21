@@ -1,12 +1,14 @@
 ---
 id: "gpui-documents-phone"
 title: "Accept offline phone Documents"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "maintenance"
 priority: 4
 depends_on: ["gpui-documents-mac"]
 spec: "docs/architecture/native-ui-boundaries.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept offline phone Documents

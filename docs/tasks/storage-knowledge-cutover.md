@@ -1,11 +1,13 @@
 ---
 id: storage-knowledge-cutover
 title: "Accept knowledge-vault cutover"
-state: verify
+state: "done"
 area: storage
 kind: fix
 priority: 1
 spec: docs/plans/storage.md
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept knowledge-vault cutover

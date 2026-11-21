@@ -1,12 +1,14 @@
 ---
 id: "data-clipper-parity"
 title: "Accept browser Clipper parity"
-state: "verify"
+state: "done"
 area: "data"
 kind: "maintenance"
 priority: 2
 depends_on: ["data-clipper-first"]
 spec: "docs/architecture/data-intake.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept browser Clipper parity

@@ -1,10 +1,12 @@
 ---
 id: "gpui-full-disk-access"
 title: "Accept one branded Full Disk Access entry for Sjel"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "maintenance"
 priority: 2
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept one branded Full Disk Access entry for Sjel

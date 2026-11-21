@@ -1,11 +1,13 @@
 ---
 id: packs-handoff-acceptance
 title: "Accept a clipped-answer handoff"
-state: verify
+state: "done"
 area: packs
 kind: investigation
 priority: 3
 spec: docs/plans/packs.md
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept a clipped-answer handoff

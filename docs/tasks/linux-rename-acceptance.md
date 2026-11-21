@@ -1,11 +1,13 @@
 ---
 id: "linux-rename-acceptance"
 title: "Accept Linux service migration"
-state: "verify"
+state: "done"
 area: "tooling"
 kind: "maintenance"
 priority: 1
 spec: "docs/plans/restructure.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept Linux service migration

@@ -1,11 +1,13 @@
 ---
 id: scan-roomplan-device
 title: "Accept RoomPlan on a device"
-state: verify
+state: "done"
 area: scanning
 kind: feature
 priority: 4
 spec: docs/plans/scanning.md
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept RoomPlan on a device

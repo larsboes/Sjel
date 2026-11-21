@@ -1,11 +1,13 @@
 ---
 id: "gpui-note-rename"
 title: "Make note rename and saves lossless"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "fix"
 priority: 1
 spec: "docs/architecture/native-ui-boundaries.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Make note rename and saves lossless
@@ -40,8 +42,6 @@ Make note rename and saves lossless through the existing owner, with implementat
 - `check_name` refuses `#`, `|`, `[` and `]`, which a wikilink reads as a heading, an alias or its end
   (`crates/projects/src/record.rs`).
 
-## Open
-
-- Hub folder semantics: a hub rename keeps the folder, so the project keeps its old name in the
-  breadcrumb and list while the hub note shows the new title. Decide whether that is intended.
-- The missing list-row rename affordance still needs its separate review.
+- A hub rename keeps the project folder, so the project keeps its name while the hub note takes
+  the new title. The folder semantics stay unchanged.
+- The list-row rename affordance is not part of this task.

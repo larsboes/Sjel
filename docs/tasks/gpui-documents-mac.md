@@ -1,12 +1,14 @@
 ---
 id: "gpui-documents-mac"
 title: "Accept the Mac Documents workflow"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "maintenance"
 priority: 2
 spec: "docs/architecture/native-ui-boundaries.md"
 issue: "https://github.com/larsboes/Sjel/issues/245"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept the Mac Documents workflow

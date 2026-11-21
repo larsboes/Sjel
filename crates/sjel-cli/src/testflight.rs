@@ -405,12 +405,27 @@ impl Api {
         let cert = self.distribution_certificate()?;
         let name = format!("{bundle} {PROFILE_SUFFIX}");
         let found = self.get(&format!(
-            "/v1/profiles?filter[name]={}&filter[profileState]=ACTIVE&fields[profiles]=uuid,profileContent",
+            "/v1/profiles?filter[name]={}&fields[profiles]=uuid,profileContent,profileState",
             name.replace(' ', "%20")
         ))?;
-        let profile = match found["data"].get(0) {
+        let all = found["data"].as_array().cloned().unwrap_or_default();
+        let active = all
+            .iter()
+            .find(|p| p["attributes"]["profileState"] == "ACTIVE");
+        let profile = match active {
             Some(profile) => profile.clone(),
             None => {
+                // Apple refuses a new profile while an invalid or expired one holds its name.
+                for stale in &all {
+                    let id = stale["id"].as_str().ok_or("profile has no id")?;
+                    self.call(reqwest::Method::DELETE, &format!("/v1/profiles/{id}"), None)?;
+                    println!(
+                        "profile \"{name}\" ({}) deleted",
+                        stale["attributes"]["profileState"]
+                            .as_str()
+                            .unwrap_or("unknown state")
+                    );
+                }
                 let ids = self.get(&format!("/v1/bundleIds?filter[identifier]={bundle}"))?;
                 let bundle_id = ids["data"][0]["id"]
                     .as_str()

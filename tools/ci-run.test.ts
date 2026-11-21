@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { localChecks, runGates } from "./ci-run.ts";
@@ -78,6 +78,42 @@ test("full gate discovery is independent of incomplete unrelated UI edits", () =
     mkdirSync(join(root, "tools"));
     writeFileSync(join(root, "tools/check-new-invariant.sh"), "#!/bin/sh\nexit 0\n");
     expect(() => allGateIDs(root)).toThrow("Unregistered repository gate");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("ensure-full dispatches full CI only when main is at the commit, then waits for the marker", () => {
+  const root = mkdtempSync(join(tmpdir(), "sjel-ci-ensure-"));
+  try {
+    const bin = join(root, "bin"); mkdirSync(bin);
+    const sha = "a".repeat(40);
+    writeFileSync(join(bin, "gh"), `#!/bin/sh
+case "$1 $2" in
+  "workflow run") echo "$*" >> "$ROOT/dispatched"; exit 0 ;;
+esac
+case "$2" in
+  *commits/main) printf '{"sha":"%s"}' "$TIP" ;;
+  *'/jobs?'*) printf '{"jobs":[{"name":"full verification result","conclusion":"%s"}]}' "$CONCLUSION" ;;
+  *) if [ -f "$ROOT/dispatched" ]; then
+       printf '{"workflow_runs":[{"id":2,"head_sha":"${sha}","event":"workflow_dispatch","status":"completed","conclusion":"%s","created_at":"%s","html_url":"https://example.invalid/runs/2"}]}' "$CONCLUSION" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+     else printf '{"workflow_runs":[]}'; fi ;;
+esac
+`, { mode: 0o755 });
+    const run = (tip: string, conclusion = "success") => {
+      rmSync(join(root, "dispatched"), { force: true });
+      return Bun.spawnSync(["bun", join(import.meta.dir, "ci-plan.ts"), "--root", root, "--ensure-full", sha], {
+        cwd: root, stdout: "pipe", stderr: "pipe",
+        env: { PATH: `${bin}:${process.env.PATH}`, HOME: root, ROOT: root, TIP: tip, CONCLUSION: conclusion,
+          GITHUB_REPOSITORY: "example/fixture", SJEL_CI_POLL_MS: "10", SJEL_CI_WAIT_MINUTES: "1" },
+      });
+    };
+    const passed = run(sha);
+    expect(passed.exitCode).toBe(0);
+    expect(readFileSync(join(root, "dispatched"), "utf8")).toContain("workflow run ci.yml --repo example/fixture --ref main -f full=true");
+    const elsewhere = run("b".repeat(40));
+    expect(elsewhere.exitCode).toBe(1);
+    expect(elsewhere.stderr.toString()).toContain("Push first");
+    expect(existsSync(join(root, "dispatched"))).toBe(false);
+    expect(run(sha, "failure").exitCode).toBe(1);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

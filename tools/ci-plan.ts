@@ -140,6 +140,32 @@ export function requireFull(root: string, sha: string): void {
   throw new Error(`No successful full verification for ${sha}. Dispatch ci.yml with full=true at this commit before releasing.`);
 }
 
+/**
+ * Dispatches full CI on main and waits for it when `sha` has no passing full verification yet.
+ * A dispatch runs the branch tip, so origin main must already be at `sha`.
+ * @throws When main is elsewhere, the run fails, or the wait passes `SJEL_CI_WAIT_MINUTES` (40).
+ */
+export async function ensureFull(root: string, sha: string): Promise<void> {
+  try { return requireFull(root, sha); } catch { /* dispatch below */ }
+  const repo = repository(root);
+  const tip = api(root, `repos/${repo}/commits/main`).sha;
+  if (tip !== sha) throw new Error(`origin main is at ${String(tip).slice(0, 8)}, not ${sha.slice(0, 8)}. Push first.`);
+  // A minute of margin covers clock skew; an older dispatch for this commit already failed.
+  const since = Date.now() - 60_000;
+  command(root, ["gh", "workflow", "run", "ci.yml", "--repo", repo, "--ref", "main", "-f", "full=true"]);
+  console.error(`Dispatched full CI for ${sha.slice(0, 8)}. Waiting for it to finish.`);
+  const poll = Number(process.env.SJEL_CI_POLL_MS ?? 20_000);
+  const deadline = Date.now() + Number(process.env.SJEL_CI_WAIT_MINUTES ?? 40) * 60_000;
+  while (Date.now() < deadline) {
+    await Bun.sleep(poll);
+    const runs: Array<WorkflowRun & { status: string; created_at: string }> =
+      api(root, `repos/${repo}/actions/workflows/ci.yml/runs?head_sha=${sha}&event=workflow_dispatch&per_page=20`).workflow_runs;
+    const run = runs.find((r) => r.head_sha === sha && Date.parse(r.created_at) >= since);
+    if (run?.status === "completed") return requireFull(root, sha);
+  }
+  throw new Error(`Full CI for ${sha.slice(0, 8)} did not finish in time.`);
+}
+
 /** Stable GitHub outputs used by all selective workflows. */
 export function outputs(plan: CIPlan): Record<string, string> {
   return {
@@ -177,6 +203,11 @@ async function main() {
   const root = resolve(arg("--root") ?? join(import.meta.dir, ".."));
   const required = arg("--require-full");
   if (required) return requireFull(root, required);
+  const ensured = arg("--ensure-full");
+  if (ensured) {
+    if (!/^[a-f0-9]{40}$/.test(ensured)) throw new Error("--ensure-full needs a full commit SHA");
+    return ensureFull(root, ensured);
+  }
   const event = process.env.GITHUB_EVENT_PATH ? JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")) : {};
   const eventName = process.env.GITHUB_EVENT_NAME;
   const workflow = arg("--workflow") ?? "ci.yml";

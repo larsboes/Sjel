@@ -18,6 +18,7 @@
 #   tools/release vX.Y.Z                     # explicit version
 #   tools/release ... --push                 # also push the tag to origin
 #   tools/release ... --gh                   # also publish a gh release (implies --push)
+#   tools/release ... --run-ci               # start full CI on main and wait when it is missing
 #   tools/release ... --force                # skip the clean/on-main/not-behind/CI gate
 #   tools/release --notes-only               # print the notes that WOULD be generated, cut nothing
 #   tools/release -h
@@ -31,15 +32,16 @@ source "$TOOLS_DIR/lib/paths.sh"     # SJEL_ROOT, toml_*
 # shellcheck source=tools/lib/delta.sh
 source "$TOOLS_DIR/lib/delta.sh"     # latest_release_ref, print_manifest_delta, ver_gt, norm_ver
 
-LEVEL=""; VERSION=""; PUSH=0; GH=0; FORCE=0; NOTES_ONLY=0
+LEVEL=""; VERSION=""; PUSH=0; GH=0; FORCE=0; NOTES_ONLY=0; RUN_CI=0
 for a in "$@"; do
   case "$a" in
     --patch|--minor|--major) LEVEL="${a#--}" ;;
     --push)       PUSH=1 ;;
     --gh)         GH=1 ;;
     --force)      FORCE=1 ;;
+    --run-ci)     RUN_CI=1 ;;
     --notes-only) NOTES_ONLY=1 ;;
-    -h|--help)    sed -n '2,25p' "$0"; exit 0 ;;
+    -h|--help)    sed -n '2,26p' "$0"; exit 0 ;;
     v[0-9]*)      VERSION="$a" ;;
     *) echo "release: unknown arg '$a'" >&2; exit 1 ;;
   esac
@@ -124,8 +126,10 @@ gate() {
   # nothing about the tree being tagged.
   local sha
   sha="$(git -C "$SJEL_ROOT" rev-parse HEAD)"
-  if ! (cd "$SJEL_ROOT" && bun tools/ci-plan.ts --require-full "$sha"); then
-    echo "release: full CI has not passed for ${sha:0:8}." >&2; fail=1
+  local check=--require-full
+  [ "$RUN_CI" -eq 1 ] && [ "$fail" -eq 0 ] && check=--ensure-full
+  if ! (cd "$SJEL_ROOT" && bun tools/ci-plan.ts "$check" "$sha"); then
+    echo "release: full CI has not passed for ${sha:0:8}. --run-ci starts it and waits." >&2; fail=1
   fi
   return "$fail"
 }

@@ -28,7 +28,8 @@ fallback. Only macOS grants access. The UI apps are not granted Full Disk Access
 
 ## Evidence
 
-The helper lifecycle and nine distribution tests pass. The installed background bundle passes
-strict signature verification, contains the menu-bar icon, and leaves the previous executable
-selected for persistence. The System Settings drop, displayed icon and name, and real launchd
-permission probe require live acceptance.
+The helper lifecycle, nine distribution tests, five Desktop settings and permissions tests,
+and 23 menu-bar tests pass. The installed background bundle passes strict signature
+verification, contains the menu-bar icon, and leaves the previous executable selected for
+persistence. The menu shortcut, System Settings drop, displayed icon and name, and real
+launchd permission probe require live acceptance.

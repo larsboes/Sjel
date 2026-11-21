@@ -21,8 +21,13 @@ if [ -z "$identity" ]; then
 fi
 [ -n "$identity" ] || { echo "apps/mac/install: no code-signing identity in the keychain" >&2; exit 1; }
 
-(cd "$APP_DIR" && swift build -c release --product SjelMacApp)
-binary="$(cd "$APP_DIR" && swift build -c release --show-bin-path)/SjelMacApp"
+if [ -n "${SJEL_MAC_PREBUILT:-}" ]; then
+  binary="$SJEL_MAC_PREBUILT"
+else
+  (cd "$APP_DIR" && swift build -c release --product SjelMacApp)
+  binary="$(cd "$APP_DIR" && swift build -c release --show-bin-path)/SjelMacApp"
+fi
+[ -f "$binary" ] && [ -x "$binary" ] || { echo "apps/mac/install: build output is not executable: $binary" >&2; exit 1; }
 
 staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT

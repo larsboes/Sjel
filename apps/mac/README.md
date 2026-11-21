@@ -36,6 +36,7 @@ apps/mac/install
 Builds a signed `~/Applications/Sjel.app` and starts it. It lives in the menu bar only. Its menu
 has **Open at login**, so the app is there after a restart. **macOS Permissions…** opens the
 shared Full Disk Access setup in Sjel Desktop; the menu-bar app does not need its own grant.
+To sign and install an existing release build, set `SJEL_MAC_PREBUILT` to its executable.
 
 ## The inbound token
 

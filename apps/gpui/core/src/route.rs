@@ -376,6 +376,67 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
     )
 }
 
+/// Resolved phone `onOpenURL` or reminder link destination.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PhoneDeepLink {
+    pub target: Target,
+    pub calendar_day: Option<String>,
+    pub used_fallback: bool,
+}
+
+fn valid_iso_day(day: &str) -> bool {
+    day.len() == 10
+        && day.as_bytes()[4] == b'-'
+        && day.as_bytes()[7] == b'-'
+        && day
+            .bytes()
+            .enumerate()
+            .all(|(i, b)| matches!(i, 4 | 7) || b.is_ascii_digit())
+}
+
+/// Routes a phone `onOpenURL` or local reminder tap (`sjel://...` or `calendar:YYYY-MM-DD`)
+/// into the shared `Target` path with known-link, reminder-day, and unknown-first-segment
+/// fallback, without widening paired-device access.
+pub fn resolve_phone_deep_link(url: &str) -> Option<PhoneDeepLink> {
+    let trimmed = url.trim();
+    if let Some(day) = trimmed.strip_prefix("calendar:") {
+        if valid_iso_day(day) {
+            return Some(PhoneDeepLink {
+                target: Target::Native(Page::Calendar),
+                calendar_day: Some(day.to_owned()),
+                used_fallback: false,
+            });
+        }
+        return None;
+    }
+
+    let parsed = parse_deep_link(trimmed)?;
+    match parsed {
+        Target::Unknown(ref path) => {
+            if let Some(day) = path.strip_prefix("/calendar/") {
+                if valid_iso_day(day) {
+                    return Some(PhoneDeepLink {
+                        target: Target::Native(Page::Calendar),
+                        calendar_day: Some(day.to_owned()),
+                        used_fallback: false,
+                    });
+                }
+            }
+            let fallback_page = first_page(path).unwrap_or(Page::Home);
+            Some(PhoneDeepLink {
+                target: Target::Native(fallback_page),
+                calendar_day: None,
+                used_fallback: true,
+            })
+        }
+        target => Some(PhoneDeepLink {
+            target,
+            calendar_day: None,
+            used_fallback: false,
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -480,5 +541,59 @@ mod tests {
                 Some(Target::Native(page))
             );
         }
+    }
+
+    #[test]
+    fn phone_deep_links_resolve_known_routes_reminders_and_unknown_segment_fallbacks() {
+        // 1. Known routes
+        assert_eq!(
+            resolve_phone_deep_link("sjel://travel"),
+            Some(PhoneDeepLink {
+                target: Target::Native(Page::Travel),
+                calendar_day: None,
+                used_fallback: false,
+            })
+        );
+        // 2. Reminder links (`calendar:YYYY-MM-DD` and `sjel://calendar/YYYY-MM-DD`)
+        assert_eq!(
+            resolve_phone_deep_link("calendar:2026-11-21"),
+            Some(PhoneDeepLink {
+                target: Target::Native(Page::Calendar),
+                calendar_day: Some("2026-11-21".into()),
+                used_fallback: false,
+            })
+        );
+        assert_eq!(
+            resolve_phone_deep_link("sjel://calendar/2026-10-15"),
+            Some(PhoneDeepLink {
+                target: Target::Native(Page::Calendar),
+                calendar_day: Some("2026-10-15".into()),
+                used_fallback: false,
+            })
+        );
+        // 3. Known first segment with unknown subpath falls back to that segment's page
+        assert_eq!(
+            resolve_phone_deep_link("sjel://projects/unknown-subpath"),
+            Some(PhoneDeepLink {
+                target: Target::Native(Page::Projects),
+                calendar_day: None,
+                used_fallback: true,
+            })
+        );
+        // 4. Unknown first segment falls back to Home without widening access
+        assert_eq!(
+            resolve_phone_deep_link("sjel://unrecognized-segment/extra"),
+            Some(PhoneDeepLink {
+                target: Target::Native(Page::Home),
+                calendar_day: None,
+                used_fallback: true,
+            })
+        );
+        // 5. Unsafe or non-sjel schemes are refused
+        assert_eq!(resolve_phone_deep_link("sjel://../secrets"), None);
+        assert_eq!(
+            resolve_phone_deep_link("https://example.com/calendar"),
+            None
+        );
     }
 }

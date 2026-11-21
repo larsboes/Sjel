@@ -11,6 +11,9 @@ use futures::channel::mpsc::{unbounded, UnboundedReceiver};
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::a2ui::{
+    self, A2uiClientState, A2uiProposalIntent, DataClass, SavedA2uiView, ValidatedA2uiView,
+};
 use crate::device::DeviceClient;
 use crate::shell::{spawn, Shell, ShellError, ShellResult};
 pub use crate::terminal::Host;
@@ -461,6 +464,8 @@ pub enum Row {
         allowed: bool,
         for_session: bool,
     },
+    /// A schema-validated A2UI live or saved view mounted inside the agent panel.
+    LiveView(Box<ValidatedA2uiView>),
     /// A reason the run stopped, or a fact worth a line: usage, a stop, a truncated stream.
     Notice(String),
 }
@@ -485,6 +490,90 @@ impl Pending {
     }
 }
 
+/// Read-only workspace navigation or focus intent derived from an agent step stream.
+///
+/// Follows searches, pages, and owner-mode value proposals in the main column without allowing
+/// model code execution or direct writes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AgentFollowIntent {
+    /// Open a native workspace destination (`Target::Native`, `Target::Travel`, etc.).
+    OpenTarget(crate::route::Target),
+    /// Populate the Finder search input with a read-only search query.
+    FinderSearch(String),
+    /// Focus an owner-mode value proposal in a mounted A2UI surface for human review.
+    FocusProposal {
+        surface_id: String,
+        node_id: String,
+        proposal_action: String,
+    },
+}
+
+impl AgentFollowIntent {
+    pub fn summary_label(&self) -> String {
+        match self {
+            Self::OpenTarget(crate::route::Target::Native(page)) => {
+                format!("Follow page: {}", page.label())
+            }
+            Self::OpenTarget(crate::route::Target::Docs(slug)) => {
+                format!("Follow doc: {slug}")
+            }
+            Self::OpenTarget(_) => "Follow destination".to_owned(),
+            Self::FinderSearch(q) => format!("Follow search: “{q}”"),
+            Self::FocusProposal {
+                surface_id,
+                proposal_action,
+                ..
+            } => format!("Review proposal: {proposal_action} ({surface_id})"),
+        }
+    }
+}
+
+/// Derives a read-only [`AgentFollowIntent`] from an incoming stream event, returning `None` for
+/// write/exec commands or unrecognized tool calls.
+pub fn derive_follow_intent(event: &Event) -> Option<AgentFollowIntent> {
+    if event.kind != "tool_call" {
+        return None;
+    }
+    let parsed: serde_json::Value = serde_json::from_str(event.arguments.trim()).ok()?;
+    let str_field = |k: &str| {
+        parsed
+            .get(k)
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    };
+
+    match event.name.as_str() {
+        "search" | "finder" | "grep" | "find" => {
+            let query = str_field("query")
+                .or_else(|| str_field("q"))
+                .or_else(|| str_field("pattern"))?;
+            Some(AgentFollowIntent::FinderSearch(query.to_owned()))
+        }
+        "open" | "navigate" | "read" => {
+            if let Some(url) = str_field("url").or_else(|| str_field("href")) {
+                if let Some(target) = crate::route::parse_deep_link(url) {
+                    return Some(AgentFollowIntent::OpenTarget(target));
+                }
+            }
+            let path = str_field("path").or_else(|| str_field("route"))?;
+            if let Some(target) = crate::route::parse_deep_link(path) {
+                return Some(AgentFollowIntent::OpenTarget(target));
+            }
+            if path.starts_with('/') {
+                let deep = format!("sjel://{}", path.trim_start_matches('/'));
+                if let Some(target) = crate::route::parse_deep_link(&deep) {
+                    if !matches!(target, crate::route::Target::Unknown(_)) {
+                        return Some(AgentFollowIntent::OpenTarget(target));
+                    }
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 pub struct AgentRun {
     /// The session this panel is attached to.
     pub session: Option<Session>,
@@ -502,6 +591,16 @@ pub struct AgentRun {
     pub sessions_loading: bool,
     /// Tier selected for the next session if none is open.
     pub draft_tier: &'static str,
+    /// Saved A2UI views that can be reloaded in the agent panel without a model call.
+    pub saved_views: Vec<SavedA2uiView>,
+    /// Constrained client state (`/draft/*` and `/ui/*`) for mounted A2UI views.
+    pub view_state: A2uiClientState,
+    /// Owner-mode proposals emitted by mounted A2UI views.
+    pub view_proposals: Vec<A2uiProposalIntent>,
+    /// Whether the main workspace should automatically follow read-only agent navigation intents.
+    pub follow_steps: bool,
+    /// Most recent read-only navigation/search/proposal intent derived from the step stream.
+    pub latest_follow_intent: Option<AgentFollowIntent>,
 }
 
 impl Default for AgentRun {
@@ -517,6 +616,11 @@ impl Default for AgentRun {
             sessions: Vec::new(),
             sessions_loading: false,
             draft_tier: "project",
+            saved_views: Vec::new(),
+            view_state: A2uiClientState::new(),
+            view_proposals: Vec::new(),
+            follow_steps: false,
+            latest_follow_intent: None,
         }
     }
 }
@@ -598,6 +702,9 @@ impl AgentRun {
             // shown as either, because a panel that mixes them is a panel you stop reading.
             "reasoning" => {}
             "tool_call" => {
+                if let Some(intent) = derive_follow_intent(&event) {
+                    self.latest_follow_intent = Some(intent);
+                }
                 self.rows.push(Row::Tool {
                     name: event.name,
                     call_id: event.tool_id,
@@ -702,11 +809,120 @@ impl AgentRun {
                     "This panel missed part of the run. Open the transcript to read it all.".into(),
                 ));
             }
+            "view_document" => {
+                let _ = self.mount_view_json(&event.content, DataClass::C2);
+            }
             other => {
                 self.rows
                     .push(Row::Notice(format!("unhandled event: {other}")));
             }
         }
+    }
+
+    /// Validates and mounts a live A2UI view document in the transcript, or records a structured
+    /// validation error without executing any model code.
+    pub fn mount_view_json(
+        &mut self,
+        raw_json: &str,
+        max_admitted_class: DataClass,
+    ) -> Result<ValidatedA2uiView, a2ui::A2uiValidationError> {
+        let view = a2ui::validate_json(raw_json)?;
+        if view.data_class > max_admitted_class {
+            let err = a2ui::A2uiValidationError {
+                kind: a2ui::A2uiErrorKind::InvalidDataClass,
+                node_id: Some(view.root.clone()),
+                message: format!(
+                    "view data class '{}' exceeds admitted class '{}'",
+                    view.data_class.as_str(),
+                    max_admitted_class.as_str()
+                ),
+            };
+            self.error = Some(format!("View refused: {err}"));
+            return Err(err);
+        }
+        if let Some(existing) = self.rows.iter_mut().rev().find_map(|row| match row {
+            Row::LiveView(v) if v.surface_id == view.surface_id => Some(v),
+            _ => None,
+        }) {
+            **existing = view.clone();
+        } else {
+            self.rows.push(Row::LiveView(Box::new(view.clone())));
+        }
+        Ok(view)
+    }
+
+    /// Saves a validated view document so it can be reloaded after restart without a model call.
+    pub fn save_view(
+        &mut self,
+        saved_id: impl Into<String>,
+        document: a2ui::A2uiDocument,
+    ) -> Result<SavedA2uiView, a2ui::A2uiValidationError> {
+        let saved = SavedA2uiView::new(saved_id, document)?;
+        self.saved_views.retain(|v| v.saved_id != saved.saved_id);
+        self.saved_views.insert(0, saved.clone());
+        Ok(saved)
+    }
+
+    /// Reloads a saved view by id without a model call, re-running schema, route, and data-class
+    /// validation.
+    pub fn reload_saved_view(
+        &mut self,
+        saved_id: &str,
+        max_admitted_class: DataClass,
+    ) -> Result<ValidatedA2uiView, a2ui::A2uiValidationError> {
+        let saved = self
+            .saved_views
+            .iter()
+            .find(|v| v.saved_id == saved_id)
+            .cloned()
+            .ok_or_else(|| a2ui::A2uiValidationError {
+                kind: a2ui::A2uiErrorKind::MissingRoot,
+                node_id: None,
+                message: format!("saved view '{saved_id}' not found"),
+            })?;
+        let json = saved.to_json().map_err(|err| a2ui::A2uiValidationError {
+            kind: a2ui::A2uiErrorKind::InvalidProperty,
+            node_id: None,
+            message: err,
+        })?;
+        let (_, view) = SavedA2uiView::reload_from_json(&json, max_admitted_class)?;
+        if let Some(existing) = self.rows.iter_mut().rev().find_map(|row| match row {
+            Row::LiveView(v) if v.surface_id == view.surface_id => Some(v),
+            _ => None,
+        }) {
+            **existing = view.clone();
+        } else {
+            self.rows.push(Row::LiveView(Box::new(view.clone())));
+        }
+        Ok(view)
+    }
+
+    /// Emits an owner-mode proposal from a button or form in a mounted view.
+    pub fn submit_view_proposal(
+        &mut self,
+        surface_id: &str,
+        node_id: &str,
+    ) -> Result<A2uiProposalIntent, a2ui::A2uiValidationError> {
+        let view = self
+            .rows
+            .iter()
+            .rev()
+            .find_map(|row| match row {
+                Row::LiveView(v) if v.surface_id == surface_id => Some(v.as_ref().clone()),
+                _ => None,
+            })
+            .ok_or_else(|| a2ui::A2uiValidationError {
+                kind: a2ui::A2uiErrorKind::MissingRoot,
+                node_id: Some(node_id.to_owned()),
+                message: format!("live view surface '{surface_id}' is not mounted"),
+            })?;
+        let proposal = self.view_state.build_proposal(&view, node_id)?;
+        self.view_proposals.push(proposal.clone());
+        self.rows.push(Row::Notice(format!(
+            "proposal queued (owner-mode) · {} · {}",
+            proposal.intent, proposal.node_id
+        )));
+        Ok(proposal)
     }
 
     /// What the footer says while a run is active.
@@ -1015,6 +1231,57 @@ mod tests {
             ..session
         };
         assert_eq!(untitled.label(), "/Users/x/Developer/Sjel");
+    }
+
+    #[test]
+    fn step_stream_derives_read_only_follow_intents_and_ignores_write_or_exec_calls() {
+        let mut run = AgentRun::default();
+
+        // 1. Read-only search tool call derives FinderSearch intent
+        run.apply(Event {
+            kind: "tool_call".into(),
+            seq: 1,
+            name: "search".into(),
+            arguments: r#"{"query":"Finanzamt Bescheid"}"#.into(),
+            ..Default::default()
+        });
+        assert_eq!(
+            run.latest_follow_intent,
+            Some(AgentFollowIntent::FinderSearch("Finanzamt Bescheid".into()))
+        );
+
+        // 2. Read-only navigation tool call derives OpenTarget intent
+        run.apply(Event {
+            kind: "tool_call".into(),
+            seq: 2,
+            name: "open".into(),
+            arguments: r#"{"url":"sjel://documents"}"#.into(),
+            ..Default::default()
+        });
+        assert_eq!(
+            run.latest_follow_intent,
+            Some(AgentFollowIntent::OpenTarget(crate::route::Target::Native(
+                crate::route::Page::Documents
+            )))
+        );
+
+        // 3. Write or bash tool calls never derive navigation or execute direct writes
+        let bash_event = Event {
+            kind: "tool_call".into(),
+            seq: 3,
+            name: "bash".into(),
+            arguments: r#"{"command":"rm -rf /tmp/test"}"#.into(),
+            ..Default::default()
+        };
+        assert_eq!(derive_follow_intent(&bash_event), None);
+        let write_event = Event {
+            kind: "tool_call".into(),
+            seq: 4,
+            name: "write".into(),
+            arguments: r#"{"path":"/projects","content":"overwrite"}"#.into(),
+            ..Default::default()
+        };
+        assert_eq!(derive_follow_intent(&write_event), None);
     }
 }
 

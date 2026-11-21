@@ -15,8 +15,11 @@ use super::{
 use crate::{
     ely::{
         buttons::{Button, ButtonVariant},
+        data_display::DescriptionList,
+        feedback::InlineMessage,
         forms::{Input, InputEvent, TextInput},
         layout::{Card as ElyCard, CardHeader, Section as ElySection},
+        primitives::Severity,
         theme::ControlSize,
     },
     theme::ThemeContext,
@@ -219,18 +222,14 @@ impl Render for PhonePeople {
                         .child(
                             ElyCard::new()
                                 .header(header)
-                                .children(fields.into_iter().map(|(label, value)| {
-                                    div()
-                                        .flex()
-                                        .flex_col()
-                                        .child(
-                                            div()
-                                                .text_sm()
-                                                .text_color(rgb(palette.muted))
-                                                .child(label),
-                                        )
-                                        .child(value)
-                                }))
+                                .when(!fields.is_empty(), |card| {
+                                    let list = fields
+                                        .into_iter()
+                                        .fold(DescriptionList::new(), |dl, (label, value)| {
+                                            dl.item(label, value)
+                                        });
+                                    card.child(list)
+                                })
                                 .child(ElySection::new(relation).child(linked_body)),
                         )
                 });
@@ -286,7 +285,7 @@ impl Render for PhonePeople {
             )
             .child(Input::new(&self.search))
             .when_some(self.snapshot.error.clone(), |screen, error| {
-                screen.child(div().text_sm().text_color(rgb(palette.red)).child(error))
+                screen.child(InlineMessage::new(Severity::Danger, error))
             })
             .when_some(
                 visible

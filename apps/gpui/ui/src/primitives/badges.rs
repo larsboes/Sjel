@@ -4,12 +4,14 @@ use gpui_kit::{
     div, prelude::*, rgb, AnyElement, App, ClickEvent, ElementId, SharedString, Window,
 };
 
+use super::tokens::FONT_MONO_TABULAR;
 use crate::ely::{
     buttons::{Button, ButtonVariant, ToggleButton, ToggleItem},
     data_display::{Badge, Tone},
     feedback::InlineMessage,
     primitives::{Severity, Tooltip},
     theme::ControlSize,
+    typography::tabular,
 };
 use crate::theme::Palette;
 
@@ -121,11 +123,13 @@ pub fn sync_status_badge(pending: usize, syncing: bool, _palette: Palette) -> An
 
 /// Right-aligned monospace text for tabular numerical alignment (amounts, dates, counts, sizes).
 pub fn mono_num(text: impl Into<SharedString>, color: u32) -> gpui_kit::Div {
-    div()
-        .font_family(".AppleSystemUIFontMonospaced")
-        .text_right()
-        .text_color(rgb(color))
-        .child(text.into())
+    tabular(
+        div()
+            .font_family(FONT_MONO_TABULAR)
+            .text_right()
+            .text_color(rgb(color))
+            .child(text.into()),
+    )
 }
 
 /// Interactive tinted status pill with tooltip and click handler.

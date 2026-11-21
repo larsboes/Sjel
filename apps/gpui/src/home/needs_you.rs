@@ -1,7 +1,7 @@
-use gpui_kit::component::tag::Tag;
-use gpui_kit::component::{ActiveTheme, Sizable};
+use gpui_kit::component::ActiveTheme;
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, SharedString};
 use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
+use sjel_gpui_ui::ely::data_display::{Badge, Tone};
 use sjel_gpui_ui::ely::primitives::Tooltip;
 use sjel_gpui_ui::ely::theme::ControlSize;
 
@@ -67,7 +67,7 @@ pub fn approval_row(
     let (allow_id, deny_id) = (approval.id.clone(), approval.id.clone());
     view.selection
         .mark(row(), selected, palette)
-        .child(Tag::warning().small().child("agent write"))
+        .child(Badge::new("agent write").tone(Tone::Warning))
         .child(
             div()
                 .id(SharedString::from(format!("approval-open-{}", approval.id)))

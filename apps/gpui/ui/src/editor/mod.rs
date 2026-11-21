@@ -6,6 +6,7 @@
 //! started from. The Mac sends it to the capability, which refuses an edit made elsewhere in the
 //! meantime; the phone writes its replica and queues the write for the Mac.
 
+pub mod adapter;
 mod block_view;
 mod preview;
 mod slash_menu;
@@ -14,11 +15,15 @@ mod types;
 
 use std::sync::Arc;
 
-use crate::ely::feedback::Toast;
-use crate::ely::primitives::Severity;
+use crate::ely::{
+    data_display::{Badge, Tone},
+    documents::{ReadingTime, WordCount},
+    feedback::Toast,
+    primitives::Severity,
+};
 use crate::feedback::WindowToastExt;
+use crate::primitives::key_bar;
 use gpui_kit::component::input::{InputEvent, TextareaState};
-use gpui_kit::component::ActiveTheme;
 use gpui_kit::{
     div, list as block_list, prelude::*, px, rgb, rgba, Context, Entity, EventEmitter, Focusable,
     FontWeight, HighlightStyle, IntoElement, ListAlignment, ListState, Render, SharedString,
@@ -29,7 +34,7 @@ use sjel_gpui_core::inline::Inline;
 use sjel_gpui_core::shell::{self, ProjectRecord};
 
 use crate::block_menu;
-use crate::theme::{tint, Palette};
+use crate::theme::{tint, Density, Palette, ThemeContext};
 
 pub use types::{
     bind_keys, repo_saver, CloseNote, EditorEvent, MoveBlockDown, MoveBlockUp, Save, SaveError,
@@ -66,6 +71,7 @@ pub struct NoteEditor {
     pub(crate) saver: Saver,
     /// The page's palette. `None` follows the window's appearance; the phone sets its own.
     pub(crate) palette: Option<Palette>,
+    pub(crate) density: Density,
     renaming: bool,
     /// A title waiting for the last keystroke to be saved before the page renames the note.
     pub(crate) pending_rename: Option<SharedString>,
@@ -109,6 +115,7 @@ impl NoteEditor {
             menu: None,
             saver,
             palette: None,
+            density: ThemeContext::of(window, cx).density,
             renaming: false,
             pending_rename: None,
             shown: Vec::new(),
@@ -394,6 +401,13 @@ impl NoteEditor {
         }
     }
 
+    pub fn set_density(&mut self, density: Density, cx: &mut Context<Self>) {
+        if self.density != density {
+            self.density = density;
+            cx.notify();
+        }
+    }
+
     pub(crate) fn palette(&self, window: &Window) -> Palette {
         self.palette
             .unwrap_or_else(|| Palette::for_appearance(window.appearance()))
@@ -655,28 +669,24 @@ impl NoteEditor {
 impl Render for NoteEditor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self.palette(window);
-        let mono = cx.theme().mono_font_family.clone();
+        let is_mobile = self.density == Density::Mobile
+            || ThemeContext::of(window, cx).density == Density::Mobile
+            || cfg!(target_os = "ios");
         let (status_text, bad) = self.status();
-        let dot_color = match (bad, self.saving, self.revision != self.saved_revision) {
-            (true, _, _) => palette.red,
-            (false, true, _) => palette.amber,
-            (false, false, true) => palette.amber,
-            (false, false, false) => palette.green,
+        let status_tone = match (bad, self.saving, self.revision != self.saved_revision) {
+            (true, _, _) => Tone::Danger,
+            (false, true, _) => Tone::Warning,
+            (false, false, true) => Tone::Warning,
+            (false, false, false) => Tone::Success,
         };
         let block_count = self.doc.blocks.len();
-        let word_count = self
+        let body_text = self
             .doc
             .blocks
             .iter()
-            .map(|b| b.text.split_whitespace().count())
-            .sum::<usize>();
-
-        let est_minutes = word_count.div_ceil(200);
-        let reading_time = if est_minutes <= 1 {
-            "1 min read".to_string()
-        } else {
-            format!("{est_minutes} min read")
-        };
+            .map(|b| b.text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
 
         let total_todos = self
             .doc
@@ -692,42 +702,16 @@ impl Render for NoteEditor {
             .count();
 
         let tasks_badge = (total_todos > 0).then(|| {
-            div()
-                .flex()
-                .items_center()
-                .gap_1()
-                .px_1p5()
-                .py(px(0.5))
-                .rounded(px(3.))
-                .bg(rgba(if done_todos == total_todos {
-                    tint(palette.green, 0x22)
+            Badge::new(format!("{done_todos}/{total_todos} tasks")).tone(
+                if done_todos == total_todos {
+                    Tone::Success
                 } else {
-                    palette.raised
-                }))
-                .text_color(rgb(if done_todos == total_todos {
-                    palette.green
-                } else {
-                    palette.muted
-                }))
-                .child(format!("{done_todos}/{total_todos} tasks"))
+                    Tone::Neutral
+                },
+            )
         });
 
-        let status_badge = div()
-            .flex()
-            .items_center()
-            .gap_1p5()
-            .px_2()
-            .py(px(1.5))
-            .rounded_full()
-            .bg(rgba(tint(dot_color, 0x18)))
-            .child(div().size(px(6.)).rounded_full().bg(rgb(dot_color)))
-            .child(
-                div()
-                    .text_xs()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(rgb(if bad { palette.red } else { palette.muted }))
-                    .child(status_text.to_owned()),
-            );
+        let status_badge = Badge::new(status_text.to_owned()).tone(status_tone).dot();
 
         let status_bar = div()
             .flex()
@@ -749,13 +733,22 @@ impl Render for NoteEditor {
                 div()
                     .flex()
                     .items_center()
-                    .gap_3()
+                    .gap_2()
                     .text_color(rgb(palette.muted))
-                    .child(format!(
-                        "{word_count} words · {block_count} blocks · {reading_time}"
-                    ))
-                    .child(div().w(px(1.)).h(px(10.)).bg(rgba(palette.border)))
-                    .child("Esc to close · / for blocks"),
+                    .child(WordCount::new(body_text.clone()))
+                    .child("·")
+                    .child(format!("{block_count} blocks"))
+                    .child("·")
+                    .child(ReadingTime::new(body_text))
+                    .when(!is_mobile, |el| {
+                        el.child(div().w(px(1.)).h(px(10.)).bg(rgba(palette.border)))
+                            .child(
+                                div()
+                                    .id("editor-desktop-escape-hint")
+                                    .debug_selector(|| "editor-desktop-escape-hint".into())
+                                    .child("Esc to close · / for blocks"),
+                            )
+                    }),
             );
 
         let headings: Vec<(usize, u8, String)> = self
@@ -848,65 +841,17 @@ impl Render for NoteEditor {
             .justify_between()
             .text_xs()
             .text_color(rgb(palette.muted))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .px_1p5()
-                                    .py(px(0.5))
-                                    .rounded(px(3.))
-                                    .bg(rgba(palette.raised))
-                                    .font_family(mono.clone())
-                                    .text_xs()
-                                    .child("⌘S"),
-                            )
-                            .child("Save"),
-                    )
-                    .child("·")
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .px_1p5()
-                                    .py(px(0.5))
-                                    .rounded(px(3.))
-                                    .bg(rgba(palette.raised))
-                                    .font_family(mono.clone())
-                                    .text_xs()
-                                    .child("⌘["),
-                            )
-                            .child("Close"),
-                    )
-                    .child("·")
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .px_1p5()
-                                    .py(px(0.5))
-                                    .rounded(px(3.))
-                                    .bg(rgba(palette.raised))
-                                    .font_family(mono)
-                                    .text_xs()
-                                    .child("⌘⇧↑/↓"),
-                            )
-                            .child("Move block"),
-                    ),
-            )
+            .when(!is_mobile, |el| {
+                el.child(
+                    div()
+                        .id("editor-desktop-key-hints")
+                        .debug_selector(|| "editor-desktop-key-hints".into())
+                        .child(key_bar(
+                            &[("⌘S", "Save"), ("⌘[", "Close"), ("⌘⇧↑/↓", "Move block")],
+                            palette,
+                        )),
+                )
+            })
             .child(
                 div()
                     .text_xs()
@@ -1377,5 +1322,33 @@ mod tests {
         cx.update(|window, cx| editor.update(cx, |e, cx| e.focus(1, 0, window, cx)));
         cx.run_until_parked();
         assert_eq!(editor.read_with(cx, |e, _| e.active), Some(1));
+    }
+
+    #[gpui::test]
+    fn mobile_density_hides_desktop_key_hints_in_editor(cx: &mut TestAppContext) {
+        let (editor, cx) = open(cx);
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("editor-desktop-escape-hint").is_some(),
+            "desktop density shows Esc to close hint"
+        );
+        assert!(
+            cx.debug_bounds("editor-desktop-key-hints").is_some(),
+            "desktop density shows footer key hints"
+        );
+        cx.update(|_, cx| {
+            editor.update(cx, |editor, cx| {
+                editor.set_density(Density::Mobile, cx);
+            });
+        });
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("editor-desktop-escape-hint").is_none(),
+            "mobile density hides Esc to close hint"
+        );
+        assert!(
+            cx.debug_bounds("editor-desktop-key-hints").is_none(),
+            "mobile density hides footer key hints (⌘S, ⌘[, ⌘⇧↑/↓)"
+        );
     }
 }

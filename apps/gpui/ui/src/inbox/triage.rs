@@ -2,9 +2,13 @@
 //! sheet or the field on this page. Rules suggest where an item goes; nothing moves until it is
 //! pressed. The web page is `dashboard/src/routes/inbox/+page.svelte`.
 
-use crate::ely::buttons::{Button, ButtonVariant};
-use crate::ely::forms::{Input, InputEvent, TextInput};
-use crate::ely::theme::ControlSize;
+use crate::ely::{
+    buttons::{Button, ButtonVariant},
+    feedback::InlineMessage,
+    forms::{Input, InputEvent, TextInput},
+    primitives::Severity,
+    theme::ControlSize,
+};
 use gpui::Focusable;
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, EventEmitter,
@@ -14,7 +18,7 @@ use sjel_gpui_core::capture::{self, Capture, TAGS};
 use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::data::{Remote, Repo};
-use crate::primitives::filter_pill;
+use crate::primitives::{filter_pill, key_bar};
 use crate::theme::{Density, Palette, ThemeContext};
 
 actions!(
@@ -493,8 +497,15 @@ impl Render for Inbox {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(muted(
-                        "j/k move · r sort · e done · d dismiss · t tag · ↩ edit",
+                    .child(key_bar(
+                        &[
+                            ("j/k", "move"),
+                            ("r", "sort"),
+                            ("e", "done"),
+                            ("d", "dismiss"),
+                            ("t", "tag"),
+                            ("↩", "edit"),
+                        ],
                         palette,
                     ))
                     .when(routable > 0, |el| {
@@ -527,19 +538,14 @@ impl Render for Inbox {
             .flex_col()
             .gap_1();
         if self.rows.value.is_none() && self.rows.loading {
-            list = list.child(muted("Loading the inbox…", palette));
+            list = list.child(InlineMessage::new(Severity::Info, "Loading the inbox…"));
         }
         if let Some(error) = &self.rows.error {
-            list = list.child(
-                div()
-                    .text_sm()
-                    .text_color(rgb(palette.red))
-                    .child(error.to_string()),
-            );
+            list = list.child(InlineMessage::new(Severity::Danger, error.to_string()));
         }
         let rows: Vec<Capture> = self.visible().into_iter().cloned().collect();
         if rows.is_empty() && !self.rows.loading && self.rows.error.is_none() {
-            list = list.child(muted("Nothing waiting.", palette));
+            list = list.child(InlineMessage::new(Severity::Info, "Nothing waiting."));
         }
         for (i, capture) in rows.into_iter().enumerate() {
             list = list.child(self.row(i, capture, palette, cx));
@@ -552,12 +558,10 @@ impl Render for Inbox {
             .gap_3()
             .child(Input::new(&field))
             .when_some(self.write_error.as_ref(), |el, error| {
-                el.child(
-                    div()
-                        .text_sm()
-                        .text_color(rgb(palette.red))
-                        .child(format!("Not saved: {error}")),
-                )
+                el.child(InlineMessage::new(
+                    Severity::Danger,
+                    format!("Not saved: {error}"),
+                ))
             })
             .child(toolbar)
             .child(list)
@@ -809,13 +813,6 @@ fn next_tag(tag: Option<&str>) -> Option<&'static str> {
         None => Some(TAGS[0]),
         Some(i) => TAGS.get(i + 1).copied(),
     }
-}
-
-fn muted(text: &str, palette: Palette) -> gpui_kit::Div {
-    div()
-        .text_sm()
-        .text_color(rgb(palette.muted))
-        .child(text.to_owned())
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 //! Trip overview, readiness check, who-is-around contacts, and timeline.
 use super::forms::Remove;
 use super::Travel;
+use crate::ely::data_display::{Badge, Tag, Tone};
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::{
     shell::CalendarEntry,
@@ -129,20 +130,11 @@ impl Travel {
             );
             for traveler in &plan.travelers {
                 travelers_row = travelers_row.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1()
-                        .px_2()
-                        .py(px(2.))
-                        .rounded(px(6.))
-                        .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
-                        .border_1()
-                        .border_color(rgba(crate::theme::tint(palette.accent, 0x35)))
-                        .text_xs()
-                        .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(rgb(palette.accent))
-                        .child(format!("👤 {traveler}")),
+                    Tag::new(
+                        gpui::SharedString::from(format!("traveler-{traveler}")),
+                        format!("👤 {traveler}"),
+                    )
+                    .tone(Tone::Accent),
                 );
             }
             content = content.child(travelers_row);
@@ -211,17 +203,7 @@ impl Travel {
                     if let Some(note) = p.note.as_deref().filter(|n| !n.is_empty()) {
                         host_badge = format!("🛏 {note}");
                     }
-                    card = card.child(
-                        div()
-                            .px(px(4.))
-                            .py(px(1.))
-                            .rounded(px(4.))
-                            .bg(rgba(crate::theme::tint(palette.green, 0x22)))
-                            .text_xs()
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                            .text_color(rgb(palette.green))
-                            .child(host_badge),
-                    );
+                    card = card.child(Badge::new(host_badge).tone(Tone::Success));
                 } else if !p.place.is_empty() && p.place != stage.destination.name {
                     card = card.child(
                         div()
@@ -268,10 +250,10 @@ impl Travel {
 
             let mut meetups_row = div().flex().flex_wrap().gap_2();
             for meetup in &meetups {
-                let status_color = match meetup.status.to_lowercase().as_str() {
-                    "confirmed" => palette.green,
-                    "planned" => palette.accent,
-                    _ => palette.muted,
+                let status_tone = match meetup.status.to_lowercase().as_str() {
+                    "confirmed" => Tone::Success,
+                    "planned" => Tone::Accent,
+                    _ => Tone::Neutral,
                 };
 
                 let mut details_str = format!("with {}", meetup.people.join(", "));
@@ -305,17 +287,7 @@ impl Travel {
                                         .text_color(rgb(palette.text))
                                         .child(format!("☕ {}", meetup.title)),
                                 )
-                                .child(
-                                    div()
-                                        .px(px(4.))
-                                        .py(px(1.))
-                                        .rounded(px(4.))
-                                        .bg(rgba(crate::theme::tint(status_color, 0x22)))
-                                        .text_xs()
-                                        .font_weight(gpui::FontWeight::MEDIUM)
-                                        .text_color(rgb(status_color))
-                                        .child(meetup.status.clone()),
-                                ),
+                                .child(Badge::new(meetup.status.clone()).tone(status_tone)),
                         )
                         .child(
                             div()
@@ -391,94 +363,37 @@ impl Travel {
             .count();
 
         let accom_pill = if total_nights == 0 {
-            div()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(6.))
-                .bg(rgba(palette.raised))
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child("Day trip")
+            Badge::new("Day trip").tone(Tone::Neutral)
         } else if lodging_count >= total_nights {
-            div()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(6.))
-                .bg(rgba(crate::theme::tint(palette.green, 0x22)))
-                .text_xs()
-                .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(rgb(palette.green))
-                .child(format!("✓ {lodging_count}/{total_nights} nights covered"))
+            Badge::new(format!("✓ {lodging_count}/{total_nights} nights covered"))
+                .tone(Tone::Success)
         } else {
-            div()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(6.))
-                .bg(rgba(crate::theme::tint(palette.amber, 0x22)))
-                .text_xs()
-                .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(rgb(palette.amber))
-                .child(format!("⚠ {lodging_count}/{total_nights} nights covered"))
+            Badge::new(format!("⚠ {lodging_count}/{total_nights} nights covered"))
+                .tone(Tone::Warning)
         };
 
         let stages_pill = if plan.stages.is_empty() {
-            div()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(6.))
-                .bg(rgba(palette.raised))
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child("No stages")
+            Badge::new("No stages").tone(Tone::Neutral)
         } else if unbooked_stages == 0 {
-            div()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(6.))
-                .bg(rgba(crate::theme::tint(palette.green, 0x22)))
-                .text_xs()
-                .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(rgb(palette.green))
-                .child(format!("✓ All {} stages booked", plan.stages.len()))
+            Badge::new(format!("✓ All {} stages booked", plan.stages.len())).tone(Tone::Success)
         } else {
-            div()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(6.))
-                .bg(rgba(crate::theme::tint(palette.amber, 0x22)))
-                .text_xs()
-                .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(rgb(palette.amber))
-                .child(format!("⚠ {unbooked_stages} unbooked stage(s)"))
+            Badge::new(format!("⚠ {unbooked_stages} unbooked stage(s)")).tone(Tone::Warning)
         };
 
         let codes_pill = if items.is_empty() {
             div().into_any_element()
         } else if missing_codes == 0 {
-            div()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(6.))
-                .bg(rgba(crate::theme::tint(palette.green, 0x22)))
-                .text_xs()
-                .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(rgb(palette.green))
-                .child(format!("✓ All {} booking codes", items.len()))
+            Badge::new(format!("✓ All {} booking codes", items.len()))
+                .tone(Tone::Success)
                 .into_any_element()
         } else {
-            div()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(6.))
-                .bg(rgba(palette.raised))
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(format!(
-                    "{}/{} booking codes",
-                    items.len() - missing_codes,
-                    items.len()
-                ))
-                .into_any_element()
+            Badge::new(format!(
+                "{}/{} booking codes",
+                items.len() - missing_codes,
+                items.len()
+            ))
+            .tone(Tone::Neutral)
+            .into_any_element()
         };
 
         div()
@@ -551,14 +466,7 @@ impl Travel {
                             .filter(|&c| c > 0),
                         |header, count| {
                             header.child(
-                                div()
-                                    .px_2()
-                                    .py(px(2.))
-                                    .rounded(px(4.))
-                                    .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
-                                    .text_xs()
-                                    .text_color(rgb(palette.accent))
-                                    .child(format!("{count} ledger postings")),
+                                Badge::new(format!("{count} ledger postings")).tone(Tone::Accent),
                             )
                         },
                     ),
@@ -709,32 +617,9 @@ impl Travel {
     fn retrospective_card(&self, retro: &Retrospective) -> AnyElement {
         let palette = self.palette;
         let again_pill = match retro.again.to_lowercase().as_str() {
-            "yes" | "definitely" => div()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(6.))
-                .bg(rgba(crate::theme::tint(palette.green, 0x22)))
-                .text_xs()
-                .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(rgb(palette.green))
-                .child("Repeat: Yes"),
-            "no" | "never" => div()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(6.))
-                .bg(rgba(crate::theme::tint(palette.red, 0x22)))
-                .text_xs()
-                .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(rgb(palette.red))
-                .child("Repeat: No"),
-            _ => div()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(6.))
-                .bg(rgba(palette.raised))
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(format!("Repeat: {}", retro.again)),
+            "yes" | "definitely" => Badge::new("Repeat: Yes").tone(Tone::Success),
+            "no" | "never" => Badge::new("Repeat: No").tone(Tone::Danger),
+            _ => Badge::new(format!("Repeat: {}", retro.again)).tone(Tone::Neutral),
         };
 
         div()
@@ -939,6 +824,45 @@ impl Travel {
                     "Show on map",
                 )
                 .on_click(cx.listener(move |view, _, _, cx| view.show_stop(place.clone(), cx))),
+            );
+        } else if let Some(candidates) =
+            sjel_gpui_core::travel::places::compound_candidates(&place.name)
+        {
+            let plan_for_edit = self.current().cloned();
+            row = row.child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        Badge::new("Compound destination · split before locating")
+                            .tone(Tone::Warning),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(self.palette.muted))
+                            .child(format!("Stops: {}", candidates.join(" · "))),
+                    )
+                    .when_some(plan_for_edit, |bar, plan| {
+                        let plan_id = plan.id.clone();
+                        bar.child(
+                            self.button(
+                                gpui::SharedString::from(format!("place-split-edit-{index}")),
+                                "Choose split in Trip Editor",
+                            )
+                            .on_click(cx.listener(
+                                move |view, _, window, cx| {
+                                    view.open_form(
+                                        super::forms::FormKind::Trip(Some(plan_id.clone())),
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            )),
+                        )
+                    }),
             );
         } else {
             row = row.child(

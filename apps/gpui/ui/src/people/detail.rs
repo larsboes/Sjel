@@ -6,13 +6,13 @@ use gpui_kit::{
     div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, FontWeight, ScrollHandle,
     SharedString,
 };
-use sjel_gpui_core::people::Person;
+use sjel_gpui_core::people::{Person, SourcedGraphInteraction};
 
 use crate::ely::buttons::{Button, ButtonVariant};
-use crate::ely::data_display::Tone;
+use crate::ely::data_display::{Badge, Tone};
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction};
 use crate::ely::theme::ControlSize;
-use crate::theme::{tint, Palette};
+use crate::theme::Palette;
 
 use super::forms::{FormKind, Work};
 use super::{avatar_badge, PeoplePage};
@@ -25,8 +25,47 @@ impl PeoplePage {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let links = self.render_links(&person.id, palette, cx);
+        let graph_interactions = self.graph_interactions_for(&person.id);
         let confirming = self.confirm_remove.as_deref() == Some(person.id.as_str());
-        render_person_detail(person, palette, cx, &self.detail_scroll, confirming, links)
+        render_person_detail(
+            person,
+            palette,
+            cx,
+            &self.detail_scroll,
+            confirming,
+            links,
+            &graph_interactions,
+        )
+    }
+
+    fn graph_interactions_for(&self, id: &str) -> Vec<SourcedGraphInteraction> {
+        let Some((graph, i)) = self.graph.value.as_ref().and_then(|graph| {
+            graph
+                .nodes
+                .iter()
+                .position(|n| n.id == id)
+                .map(|i| (graph, i))
+        }) else {
+            return Vec::new();
+        };
+        graph
+            .links_of(i)
+            .map(|(other, edge)| {
+                let node = &graph.nodes[other];
+                let summary = match (edge.kind.as_str(), edge.from == i) {
+                    ("introduced", true) => format!("Introduced {}", node.name),
+                    ("introduced", false) => format!("Introduced by {}", node.name),
+                    _ => format!("Group conversation with {}", node.name),
+                };
+                SourcedGraphInteraction {
+                    other_id: node.id.clone(),
+                    kind: edge.kind.clone(),
+                    summary,
+                    source: edge.source.clone(),
+                    at: edge.at.clone(),
+                }
+            })
+            .collect()
     }
 
     /// Probable duplicates with side-by-side field comparison and explicit keep choice.
@@ -195,17 +234,7 @@ impl PeoplePage {
                                     ),
                             )
                             .when(is_recommended, |el| {
-                                el.child(
-                                    div()
-                                        .flex_none()
-                                        .px_1p5()
-                                        .py(px(1.))
-                                        .rounded(px(4.))
-                                        .bg(rgba(tint(palette.green, 0x20)))
-                                        .text_xs()
-                                        .text_color(rgb(palette.green))
-                                        .child("KEEP"),
-                                )
+                                el.child(Badge::new("KEEP").tone(Tone::Success))
                             }),
                     )
                     .child(rows)
@@ -345,6 +374,7 @@ pub(super) fn render_person_detail(
     scroll: &ScrollHandle,
     confirming: bool,
     links: AnyElement,
+    graph_interactions: &[SourcedGraphInteraction],
 ) -> AnyElement {
     let today = chrono::Local::now().date_naive();
     let company_role = [person.role.as_deref(), person.company.as_deref()]
@@ -358,20 +388,11 @@ pub(super) fn render_person_detail(
     let person_rev = person.revision;
 
     let status_badge = follow_up_due.map(|due| {
-        let (label, color) = if overdue {
-            (format!("Overdue · due {due}"), palette.red)
+        if overdue {
+            Badge::new(format!("Overdue · due {due}")).tone(Tone::Danger)
         } else {
-            (format!("Follow-up {due}"), palette.green)
-        };
-        div()
-            .px_2()
-            .py_0p5()
-            .rounded_full()
-            .bg(rgba(tint(color, 0x1e)))
-            .text_xs()
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(rgb(color))
-            .child(label)
+            Badge::new(format!("Follow-up {due}")).tone(Tone::Success)
+        }
     });
 
     let header_card = div()
@@ -663,20 +684,12 @@ pub(super) fn render_person_detail(
                 )
                 .when(!person.tags.is_empty(), |el| {
                     el.child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .gap_1p5()
-                            .children(person.tags.iter().map(|tag| {
-                                div()
-                                    .px_2()
-                                    .py_0p5()
-                                    .rounded_full()
-                                    .bg(rgba(tint(palette.accent, 0x18)))
-                                    .text_xs()
-                                    .text_color(rgb(palette.accent))
-                                    .child(tag.clone())
-                            })),
+                        div().flex().flex_wrap().gap_1p5().children(
+                            person
+                                .tags
+                                .iter()
+                                .map(|tag| Badge::new(tag.clone()).tone(Tone::Accent)),
+                        ),
                     )
                 })
                 .when(!custom_rows.is_empty(), |el| {
@@ -694,6 +707,72 @@ pub(super) fn render_person_detail(
                 })
         });
 
+    let interactions = person.sourced_interactions(graph_interactions, &[]);
+    let history_card = (!interactions.is_empty()).then(|| {
+        let columns = vec![
+            Column::new("date", "DATE").width(rems(8.)),
+            Column::new("kind", "KIND").width(rems(8.)),
+            Column::new("summary", "INTERACTION / LINK").min_width(rems(14.)),
+            Column::new("source", "SOURCE").width(rems(7.)),
+            Column::new("class", "CLASS").width(rems(5.)),
+        ];
+        let rows: Rc<Vec<Row>> = Rc::new(
+            interactions
+                .iter()
+                .enumerate()
+                .map(|(ix, item)| {
+                    Row::new(
+                        format!("interaction-{ix}"),
+                        [
+                            Cell::Text(
+                                item.date
+                                    .clone()
+                                    .unwrap_or_else(|| "Owner link".into())
+                                    .into(),
+                            ),
+                            Cell::Tag(item.kind.into(), Tone::Accent),
+                            Cell::Text(item.summary.clone().into()),
+                            Cell::Tag(item.source.clone().into(), Tone::Neutral),
+                            Cell::Tag(item.data_class.into(), Tone::Neutral),
+                        ],
+                    )
+                })
+                .collect(),
+        );
+        let table = DataTable::new("person-sourced-history-table", columns)
+            .label("Sourced interaction history")
+            .rows(rows)
+            .empty("No sourced interactions recorded.");
+        div()
+            .flex_none()
+            .w_full()
+            .p_4()
+            .rounded(px(8.))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .bg(rgba(palette.surface))
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(palette.muted))
+                            .child("SOURCED INTERACTION HISTORY"),
+                    )
+                    .child(
+                        Badge::new("Owner-linked only · no lexical inference").tone(Tone::Neutral),
+                    ),
+            )
+            .child(table)
+    });
+
     div()
         .id("person-detail-scroll")
         .flex_1()
@@ -708,6 +787,7 @@ pub(super) fn render_person_detail(
         .child(header_card.flex_none().w_full())
         .children(contact_card)
         .children(relationship_card)
+        .children(history_card)
         .child(links)
         .children(extra_card)
         .when(!person.facts.is_empty(), |el| {

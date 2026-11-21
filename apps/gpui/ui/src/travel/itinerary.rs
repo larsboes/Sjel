@@ -2,7 +2,11 @@
 use super::forms::{FormKind, Remove};
 use super::overview::{calendar_agenda, calendar_event_when};
 use super::Travel;
-use crate::ely::buttons::ButtonVariant;
+use crate::ely::{
+    buttons::{Button, ButtonVariant},
+    data_display::{Badge, Tone},
+    theme::ControlSize,
+};
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::{
     record::Link,
@@ -128,26 +132,17 @@ impl Travel {
             .items_center()
             .gap_1()
             .child(
-                div()
-                    .id("filter-day-all")
-                    .px_2()
-                    .py(px(2.))
-                    .rounded(px(6.))
-                    .text_xs()
-                    .cursor_pointer()
-                    .when(self.selected_day_filter.is_none(), |el| {
-                        el.bg(rgb(palette.accent))
-                            .text_color(rgb(0xffffff))
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                    })
-                    .when(self.selected_day_filter.is_some(), |el| {
-                        el.bg(rgba(palette.raised)).text_color(rgb(palette.muted))
+                Button::new("filter-day-all", "All days")
+                    .size(ControlSize::Sm)
+                    .variant(if self.selected_day_filter.is_none() {
+                        ButtonVariant::Primary
+                    } else {
+                        ButtonVariant::Ghost
                     })
                     .on_click(cx.listener(|view, _, _, cx| {
                         view.selected_day_filter = None;
                         cx.notify();
-                    }))
-                    .child("All days"),
+                    })),
             )
             .children(days.iter().enumerate().map(|(idx, day_str)| {
                 let this_day = day_str.clone();
@@ -156,26 +151,20 @@ impl Travel {
                     .ok()
                     .map(|d| d.format("%b %-d").to_string())
                     .unwrap_or_else(|| day_str.clone());
-                div()
-                    .id(gpui::SharedString::from(format!("filter-day-{idx}")))
-                    .px_2()
-                    .py(px(2.))
-                    .rounded(px(6.))
-                    .text_xs()
-                    .cursor_pointer()
-                    .when(active, |el| {
-                        el.bg(rgb(palette.accent))
-                            .text_color(rgb(0xffffff))
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                    })
-                    .when(!active, |el| {
-                        el.bg(rgba(palette.raised)).text_color(rgb(palette.muted))
-                    })
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.selected_day_filter = Some(this_day.clone());
-                        cx.notify();
-                    }))
-                    .child(format!("Day {} · {}", idx + 1, short_date))
+                Button::new(
+                    gpui::SharedString::from(format!("filter-day-{idx}")),
+                    format!("Day {} · {}", idx + 1, short_date),
+                )
+                .size(ControlSize::Sm)
+                .variant(if active {
+                    ButtonVariant::Primary
+                } else {
+                    ButtonVariant::Ghost
+                })
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.selected_day_filter = Some(this_day.clone());
+                    cx.notify();
+                }))
             }));
 
         page = page.child(day_filters);
@@ -697,22 +686,7 @@ impl Travel {
                                     .flex()
                                     .items_center()
                                     .gap_2()
-                                    .child(
-                                        div()
-                                            .px_2()
-                                            .py(px(1.5))
-                                            .rounded(px(4.))
-                                            .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
-                                            .border_1()
-                                            .border_color(rgba(crate::theme::tint(
-                                                palette.accent,
-                                                0x35,
-                                            )))
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
-                                            .text_color(rgb(palette.accent))
-                                            .child("MEETING"),
-                                    )
+                                    .child(Badge::new("MEETING").tone(Tone::Accent))
                                     .child(
                                         div()
                                             .text_xs()
@@ -755,19 +729,7 @@ impl Travel {
                                     .flex()
                                     .items_center()
                                     .gap_2()
-                                    .child(
-                                        div()
-                                            .px_2()
-                                            .py(px(1.5))
-                                            .rounded(px(4.))
-                                            .bg(rgba(palette.raised))
-                                            .border_1()
-                                            .border_color(rgba(palette.border))
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
-                                            .text_color(rgb(palette.muted))
-                                            .child("NEARBY CALENDAR"),
-                                    )
+                                    .child(Badge::new("NEARBY CALENDAR").tone(Tone::Neutral))
                                     .child(
                                         div()
                                             .text_xs()

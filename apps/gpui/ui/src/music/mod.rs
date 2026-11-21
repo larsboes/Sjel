@@ -6,9 +6,10 @@ pub mod types;
 use std::time::Duration;
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::feedback::InlineMessage;
 use crate::ely::forms::{Input, TextInput};
+use crate::ely::primitives::Severity;
 use crate::ely::theme::ControlSize;
-use gpui_kit::component::input::TextareaState;
 use gpui_kit::{div, prelude::*, rgb, Context, Entity, EventEmitter, FontWeight, Window};
 use sjel_gpui_core::shell::{self, MusicBuild, MusicJob, ShellError};
 
@@ -31,7 +32,7 @@ pub struct Music {
     pub(crate) album: Entity<TextInput>,
     pub(crate) artist: Entity<TextInput>,
     pub(crate) year: Entity<TextInput>,
-    pub(crate) tracklist: Entity<TextareaState>,
+    pub(crate) tracklist: Entity<TextInput>,
     pub(crate) probing: bool,
     pub(crate) starting: bool,
     pub(crate) message: Option<String>,
@@ -54,7 +55,7 @@ impl Music {
         let album = cx.new(|cx| TextInput::new(window, cx).placeholder("Album name"));
         let artist = cx.new(|cx| TextInput::new(window, cx).placeholder("Album artist"));
         let year = cx.new(|cx| TextInput::new(window, cx).placeholder("Year"));
-        let tracklist = cx.new(|cx| TextareaState::new(window, cx).auto_grow(6, 14));
+        let tracklist = cx.new(|cx| TextInput::new(window, cx).multi_line(6, 14));
         Self {
             repo,
             mode: Mode::Song,
@@ -104,7 +105,7 @@ impl Music {
         let work = shell::run(async move { shell.music_probe(&url).await });
         cx.spawn_in(window, async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = this.update_in(cx, |view, window, cx| {
+            let _ = this.update_in(cx, |view, _window, cx| {
                 view.probing = false;
                 match result {
                     Ok(probe) => {
@@ -123,10 +124,10 @@ impl Music {
                         if view.mode == Mode::Song {
                             view.message = Some(format!("{} · video ready", probe.duration_hms));
                         } else if !probe.tracklist_from_chapters.trim().is_empty()
-                            && view.tracklist.read(cx).value().trim().is_empty()
+                            && view.tracklist.read(cx).text().trim().is_empty()
                         {
                             view.tracklist.update(cx, |input, cx| {
-                                input.set_value(probe.tracklist_from_chapters.clone(), window, cx)
+                                input.set_text(probe.tracklist_from_chapters.clone(), cx)
                             });
                             view.message = Some(format!(
                                 "{} · {} tracks filled from chapters",
@@ -169,7 +170,7 @@ impl Music {
             tracklist: if song {
                 String::new()
             } else {
-                self.tracklist.read(cx).value().to_string()
+                self.tracklist.read(cx).text().to_string()
             },
             title: if song {
                 text(&self.title)
@@ -282,7 +283,7 @@ impl Render for Music {
         let ready = if song {
             !self.title.read(cx).text().trim().is_empty()
         } else {
-            !self.tracklist.read(cx).value().trim().is_empty()
+            !self.tracklist.read(cx).text().trim().is_empty()
         };
         let job_running = self.job.as_ref().is_some_and(|job| job.state == "running");
         let job = self.job.clone();
@@ -386,7 +387,7 @@ impl Render for Music {
                     }),
             )
             .when_some(self.error.clone(), |el, error| {
-                el.child(div().text_sm().text_color(rgb(palette.red)).child(error))
+                el.child(InlineMessage::new(Severity::Danger, error))
             })
             .when_some(job, |el, job| el.child(render_job_card(job, palette)))
     }

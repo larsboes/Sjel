@@ -4,12 +4,12 @@ use crate::ely::buttons::Button;
 use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::prelude::*;
-use gpui_kit::{div, px, rgb, rgba, AnyElement, Context, IntoElement, ScrollHandle, SharedString};
-use sjel_gpui_core::packs::{
-    installed_harnesses, row_needs_attention, status_of, MatrixRow, PacksView,
-};
+use gpui_kit::{div, px, rgb, rgba, AnyElement, Context, IntoElement, ScrollHandle};
+use sjel_gpui_core::packs::{installed_harnesses, PacksView};
 
-use super::types::{column, pill, HARNESS_MIN, PACK_COL, PACK_MIN, SKILL_COL, SKILL_MIN};
+use super::types::{
+    column, pill, ResolvedMatrixRow, HARNESS_MIN, PACK_COL, PACK_MIN, SKILL_COL, SKILL_MIN,
+};
 use super::PacksPage;
 use crate::theme::Palette;
 
@@ -18,7 +18,7 @@ use crate::theme::Palette;
 pub(crate) fn render_matrix_table(
     page: &PacksPage,
     view: &PacksView,
-    rows: &[MatrixRow],
+    rows: &[ResolvedMatrixRow],
     matrix_scroll: &ScrollHandle,
     palette: Palette,
     cx: &mut Context<PacksPage>,
@@ -55,13 +55,14 @@ pub(crate) fn render_matrix_table(
             )
         }));
 
-    let mut body = Vec::new();
+    let mut body = Vec::with_capacity(rows.len());
     for r in rows {
-        if page.only_attention && !row_needs_attention(view, r) {
+        if page.only_attention && !r.needs_attention {
             continue;
         }
 
         let mut row = div()
+            .id(r.row_id.clone())
             .flex()
             .items_center()
             .gap_1()
@@ -88,32 +89,29 @@ pub(crate) fn render_matrix_table(
                     .into_any_element(),
             ));
 
-        for h in &shown {
-            let status = status_of(h, &r.pack, &r.skill);
+        for cell_state in &r.cells {
+            let status = cell_state.status.as_str();
             let cell: AnyElement = match status {
                 "current" => div()
                     .text_color(rgb(palette.muted))
                     .child("·")
                     .into_any_element(),
-                "outdated" | "missing" if !h.write_supported => {
+                "outdated" | "missing" if !cell_state.write_supported => {
                     pill(crate::ely::data_display::Tone::Warning, status.to_string())
                 }
                 "outdated" | "missing" => {
                     let is_missing = status == "missing";
                     let verb = if is_missing { "Deploy" } else { "Sync" };
                     let action = if is_missing { "deploy" } else { "sync" };
-                    let h_id = h.id.clone();
+                    let h_id = cell_state.harness_id.clone();
                     let p_name = r.pack.clone();
-                    Button::new(
-                        SharedString::from(format!("cell-{}-{}-{}", h.id, r.pack, r.skill)),
-                        verb,
-                    )
-                    .size(ControlSize::Sm)
-                    .disabled(is_busy)
-                    .on_click(cx.listener(move |page, _, window, cx| {
-                        page.write(action, h_id.clone(), vec![p_name.clone()], window, cx);
-                    }))
-                    .into_any_element()
+                    Button::new(cell_state.button_id.clone(), verb)
+                        .size(ControlSize::Sm)
+                        .disabled(is_busy)
+                        .on_click(cx.listener(move |page, _, window, cx| {
+                            page.write(action, h_id.clone(), vec![p_name.clone()], window, cx);
+                        }))
+                        .into_any_element()
                 }
                 "drifted" => pill(
                     crate::ely::data_display::Tone::Warning,

@@ -2,13 +2,12 @@
 
 use std::rc::Rc;
 
-use gpui_kit::component::input::{Escape, Input, InputState};
-use gpui_kit::component::Sizable;
 use gpui_kit::{div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, Entity, SharedString};
 
 use crate::ely::data_display::Tone;
+use crate::ely::forms::{Input, TextInput};
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
-use crate::ely::theme::Density as ElyDensity;
+use crate::ely::theme::{ControlSize, Density as ElyDensity};
 use crate::primitives::{filter_pill, key_bar, row_for_density, status_pill};
 use crate::tasks::{self, NoteSort, StatusFilter, TaskFilter, TaskSort, TASK_STATUSES};
 use crate::theme::{Density, Palette};
@@ -172,17 +171,17 @@ impl Projects {
                     .bg(rgba(palette.raised))
                     .border_1()
                     .border_color(rgba(palette.border))
-                    .capture_action(cx.listener(|view, _: &Escape, _, cx| {
-                        view.cancel_task_title(cx);
-                        cx.stop_propagation();
-                    }))
                     .child(
                         div()
                             .text_xs()
                             .text_color(rgb(palette.muted))
                             .child("Rename task:"),
                     )
-                    .child(div().flex_1().child(Input::new(input).small()))
+                    .child(
+                        div()
+                            .flex_1()
+                            .child(Input::new(input).size(ControlSize::Sm)),
+                    )
                     .into_any_element(),
             );
         }
@@ -215,7 +214,7 @@ impl Projects {
     pub(super) fn task_table(
         &self,
         records: &[ProjectRecord],
-        new_task: &Entity<InputState>,
+        new_task: &Entity<TextInput>,
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -365,7 +364,7 @@ impl Projects {
             .child(
                 div()
                     .flex_1()
-                    .child(Input::new(new_task).appearance(false).px_0()),
+                    .child(Input::new(new_task).size(ControlSize::Sm)),
             );
 
         div()
@@ -382,7 +381,7 @@ impl Projects {
     pub(super) fn due_editor(
         &self,
         path: String,
-        input: &Entity<InputState>,
+        input: &Entity<TextInput>,
         index: usize,
         width: f32,
         palette: Palette,
@@ -423,7 +422,7 @@ impl Projects {
             .flex()
             .flex_col()
             .gap_1()
-            .child(Input::new(input).small())
+            .child(Input::new(input).size(ControlSize::Sm))
             .child(div().flex().gap_1().children(chips))
             .into_any_element()
     }
@@ -469,7 +468,7 @@ impl Projects {
     pub(super) fn all_tasks_table(
         &self,
         tasks: &[GlobalTask],
-        search_input: &Entity<InputState>,
+        search_input: &Entity<TextInput>,
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -513,11 +512,11 @@ impl Projects {
                 cx.notify();
             }),
         );
+        let is_mobile = cols.density == Density::Mobile;
         let filter_bar = div()
             .flex()
-            .items_center()
-            .justify_between()
-            .gap_2()
+            .when(is_mobile, |el| el.flex_col().items_stretch().gap_2())
+            .when(!is_mobile, |el| el.items_center().justify_between().gap_2())
             .mb_2()
             .child(
                 div()
@@ -528,7 +527,11 @@ impl Projects {
                     .children(pills)
                     .child(group_toggle),
             )
-            .child(search_box(cols.search).child(Input::new(search_input).small()));
+            .child(
+                search_box(cols.search)
+                    .when(is_mobile, |el| el.w_full())
+                    .child(Input::new(search_input).size(ControlSize::Sm)),
+            );
 
         let focus_pills: Vec<AnyElement> = TaskFocusFilter::ALL
             .into_iter()
@@ -786,22 +789,23 @@ impl Projects {
     pub(super) fn all_notes_table(
         &self,
         notes: &[GlobalNote],
-        search_input: &Entity<InputState>,
+        search_input: &Entity<TextInput>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let cols = self.columns();
         let hubs_count = notes.iter().filter(|n| n.kind == "project").count();
         let regular_count = notes.len().saturating_sub(hubs_count);
 
+        let is_mobile = cols.density == Density::Mobile;
         let filter_bar = div()
             .flex()
-            .items_center()
-            .justify_between()
-            .gap_2()
+            .when(is_mobile, |el| el.flex_col().items_stretch().gap_2())
+            .when(!is_mobile, |el| el.items_center().justify_between().gap_2())
             .mb_2()
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
                     .gap_2()
                     .child(filter_pill(
@@ -832,7 +836,11 @@ impl Projects {
                         }),
                     )),
             )
-            .child(search_box(cols.search).child(Input::new(search_input).small()));
+            .child(
+                search_box(cols.search)
+                    .when(is_mobile, |el| el.w_full())
+                    .child(Input::new(search_input).size(ControlSize::Sm)),
+            );
 
         let query = self.notes_search_query.as_str();
         let filtered: Vec<_> = notes

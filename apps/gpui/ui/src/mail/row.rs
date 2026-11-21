@@ -16,11 +16,17 @@ impl Mail {
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let chosen = self.cursor.as_deref() == Some(m.id.as_str());
-        let picked = self.selected.contains(&m.id);
+        let adapted = super::adapter::AdaptedMailProposal::from_proposal(
+            &m,
+            &self.selected,
+            self.cursor.as_deref(),
+            self.opened_thread.as_deref(),
+        );
+        let chosen = adapted.cursor;
+        let picked = adapted.selected;
         let is_mobile = self.density.is_mobile();
-        let is_open = self.opened_thread.as_deref() == Some(m.id.as_str());
-        let mut meta = vec![
+        let is_open = adapted.opened;
+        let meta = [
             m.from_addr
                 .clone()
                 .unwrap_or_else(|| "Unknown sender".into()),
@@ -29,46 +35,23 @@ impl Mail {
                 .and_then(|d| d.get(..10))
                 .unwrap_or_default()
                 .to_owned(),
-        ];
-        if let Some(top) = m.relevance.first() {
-            meta.push(format!("{} {:.2}", top.profile_label, top.score));
-        }
-        if let Some(badge) = m.authenticity_badge() {
-            meta.push(badge);
-        }
-        if m.waiting {
-            meta.push("Waiting".into());
-        }
-        if let Some(sync) = m.gmail_sync_status.as_deref().filter(|s| *s != "synced") {
-            meta.push(format!("Gmail sync: {sync}"));
-        }
-        if m.status != "proposed" {
-            meta.push(m.status.clone());
-        }
-        let model_line = m.model.as_ref().map(|verdict| {
-            let proposed = verdict.proposes_change(&m.stream).map(str::to_owned);
-            let mut text = match &proposed {
-                Some(stream) => format!("Model proposes {}", category_label(stream)),
-                None if verdict.state == "generated" => "Model agrees".to_owned(),
-                None => verdict.state_text().to_owned(),
-            };
-            if let Some(bp) = verdict.confidence_bp.filter(|_| proposed.is_some()) {
-                text.push_str(&format!(" · {}% (self-reported)", bp / 100));
-            }
-            if let Some(why) = verdict.rationale.as_deref().filter(|_| proposed.is_some()) {
-                text.push_str(&format!(" · {why}"));
-            }
-            if let Some(held) = verdict
-                .held_reason
-                .as_deref()
-                .filter(|_| verdict.mode == "held")
-            {
-                text.push_str(&format!(" · Held for you: {held}"));
-            }
-            (text, proposed)
+        ]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
+        let badges = adapted.badges();
+        let model_line = adapted.model_summary.clone().map(|summary| {
+            (
+                summary.to_string(),
+                adapted
+                    .model_proposed_stream
+                    .as_ref()
+                    .map(|s| s.to_string()),
+            )
         });
         let accept_id = m.id.clone();
-        let attention = (m.gmail_sync_status.as_deref() == Some("attention")).then(|| m.id.clone());
+        let attention = adapted.sync_needs_attention.then(|| m.id.clone());
         let select = m.id.clone();
         let toggle = m.id.clone();
         let id_for_triage = m.id.clone();
@@ -134,10 +117,18 @@ impl Mail {
                             )
                             .child(
                                 div()
-                                    .truncate()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(meta.join(" · ")),
+                                    .flex()
+                                    .flex_wrap()
+                                    .items_center()
+                                    .gap_1p5()
+                                    .child(
+                                        div()
+                                            .truncate()
+                                            .text_xs()
+                                            .text_color(rgb(palette.muted))
+                                            .child(meta),
+                                    )
+                                    .children(badges),
                             )
                             .when_some(model_line, |el, (text, proposed)| {
                                 el.child(

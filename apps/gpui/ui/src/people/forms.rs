@@ -1,7 +1,5 @@
 //! Contact editing, creation, fact attachment, and field declaration forms.
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::searchable_list::{SearchableListItem, SearchableVec};
-use gpui_kit::component::select::{Select, SelectState};
 use gpui_kit::{
     div, point, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, Focusable, FontWeight,
     SharedString, Subscription, Window,
@@ -12,7 +10,9 @@ use sjel_gpui_core::people::edit::{
 };
 
 use crate::ely::buttons::{Button, ButtonVariant};
-use crate::ely::forms::{Form as ElyForm, FormError, FormField, Input, InputEvent, TextInput};
+use crate::ely::forms::{
+    Choice, Combobox, Form as ElyForm, FormError, FormField, Input, InputEvent, TextInput,
+};
 use crate::ely::theme::ControlSize;
 use crate::theme::Palette;
 
@@ -41,7 +41,9 @@ pub(crate) struct Form {
     pub(super) field_meta: std::collections::HashMap<String, (String, Vec<String>, Option<String>)>,
     /// The name input, for the two person forms.
     pub(super) name: Option<Entity<TextInput>>,
-    introducer: Option<Entity<SelectState<SearchableVec<Introducer>>>>,
+    introducer: Option<Entity<TextInput>>,
+    introducer_choices: Vec<Choice>,
+    introducer_selected: Option<SharedString>,
     /// The chosen predicate for a fact, and the chosen type for a field.
     pub(super) choice: String,
     pub(super) error: Option<SharedString>,
@@ -56,30 +58,6 @@ impl Form {
             .find(|(field, _, _)| field == key)
             .map(|(_, _, input)| input.read(cx).text().to_owned())
             .unwrap_or_default()
-    }
-}
-
-#[derive(Clone)]
-struct Introducer {
-    id: String,
-    label: SharedString,
-    aliases: String,
-}
-
-impl SearchableListItem for Introducer {
-    type Value = String;
-
-    fn title(&self) -> SharedString {
-        self.label.clone()
-    }
-
-    fn value(&self) -> &String {
-        &self.id
-    }
-
-    fn matches(&self, query: &str) -> bool {
-        let query = query.trim().to_lowercase();
-        self.label.to_lowercase().contains(&query) || self.aliases.to_lowercase().contains(&query)
     }
 }
 
@@ -166,6 +144,7 @@ impl PeoplePage {
 
         let mut name = None;
         let mut introducer = None;
+        let mut introducer_choices = Vec::new();
         let mut fields = Vec::new();
         let mut field_meta = std::collections::HashMap::new();
         let mut choice = String::new();
@@ -259,25 +238,30 @@ impl PeoplePage {
             }
             FormKind::Introduction(id) => {
                 self.sync_derived();
-                let mut choices: Vec<_> = self
+                let mut raw_choices: Vec<_> = self
                     .derived
                     .parsed
                     .iter()
                     .filter(|person| &person.id != id)
-                    .map(|person| Introducer {
-                        id: person.id.clone(),
-                        label: match &person.company {
+                    .map(|person| {
+                        let label: SharedString = match &person.company {
                             Some(company) => format!("{} · {company}", person.name).into(),
                             None => person.name.clone().into(),
-                        },
-                        aliases: person.value("aliases"),
+                        };
+                        let aliases = person.value("aliases");
+                        let mut choice = Choice::new(person.id.clone(), label.clone());
+                        if !aliases.trim().is_empty() {
+                            choice = choice.note(aliases);
+                        }
+                        (label.to_lowercase(), choice)
                     })
                     .collect();
-                choices.sort_by_cached_key(|person| person.label.to_lowercase());
-                introducer = Some(cx.new(|cx| {
-                    SelectState::new(SearchableVec::from(choices), None, window, cx)
-                        .searchable(true)
-                }));
+                raw_choices.sort_by(|a, b| a.0.cmp(&b.0));
+                introducer_choices = raw_choices.into_iter().map(|(_, c)| c).collect();
+                introducer =
+                    Some(cx.new(|cx| {
+                        TextInput::new(window, cx).placeholder("Search names or aliases…")
+                    }));
                 fields.push((
                     "note".into(),
                     "Context".into(),
@@ -304,7 +288,7 @@ impl PeoplePage {
             }
         }
         if let Some(picker) = &introducer {
-            picker.update(cx, |picker, cx| picker.focus(window, cx));
+            picker.update(cx, |picker, cx| picker.focus_handle(cx).focus(window, cx));
         } else if let Some(first) = name
             .clone()
             .or_else(|| fields.first().map(|(_, _, i)| i.clone()))
@@ -317,6 +301,8 @@ impl PeoplePage {
             field_meta,
             name,
             introducer,
+            introducer_choices,
+            introducer_selected: None,
             choice,
             error: None,
             saving: false,
@@ -349,9 +335,9 @@ impl PeoplePage {
         let to = form.value("to", cx);
         let note = form.value("note", cx);
         let introducer = form
-            .introducer
+            .introducer_selected
             .as_ref()
-            .and_then(|picker| picker.read(cx).selected_value().cloned());
+            .map(|selected| selected.to_string());
         let field_key = form.value("key", cx);
         let field_label = form.value("label", cx);
         let field_options = form.value("options", cx);
@@ -496,16 +482,24 @@ impl PeoplePage {
             );
         }
         if let Some(picker) = &form.introducer {
-            form_body = form_body.child(
-                FormField::new("people-introducer-field", "Introduced by").child(
-                    Select::new(picker)
-                        .id("people-introducer")
-                        .placeholder("Choose a person")
-                        .accessibility_label("Introduced by")
-                        .search_placeholder("Search names or aliases…")
-                        .disabled(form.saving),
-                ),
-            );
+            let pick_entity = cx.entity();
+            let mut combo =
+                Combobox::new("people-introducer", picker, form.introducer_choices.clone())
+                    .size(ControlSize::Sm)
+                    .on_change(move |value, _, cx| {
+                        let picked = value.clone();
+                        pick_entity.update(cx, |page, cx| {
+                            if let Some(form) = page.form.as_mut() {
+                                form.introducer_selected = Some(picked);
+                            }
+                            cx.notify();
+                        });
+                    });
+            if let Some(selected) = &form.introducer_selected {
+                combo = combo.selected(selected.clone());
+            }
+            form_body = form_body
+                .child(FormField::new("people-introducer-field", "Introduced by").child(combo));
         }
         let render_field_row = |key: &String,
                                 label: &String,

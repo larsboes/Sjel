@@ -43,5 +43,7 @@ pub struct Hit {
 pub enum FinderEvent {
     Open(Open),
     AgentStarted,
+    Follow(sjel_gpui_core::agent::AgentFollowIntent),
+    PinToHome(sjel_gpui_core::a2ui::SavedA2uiView),
     Closed,
 }

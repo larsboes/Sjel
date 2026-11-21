@@ -1,19 +1,18 @@
 //! Card frames, lists, density rows, progress bars, and metrics.
 
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::IconName;
 use gpui_kit::{
     div, list as gpui_list, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, ElementId,
-    FontWeight, ListState, SharedString, Window,
+    ListState, SharedString, Window,
 };
 
-use super::tokens::FONT_MONO_TABULAR;
 use crate::ely::{
     buttons::{Button, ButtonVariant},
-    data_display::{Badge, Tone},
+    dashboard::{MetricStrip, MetricTile, QuickActionTile},
+    data_display::ProgressBar,
     layout::{Card, CardHeader, Section},
     lists::List,
-    primitives::Tooltip,
+    primitives::{Icon, IconName},
     theme::ControlSize,
 };
 use crate::theme::{tint, Density, Palette};
@@ -93,21 +92,9 @@ pub fn chart_card(
     Card::new().header(header).child(body).into_any_element()
 }
 
-pub fn progress_bar(progress: f32, color: u32, palette: Palette) -> AnyElement {
-    let width = 48.0;
-    let clamped = progress.clamp(0.0, 1.0);
-    div()
-        .w(px(width))
-        .h(px(4.))
-        .rounded_full()
-        .bg(rgba(palette.border))
-        .child(
-            div()
-                .h_full()
-                .rounded_full()
-                .bg(rgb(color))
-                .w(px(width * clamped)),
-        )
+pub fn progress_bar(progress: f32, color: u32, _palette: Palette) -> AnyElement {
+    ProgressBar::new(progress)
+        .color(rgb(color))
         .into_any_element()
 }
 
@@ -129,42 +116,14 @@ pub fn stat_card(
     value: impl Into<SharedString>,
     detail: Option<SharedString>,
     tone: u32,
-    palette: Palette,
+    _palette: Palette,
 ) -> AnyElement {
-    Card::new()
-        .flex_1()
-        .min_w(px(120.))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap_1p5()
-                .child(
-                    div()
-                        .text_xs()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(rgb(palette.muted))
-                        .child(label.into()),
-                )
-                .child(
-                    div()
-                        .text_2xl()
-                        .font_weight(FontWeight::BOLD)
-                        .font_family(FONT_MONO_TABULAR)
-                        .text_color(rgb(tone))
-                        .child(value.into()),
-                )
-                .when_some(detail, |el, det| {
-                    el.child(
-                        div()
-                            .truncate()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(det),
-                    )
-                }),
-        )
-        .into_any_element()
+    let label = label.into();
+    let mut tile = MetricTile::new(label.clone(), label, value).color(rgb(tone));
+    if let Some(det) = detail {
+        tile = tile.detail(det);
+    }
+    tile.into_any_element()
 }
 
 /// Content, styling state, and semantic color for an interactive metric card.
@@ -180,13 +139,7 @@ pub struct InteractiveStatCard {
 
 /// Horizontal strip of [`stat_card`] metrics.
 pub fn stat_strip(cards: Vec<AnyElement>) -> AnyElement {
-    div()
-        .flex()
-        .flex_wrap()
-        .items_stretch()
-        .gap_3()
-        .children(cards)
-        .into_any_element()
+    MetricStrip::new().children(cards).into_any_element()
 }
 
 /// Tactile dashboard metric tile with large tabular value and quiet caption.
@@ -201,81 +154,17 @@ pub fn dashboard_metric_tile(
         detail,
         tone,
         active,
-        palette,
+        palette: _,
     } = card;
-    div()
-        .id(id)
-        .flex_1()
+    let mut tile = MetricTile::new(id, label, value)
+        .color(rgb(tone))
+        .active(active)
         .min_w(px(136.))
-        .px_4()
-        .py_3p5()
-        .rounded(px(14.))
-        .bg(rgba(if active {
-            tint(palette.accent, 0x1a)
-        } else {
-            palette.surface
-        }))
-        .border_1()
-        .border_color(if active {
-            rgb(palette.accent)
-        } else {
-            rgba(tint(palette.border, 0x77))
-        })
-        .cursor_pointer()
-        .hover(move |s| {
-            s.bg(rgba(if active {
-                tint(palette.accent, 0x24)
-            } else {
-                palette.raised
-            }))
-            .border_color(if active {
-                rgb(palette.accent)
-            } else {
-                rgba(tint(palette.accent, 0x55))
-            })
-        })
-        .on_click(on_click)
-        .flex()
-        .flex_col()
-        .gap_1p5()
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_xs()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(rgb(if active {
-                            palette.accent
-                        } else {
-                            palette.muted
-                        }))
-                        .child(label),
-                )
-                .when(active, |el| {
-                    el.child(Badge::new("Active").tone(Tone::Accent))
-                }),
-        )
-        .child(
-            div()
-                .text_2xl()
-                .font_weight(FontWeight::BOLD)
-                .font_family(FONT_MONO_TABULAR)
-                .text_color(rgb(tone))
-                .child(value),
-        )
-        .when_some(detail, |el, det| {
-            el.child(
-                div()
-                    .truncate()
-                    .text_xs()
-                    .text_color(rgb(if active { palette.text } else { palette.muted }))
-                    .child(det),
-            )
-        })
-        .into_any_element()
+        .on_click(on_click);
+    if let Some(det) = detail {
+        tile = tile.detail(det);
+    }
+    tile.into_any_element()
 }
 
 /// Circular icon-first quick action with caption underneath.
@@ -303,55 +192,10 @@ pub fn quick_action_button(
         palette,
     } = action;
     let accent = tone.unwrap_or(palette.accent);
-    div()
-        .id(id)
-        .flex()
-        .flex_col()
-        .items_center()
-        .gap_1p5()
-        .min_w(px(64.))
-        .cursor_pointer()
-        .tooltip(Tooltip::text(tooltip))
+    QuickActionTile::with_element(id, div().text_base().child(Icon::new(icon)), label)
+        .tooltip(tooltip)
+        .active(active)
+        .color(rgb(accent))
         .on_click(on_click)
-        .child(
-            div()
-                .size(px(42.))
-                .rounded_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(rgba(if active {
-                    tint(accent, 0x28)
-                } else {
-                    palette.raised
-                }))
-                .border_1()
-                .border_color(if active {
-                    rgb(accent)
-                } else {
-                    rgba(tint(palette.border, 0x88))
-                })
-                .text_color(rgb(if active { accent } else { palette.text }))
-                .hover(move |s| {
-                    s.bg(rgba(if active {
-                        tint(accent, 0x36)
-                    } else {
-                        tint(palette.accent, 0x18)
-                    }))
-                    .border_color(rgb(accent))
-                })
-                .child(div().text_base().child(icon)),
-        )
-        .child(
-            div()
-                .text_xs()
-                .font_weight(if active {
-                    FontWeight::SEMIBOLD
-                } else {
-                    FontWeight::MEDIUM
-                })
-                .text_color(rgb(if active { accent } else { palette.muted }))
-                .child(label),
-        )
         .into_any_element()
 }

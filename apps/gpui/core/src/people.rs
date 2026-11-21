@@ -200,6 +200,178 @@ impl Person {
             Origin::Manual => !origins.contains("linkedin") && !origins.contains("google"),
         }
     }
+
+    /// Dated and owner-linked interaction history for this person.
+    ///
+    /// Includes only records tied through explicit owner links (`note_ref`, registry field
+    /// provenance, dated place facts, explicit graph edges, or notes with explicit entity/note
+    /// links within allowed classification boundaries). Never infers identity from lexical name
+    /// matches and never duplicates private note bodies.
+    pub fn sourced_interactions(
+        &self,
+        graph_links: &[SourcedGraphInteraction],
+        candidate_notes: &[CandidateNoteMention],
+    ) -> Vec<SourcedInteraction> {
+        let mut items = Vec::new();
+
+        if let Some(last) = self
+            .values
+            .get("last_contact")
+            .filter(|v| !v.trim().is_empty())
+        {
+            let source = self
+                .sources
+                .get("last_contact")
+                .cloned()
+                .unwrap_or_else(|| "operator".into());
+            items.push(SourcedInteraction {
+                date: Some(last.clone()),
+                kind: "contact_log",
+                summary: "Logged direct contact".into(),
+                source,
+                reference: None,
+                data_class: "c1",
+            });
+        }
+
+        if let Some(connected) = self
+            .values
+            .get("connected_on")
+            .filter(|v| !v.trim().is_empty())
+        {
+            let source = self
+                .sources
+                .get("connected_on")
+                .cloned()
+                .unwrap_or_else(|| "operator".into());
+            let met_at = self.values.get("met_at").map(String::as_str).unwrap_or("");
+            let summary = if met_at.trim().is_empty() {
+                "Connected".into()
+            } else {
+                format!("Connected · {}", met_at.trim())
+            };
+            items.push(SourcedInteraction {
+                date: Some(connected.clone()),
+                kind: "connection",
+                summary,
+                source,
+                reference: None,
+                data_class: "c1",
+            });
+        }
+
+        for fact in &self.facts {
+            let date = fact.valid_from.clone().or_else(|| fact.valid_to.clone());
+            let window = match (fact.valid_from.as_deref(), fact.valid_to.as_deref()) {
+                (Some(from), Some(to)) => format!("{from} → {to}"),
+                (Some(from), None) => format!("from {from}"),
+                (None, Some(to)) => format!("until {to}"),
+                (None, None) => "ongoing".into(),
+            };
+            items.push(SourcedInteraction {
+                date,
+                kind: "place_fact",
+                summary: format!("{} · {} ({window})", fact.predicate, fact.place),
+                source: "entities".into(),
+                reference: Some(fact.id.clone()),
+                data_class: "c1",
+            });
+        }
+
+        for link in graph_links {
+            items.push(SourcedInteraction {
+                date: link.at.clone(),
+                kind: if link.kind == "introduced" {
+                    "introduction"
+                } else {
+                    "conversation"
+                },
+                summary: link.summary.clone(),
+                source: link.source.clone(),
+                reference: Some(link.other_id.clone()),
+                data_class: "c1",
+            });
+        }
+
+        if let Some(note_ref) = self.note_ref.as_ref().filter(|s| !s.trim().is_empty()) {
+            items.push(SourcedInteraction {
+                date: None,
+                kind: "owner_note",
+                summary: format!("Linked owner note ({note_ref})"),
+                source: "projects".into(),
+                reference: Some(note_ref.clone()),
+                data_class: "c2",
+            });
+        }
+
+        for note in candidate_notes {
+            let normalized_class = note.data_class.trim().to_ascii_lowercase();
+            if normalized_class == "c3" {
+                continue;
+            }
+            let explicit_id_link = note.linked_entity_ids.iter().any(|id| id == &self.id);
+            let explicit_note_link = self.note_ref.as_ref().is_some_and(|nref| {
+                &note.path == nref || note.linked_note_refs.iter().any(|r| r == nref)
+            });
+            if !explicit_id_link && !explicit_note_link {
+                continue;
+            }
+            items.push(SourcedInteraction {
+                date: note.date.clone(),
+                kind: "linked_note",
+                summary: format!("Note reference · {}", note.title),
+                source: "projects".into(),
+                reference: Some(note.path.clone()),
+                data_class: if normalized_class == "c0" || normalized_class == "c1" {
+                    "c1"
+                } else {
+                    "c2"
+                },
+            });
+        }
+
+        items.sort_by(|a, b| match (&a.date, &b.date) {
+            (Some(da), Some(db)) => db.cmp(da).then_with(|| a.summary.cmp(&b.summary)),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.summary.cmp(&b.summary),
+        });
+        items
+    }
+}
+
+/// An explicit graph link (introduction or group conversation) involving a person.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourcedGraphInteraction {
+    pub other_id: String,
+    pub kind: String,
+    pub summary: String,
+    pub source: String,
+    pub at: Option<String>,
+}
+
+/// A candidate note evaluated for person interaction history. Only explicit entity or `note_ref`
+/// links within allowed classification boundaries are admitted; `body_excerpt` is never copied.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CandidateNoteMention {
+    pub path: String,
+    pub date: Option<String>,
+    pub title: String,
+    pub linked_entity_ids: Vec<String>,
+    pub linked_note_refs: Vec<String>,
+    pub data_class: String,
+    pub body_excerpt: String,
+}
+
+/// One dated or owner-linked interaction row shown in the person detail view.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourcedInteraction {
+    pub date: Option<String>,
+    pub kind: &'static str,
+    pub summary: String,
+    pub source: String,
+    pub reference: Option<String>,
+    pub data_class: &'static str,
 }
 
 /// Registry keys that `network_rows` shows, with their labels.
@@ -325,7 +497,7 @@ pub fn extract_initials(name: &str) -> String {
 
 /// Filters people by search query against name, aliases, company, role, location, or email.
 pub fn filter_people<'a>(people: &'a [Person], query: &str) -> Vec<&'a Person> {
-    let q = query.trim().to_lowercase();
+    let q = crate::search::fold_search_text(query.trim());
     if q.is_empty() {
         return people.iter().collect();
     }
@@ -342,7 +514,7 @@ pub fn filter_people<'a>(people: &'a [Person], query: &str) -> Vec<&'a Person> {
             ]
             .into_iter()
             .flatten()
-            .any(|field| field.to_lowercase().contains(&q))
+            .any(|field| crate::search::fold_search_text(field).contains(&q))
         })
         .collect()
 }
@@ -590,5 +762,115 @@ mod tests {
         assert_eq!(filter_people(&list, "lovelace").len(), 1);
         assert_eq!(filter_people(&list, "mathematician").len(), 1);
         assert_eq!(filter_people(&list, "unknown").len(), 0);
+    }
+
+    #[test]
+    fn sourced_interactions_list_owner_links_and_reject_lexical_similarity_or_c3_notes() {
+        let mut values = BTreeMap::new();
+        values.insert(
+            "last_contact".into(),
+            serde_json::json!({ "value": "2026-11-18", "source": "operator" }),
+        );
+        values.insert(
+            "connected_on".into(),
+            serde_json::json!({ "value": "2024-05-10", "source": "linkedin" }),
+        );
+        values.insert(
+            "met_at".into(),
+            serde_json::json!({ "value": "RustFest Zürich", "source": "operator" }),
+        );
+
+        let record = EntityRecord {
+            id: "person-ada".into(),
+            kind: "person".into(),
+            name: "Ada Lovelace".into(),
+            note_ref: Some("People/Ada-Lovelace.md".into()),
+            revision: 2,
+            values,
+            facts: vec![EntityFact {
+                id: "fact-1".into(),
+                predicate: "away_in".into(),
+                place: "Zürich".into(),
+                valid_from: Some("2026-11-01".into()),
+                valid_to: Some("2026-11-05".into()),
+                note: None,
+                latitude: None,
+                longitude: None,
+                source: "operator".into(),
+            }],
+        };
+        let person = Person::from_record(&record);
+
+        let graph_links = vec![SourcedGraphInteraction {
+            other_id: "person-charles".into(),
+            kind: "introduced".into(),
+            summary: "Introduced by Charles Babbage".into(),
+            source: "operator".into(),
+            at: Some("2025-09-12".into()),
+        }];
+
+        let candidate_notes = vec![
+            // Explicitly linked c2 note: included without copying body_excerpt
+            CandidateNoteMention {
+                path: "Projects/Engine/Review-2026-11-15.md".into(),
+                date: Some("2026-11-15".into()),
+                title: "Architecture review".into(),
+                linked_entity_ids: vec!["person-ada".into()],
+                linked_note_refs: Vec::new(),
+                data_class: "c2".into(),
+                body_excerpt: "CONFIDENTIAL PRIVATE NOTE BODY DO NOT DUPLICATE".into(),
+            },
+            // Lexical-only match (same name in title & body, no owner link): MUST BE EXCLUDED
+            CandidateNoteMention {
+                path: "Journal/2026-11-19.md".into(),
+                date: Some("2026-11-19".into()),
+                title: "Met Ada Lovelace for coffee".into(),
+                linked_entity_ids: Vec::new(),
+                linked_note_refs: Vec::new(),
+                data_class: "c2".into(),
+                body_excerpt: "Spoke with Ada Lovelace about London.".into(),
+            },
+            // Explicitly linked c3 note: MUST BE EXCLUDED by classification boundary
+            CandidateNoteMention {
+                path: "Vault/Medical/Ada-Check.md".into(),
+                date: Some("2026-11-20".into()),
+                title: "Restricted medical note".into(),
+                linked_entity_ids: vec!["person-ada".into()],
+                linked_note_refs: Vec::new(),
+                data_class: "c3".into(),
+                body_excerpt: "Secret c3 payload".into(),
+            },
+        ];
+
+        let history = person.sourced_interactions(&graph_links, &candidate_notes);
+        let dates: Vec<Option<&str>> = history.iter().map(|h| h.date.as_deref()).collect();
+        assert_eq!(
+            dates,
+            vec![
+                Some("2026-11-18"),
+                Some("2026-11-15"),
+                Some("2026-11-01"),
+                Some("2025-09-12"),
+                Some("2024-05-10"),
+                None,
+            ],
+            "dated owner-linked entries sort newest-first, with undated owner_note last"
+        );
+        assert!(
+            !history.iter().any(|h| h.summary.contains("coffee")),
+            "lexical-only mention without explicit owner link is excluded"
+        );
+        assert!(
+            !history
+                .iter()
+                .any(|h| h.summary.contains("Restricted medical")),
+            "c3 note is excluded by classification boundary"
+        );
+        assert!(
+            !history
+                .iter()
+                .any(|h| h.summary.contains("CONFIDENTIAL PRIVATE NOTE BODY")),
+            "private note body content is never duplicated"
+        );
     }
 }

@@ -8,6 +8,8 @@ use super::{send, snapshots, Choice, SettingsAction as Action, SettingsState};
 use crate::{
     ely::{
         buttons::{Button, ButtonVariant},
+        data_display::{Badge, Tone},
+        forms::SettingRow,
         theme::ControlSize,
     },
     primitives::{note, surface_card},
@@ -104,17 +106,15 @@ impl Render for PhoneSettings {
 
         let reminders = section(palette, "Local alerts")
             .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .gap_2()
-                    .child(caption(palette, state.reminders_sentence.clone()))
-                    .child(action(
+                SettingRow::new(
+                    "Notification reminders",
+                    action(
                         "reminders-toggle",
                         if state.reminders_on { "On" } else { "Off" },
                         Action::ToggleReminders,
-                    )),
+                    ),
+                )
+                .description(state.reminders_sentence.clone()),
             )
             .child(caption(
                 palette,
@@ -163,24 +163,16 @@ impl Render for PhoneSettings {
                         |page| {
                             page.child(section(palette, "Nearby Macs").children(
                                 state.found.iter().enumerate().map(|(index, mac)| {
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .gap_2()
-                                        .child(
-                                            column()
-                                                .child(mac.name.clone())
-                                                .child(caption(palette, mac.address.clone())),
+                                    SettingRow::new(
+                                        mac.name.clone(),
+                                        action(
+                                            format!("join-mac-{index}"),
+                                            if state.joining { "Asking…" } else { "Join" },
+                                            Action::Join(index),
                                         )
-                                        .child(
-                                            action(
-                                                format!("join-mac-{index}"),
-                                                if state.joining { "Asking…" } else { "Join" },
-                                                Action::Join(index),
-                                            )
-                                            .disabled(state.joining),
-                                        )
+                                        .disabled(state.joining),
+                                    )
+                                    .description(mac.address.clone())
                                 }),
                             ))
                         },
@@ -189,15 +181,11 @@ impl Render for PhoneSettings {
                     .when(!state.capabilities.is_empty(), |page| {
                         page.child(section(palette, "Capabilities").children(
                             state.capabilities.iter().map(|(name, up)| {
-                                div()
-                                    .flex()
-                                    .justify_between()
-                                    .gap_2()
-                                    .child(name.clone())
-                                    .child(caption(
-                                        palette,
-                                        if *up { "Available" } else { "Unavailable" },
-                                    ))
+                                SettingRow::new(
+                                    name.clone(),
+                                    Badge::new(if *up { "Available" } else { "Unavailable" })
+                                        .tone(if *up { Tone::Success } else { Tone::Warning }),
+                                )
                             }),
                         ))
                     })

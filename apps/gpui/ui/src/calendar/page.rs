@@ -6,15 +6,14 @@ use crate::ely::theme::ControlSize;
 use chrono::{Duration, Local, Months, NaiveDate};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, Context, FocusHandle, FontWeight, ScrollHandle, SharedString,
-    Window,
+    div, prelude::*, px, rgb, rgba, Context, FocusHandle, FontWeight, ScrollHandle, Window,
 };
 use sjel_gpui_core::calendar::{self, entries_on};
 use sjel_gpui_core::data::RequestVersion;
 use sjel_gpui_core::shell::{self, CalendarEntry, CalendarEntryDetail, ShellError, ShellResult};
 
 use crate::data::{Remote, Repo};
-use crate::primitives::key_bar;
+use crate::primitives::{key_bar, sub_tabs};
 use crate::theme::{Density, Palette, ThemeContext};
 
 use super::types::CalendarIntent;
@@ -467,13 +466,23 @@ impl Render for CalendarPage {
                 dates[6].format("%b %-d, %Y")
             ),
         };
-        let view_button = |label: &'static str, view: View, cx: &mut Context<Self>| {
-            Button::new(SharedString::from(format!("calendar-view-{label}")), label)
-                .size(ControlSize::Sm)
-                .when(self.view == view, |b| b.variant(ButtonVariant::Primary))
-                .when(self.view != view, |b| b.variant(ButtonVariant::Ghost))
-                .on_click(cx.listener(move |page, _, _, cx| page.set_view(view, cx)))
-        };
+        let view_owner = cx.entity();
+        let view_tabs = sub_tabs(
+            "calendar-view",
+            vec![
+                ("Day", None, self.view == View::Day),
+                ("Week", None, self.view == View::Week),
+                ("Month", None, self.view == View::Month),
+            ],
+            move |ix, _, cx| {
+                let target = match ix {
+                    0 => View::Day,
+                    1 => View::Week,
+                    _ => View::Month,
+                };
+                view_owner.update(cx, |page, cx| page.set_view(target, cx));
+            },
+        );
         let header = div()
             .flex()
             .items_center()
@@ -515,19 +524,7 @@ impl Render for CalendarPage {
                     ),
             )
             .child(div().flex_1())
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .p(px(2.))
-                    .rounded(px(6.))
-                    .bg(rgba(palette.surface))
-                    .border_1()
-                    .border_color(rgba(palette.border))
-                    .child(view_button("Day", View::Day, cx))
-                    .child(view_button("Week", View::Week, cx))
-                    .child(view_button("Month", View::Month, cx)),
-            )
+            .child(view_tabs)
             .when(self.undo_time.is_some(), |header| {
                 header.child(
                     Button::new("calendar-undo-time", "Undo time change · ⌘Z")

@@ -1,13 +1,14 @@
 //! Kanban Board view for project tasks.
 
-use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, Render, SharedString,
     Window,
 };
 
 use crate::ely::charts::{GanttChart, ProgressChart, Task};
+use crate::ely::data_display::{Badge, Tone};
+use crate::ely::forms::{Input, TextInput};
+use crate::ely::theme::ControlSize;
 use crate::primitives::{due_badge, priority_pill, status_pill};
 use crate::theme::{tint, Palette};
 use sjel_gpui_core::shell::ProjectRecord;
@@ -104,7 +105,7 @@ impl Projects {
     pub(super) fn task_board(
         &self,
         records: &[ProjectRecord],
-        new_task: &Entity<InputState>,
+        new_task: &Entity<TextInput>,
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -249,24 +250,13 @@ impl Projects {
                                     el.child(due_badge(Some(&d), task.done, &today, palette))
                                 })
                                 .when_some(subtask_progress, |el, (done, total)| {
-                                    el.child(
-                                        div()
-                                            .px_1p5()
-                                            .py_0p5()
-                                            .rounded(px(4.))
-                                            .bg(rgba(if done == total {
-                                                tint(palette.green, 0x22)
-                                            } else {
-                                                palette.raised
-                                            }))
-                                            .text_xs()
-                                            .text_color(rgb(if done == total {
-                                                palette.green
-                                            } else {
-                                                palette.muted
-                                            }))
-                                            .child(format!("{done}/{total}")),
-                                    )
+                                    el.child(Badge::new(format!("{done}/{total}")).tone(
+                                        if done == total {
+                                            Tone::Success
+                                        } else {
+                                            Tone::Neutral
+                                        },
+                                    ))
                                 }),
                         )
                         .into_any_element()
@@ -326,17 +316,7 @@ impl Projects {
                                         .child(col_kind.label()),
                                 ),
                         )
-                        .child(
-                            div()
-                                .px_1p5()
-                                .py_0p5()
-                                .rounded_full()
-                                .bg(rgba(palette.surface))
-                                .text_xs()
-                                .font_family(".AppleSystemUIFontMonospaced")
-                                .text_color(rgb(palette.muted))
-                                .child(count.to_string()),
-                        ),
+                        .child(Badge::new(count.to_string()).tone(Tone::Neutral)),
                 )
                 .child(
                     div()
@@ -355,7 +335,7 @@ impl Projects {
                                     .border_dashed()
                                     .border_color(rgba(palette.border))
                                     .bg(rgba(palette.surface))
-                                    .child(Input::new(new_task).small().appearance(false)),
+                                    .child(Input::new(new_task).size(ControlSize::Sm)),
                             )
                         }),
                 )

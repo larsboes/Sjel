@@ -1,68 +1,19 @@
 //! Document proposal reviews and local rule and model generation.
 
-use std::collections::BTreeMap;
-
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight};
-use sjel_gpui_core::shell::{
-    self, DocumentDetail, ProposalEvidenceSource, ProposalOutcome, ProposalReview, ProposalSource,
-    ShellError,
+use sjel_gpui_core::document_queue::{
+    can_enter_model_prompt, evaluate_proposal_run, ProposalAgreement,
 };
+use sjel_gpui_core::shell::{self, DocumentDetail, ProposalReview, ShellError};
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::data_display::{Badge, DescriptionList, Tone};
+use crate::ely::feedback::InlineMessage;
+use crate::ely::primitives::Severity;
 use crate::ely::theme::ControlSize;
 use crate::theme::Palette;
 
 use super::Documents;
-
-fn proposal_source_label(source: &ProposalSource) -> String {
-    match source {
-        ProposalSource::Rules { identity, version } => format!("Rules · {identity} · {version}"),
-        ProposalSource::Model {
-            role,
-            model,
-            revision,
-        } => format!(
-            "Model · {role} · {model}{}",
-            revision
-                .as_deref()
-                .map(|revision| format!(" · {revision}"))
-                .unwrap_or_default()
-        ),
-    }
-}
-
-fn proposal_outcome_label(outcome: &ProposalOutcome) -> String {
-    match outcome {
-        ProposalOutcome::Proposed { category, .. } => category.clone(),
-        ProposalOutcome::Abstained { reason } => format!(
-            "No category · {}",
-            match reason {
-                shell::ProposalAbstentionReason::NoMatch => "no rule matched",
-                shell::ProposalAbstentionReason::MissingEvidence => "evidence missing",
-                shell::ProposalAbstentionReason::ModelUnavailable => "source unavailable",
-                shell::ProposalAbstentionReason::CategoryNotConfigured => "category not configured",
-                shell::ProposalAbstentionReason::SafetyRefused => "safety refused",
-            }
-        ),
-        ProposalOutcome::Invalid { reason } => format!(
-            "Invalid · {}",
-            match reason {
-                shell::ProposalInvalidReason::MalformedOutput => "malformed output",
-                shell::ProposalInvalidReason::EvidenceNotExact => "evidence was not exact",
-                shell::ProposalInvalidReason::EvidenceTooLong => "evidence exceeded limits",
-                shell::ProposalInvalidReason::InvalidCategory => "category was invalid",
-            }
-        ),
-    }
-}
-
-fn proposal_review_label(review: ProposalReview) -> &'static str {
-    match review {
-        ProposalReview::Accepted => "Agreed",
-        ProposalReview::Rejected => "Rejected",
-        ProposalReview::Overridden => "Overridden",
-    }
-}
 
 pub(super) fn proposal_panel(
     view: &Documents,
@@ -79,37 +30,25 @@ pub(super) fn proposal_panel(
                 .then_with(|| left.generation_id.cmp(&right.generation_id))
         })
         .map(|record| record.generation_id.as_str());
-    let latest: Vec<_> = detail
-        .proposals
-        .iter()
-        .filter(|record| Some(record.generation_id.as_str()) == latest_generation)
-        .collect();
-    let mut categories = BTreeMap::<String, usize>::new();
-    for record in &latest {
-        if let ProposalOutcome::Proposed { category, .. } = &record.proposal.outcome {
-            *categories.entry(category.clone()).or_default() += 1;
-        }
-    }
-    let proposed_count: usize = categories.values().sum();
-    let summary = if categories.len() > 1 {
-        format!(
-            "Sources disagree: {}",
-            categories.keys().cloned().collect::<Vec<_>>().join(" · ")
-        )
-    } else if proposed_count > 1 {
-        format!(
-            "Sources agree: {}",
-            categories.keys().next().cloned().unwrap_or_default()
-        )
-    } else if proposed_count == 1 {
-        format!(
-            "One proposal: {}",
-            categories.keys().next().cloned().unwrap_or_default()
-        )
-    } else if latest.is_empty() {
-        "No proposal records yet".into()
-    } else {
-        "No category proposed in this run".into()
+    let (agreement, visible) = evaluate_proposal_run(detail, view.show_proposal_history);
+    let summary = agreement.summary_label();
+    let agreement_badge = match &agreement {
+        ProposalAgreement::Agree(cat) => Some(
+            Badge::new(format!("Agree · {cat}"))
+                .tone(Tone::Success)
+                .into_any_element(),
+        ),
+        ProposalAgreement::Conflict(cats) => Some(
+            Badge::new(format!("Conflict · {}", cats.join(" vs ")))
+                .tone(Tone::Warning)
+                .into_any_element(),
+        ),
+        ProposalAgreement::Single(cat) => Some(
+            Badge::new(format!("Single · {cat}"))
+                .tone(Tone::Accent)
+                .into_any_element(),
+        ),
+        ProposalAgreement::NoCategory | ProposalAgreement::NoRecords => None,
     };
     let older_runs = detail
         .proposals
@@ -118,20 +57,13 @@ pub(super) fn proposal_panel(
         .map(|record| record.generation_id.as_str())
         .collect::<std::collections::BTreeSet<_>>()
         .len();
-    let mut visible: Vec<_> = detail
-        .proposals
-        .iter()
-        .filter(|record| {
-            view.show_proposal_history || Some(record.generation_id.as_str()) == latest_generation
-        })
-        .collect();
-    visible.sort_by(|left, right| {
-        right
-            .generated_at
-            .cmp(&left.generated_at)
-            .then_with(|| right.id.cmp(&left.id))
-    });
     let busy = view.proposal_busy.is_some();
+    let data_class = if detail.document.data_class.trim().is_empty() {
+        "c2"
+    } else {
+        detail.document.data_class.as_str()
+    };
+    let model_allowed = can_enter_model_prompt(data_class, true);
     let mut panel = div()
         .flex()
         .flex_col()
@@ -150,28 +82,44 @@ pub(super) fn proposal_panel(
                         .font_weight(FontWeight::MEDIUM)
                         .child("Classification proposals"),
                 )
+                .child(Badge::new(format!("Class {data_class}")).tone(
+                    if data_class.eq_ignore_ascii_case("c3") {
+                        Tone::Danger
+                    } else {
+                        Tone::Neutral
+                    },
+                ))
+                .children(agreement_badge)
                 .child(div().flex_1())
                 .child(
-                    Button::new("document-regenerate-proposals", if view.proposal_busy.as_deref() == Some("regenerate") {
+                    Button::new(
+                        "document-regenerate-proposals",
+                        if view.proposal_busy.as_deref() == Some("regenerate") {
                             "Saving…"
                         } else {
                             "Regenerate rules"
-                        })
-                        .size(ControlSize::Sm)
-                        .variant(ButtonVariant::Ghost)
-                        .disabled(busy)
-                        .on_click(cx.listener(|view, _, _, cx| view.regenerate_proposals(cx))),
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
+                    .disabled(busy)
+                    .on_click(cx.listener(|view, _, _, cx| view.regenerate_proposals(cx))),
                 )
                 .child(
-                    Button::new("document-model-proposal", if view.proposal_busy.as_deref() == Some("model") {
+                    Button::new(
+                        "document-model-proposal",
+                        if view.proposal_busy.as_deref() == Some("model") {
                             "Asking local model…"
+                        } else if !model_allowed {
+                            "Model blocked (c3)"
                         } else {
                             "Ask local model"
-                        })
-                        .size(ControlSize::Sm)
-                        .variant(ButtonVariant::Ghost)
-                        .disabled(busy)
-                        .on_click(cx.listener(|view, _, _, cx| view.generate_model_proposal(cx))),
+                        },
+                    )
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Ghost)
+                    .disabled(busy || !model_allowed)
+                    .on_click(cx.listener(|view, _, _, cx| view.generate_model_proposal(cx))),
                 ),
         )
         .child(
@@ -183,7 +131,7 @@ pub(super) fn proposal_panel(
         .child(
             div()
                 .text_xs()
-                .text_color(rgb(if categories.len() > 1 {
+                .text_color(rgb(if matches!(agreement, ProposalAgreement::Conflict(_)) {
                     palette.amber
                 } else {
                     palette.muted
@@ -197,20 +145,13 @@ pub(super) fn proposal_panel(
                 .child("Review records an assessment only. Filing remains a separate action."),
         );
     if let Some(error) = view.proposal_error.as_ref() {
-        panel = panel.child(
-            div()
-                .text_xs()
-                .text_color(rgb(palette.red))
-                .child(format!("Proposal action failed: {error}")),
-        );
+        panel = panel.child(InlineMessage::new(
+            Severity::Danger,
+            format!("Proposal action failed: {error}"),
+        ));
     }
     if let Some(notice) = view.proposal_notice.as_ref() {
-        panel = panel.child(
-            div()
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(notice.clone()),
-        );
+        panel = panel.child(InlineMessage::new(Severity::Info, notice.clone()));
     }
     if older_runs > 0 {
         panel = panel.child(
@@ -237,62 +178,54 @@ pub(super) fn proposal_panel(
     }
     panel
         .children(visible.into_iter().map(|record| {
-            let source = proposal_source_label(&record.proposal.source);
-            let outcome = proposal_outcome_label(&record.proposal.outcome);
-            let evidence = match &record.proposal.outcome {
-                ProposalOutcome::Proposed { evidence, .. } => Some((
-                    match evidence.source {
-                        ProposalEvidenceSource::Filename => "Filename evidence",
-                        ProposalEvidenceSource::ExtractedText => "Text evidence",
-                    },
-                    evidence.quote.clone(),
-                )),
-                _ => None,
-            };
-            let review_history = if record.review_history.is_empty() {
-                "Not reviewed".to_owned()
-            } else {
-                record
-                    .review_history
-                    .iter()
-                    .map(|event| {
-                        format!(
-                            "{} · {}",
-                            proposal_review_label(event.outcome),
-                            event.reviewed_at.get(..10).unwrap_or("date unknown")
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" → ")
-            };
             let proposal_id = record.id.clone();
             let source_id = record.id.clone();
             let override_id = record.id.clone();
-            let latest_review = record
-                .proposal
-                .review
-                .map(proposal_review_label)
-                .unwrap_or("Not reviewed");
-            let confidence = record
-                .proposal
-                .confidence
-                .map(|confidence| format!("Confidence {confidence:.2}"));
-            let generated = record
-                .generated_at
-                .get(..16)
-                .unwrap_or(&record.generated_at);
+            let evidence_page_label = record
+                .evidence_page
+                .map(|p| format!("Page {p}"))
+                .unwrap_or_else(|| {
+                    if record.evidence_source_label == Some("Filename evidence") {
+                        "Filename".to_owned()
+                    } else {
+                        "No page span".to_owned()
+                    }
+                });
+            let provenance = DescriptionList::new()
+                .item("Summary", record.summary_label.clone())
+                .item("Engine / Rev", record.engine_revision.clone())
+                .item("Evidence Page", evidence_page_label)
+                .item("Generated", record.generated_at.clone())
+                .item("Class", record.data_class.clone())
+                .item("Review", record.review_outcome);
+            let outcome_tone = match record.review_outcome {
+                "Agreed" => Tone::Success,
+                "Rejected" => Tone::Danger,
+                "Overridden" => Tone::Warning,
+                _ => Tone::Neutral,
+            };
             div()
                 .flex()
                 .flex_col()
-                .gap_1()
+                .gap_1p5()
                 .p_2()
                 .rounded(px(4.))
                 .bg(rgba(palette.surface))
                 .child(
                     div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
-                        .gap_2()
+                        .gap_1p5()
+                        .child(
+                            Badge::new(if record.is_rule { "Rules" } else { "Model" }).tone(
+                                if record.is_rule {
+                                    Tone::Neutral
+                                } else {
+                                    Tone::Accent
+                                },
+                            ),
+                        )
                         .child(
                             div()
                                 .flex_1()
@@ -300,38 +233,59 @@ pub(super) fn proposal_panel(
                                 .text_xs()
                                 .font_weight(FontWeight::MEDIUM)
                                 .truncate()
-                                .child(source),
+                                .child(record.source_label),
                         )
-                        .child(div().text_xs().child(outcome))
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(rgb(palette.muted))
-                                .child(latest_review),
-                        )
-                        .when_some(confidence, |row, confidence| {
-                            row.child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(confidence),
-                            )
-                        }),
+                        .child(Badge::new(record.outcome_label).tone(
+                            if record.proposed_category.is_some() {
+                                Tone::Accent
+                            } else {
+                                Tone::Neutral
+                            },
+                        ))
+                        .child(Badge::new(record.review_outcome).tone(outcome_tone))
+                        .child(Badge::new(record.confidence_label).tone(Tone::Neutral)),
                 )
-                .when_some(evidence, |row, (label, quote)| {
-                    row.child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(format!("{label}: “{quote}”")),
-                    )
-                })
+                .child(provenance)
+                .when_some(
+                    record
+                        .evidence_source_label
+                        .zip(record.evidence_quote.clone()),
+                    |row, (label, quote)| {
+                        row.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1p5()
+                                .child(
+                                    Badge::new(if record.evidence_span_verified {
+                                        "Exact span"
+                                    } else {
+                                        "Unverified span"
+                                    })
+                                    .tone(
+                                        if record.evidence_span_verified {
+                                            Tone::Success
+                                        } else {
+                                            Tone::Warning
+                                        },
+                                    ),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(format!("{label}: “{quote}”")),
+                                ),
+                        )
+                    },
+                )
                 .child(
                     div()
                         .text_xs()
                         .text_color(rgb(palette.muted))
                         .child(format!(
-                            "Run {generated} · review history: {review_history}"
+                            "Run {} · review history: {}",
+                            record.generated_at, record.review_history_label
                         )),
                 )
                 .child(

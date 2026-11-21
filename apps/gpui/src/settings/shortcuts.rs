@@ -1,7 +1,7 @@
 //! Shortcuts listing: Key bindings inspection, filtering, human-readable labels, and key display.
 
-use gpui_kit::component::kbd::Kbd;
 use gpui_kit::{div, prelude::*, AnyElement, App, AsKeystroke, IntoElement, Keystroke};
+use sjel_gpui_ui::ely::typography::Kbd;
 use sjel_gpui_ui::primitives::note;
 use sjel_gpui_ui::theme::Palette;
 
@@ -103,7 +103,7 @@ pub(super) fn shortcuts(
                             .flex()
                             .items_center()
                             .gap_1()
-                            .children(strokes.into_iter().map(Kbd::new)),
+                            .children(strokes.into_iter().map(Kbd::from_keystroke)),
                         palette,
                     )
                 })

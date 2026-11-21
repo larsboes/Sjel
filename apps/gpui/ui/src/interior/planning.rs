@@ -3,6 +3,8 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::feedback::InlineMessage;
+use crate::ely::primitives::Severity;
 use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::interior::{RoomPlanJob, RoomPlanJobState};
@@ -504,7 +506,9 @@ impl RoomPlanHistory {
             ))
             .when_some(job_status, |panel, status| panel.child(div().text_xs().text_color(rgb(palette.muted)).child(status)))
             .when_some(self.planning_message.clone(), |panel, message| panel.child(div().text_xs().text_color(rgb(palette.muted)).child(message)))
-            .when_some(self.planning_error.clone(), |panel, error| panel.child(div().text_xs().text_color(rgb(palette.red)).child(error)))
+            .when_some(self.planning_error.clone(), |panel, error| {
+                panel.child(InlineMessage::new(Severity::Danger, error))
+            })
             .children(candidates)
             .into_any_element()
     }

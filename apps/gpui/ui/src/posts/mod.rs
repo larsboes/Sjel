@@ -8,7 +8,6 @@ use std::path::PathBuf;
 use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::forms::{Input, TextInput};
 use crate::ely::theme::ControlSize;
-use gpui_kit::component::input::{Textarea, TextareaState};
 use gpui_kit::{
     div, img, prelude::*, px, AnyElement, Context, Entity, FontWeight, IntoElement, ObjectFit,
     Render, SharedString, Window,
@@ -29,7 +28,7 @@ pub struct PostsPage {
     pub selected: Option<String>,
     /// The slug whose text the editor holds, so a reload never overwrites typing.
     loaded_text: Option<String>,
-    text: Option<Entity<TextareaState>>,
+    text: Option<Entity<TextInput>>,
     new_slug: Option<Entity<TextInput>>,
     new_title: Option<Entity<TextInput>>,
     url: Option<Entity<TextInput>>,
@@ -129,7 +128,7 @@ impl PostsPage {
 
     fn ensure_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.text.is_none() {
-            self.text = Some(cx.new(|cx| TextareaState::new(window, cx).auto_grow(12, 40)));
+            self.text = Some(cx.new(|cx| TextInput::new(window, cx).multi_line(12, 40)));
         }
         if self.new_slug.is_none() {
             self.new_slug =
@@ -142,7 +141,7 @@ impl PostsPage {
         if let (Some(detail), Some(text)) = (&self.detail.value, &self.text) {
             if self.loaded_text.as_deref() != Some(detail.summary.slug.as_str()) {
                 let body = detail.text.clone();
-                text.update(cx, |t, cx| t.set_value(body, window, cx));
+                text.update(cx, |t, cx| t.set_text(body, cx));
                 let url = detail.summary.url.clone().unwrap_or_default();
                 if let Some(input) = &self.url {
                     input.update(cx, |i, cx| i.set_text(url, cx));
@@ -243,7 +242,7 @@ impl PostsPage {
         }
         if let Some(text) = &self.text {
             let area = text.clone();
-            col = col.child(Textarea::new(text)).child(
+            col = col.child(Input::new(text)).child(
                 div()
                     .flex()
                     .gap(px(8.))
@@ -253,7 +252,7 @@ impl PostsPage {
                             .size(ControlSize::Sm)
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 let req = PostsWriteRequest {
-                                    text: area.read(cx).value().to_string(),
+                                    text: area.read(cx).text().to_string(),
                                     ..this.request("text")
                                 };
                                 this.loaded_text = None;

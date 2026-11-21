@@ -5,13 +5,19 @@
 //! Sweeps, reconciling and classification passes stay in the dashboard for now.
 
 pub mod actions;
+pub mod adapter;
 pub mod bar;
 pub mod row;
 
 pub use actions::*;
 
-use crate::ely::buttons::{Button, ButtonVariant};
-use crate::ely::theme::ControlSize;
+use crate::ely::{
+    buttons::{Button, ButtonVariant},
+    feedback::InlineMessage,
+    primitives::Severity,
+    theme::ControlSize,
+};
+use crate::primitives::{filter_pill, key_bar};
 use gpui_kit::{div, prelude::*, rgb, Context, FocusHandle, FontWeight, SharedString, Window};
 use sjel_gpui_core::mail::{
     self, category_label, MailAction, MailProposal, StatusFilter, CATEGORIES,
@@ -376,13 +382,6 @@ pub(crate) fn notice(result: &mail::BulkResult) -> Option<(String, bool)> {
     (!parts.is_empty()).then(|| (parts.join(" "), !result.failures.is_empty()))
 }
 
-fn muted(text: &str, palette: Palette) -> gpui_kit::Div {
-    div()
-        .text_sm()
-        .text_color(rgb(palette.muted))
-        .child(text.to_owned())
-}
-
 impl gpui_kit::Render for Mail {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self.palette.unwrap_or_else(Palette::dark);
@@ -398,17 +397,12 @@ impl gpui_kit::Render for Mail {
         };
 
         let statuses = div().flex().gap_1().children(StatusFilter::ALL.map(|s| {
-            Button::new(
-                SharedString::from(format!("mail-status-{}", s.label())),
-                format!("{} {}", s.label(), status_count(s)),
+            filter_pill(
+                s.label(),
+                status_count(s),
+                self.status == s,
+                cx.listener(move |view, _, _, cx| view.set_status(s, cx)),
             )
-            .size(ControlSize::Sm)
-            .variant(if self.status == s {
-                ButtonVariant::Primary
-            } else {
-                ButtonVariant::Ghost
-            })
-            .on_click(cx.listener(move |view, _, _, cx| view.set_status(s, cx)))
         }));
         let categories = div()
             .flex()
@@ -460,19 +454,17 @@ impl gpui_kit::Render for Mail {
             .flex_col()
             .gap_1();
         if self.rows.value.is_none() && self.rows.loading {
-            list = list.child(muted("Loading mail proposals…", palette));
+            list = list.child(InlineMessage::new(
+                Severity::Info,
+                "Loading mail proposals…",
+            ));
         }
         if let Some(error) = &self.rows.error {
-            list = list.child(
-                div()
-                    .text_sm()
-                    .text_color(rgb(palette.red))
-                    .child(error.to_string()),
-            );
+            list = list.child(InlineMessage::new(Severity::Danger, error.to_string()));
         }
         let visible: Vec<MailProposal> = self.visible().into_iter().cloned().collect();
         if visible.is_empty() && !self.rows.loading && self.rows.error.is_none() {
-            list = list.child(muted("No mail in this view.", palette));
+            list = list.child(InlineMessage::new(Severity::Info, "No mail in this view."));
         }
         let total = visible.len();
         let mut category = None;
@@ -543,8 +535,16 @@ impl gpui_kit::Render for Mail {
                         .flex()
                         .items_center()
                         .justify_between()
-                        .child(muted(
-                            "j/k move · x select · d dismiss · e archive · # trash · w waiting · o Gmail",
+                        .child(key_bar(
+                            &[
+                                ("j/k", "move"),
+                                ("x", "select"),
+                                ("d", "dismiss"),
+                                ("e", "archive"),
+                                ("#", "trash"),
+                                ("w", "waiting"),
+                                ("o", "Gmail"),
+                            ],
                             palette,
                         ))
                         .child(density_selector),
@@ -553,12 +553,14 @@ impl gpui_kit::Render for Mail {
             .child(statuses)
             .child(categories)
             .when_some(self.notice.clone(), |el, (text, failed)| {
-                el.child(
-                    div()
-                        .text_sm()
-                        .text_color(rgb(if failed { palette.red } else { palette.amber }))
-                        .child(text),
-                )
+                el.child(InlineMessage::new(
+                    if failed {
+                        Severity::Danger
+                    } else {
+                        Severity::Warning
+                    },
+                    text,
+                ))
             })
             .children(bar)
             .child(list)

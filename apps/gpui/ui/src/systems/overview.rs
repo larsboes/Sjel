@@ -1,5 +1,7 @@
 //! Runtime profile, Mac hardware metrics, and Host watch findings panels.
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::feedback::InlineMessage;
+use crate::ely::primitives::Severity;
 use crate::ely::theme::ControlSize;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, SharedString, Window,
@@ -137,115 +139,117 @@ impl SystemsPage {
 
     pub(super) fn runtime_panel(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
         let status = self.runtime.value.clone();
-        let body =
-            match &status {
-                None => match &self.runtime.error {
-                    Some(error) => note(error.to_string(), palette.red),
-                    None => placeholder(72.),
-                },
-                Some(status) => {
-                    let view = status.view();
-                    let selection = status.selection.clone();
-                    let busy = self.busy.contains("runtime");
-                    let modes: Vec<Button> = RUNTIME_SELECTIONS
-                        .iter()
-                        .map(|(id, label)| {
-                            let chosen = selection == *id;
-                            let choice = *id;
-                            let selected_choice = selection.clone();
-                            Button::new(SharedString::from(format!("runtime-{id}")), *label)
-                                .size(ControlSize::Sm)
-                                .when(!chosen, |button| button.variant(ButtonVariant::Ghost))
-                                .loading(busy && chosen)
-                                .on_click(cx.listener(move |page, _, window, cx| {
-                                    if selected_choice != choice {
-                                        page.set_selection(choice, window, cx);
-                                    }
-                                }))
-                        })
-                        .collect();
-                    // One wrapped row of pills rather than five stacked switches: the set is
-                    // small, and a page whose first panel is 300 px tall buries the machine it
-                    // exists to describe.
-                    let categories: Vec<AnyElement> = RUNTIME_CATEGORIES
-                        .iter()
-                        .map(|(id, label)| {
-                            let allowed = status.allow.iter().any(|entry| entry == id);
-                            let choice = *id;
-                            let enabled = view.on_the_go && status.configured;
-                            div()
-                                .id(SharedString::from(format!("runtime-category-{id}")))
-                                .px_2()
-                                .py(px(3.))
-                                .rounded(px(6.))
-                                .border_1()
-                                .text_xs()
-                                .when(enabled, |pill| pill.cursor_pointer())
-                                .when(allowed && enabled, |pill| {
-                                    pill.bg(rgba(tint(palette.accent, 0x22)))
-                                        .border_color(rgba(tint(palette.accent, 0x55)))
-                                        .text_color(rgb(palette.accent))
-                                })
-                                .when(!(allowed && enabled), |pill| {
-                                    pill.border_color(rgba(palette.border)).text_color(rgb(
-                                        if enabled {
-                                            palette.muted
-                                        } else {
-                                            palette.border
-                                        },
-                                    ))
-                                })
-                                .when(enabled, |pill| {
-                                    pill.hover(move |style| style.text_color(rgb(palette.text)))
-                                })
-                                .on_click(cx.listener(move |page, _, window, cx| {
+        let body = match &status {
+            None => match &self.runtime.error {
+                Some(error) => note(error.to_string(), palette.red),
+                None => placeholder(72.),
+            },
+            Some(status) => {
+                let view = status.view();
+                let selection = status.selection.clone();
+                let busy = self.busy.contains("runtime");
+                let modes: Vec<Button> = RUNTIME_SELECTIONS
+                    .iter()
+                    .map(|(id, label)| {
+                        let chosen = selection == *id;
+                        let choice = *id;
+                        let selected_choice = selection.clone();
+                        Button::new(SharedString::from(format!("runtime-{id}")), *label)
+                            .size(ControlSize::Sm)
+                            .when(!chosen, |button| button.variant(ButtonVariant::Ghost))
+                            .loading(busy && chosen)
+                            .on_click(cx.listener(move |page, _, window, cx| {
+                                if selected_choice != choice {
+                                    page.set_selection(choice, window, cx);
+                                }
+                            }))
+                    })
+                    .collect();
+                // One wrapped row of pills rather than five stacked switches: the set is
+                // small, and a page whose first panel is 300 px tall buries the machine it
+                // exists to describe.
+                let categories: Vec<AnyElement> = RUNTIME_CATEGORIES
+                    .iter()
+                    .map(|(id, label)| {
+                        let allowed = status.allow.iter().any(|entry| entry == id);
+                        let choice = *id;
+                        let enabled = view.on_the_go && status.configured;
+                        div()
+                            .id(SharedString::from(format!("runtime-category-{id}")))
+                            .px_2()
+                            .py(px(3.))
+                            .rounded(px(6.))
+                            .border_1()
+                            .text_xs()
+                            .when(enabled, |pill| pill.cursor_pointer())
+                            .when(allowed && enabled, |pill| {
+                                pill.bg(rgba(tint(palette.accent, 0x22)))
+                                    .border_color(rgba(tint(palette.accent, 0x55)))
+                                    .text_color(rgb(palette.accent))
+                            })
+                            .when(!(allowed && enabled), |pill| {
+                                pill.border_color(rgba(palette.border)).text_color(rgb(
                                     if enabled {
-                                        page.toggle_category(choice, window, cx);
-                                    }
-                                }))
-                                .child(*label)
-                                .into_any_element()
-                        })
-                        .collect();
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_3()
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(rgb(palette.text))
-                                .child(view.summary()),
-                        )
-                        .children(status.detail.clone().map(|detail| {
-                            div().text_xs().text_color(rgb(palette.amber)).child(detail)
-                        }))
-                        .child(div().text_xs().text_color(rgb(palette.muted)).child(
-                            if status.configured {
-                                "Exceptions apply only while On the go. Normal is unrestricted."
-                            } else {
-                                "Not configured yet: Auto follows fresh power observations."
-                            },
-                        ))
-                        .child(div().flex().flex_wrap().gap_1().children(modes))
-                        .child(
-                            div()
-                                .flex()
-                                .flex_wrap()
-                                .items_center()
-                                .gap_1()
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(rgb(palette.muted))
-                                        .mr_1()
-                                        .child("Allowed while On the go"),
-                                )
-                                .children(categories),
-                        )
-                        .into_any_element()
-                }
-            };
+                                        palette.muted
+                                    } else {
+                                        palette.border
+                                    },
+                                ))
+                            })
+                            .when(enabled, |pill| {
+                                pill.hover(move |style| style.text_color(rgb(palette.text)))
+                            })
+                            .on_click(cx.listener(move |page, _, window, cx| {
+                                if enabled {
+                                    page.toggle_category(choice, window, cx);
+                                }
+                            }))
+                            .child(*label)
+                            .into_any_element()
+                    })
+                    .collect();
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(palette.text))
+                            .child(view.summary()),
+                    )
+                    .children(
+                        status
+                            .detail
+                            .clone()
+                            .map(|detail| InlineMessage::new(Severity::Warning, detail)),
+                    )
+                    .child(div().text_xs().text_color(rgb(palette.muted)).child(
+                        if status.configured {
+                            "Exceptions apply only while On the go. Normal is unrestricted."
+                        } else {
+                            "Not configured yet: Auto follows fresh power observations."
+                        },
+                    ))
+                    .child(div().flex().flex_wrap().gap_1().children(modes))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .mr_1()
+                                    .child("Allowed while On the go"),
+                            )
+                            .children(categories),
+                    )
+                    .into_any_element()
+            }
+        };
         section("Runtime profile", card(body, palette), palette).into_any_element()
     }
 
@@ -286,12 +290,10 @@ impl SystemsPage {
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(rgb(palette.amber))
-                            .child("macmon is not sampling this Mac."),
-                    )
+                    .child(InlineMessage::new(
+                        Severity::Warning,
+                        "macmon is not sampling this Mac.",
+                    ))
                     .child(
                         div()
                             .text_xs()

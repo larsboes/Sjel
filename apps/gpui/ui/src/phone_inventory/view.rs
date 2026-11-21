@@ -13,6 +13,8 @@ use super::{format_item_price, load, snapshots, InventoryTab, Snapshot};
 use crate::{
     ely::{
         buttons::{Button, ButtonVariant},
+        dashboard::MetricTile,
+        data_display::{Badge, Tone},
         feedback::InlineMessage,
         forms::{Input, InputEvent, TextInput},
         primitives::Severity,
@@ -104,26 +106,21 @@ impl PhoneInventory {
                 (Some(group.id.clone()), label)
             }),
         );
+        let mut budget_tile = MetricTile::new("phone-wishlist-budget", "Counted budget", price)
+            .detail(format!(
+                "{} counted of {} visible · {} unpriced",
+                counted_items.len(),
+                items.len(),
+                budget.unpriced
+            ));
+        if let Some(horizon) = horizon {
+            budget_tile = budget_tile.detail(horizon);
+        }
         div()
             .flex()
             .flex_col()
             .gap_2()
-            .child(
-                card(palette)
-                    .child(title(format!("Counted budget · {price}")))
-                    .child(caption(
-                        palette,
-                        format!(
-                            "{} counted of {} visible · {} unpriced",
-                            counted_items.len(),
-                            items.len(),
-                            budget.unpriced
-                        ),
-                    ))
-                    .when_some(horizon, |card, horizon| {
-                        card.child(caption(palette, horizon))
-                    }),
-            )
+            .child(budget_tile)
             .child(
                 div()
                     .flex()
@@ -235,20 +232,29 @@ impl PhoneInventory {
                         card.child(caption(palette, "No open wishes remaining in this group"))
                     })
                     .children(members.map(|item| {
-                        let label = if counted_items.iter().any(|counted| counted.id == item.id) {
-                            "Counted in budget"
+                        let is_counted = counted_items.iter().any(|counted| counted.id == item.id);
+                        let (label, tone) = if is_counted {
+                            ("Counted in budget", Tone::Success)
                         } else {
-                            "Alternative option"
+                            ("Alternative option", Tone::Neutral)
                         };
                         div()
                             .border_t_1()
                             .border_color(rgba(palette.border))
                             .py_2()
-                            .child(format!("{} · {}", item.label, format_item_price(item)))
-                            .child(caption(
-                                palette,
-                                format!("{} · {label}", item_summary(item)),
-                            ))
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .gap_2()
+                                    .child(format!("{} · {}", item.label, format_item_price(item)))
+                                    .child(Badge::new(label).tone(tone)),
+                            )
+                            .child(caption(palette, item_summary(item)))
                     }))
             }))
     }

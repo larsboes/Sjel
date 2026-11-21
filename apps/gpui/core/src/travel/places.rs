@@ -69,6 +69,86 @@ pub fn query(place: &Place) -> String {
     }
 }
 
+/// Detects when a historical destination string is a compound multi-stop label (such as
+/// `"Berlin / Potsdam"`, `"Tokyo & Kyoto"`, `"München → Salzburg"`, or `"Wien und Graz"`)
+/// that must be split by the operator before coordinate backfill rather than geocoded to a
+/// single guessed point.
+pub fn compound_candidates(name: &str) -> Option<Vec<String>> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    const DELIMITERS: &[&str] = &[
+        " / ", " → ", " -> ", " & ", " + ", " ; ", "; ", " and ", " und ", "/", "→",
+    ];
+    for delim in DELIMITERS {
+        if trimmed.contains(delim) {
+            let parts: Vec<String> = trimmed
+                .split(delim)
+                .map(str::trim)
+                .filter(|part| !part.is_empty())
+                .map(str::to_owned)
+                .collect();
+            if parts.len() >= 2 {
+                return Some(parts);
+            }
+        }
+    }
+    None
+}
+
+/// True when `place` has no owner coordinate and its name is a compound multi-stop string.
+pub fn is_compound_place(place: &Place) -> bool {
+    place.coordinate().is_none() && compound_candidates(&place.name).is_some()
+}
+
+/// Classification of a trip's places before running historical coordinate backfill.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BackfillClassification {
+    /// Single-stop `(key, query)` pairs that are safe to geocode automatically.
+    pub ready_to_resolve: Vec<(String, String)>,
+    /// Compound stop names paired with their candidate split stops; held back from automatic
+    /// geocoding until the operator chooses how to split them.
+    pub compound_stops: Vec<(String, Vec<String>)>,
+    /// Count of stops that already carry one owner coordinate.
+    pub already_located: usize,
+}
+
+/// Classifies places for safe historical coordinate backfill:
+/// - Keeps one owner coordinate per resolved stop,
+/// - Holds compound destination strings out of automatic geocoding so a guessed single point is
+///   never substituted for multiple stops,
+/// - Records single-stop unresolved queries in deterministic order.
+pub fn classify_backfill<'a>(
+    places: impl IntoIterator<Item = &'a Place>,
+    coords: &PlaceCoords,
+    refresh: bool,
+) -> BackfillClassification {
+    let mut out = BackfillClassification::default();
+    let mut seen_keys = std::collections::HashSet::new();
+    let mut seen_compound = std::collections::HashSet::new();
+
+    for place in places {
+        let has_coord = place.coordinate().is_some() || coords.get(place).is_some();
+        if has_coord && !refresh {
+            out.already_located += 1;
+            continue;
+        }
+        if let Some(candidates) = compound_candidates(&place.name) {
+            let clean_name = place.name.trim().to_owned();
+            if seen_compound.insert(clean_name.clone()) {
+                out.compound_stops.push((clean_name, candidates));
+            }
+            continue;
+        }
+        let k = key(place);
+        if !k.is_empty() && seen_keys.insert(k.clone()) {
+            out.ready_to_resolve.push((k, query(place)));
+        }
+    }
+    out
+}
+
 impl PlaceCoords {
     pub fn is_empty(&self) -> bool {
         self.places.is_empty()
@@ -266,6 +346,57 @@ mod tests {
                 })
             }),
             Coordinate::new(52.5, 13.4)
+        );
+    }
+
+    #[test]
+    fn compound_historical_destinations_require_split_choice_before_coordinate_backfill() {
+        let stops = vec![
+            place("Berlin / Potsdam", None),
+            place("Tokyo & Kyoto", None),
+            place("München → Salzburg", None),
+            place("Wien und Graz", None),
+            place("Garmisch-Partenkirchen", None),
+            Place {
+                name: "Bonn".into(),
+                latitude: Some(50.7374),
+                longitude: Some(7.0982),
+                ..Default::default()
+            },
+        ];
+
+        let coords = PlaceCoords::default();
+        let report = classify_backfill(&stops, &coords, false);
+
+        assert_eq!(report.already_located, 1, "Bonn keeps its owner coordinate");
+        assert_eq!(
+            report.ready_to_resolve,
+            vec![(
+                "garmisch-partenkirchen".to_owned(),
+                "Garmisch-Partenkirchen".to_owned()
+            )],
+            "hyphenated single city resolves normally while compound stops are held back"
+        );
+        assert_eq!(
+            report.compound_stops,
+            vec![
+                (
+                    "Berlin / Potsdam".to_owned(),
+                    vec!["Berlin".to_owned(), "Potsdam".to_owned()]
+                ),
+                (
+                    "Tokyo & Kyoto".to_owned(),
+                    vec!["Tokyo".to_owned(), "Kyoto".to_owned()]
+                ),
+                (
+                    "München → Salzburg".to_owned(),
+                    vec!["München".to_owned(), "Salzburg".to_owned()]
+                ),
+                (
+                    "Wien und Graz".to_owned(),
+                    vec!["Wien".to_owned(), "Graz".to_owned()]
+                ),
+            ]
         );
     }
 }

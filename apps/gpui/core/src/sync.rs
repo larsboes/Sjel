@@ -332,7 +332,200 @@ async fn replay<H: Host>(
         "calendar_save" => calendar_save(store, host, report, &mutation.path, &payload).await,
         "calendar_delete" => calendar_delete(host, &mutation.path).await,
         "inventory_create" => inventory_create(host, &mutation.payload).await,
+        "trip_edit" => trip_edit(host, &mutation.payload).await,
         other => Err(format!("this app has no way to replay a {other}")),
+    }
+}
+
+/// A signed share item captured by the iOS Share Extension via the shared Keychain group.
+/// Unsigned or shared-token shortcut items are rejected before queueing or delivery.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SignedShareItem {
+    pub share_id: String,
+    pub actor_device_id: String,
+    pub kind: String,
+    pub content: String,
+    pub title: Option<String>,
+    pub key_group: String,
+    pub signature_hex: String,
+}
+
+impl SignedShareItem {
+    pub fn validate(&self, expected_device_id: Option<&str>) -> Result<(), String> {
+        if self.share_id.trim().is_empty() {
+            return Err("Share item is missing a stable share_id".into());
+        }
+        if !matches!(self.kind.as_str(), "link" | "text" | "file") {
+            return Err(format!("Unsupported share kind '{}'", self.kind));
+        }
+        if self.content.trim().is_empty() {
+            return Err("Share content is empty".into());
+        }
+        if self.key_group != "group.sjel.device.keychain" {
+            return Err("Share must be signed through the shared Keychain group".into());
+        }
+        if self.signature_hex.len() < 64
+            || !self.signature_hex.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err("Share is missing a valid paired-device signature".into());
+        }
+        if let Some(expected) = expected_device_id {
+            if self.actor_device_id != expected {
+                return Err("Share belongs to a different paired device".into());
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Persistent offline share outbox that guarantees at-most-once delivery to Inbox on reconnect.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct ShareOutbox {
+    pub pending: Vec<SignedShareItem>,
+    pub delivered_ids: HashSet<String>,
+}
+
+impl ShareOutbox {
+    /// Enqueues a signed share item once; duplicate `share_id`s or unsigned items are refused.
+    pub fn enqueue(&mut self, item: SignedShareItem) -> Result<bool, String> {
+        item.validate(None)?;
+        if self.delivered_ids.contains(&item.share_id)
+            || self.pending.iter().any(|p| p.share_id == item.share_id)
+        {
+            return Ok(false);
+        }
+        self.pending.push(item);
+        Ok(true)
+    }
+
+    /// Delivers queued shares to `/comms/captures` over the paired [`Host`] once on reconnect.
+    pub async fn deliver_pending<H: Host>(&mut self, host: &H) -> Result<usize, String> {
+        let mut delivered = 0usize;
+        let mut remaining = Vec::new();
+        let batch = std::mem::take(&mut self.pending);
+        let mut iter = batch.into_iter();
+        while let Some(item) = iter.next() {
+            if self.delivered_ids.contains(&item.share_id) {
+                continue;
+            }
+            if let Err(err) = item.validate(host.paired_device_id()) {
+                remaining.push(item);
+                remaining.extend(iter);
+                self.pending = remaining;
+                return Err(err);
+            }
+            let body = json!({
+                "id": item.share_id,
+                "kind": item.kind,
+                "text": item.content,
+                "title": item.title,
+                "device_id": item.actor_device_id,
+                "signature": item.signature_hex,
+            });
+            let bytes = serde_json::to_vec(&body).map_err(|e| e.to_string())?;
+            match host.send("POST", CAPTURES, Some(&bytes)).await {
+                Ok(reply) if reply.ok() => {
+                    self.delivered_ids.insert(item.share_id);
+                    delivered += 1;
+                }
+                Ok(reply) => {
+                    remaining.push(item);
+                    remaining.extend(iter);
+                    self.pending = remaining;
+                    return Err(reply.refused());
+                }
+                Err(err) => {
+                    remaining.push(item);
+                    remaining.extend(iter);
+                    self.pending = remaining;
+                    return Err(err);
+                }
+            }
+        }
+        self.pending = remaining;
+        Ok(delivered)
+    }
+}
+
+/// Queued phone trip field or booking edit with explicit stale-revision checking.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TripEditEnvelope {
+    pub actor_device_id: String,
+    pub plan_id: String,
+    pub base_revision: u64,
+    pub target_kind: String,
+    pub patch: Value,
+    #[serde(default)]
+    pub branch_tag: Option<String>,
+}
+
+async fn trip_edit<H: Host>(host: &H, payload: &str) -> Result<(), String> {
+    let envelope: TripEditEnvelope =
+        serde_json::from_str(payload).map_err(|error| error.to_string())?;
+    if host.paired_device_id() != Some(envelope.actor_device_id.as_str()) {
+        return Err("The Travel write belongs to a different pairing".into());
+    }
+    if envelope.plan_id.trim().is_empty() || envelope.base_revision == 0 {
+        return Err("Queued Travel write requires a plan_id and base_revision".into());
+    }
+    if !matches!(envelope.target_kind.as_str(), "plan_fields" | "booking") {
+        return Err(format!(
+            "Unsupported Travel mutation target '{}'",
+            envelope.target_kind
+        ));
+    }
+    let route = format!("/trips/api/plans/{}", quote(&envelope.plan_id));
+    let body = serde_json::to_vec(&json!({
+        "base_revision": envelope.base_revision,
+        "target_kind": envelope.target_kind,
+        "patch": envelope.patch,
+        "branch_tag": envelope.branch_tag,
+    }))
+    .map_err(|error| error.to_string())?;
+    let reply = host.send("PATCH", &route, Some(&body)).await?;
+    if reply.ok() {
+        return Ok(());
+    }
+    if reply.status == 409 {
+        return Err(format!(
+            "stale trip revision {} refused by owner: {}",
+            envelope.base_revision,
+            reply.refused()
+        ));
+    }
+    Err(reply.refused())
+}
+
+/// Synthetic demo seed for pairing the phone in demo/screenshot mode without touching any
+/// production snapshot.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SyntheticDemoSeed {
+    pub is_synthetic_demo: bool,
+    pub source_origin: String,
+    pub listen_addr: String,
+    pub device_id: String,
+    pub project_titles: Vec<String>,
+}
+
+impl SyntheticDemoSeed {
+    pub fn canonical() -> Self {
+        Self {
+            is_synthetic_demo: true,
+            source_origin: "synthetic-fixture".into(),
+            listen_addr: "127.0.0.1:18082".into(),
+            device_id: "demo-phone-synthetic-01".into(),
+            project_titles: vec!["Synthetic Atlas".into(), "Synthetic Travel".into()],
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.is_synthetic_demo || self.source_origin != "synthetic-fixture" {
+            return Err("Production snapshots cannot be used as a demo phone seed".into());
+        }
+        if !self.listen_addr.starts_with("127.0.0.1:") {
+            return Err("Synthetic demo listener must bind loopback".into());
+        }
+        Ok(())
     }
 }
 
@@ -2795,5 +2988,104 @@ mod tests {
             assert!(mark.is_some(), "sync mark was stamped");
             assert_eq!(mark, store.last_global_sync().await.unwrap());
         });
+    }
+
+    #[test]
+    fn share_outbox_requires_paired_signature_and_delivers_exactly_once_on_reconnect() {
+        runtime().block_on(async {
+            let mut outbox = ShareOutbox::default();
+            let valid = SignedShareItem {
+                share_id: "share-safari-001".into(),
+                actor_device_id: "phone".into(),
+                kind: "link".into(),
+                content: "https://example.org/research-paper".into(),
+                title: Some("Research Paper".into()),
+                key_group: "group.sjel.device.keychain".into(),
+                signature_hex: "a".repeat(64),
+            };
+
+            // Unsigned / shortcut token item is rejected
+            let mut unsigned = valid.clone();
+            unsigned.signature_hex = "short".into();
+            assert!(outbox.enqueue(unsigned).is_err());
+
+            // Enqueue while offline succeeds once and deduplicates retries
+            assert!(outbox.enqueue(valid.clone()).unwrap());
+            assert!(!outbox.enqueue(valid.clone()).unwrap());
+            assert_eq!(outbox.pending.len(), 1);
+
+            // Reconnect and deliver to CAPTURES
+            let fake = Fake::default();
+            fake.on("POST", CAPTURES, 201, serde_json::json!({"ok": true}));
+            let delivered = outbox.deliver_pending(&fake).await.expect("deliver");
+            assert_eq!(delivered, 1);
+            assert!(outbox.pending.is_empty());
+
+            // Subsequent enqueue or reconnect with the same share_id is a no-op
+            assert!(!outbox.enqueue(valid).unwrap());
+            assert_eq!(outbox.deliver_pending(&fake).await.unwrap(), 0);
+        });
+    }
+
+    #[test]
+    fn phone_trip_edit_replays_through_owner_and_refuses_stale_revision() {
+        runtime().block_on(async {
+            let fake = Fake::default();
+            let fresh_env = TripEditEnvelope {
+                actor_device_id: "phone".into(),
+                plan_id: "trip:plan:2026-japan".into(),
+                base_revision: 4,
+                target_kind: "booking".into(),
+                patch: serde_json::json!({
+                    "title": "Shinkansen Nozomi",
+                    "confirmation": "JR-8841"
+                }),
+                branch_tag: Some("kyoto-branch-a".into()),
+            };
+            fake.on(
+                "PATCH",
+                "/trips/api/plans/trip%3Aplan%3A2026-japan",
+                200,
+                serde_json::json!({"revision": 5}),
+            );
+            trip_edit(&fake, &serde_json::to_string(&fresh_env).unwrap())
+                .await
+                .expect("fresh revision succeeds");
+
+            // Stale revision (409) is explicitly refused without overwriting owner state
+            let stale_env = TripEditEnvelope {
+                base_revision: 2,
+                ..fresh_env
+            };
+            fake.on(
+                "PATCH",
+                "/trips/api/plans/trip%3Aplan%3A2026-japan",
+                409,
+                serde_json::json!({"error": "revision 2 is behind current revision 5"}),
+            );
+            let err = trip_edit(&fake, &serde_json::to_string(&stale_env).unwrap())
+                .await
+                .expect_err("stale revision must fail");
+            assert!(err.contains("stale trip revision 2 refused by owner"));
+        });
+    }
+
+    #[test]
+    fn synthetic_demo_pairing_uses_synthetic_seed_and_rejects_production_snapshots() {
+        let seed = SyntheticDemoSeed::canonical();
+        assert!(seed.validate().is_ok());
+
+        let prod_snapshot = SyntheticDemoSeed {
+            is_synthetic_demo: true,
+            source_origin: "production-backup".into(),
+            ..seed.clone()
+        };
+        assert!(prod_snapshot.validate().is_err());
+
+        let non_loopback = SyntheticDemoSeed {
+            listen_addr: "0.0.0.0:18082".into(),
+            ..seed
+        };
+        assert!(non_loopback.validate().is_err());
     }
 }

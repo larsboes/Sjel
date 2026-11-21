@@ -3,15 +3,29 @@
 use std::time::Instant;
 
 use gpui_kit::prelude::*;
-use gpui_kit::{div, px, relative, AnyElement, IntoElement};
-use sjel_gpui_core::packs::MatrixRow;
+use gpui_kit::{div, px, relative, AnyElement, IntoElement, SharedString};
 
 use crate::ely::data_display::{Badge, Tone};
+
+pub(crate) struct ResolvedMatrixCell {
+    pub(crate) harness_id: String,
+    pub(crate) write_supported: bool,
+    pub(crate) status: String,
+    pub(crate) button_id: SharedString,
+}
+
+pub(crate) struct ResolvedMatrixRow {
+    pub(crate) row_id: SharedString,
+    pub(crate) pack: String,
+    pub(crate) skill: String,
+    pub(crate) needs_attention: bool,
+    pub(crate) cells: Vec<ResolvedMatrixCell>,
+}
 
 /// The payload's reductions, kept until a new measurement settles.
 pub(crate) struct Derived {
     pub(crate) loaded_at: Option<Instant>,
-    pub(crate) rows: Vec<MatrixRow>,
+    pub(crate) resolved_rows: Vec<ResolvedMatrixRow>,
     pub(crate) pack_names: Vec<String>,
 }
 

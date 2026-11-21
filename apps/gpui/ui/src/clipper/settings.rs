@@ -2,7 +2,6 @@
 use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::forms::{Input, TextInput};
 use crate::ely::theme::ControlSize;
-use gpui_kit::component::input::{Textarea, TextareaState};
 use gpui_kit::{div, prelude::*, rgb, AnyElement, Context, Entity, IntoElement, Render, Window};
 use serde_json::Value;
 use sjel_gpui_core::clipper::{self, Settings, BEHAVIORS};
@@ -15,8 +14,8 @@ struct Editor {
     name: Entity<TextInput>,
     path: Entity<TextInput>,
     note_name: Entity<TextInput>,
-    content: Entity<TextareaState>,
-    triggers: Entity<TextareaState>,
+    content: Entity<TextInput>,
+    triggers: Entity<TextInput>,
 }
 
 pub struct ClipperSettings {
@@ -77,8 +76,8 @@ impl ClipperSettings {
                 name: cx.new(|cx| TextInput::new(window, cx).placeholder("Template name")),
                 path: cx.new(|cx| TextInput::new(window, cx).placeholder("Clippings")),
                 note_name: cx.new(|cx| TextInput::new(window, cx).placeholder("{{title}}")),
-                content: cx.new(|cx| TextareaState::new(window, cx).auto_grow(6, 18)),
-                triggers: cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 6)),
+                content: cx.new(|cx| TextInput::new(window, cx).multi_line(6, 18)),
+                triggers: cx.new(|cx| TextInput::new(window, cx).multi_line(2, 6)),
             });
         }
         if self.editor_for != Some(self.selected) {
@@ -122,11 +121,11 @@ impl ClipperSettings {
             let content = clipper::text_field(&template, "noteContentFormat");
             editor
                 .content
-                .update(cx, |input, cx| input.set_value(content, window, cx));
+                .update(cx, |input, cx| input.set_text(content, cx));
             let triggers = clipper::triggers(&template);
             editor
                 .triggers
-                .update(cx, |input, cx| input.set_value(triggers, window, cx));
+                .update(cx, |input, cx| input.set_text(triggers, cx));
         }
         self.editor_for = Some(self.selected);
     }
@@ -148,10 +147,10 @@ impl ClipperSettings {
             ),
             (
                 "noteContentFormat",
-                editor.content.read(cx).value().to_string(),
+                editor.content.read(cx).text().to_string(),
             ),
         ];
-        let triggers = editor.triggers.read(cx).value().to_string();
+        let triggers = editor.triggers.read(cx).text().to_string();
         let before = template.clone();
         clipper::apply_edit(template, &fields, &self.behavior, &triggers);
         if *template != before {
@@ -403,8 +402,8 @@ impl Render for ClipperSettings {
                     .child(field("Save behavior", behaviors.into_any_element()))
                     .child(field("Path", Input::new(&path).into_any_element()))
                     .child(field("Note name", Input::new(&note_name).into_any_element()))
-                    .child(field("Note content", Textarea::new(&content).into_any_element()))
-                    .child(field("Triggers, one URL prefix or schema:Type per line", Textarea::new(&triggers).into_any_element()))
+                    .child(field("Note content", Input::new(&content).into_any_element()))
+                    .child(field("Triggers, one URL prefix or schema:Type per line", Input::new(&triggers).into_any_element()))
                     .child(note(
                         "Properties, context and the other template fields are kept as the browser set them.",
                         palette.muted,

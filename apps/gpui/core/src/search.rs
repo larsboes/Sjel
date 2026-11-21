@@ -160,29 +160,69 @@ pub fn intent(text: &str) -> Mode {
     Mode::Search
 }
 
+/// Folds case, diacritics, and German/Nordic ligatures into a canonical ASCII-friendly search
+/// string so non-ASCII titles and document bodies match both accented and plain-ASCII queries
+/// (e.g. `"Köln"` matches `"köln"`, `"koln"`, and `"koeln"`; `"Straße"` matches `"strasse"`).
+pub fn fold_search_text(input: &str) -> String {
+    let mut folded = String::with_capacity(input.len());
+    for ch in input.chars() {
+        for lower in ch.to_lowercase() {
+            match lower {
+                'ä' | 'á' | 'à' | 'â' | 'ã' | 'å' | 'ā' | 'ă' | 'ą' => folded.push('a'),
+                'ö' | 'ó' | 'ò' | 'ô' | 'õ' | 'ø' | 'ō' | 'ŏ' | 'ő' => folded.push('o'),
+                'ü' | 'ú' | 'ù' | 'û' | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' => folded.push('u'),
+                'ß' => folded.push_str("ss"),
+                'æ' => folded.push('a'),
+                'œ' => folded.push('o'),
+                'é' | 'è' | 'ê' | 'ë' | 'ē' | 'ĕ' | 'ė' | 'ę' | 'ě' => folded.push('e'),
+                'í' | 'ì' | 'î' | 'ï' | 'ĩ' | 'ī' | 'ĭ' | 'į' => folded.push('i'),
+                'ñ' | 'ń' | 'ň' => folded.push('n'),
+                'ç' | 'ć' | 'č' => folded.push('c'),
+                'ś' | 'š' | 'ş' => folded.push('s'),
+                'ź' | 'ż' | 'ž' => folded.push('z'),
+                'ł' => folded.push('l'),
+                'ý' | 'ÿ' => folded.push('y'),
+                other => folded.push(other),
+            }
+        }
+    }
+    // Collapse common German/Nordic ASCII digraph transliterations (ae/oe/ue -> a/o/u) when
+    // preceded/followed by letters so "koeln" and "koln" fold identically to "Köln".
+    folded
+        .replace("ae", "a")
+        .replace("oe", "o")
+        .replace("ue", "u")
+}
+
 /// How well `query` matches one candidate's fields, or `None` when it does not match at all.
 ///
 /// Every query word has to appear in some field, so adding a word narrows. A word that starts the
 /// title scores highest, then one that starts any word of the title, then one anywhere in it, then
 /// one only in the detail fields. Shorter titles win ties, so "Inbox" beats "Inbox rules".
 pub fn score(query: &str, title: &str, details: &[&str]) -> Option<u32> {
-    let title = title.to_lowercase();
-    let details: Vec<String> = details.iter().map(|detail| detail.to_lowercase()).collect();
+    let title_folded = fold_search_text(title);
+    let details_folded: Vec<String> = details
+        .iter()
+        .map(|detail| fold_search_text(detail))
+        .collect();
     let mut total = 0u32;
     let mut any = false;
     for word in query.split_whitespace() {
-        let word = word.to_lowercase();
+        let word = fold_search_text(word);
+        if word.is_empty() {
+            continue;
+        }
         any = true;
-        let points = if title.starts_with(&word) {
+        let points = if title_folded.starts_with(&word) {
             100
-        } else if title
+        } else if title_folded
             .split(|c: char| !c.is_alphanumeric())
             .any(|part| part.starts_with(&word))
         {
             70
-        } else if title.contains(&word) {
+        } else if title_folded.contains(&word) {
             40
-        } else if details.iter().any(|detail| detail.contains(&word)) {
+        } else if details_folded.iter().any(|detail| detail.contains(&word)) {
             15
         } else {
             return None;
@@ -285,5 +325,40 @@ mod tests {
             &[2, 1, 0],
             "shorter titles first among prefixes"
         );
+    }
+
+    #[test]
+    fn non_ascii_case_folding_and_diacritics_match_titles_and_document_bodies() {
+        // Reproduces non-ASCII case-folding and German/Nordic diacritic/ligature queries
+        // across titles and document body details while keeping local-first prefix priority.
+        let candidates = [
+            ("Köln Hbf → München Hbf", vec!["ICE 515 · Wagen 12"]),
+            (
+                "Finanzamt Bescheid 2026",
+                vec!["Einkommensteuerbescheid für 2025 · Voßstraße 14, Zürich"],
+            ),
+            (
+                "Søren Kierkegaard",
+                vec!["Copenhagen notes · Àda reference"],
+            ),
+            ("Trip to Koln Archive", vec!["Secondary match"]),
+        ];
+
+        // Plain ASCII "koln" and German digraph "koeln" both match "Köln"
+        assert!(score("koln", candidates[0].0, &candidates[0].1).is_some());
+        assert!(score("koeln", candidates[0].0, &candidates[0].1).is_some());
+        assert!(score("munchen", candidates[0].0, &candidates[0].1).is_some());
+        assert!(score("muenchen", candidates[0].0, &candidates[0].1).is_some());
+
+        // Document body detail matches "ß" via "ss" ("vossstrasse") and "ü" via "u"/"ue" ("fur", "zurich", "zuerich")
+        assert!(score("vossstrasse zurich", candidates[1].0, &candidates[1].1).is_some());
+        assert!(score("zuerich fur 2025", candidates[1].0, &candidates[1].1).is_some());
+
+        // Nordic "ø" and accented "Àda" match plain ASCII "soren" and "ada"
+        assert!(score("soren ada", candidates[2].0, &candidates[2].1).is_some());
+
+        // Ranking keeps title prefix matches ahead of detail-only matches
+        let ranked = rank("koeln", &candidates, |c| (c.0, c.1.clone()));
+        assert_eq!(ranked, vec![0, 3]);
     }
 }

@@ -567,35 +567,13 @@ pub(super) fn row(
     title: impl Into<SharedString>,
     detail: Option<&str>,
     control: impl IntoElement,
-    palette: Palette,
+    _palette: Palette,
 ) -> AnyElement {
-    // A narrow window wraps the control onto its own line, still on the right.
-    div()
-        .flex()
-        .flex_wrap()
-        .items_center()
-        .gap_x_6()
-        .gap_y_2()
-        .px_4()
-        .py_3()
-        .min_h(px(48.))
-        .child(
-            div()
-                .flex_1()
-                .min_w(px(200.))
-                .flex()
-                .flex_col()
-                .gap(px(2.))
-                .child(div().text_sm().child(title.into()))
-                .children(detail.map(|detail| {
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(SharedString::from(detail.to_owned()))
-                })),
-        )
-        .child(div().flex_none().ml_auto().child(control))
-        .into_any_element()
+    let mut item = sjel_gpui_ui::ely::forms::SettingRow::new(title, control);
+    if let Some(detail) = detail {
+        item = item.description(SharedString::from(detail.to_owned()));
+    }
+    item.into_any_element()
 }
 
 pub(super) fn group(title: &'static str, rows: Vec<AnyElement>, palette: Palette) -> AnyElement {

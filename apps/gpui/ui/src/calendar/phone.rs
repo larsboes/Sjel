@@ -153,44 +153,22 @@ impl PhoneCalendar {
         }
     }
 
-    fn week(&self, cx: &Context<Self>) -> Div {
+    fn week(&self, palette: Palette, cx: &Context<Self>) -> Div {
         let day = self.snapshot.day;
-        div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .child(
-                control("previous-week", "‹", false)
-                    .on_click(move |_, _, _| data::open_day(day - Duration::days(7))),
-            )
-            .children(self.snapshot.week.iter().map(|date| {
-                let date = *date;
-                let badge = if calendar::entries_on(&self.snapshot.entries, date).is_empty() {
-                    ""
-                } else {
-                    "•"
-                };
-                let label = date.format("%a").to_string().chars().next().unwrap_or(' ');
-                Button::new(
-                    date.to_string(),
-                    format!("{label}\n{}{badge}", date.format("%-d")),
-                )
-                .size(ControlSize::Sm)
-                .variant(if date == day {
-                    ButtonVariant::Primary
-                } else {
-                    ButtonVariant::Ghost
-                })
-                .on_click(cx.listener(move |view, _, window, cx| {
-                    window.blur(cx);
-                    view.close_editor(cx);
-                    data::open_day(date);
-                }))
-            }))
-            .child(
-                control("next-week", "›", false)
-                    .on_click(move |_, _, _| data::open_day(day + Duration::days(7))),
-            )
+        let entity = cx.entity();
+        super::mobile_week_strip(
+            day,
+            &self.snapshot.week,
+            &self.snapshot.entries,
+            palette,
+            move |_, _| data::open_day(day - Duration::days(7)),
+            move |_, _| data::open_day(day + Duration::days(7)),
+            move |date, window, cx| {
+                window.blur(cx);
+                entity.update(cx, |view, cx| view.close_editor(cx));
+                data::open_day(date);
+            },
+        )
     }
 
     fn list(&self, palette: Palette, cx: &Context<Self>) -> impl IntoElement {
@@ -572,7 +550,7 @@ impl Render for PhoneCalendar {
                 };
                 screen.child(div().text_sm().text_color(rgb(color)).child(line))
             })
-            .child(self.week(cx))
+            .child(self.week(palette, cx))
             .child(
                 div()
                     .flex()

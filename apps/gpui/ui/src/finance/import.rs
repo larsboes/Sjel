@@ -19,8 +19,9 @@ use sjel_gpui_core::finance::{
 use sjel_gpui_core::shell::{self, FinanceCandidate, ShellError};
 
 use crate::ely::data_display::Tone;
+use crate::ely::feedback::InlineMessage;
 use crate::ely::layout::Sheet;
-use crate::ely::primitives::Place;
+use crate::ely::primitives::{Place, Severity};
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction, SortKey};
 use crate::ely::theme::Density;
 use crate::primitives::{sub_tabs, tabular_cell};
@@ -1470,7 +1471,7 @@ impl FinancePage {
                     }),
             )
             .when_some(self.notice.clone(), |view, notice| {
-                view.child(div().text_sm().text_color(rgb(palette.red)).child(notice))
+                view.child(InlineMessage::new(Severity::Danger, notice))
             })
             .child(active_sub_body)
             .child(csv_sheet);

@@ -8,10 +8,11 @@
 use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::data_display::{Badge, Tone};
 use crate::ely::feedback::Toast;
+use crate::ely::forms::{InputEvent as ElyInputEvent, TextInput};
 use crate::ely::primitives::Severity;
 use crate::ely::theme::ControlSize;
 use crate::feedback::WindowToastExt;
-use gpui_kit::component::input::{InputEvent, InputState, Textarea, TextareaState};
+use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, Context, Entity, EventEmitter, FocusHandle, Focusable,
@@ -38,7 +39,7 @@ pub struct ScratchpadSeat {
     palette: Option<Palette>,
     pub state: ScratchpadState,
     textarea: Option<(Entity<TextareaState>, Subscription)>,
-    quick_input: Option<(Entity<InputState>, Subscription)>,
+    quick_input: Option<(Entity<TextInput>, Subscription)>,
     pub sorting: bool,
     pub error: Option<String>,
     pub last_outcome: Option<SortOutcome>,
@@ -132,21 +133,21 @@ impl ScratchpadSeat {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.quick_input {
             return input.clone();
         }
         let input = cx.new(|cx| {
-            InputState::new(window, cx)
+            TextInput::new(window, cx)
                 .placeholder("Quick jot: note, link, - [ ] task, #buy, #go… (↩ to add)")
         });
         let sub = cx.subscribe_in(&input, window, |this, input, event, window, cx| {
-            if matches!(event, InputEvent::PressEnter { .. }) {
-                let line = input.read(cx).value().trim().to_owned();
+            if matches!(event, ElyInputEvent::Submit) {
+                let line = input.read(cx).text().trim().to_owned();
                 if line.is_empty() {
                     return;
                 }
-                input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
+                input.update(cx, |state, cx| state.set_text(String::new(), cx));
                 this.append_line(&line, window, cx);
             }
         });

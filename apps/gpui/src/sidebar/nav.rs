@@ -1,4 +1,3 @@
-use gpui_kit::component::kbd::Kbd;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, Action, AnyElement, Context, FontWeight, IntoElement,
     SharedString, Window,
@@ -11,9 +10,11 @@ use crate::workspace::{
 };
 use sjel_gpui_core::soundscape::Preset;
 use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant, IconButton};
+use sjel_gpui_ui::ely::data_display::{Badge, Tone};
 use sjel_gpui_ui::ely::motion::ProgressBar;
 use sjel_gpui_ui::ely::primitives::IconName;
 use sjel_gpui_ui::ely::theme::ControlSize;
+use sjel_gpui_ui::ely::typography::Kbd;
 use sjel_gpui_ui::sidebar::Seat;
 use sjel_gpui_ui::theme::{tint, Palette};
 
@@ -166,21 +167,11 @@ pub fn nav(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> V
                         .flex_none()
                         .when_some(badge, |el, count| {
                             let tone = if area == Area::Sjel {
-                                palette.red
+                                Tone::Danger
                             } else {
-                                palette.accent
+                                Tone::Accent
                             };
-                            el.child(
-                                div()
-                                    .px_1p5()
-                                    .py(px(0.5))
-                                    .rounded_full()
-                                    .bg(rgba(tint(tone, 0x20)))
-                                    .text_color(rgb(tone))
-                                    .font_family(".AppleSystemUIFontMonospaced")
-                                    .text_xs()
-                                    .child(count.to_string()),
-                            )
+                            el.child(Badge::new(count.to_string()).tone(tone))
                         })
                         .child(
                             div()
@@ -406,22 +397,10 @@ pub fn scratchpad_row(
                 .gap_2()
                 .child("Scratchpad")
                 .when(count > 0, |el| {
-                    el.child(
-                        div()
-                            .px_1p5()
-                            .py(px(0.5))
-                            .rounded_full()
-                            .bg(rgba(tint(palette.amber, 0x22)))
-                            .text_color(rgb(palette.amber))
-                            .font_family(".AppleSystemUIFontMonospaced")
-                            .text_xs()
-                            .child(count.to_string()),
-                    )
+                    el.child(Badge::new(count.to_string()).tone(Tone::Warning))
                 }),
         )
-        .children(
-            Kbd::binding_for_action(&OpenScratchpad, None, window).map(|k| k.appearance(false)),
-        )
+        .children(Kbd::for_action(&OpenScratchpad, window))
 }
 
 /// The optional sidebar player for an available soundscape capability.
@@ -548,10 +527,7 @@ pub fn soundscape(
                 .text_xs()
                 .text_color(rgb(palette.muted))
                 .child(div().min_w_0().truncate().child(status))
-                .children(
-                    Kbd::binding_for_action(&ToggleSoundscapePanel, None, window)
-                        .map(|kbd| kbd.appearance(false)),
-                ),
+                .children(Kbd::for_action(&ToggleSoundscapePanel, window)),
         )
         .when_some(repeat, |player, saved| {
             player.child(
@@ -629,7 +605,7 @@ pub fn palette_hint(palette: Palette, window: &mut Window) -> impl IntoElement {
         .hover(move |style| style.bg(rgba(palette.raised)))
         .on_click(|_, window, cx| window.dispatch_action(OpenPalette.boxed_clone(), cx))
         .child("Search or ask")
-        .children(Kbd::binding_for_action(&OpenPalette, None, window).map(|k| k.appearance(false)))
+        .children(Kbd::for_action(&OpenPalette, window))
 }
 
 pub fn settings_row(
@@ -658,5 +634,5 @@ pub fn settings_row(
         .hover(move |style| style.bg(rgba(palette.raised)))
         .on_click(cx.listener(|view, _, _, cx| view.open_settings(None, cx)))
         .child("Settings")
-        .children(Kbd::binding_for_action(&OpenSettings, None, window).map(|k| k.appearance(false)))
+        .children(Kbd::for_action(&OpenSettings, window))
 }

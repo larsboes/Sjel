@@ -86,6 +86,18 @@ impl Finder {
                     view.mode = Mode::Agent;
                     view.open(cx);
                 }
+                AgentSeatEvent::Follow(intent) => {
+                    if let sjel_gpui_core::agent::AgentFollowIntent::FinderSearch(query) = intent {
+                        view.mode = Mode::Auto;
+                        view.open(cx);
+                        view.query = query.clone();
+                        cx.notify();
+                    }
+                    cx.emit(FinderEvent::Follow(intent.clone()));
+                }
+                AgentSeatEvent::PinToHome(saved) => {
+                    cx.emit(FinderEvent::PinToHome(saved.clone()));
+                }
             });
         Self {
             repo,

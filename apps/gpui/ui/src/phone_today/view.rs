@@ -1,11 +1,16 @@
 //! GPUI layout for the phone's Today route.
 
+use std::sync::Arc;
+
 use gpui::{div, prelude::*, rgb, AnyElement, Context, FontWeight, Task, Window};
+use sjel_gpui_core::a2ui::{validate_document, A2uiClientState, SavedA2uiView};
+use sjel_gpui_core::home::{plan_home_layout, HomeContextMode, HomeSignals};
 
 use super::{due_label, emit, rest_line, spot_label, subscribe, toggle, Snapshot, TodayEvent};
 use crate::{
     ely::{
         buttons::{Button, ButtonVariant},
+        dashboard::{MetricStrip, MetricTile},
         data_display::{Badge, Tone},
         forms::Checkbox,
         layout::Section as ElySection,
@@ -13,6 +18,7 @@ use crate::{
         primitives::IconName,
         theme::ControlSize,
     },
+    live_view::{render_live_view, ProposeHandler},
     primitives::{sub_tabs, surface_card},
     theme::{Palette, ThemeContext},
 };
@@ -43,6 +49,7 @@ impl Section {
 pub struct PhoneToday {
     snapshot: Snapshot,
     section: Section,
+    pinned_views: Vec<SavedA2uiView>,
     _updates: Task<()>,
 }
 
@@ -68,8 +75,15 @@ impl PhoneToday {
         Self {
             snapshot,
             section: Section::Overview,
+            pinned_views: Vec::new(),
             _updates: updates,
         }
+    }
+
+    /// Replaces the pinned generative views rendered on the phone's Today surface.
+    pub fn set_pinned_views(&mut self, views: Vec<SavedA2uiView>, cx: &mut Context<Self>) {
+        self.pinned_views = views;
+        cx.notify();
     }
 }
 
@@ -114,12 +128,25 @@ impl Render for PhoneToday {
         let palette = ThemeContext::of(window, cx).palette;
         let snap = &self.snapshot;
         let day = snap.view.as_ref().map(|today| today.day);
+        let plan = plan_home_layout(&HomeSignals {
+            mode: HomeContextMode::Auto,
+            urgent_tasks: snap.view.as_ref().map_or(0, |today| today.focus.len()),
+            ..Default::default()
+        });
         let hero = surface_card(palette)
             .p_4()
             .flex()
             .flex_col()
             .gap_2()
-            .child(heading("TODAY"))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_2()
+                    .child(heading("TODAY"))
+                    .child(Badge::new(plan.reason).tone(Tone::Accent)),
+            )
             .child(
                 Button::new("today-calendar", snap.headline.clone())
                     .icon(IconName::Calendar)
@@ -136,6 +163,26 @@ impl Render for PhoneToday {
                 snap.view.as_ref().map(|day| day.summary()),
                 |body, summary| body.child(div().text_sm().child(summary)),
             )
+            .when_some(snap.view.as_ref(), |body, today| {
+                body.child(
+                    MetricStrip::new()
+                        .child(MetricTile::new(
+                            "phone-today-events",
+                            "Events",
+                            today.entries.len().to_string(),
+                        ))
+                        .child(MetricTile::new(
+                            "phone-today-up-next",
+                            "Up next",
+                            today.focus.len().to_string(),
+                        ))
+                        .child(MetricTile::new(
+                            "phone-today-projects",
+                            "Projects",
+                            today.projects.len().to_string(),
+                        )),
+                )
+            })
             .child(
                 div()
                     .text_sm()
@@ -188,6 +235,35 @@ impl Render for PhoneToday {
                 ),
             )
             .child(hero)
+            .when(
+                self.section == Section::Overview && !self.pinned_views.is_empty(),
+                |content| {
+                    let on_propose: ProposeHandler = Arc::new(|_, _, _| {});
+                    let pinned_cards: Vec<AnyElement> = self
+                        .pinned_views
+                        .iter()
+                        .filter_map(|saved| {
+                            let validated = validate_document(&saved.document).ok()?;
+                            Some(render_live_view(
+                                &validated,
+                                &A2uiClientState::default(),
+                                on_propose.clone(),
+                                palette,
+                            ))
+                        })
+                        .collect();
+                    if pinned_cards.is_empty() {
+                        content
+                    } else {
+                        content.child(section(
+                            "PINNED VIEWS",
+                            "No pinned views.",
+                            pinned_cards,
+                            palette,
+                        ))
+                    }
+                },
+            )
             .child(div().flex().flex_wrap().gap_2().children([
                 action("People & Places", IconName::Users, TodayEvent::People),
                 action("Documents", IconName::FileText, TodayEvent::Documents),

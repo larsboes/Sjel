@@ -4,8 +4,10 @@
 use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::charts::{Bullet, BulletChart};
 use crate::ely::data_display::{Badge, Tone};
+use crate::ely::feedback::InlineMessage;
 use crate::ely::forms::{Input, TextInput};
 use crate::ely::layout::Collapsible;
+use crate::ely::primitives::Severity;
 use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{
@@ -497,7 +499,7 @@ impl FinancePage {
                     .flex_col()
                     .gap_3()
                     .when_some(self.notice.clone(), |column, notice| {
-                        column.child(div().text_sm().text_color(rgb(palette.amber)).child(notice))
+                        column.child(InlineMessage::new(Severity::Warning, notice))
                     })
                     .child(detail),
             )

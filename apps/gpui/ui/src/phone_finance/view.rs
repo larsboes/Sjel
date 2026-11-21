@@ -18,7 +18,7 @@ use super::{
 use crate::{
     ely::{
         buttons::{Button, ButtonVariant},
-        data_display::Meter,
+        data_display::{Badge, Meter, Tone},
         feedback::InlineMessage,
         forms::{Input, InputEvent, TextInput},
         primitives::Severity,
@@ -167,16 +167,19 @@ impl PhoneFinance {
                 card(palette)
                     .child(title(format!("Balances as of {}", balances.as_of)))
                     .children(balances.balances.iter().map(|balance| {
-                        let kind = match balance.kind {
-                            BalanceKind::Asset => "Asset",
-                            BalanceKind::Liability => "Liability",
+                        let (kind, tone) = match balance.kind {
+                            BalanceKind::Asset => ("Asset", Tone::Success),
+                            BalanceKind::Liability => ("Liability", Tone::Warning),
                         };
                         div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
                             .child(label_value(
                                 balance.label.clone(),
                                 money(balance.amount_cents, &balances.currency),
                             ))
-                            .child(caption(palette, kind))
+                            .child(div().flex().child(Badge::new(kind).tone(tone)))
                     })),
             );
         }
@@ -266,8 +269,21 @@ impl PhoneFinance {
                 list.child(caption(palette, "No subscriptions listed"))
             })
             .children(rows.into_iter().map(|row| {
+                let status_tone = match row.status.as_str() {
+                    "active" => Tone::Success,
+                    "trial" => Tone::Warning,
+                    _ => Tone::Neutral,
+                };
                 card(palette)
-                    .child(label_value(row.name, row.status))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap_2()
+                            .child(title(row.name))
+                            .child(Badge::new(row.status).tone(status_tone)),
+                    )
                     .child(caption(
                         palette,
                         format!("{} · {}", row.category, row.cycle),

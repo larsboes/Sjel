@@ -1,55 +1,32 @@
 //! Orphaned harness warnings, harness summary cards, and unowned stray listings.
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::data_display::{Badge, Tone};
+use crate::ely::feedback::InlineMessage;
+use crate::ely::primitives::Severity;
 use crate::ely::theme::ControlSize;
 use gpui_kit::prelude::*;
 use gpui_kit::{div, px, rgb, rgba, AnyElement, Context, IntoElement, SharedString};
 use sjel_gpui_core::packs::{deployed_units, held_packs, orphaned_harnesses, PacksView};
 
 use super::PacksPage;
-use crate::primitives::{card, dot, list};
-use crate::theme::{tint, Palette};
+use crate::primitives::{card, list};
+use crate::theme::Palette;
 
-pub(crate) fn render_orphan_cards(view: &PacksView, palette: Palette) -> Vec<AnyElement> {
+pub(crate) fn render_orphan_cards(view: &PacksView, _palette: Palette) -> Vec<AnyElement> {
     orphaned_harnesses(view)
         .into_iter()
         .map(|harness| {
             let count = deployed_units(harness).len();
             let packs = held_packs(harness).join(" ");
-            card(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(dot(palette.amber))
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                    .text_color(rgb(palette.amber))
-                                    .child(format!(
-                                        "{} is not installed, and {} units are deployed at its skill root",
-                                        harness.label, count
-                                    )),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(format!(
-                                "Nothing on this machine reads them. Run: {} remove {}",
-                                harness.cli, packs
-                            )),
-                    )
-                    .into_any_element(),
-                palette,
+            InlineMessage::new(
+                Severity::Warning,
+                format!(
+                    "{} is not installed, and {} units are deployed at its skill root. Nothing on this machine reads them. Run: {} remove {}",
+                    harness.label, count, harness.cli, packs
+                ),
             )
+            .into_any_element()
         })
         .collect()
 }
@@ -90,22 +67,11 @@ pub(crate) fn render_harness_cards(
                     .child(label),
             )
             .child(
-                div()
-                    .px_2()
-                    .py(px(1.5))
-                    .rounded(px(4.))
-                    .bg(rgba(if installed {
-                        tint(palette.green, 0x22)
-                    } else {
-                        tint(palette.amber, 0x22)
-                    }))
-                    .text_color(rgb(if installed {
-                        palette.green
-                    } else {
-                        palette.amber
-                    }))
-                    .text_xs()
-                    .child(if installed { "installed" } else { "absent" }),
+                Badge::new(if installed { "installed" } else { "absent" }).tone(if installed {
+                    Tone::Success
+                } else {
+                    Tone::Warning
+                }),
             );
 
         let meta = div()
@@ -280,17 +246,11 @@ pub(crate) fn render_strays_section(view: &PacksView, palette: Palette) -> Vec<A
                     .py_2()
                     .text_xs()
                     .child(
-                        div()
-                            .px_1()
-                            .py(px(1.))
-                            .rounded(px(3.))
-                            .bg(rgba(palette.raised))
-                            .text_color(rgb(if stray.kind == "copy" {
-                                palette.amber
-                            } else {
-                                palette.muted
-                            }))
-                            .child(stray.kind.clone()),
+                        Badge::new(stray.kind.clone()).tone(if stray.kind == "copy" {
+                            Tone::Warning
+                        } else {
+                            Tone::Neutral
+                        }),
                     )
                     .child(
                         div()

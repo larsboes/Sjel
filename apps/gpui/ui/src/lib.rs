@@ -55,6 +55,8 @@ pub mod interior;
 #[cfg(feature = "gpui")]
 pub mod inventory;
 #[cfg(feature = "gpui")]
+pub mod live_view;
+#[cfg(feature = "gpui")]
 pub mod mail;
 #[cfg(feature = "gpui")]
 pub mod media;

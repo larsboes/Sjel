@@ -43,7 +43,7 @@ actions!(
 );
 
 /// Where a bare key is a command. A focused text field inside the page takes the key as text.
-const LETTERS: &str = "Projects && !Input";
+const LETTERS: &str = "Projects && !Input && !ElyInput";
 
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([
@@ -139,7 +139,7 @@ mod tests {
         cx.run_until_parked();
         projects.read_with(cx, |view, cx| {
             let (_, _, input, _) = view.title_edit.as_ref().expect("the title is a field");
-            assert_eq!(input.read(cx).value().as_ref(), "kltn 1e");
+            assert_eq!(input.read(cx).text(), "kltn 1e");
         });
         cx.simulate_keystrokes("escape");
         cx.run_until_parked();

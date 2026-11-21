@@ -1,11 +1,10 @@
-use gpui_kit::component::input::Input;
-use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString, Window,
 };
 use sjel_gpui_core::scratchpad::{now_unix_secs, ScratchTarget};
 use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant};
 use sjel_gpui_ui::ely::data_display::{Badge, Tone};
+use sjel_gpui_ui::ely::forms::Input;
 use sjel_gpui_ui::ely::primitives::Tooltip;
 use sjel_gpui_ui::ely::theme::ControlSize;
 
@@ -546,7 +545,7 @@ pub fn scratchpad_card(
         .gap_2p5()
         .p_3()
         .child(header_row)
-        .child(Input::new(&quick_input).small())
+        .child(Input::new(&quick_input).size(ControlSize::Sm))
         .when(has_preview, |card| {
             card.child(div().flex().flex_col().gap_1().children(preview_items))
         })

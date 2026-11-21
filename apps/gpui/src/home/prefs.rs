@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sjel_gpui_core::a2ui::SavedA2uiView;
 use std::path::PathBuf;
 
 /// Situational layout mode for the Today page.
@@ -35,7 +36,7 @@ impl HomeMode {
 }
 
 /// Persisted customization for the Today page.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HomePreferences {
     pub mode: HomeMode,
@@ -48,6 +49,8 @@ pub struct HomePreferences {
     pub show_projects: bool,
     pub large_map: bool,
     pub rail_tab: usize,
+    #[serde(default)]
+    pub pinned_views: Vec<SavedA2uiView>,
 }
 
 impl Default for HomePreferences {
@@ -63,6 +66,7 @@ impl Default for HomePreferences {
             show_projects: true,
             large_map: false,
             rail_tab: 0,
+            pinned_views: Vec::new(),
         }
     }
 }
@@ -120,6 +124,15 @@ impl HomePreferences {
     pub fn force_expanded_map(&self) -> bool {
         self.mode == HomeMode::Travel
     }
+
+    pub fn pin_view(&mut self, view: SavedA2uiView) {
+        self.pinned_views.retain(|v| v.saved_id != view.saved_id);
+        self.pinned_views.insert(0, view);
+    }
+
+    pub fn unpin_view(&mut self, saved_id: &str) {
+        self.pinned_views.retain(|v| v.saved_id != saved_id);
+    }
 }
 
 #[cfg(test)]
@@ -163,9 +176,27 @@ mod tests {
             show_projects: false,
             large_map: true,
             rail_tab: 0,
+            pinned_views: Vec::new(),
         };
         let raw = serde_json::to_string(&prefs).expect("serialize");
         let parsed: HomePreferences = serde_json::from_str(&raw).expect("deserialize");
         assert_eq!(parsed, prefs);
+    }
+
+    #[test]
+    fn pin_and_unpin_saved_views_round_trip() {
+        let mut prefs = HomePreferences::default();
+        let saved = SavedA2uiView::new(
+            "pinned-triage",
+            sjel_gpui_core::a2ui::synthetic_project_triage_document(),
+        )
+        .expect("valid synthetic view");
+        prefs.pin_view(saved.clone());
+        assert_eq!(prefs.pinned_views.len(), 1);
+        let raw = serde_json::to_string(&prefs).expect("serialize");
+        let mut parsed: HomePreferences = serde_json::from_str(&raw).expect("deserialize");
+        assert_eq!(parsed.pinned_views, vec![saved]);
+        parsed.unpin_view("pinned-triage");
+        assert!(parsed.pinned_views.is_empty());
     }
 }

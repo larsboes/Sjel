@@ -1,9 +1,12 @@
 //! The side panel of the cross-project task table: one task's status, priority, due date,
 //! context and blockers, each written through the capability as it changes.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::Sizable;
+use crate::ely::{
+    buttons::{Button, ButtonVariant},
+    data_display::DescriptionList,
+    forms::{Input, InputEvent, TextInput},
+    theme::ControlSize,
+};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString,
     Subscription, Window,
@@ -34,14 +37,14 @@ const TEXT_KEYS: [(&str, &str); 2] = [("context", "Context"), ("blocked_by", "Bl
 /// The task the panel shows, and one input per [`TEXT_KEYS`] entry.
 pub struct TaskPanel {
     pub(in crate::projects) path: String,
-    inputs: Vec<(&'static str, Entity<InputState>)>,
+    inputs: Vec<(&'static str, Entity<TextInput>)>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl TaskPanel {
     /// The field that edits `key`, if the panel has one.
     #[cfg(test)]
-    pub(in crate::projects) fn input(&self, key: &str) -> Option<&Entity<InputState>> {
+    pub(in crate::projects) fn input(&self, key: &str) -> Option<&Entity<TextInput>> {
         self.inputs
             .iter()
             .find(|(k, _)| *k == key)
@@ -76,8 +79,8 @@ impl Projects {
         for (key, label) in TEXT_KEYS {
             let value = task.fields.get(key).cloned().unwrap_or_default();
             let input = cx.new(|cx| {
-                let mut state = InputState::new(window, cx).placeholder(label);
-                state.set_value(value.clone(), window, cx);
+                let mut state = TextInput::new(window, cx).placeholder(label);
+                state.set_text(value.clone(), cx);
                 state
             });
             let path = task.id.clone();
@@ -85,8 +88,8 @@ impl Projects {
                 &input,
                 window,
                 move |view, input, event, window, cx| {
-                    if matches!(event, InputEvent::PressEnter { .. } | InputEvent::Blur) {
-                        let typed = input.read(cx).value().trim().to_owned();
+                    if matches!(event, InputEvent::Submit | InputEvent::Blur) {
+                        let typed = input.read(cx).text().trim().to_owned();
                         if typed != value {
                             view.set_task_property(path.clone(), key, typed, window, cx);
                         }
@@ -133,9 +136,9 @@ impl Projects {
                 )
                 .when(!self.repo.is_replica() && !source_uri.is_empty(), |panel| {
                     panel.child(
-                        Button::new("open-task-source")
-                            .small()
-                            .label("Open task source")
+                        Button::new("open-task-source", "Open task source")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Secondary)
                             .on_click(move |_, _, cx| cx.open_url(&source_uri)),
                     )
                 })
@@ -211,26 +214,17 @@ impl Projects {
                 .iter()
                 .find(|(k, _)| k == key)
                 .map_or(*key, |(_, label)| *label);
-            field(name, Input::new(input).small().into_any_element())
+            field(
+                name,
+                Input::new(input).size(ControlSize::Sm).into_any_element(),
+            )
         });
 
-        let others: Vec<_> = task
+        let others: Vec<(String, String)> = task
             .fields
             .iter()
             .filter(|(key, value)| !SHOWN_KEYS.contains(&key.as_str()) && !value.is_empty())
-            .map(|(key, value)| {
-                div()
-                    .flex()
-                    .gap_2()
-                    .text_xs()
-                    .child(
-                        div()
-                            .w(px(96.))
-                            .text_color(rgb(palette.muted))
-                            .child(key.clone()),
-                    )
-                    .child(div().flex_1().min_w_0().truncate().child(value.clone()))
-            })
+            .map(|(key, value)| (key.clone(), value.clone()))
             .collect();
 
         let unblocks: Vec<AnyElement> = self
@@ -243,10 +237,9 @@ impl Projects {
                     .map(|downstream| {
                         let target = downstream.clone();
                         let id = format!("panel-unblocks-{}", downstream.id);
-                        Button::new(SharedString::from(id))
-                            .small()
-                            .ghost()
-                            .label(downstream.title.clone())
+                        Button::new(SharedString::from(id), downstream.title.clone())
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 view.select_task(&target, window, cx);
                             }))
@@ -275,10 +268,9 @@ impl Projects {
                     .map(|note| {
                         let note_path = note.path.clone();
                         let id = format!("panel-related-note-{}", note.path);
-                        Button::new(SharedString::from(id))
-                            .small()
-                            .ghost()
-                            .label(note.title.clone())
+                        Button::new(SharedString::from(id), note.title.clone())
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 view.task_panel = None;
                                 view.open_note(note_path.clone(), true, window, cx);
@@ -381,15 +373,10 @@ impl Projects {
                     }),
             )
             .when(!others.is_empty(), |panel| {
-                panel.child(field(
-                    "Other fields",
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .children(others)
-                        .into_any_element(),
-                ))
+                let list = others
+                    .into_iter()
+                    .fold(DescriptionList::new(), |dl, (k, v)| dl.item(k, v));
+                panel.child(field("Other fields", list.into_any_element()))
             })
             .child(
                 div()
@@ -397,15 +384,18 @@ impl Projects {
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("panel-pin-next")
-                            .small()
-                            .ghost()
-                            .label(if is_pinned_next {
+                        Button::new(
+                            "panel-pin-next",
+                            if is_pinned_next {
                                 "★ Pinned Next"
                             } else {
                                 "☆ Pin Next"
-                            })
-                            .on_click(cx.listener(move |view, _, window, cx| {
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(cx.listener(
+                            move |view, _, window, cx| {
                                 let next_val = if is_pinned_next { "" } else { "true" };
                                 view.set_task_property(
                                     next_path.clone(),
@@ -414,13 +404,13 @@ impl Projects {
                                     window,
                                     cx,
                                 );
-                            })),
+                            },
+                        )),
                     )
                     .child(
-                        Button::new("panel-open-note")
-                            .small()
-                            .ghost()
-                            .label("Open note")
+                        Button::new("panel-open-note", "Open note")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 view.task_panel = None;
                                 view.tab = ProjectsTab::Hubs;

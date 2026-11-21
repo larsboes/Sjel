@@ -2,12 +2,12 @@
 
 use std::rc::Rc;
 
+use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::data_display::Tone;
 use crate::ely::layout::Sheet;
 use crate::ely::primitives::Place;
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction};
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rems, rgb, rgba, AnyElement, Context};
 
 use crate::data::Remote;
@@ -233,15 +233,18 @@ impl Projects {
             }
             for row in hubs {
                 let path = row.path.clone();
-                body = body.child(
-                    Button::new(format!("link-record-{path}"))
-                        .small()
-                        .label(format!("{} · {}", row.title, row.path))
+                body =
+                    body.child(
+                        Button::new(
+                            format!("link-record-{path}"),
+                            format!("{} · {}", row.title, row.path),
+                        )
+                        .size(ControlSize::Sm)
                         .disabled(self.link_busy)
                         .on_click(cx.listener(move |view, _, _, cx| {
                             view.select_link_record(path.clone(), cx)
                         })),
-                );
+                    );
             }
         }
         if let Some(path) = &self.link_path {
@@ -265,9 +268,8 @@ impl Projects {
             }
             let refresh_path = path.clone();
             body = body.child(
-                Button::new("link-refresh")
-                    .small()
-                    .label("Refresh links and Inventory")
+                Button::new("link-refresh", "Refresh links and Inventory")
+                    .size(ControlSize::Sm)
                     .disabled(self.link_busy)
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.select_link_record(refresh_path.clone(), cx)
@@ -469,24 +471,25 @@ impl Projects {
                             .items_center()
                             .gap_2()
                             .child(
-                                Button::new("link-confirm")
-                                    .small()
-                                    .primary()
-                                    .label(if review.remove {
+                                Button::new(
+                                    "link-confirm",
+                                    if review.remove {
                                         "Confirm removal"
                                     } else {
                                         "Confirm link"
-                                    })
-                                    .disabled(self.link_busy)
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.confirm_inventory_link(cx)
-                                    })),
+                                    },
+                                )
+                                .size(ControlSize::Sm)
+                                .primary()
+                                .disabled(self.link_busy)
+                                .on_click(
+                                    cx.listener(|view, _, _, cx| view.confirm_inventory_link(cx)),
+                                ),
                             )
                             .child(
-                                Button::new("link-cancel")
-                                    .small()
-                                    .ghost()
-                                    .label("Cancel")
+                                Button::new("link-cancel", "Cancel")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
                                     .disabled(self.link_busy)
                                     .on_click(cx.listener(|view, _, _, cx| {
                                         view.link_review = None;

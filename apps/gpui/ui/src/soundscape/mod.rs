@@ -8,20 +8,21 @@
 pub mod controls;
 pub mod slideover;
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use gpui::{
-    div, prelude::*, px, rgb, rgba, Context, Entity, FontWeight, Render, SharedString,
-    Subscription, Window,
-};
-use gpui_kit::component::slider::{Slider, SliderEvent, SliderState};
+use gpui::{div, prelude::*, px, rgb, rgba, Context, FontWeight, Render, SharedString, Window};
 use sjel_gpui_core::soundscape::{Control, LayerName, Playback, Preset, Visual};
 
+use crate::ely::forms::Slider;
 use crate::primitives::{mono_num, surface_card};
 use crate::theme::{SoundscapePrefs, ThemeContext};
+use crate::viz::Field;
 use crate::Palette;
 
-pub use controls::{title_case, METER_EVERY, STEPS};
+pub use controls::{preset_mood, title_case, METER_EVERY, STEPS};
 pub use slideover::{
     CloseDrawer, NextPreset, SoundscapeSlideover, ToggleMix, ToggleTransport, WIDTH,
 };
@@ -43,9 +44,11 @@ pub struct Soundscape {
     pub(crate) palette_override: Option<Palette>,
     /// Counts renders between two frames asked for, so the meter redraws at a fifth of the rate.
     pub(crate) tick: usize,
-    pub(crate) volume_slider: Option<Entity<SliderState>>,
-    pub(crate) layer_sliders: Vec<(LayerName, Entity<SliderState>)>,
-    pub(crate) _slider_subs: Vec<Subscription>,
+    /// Audio-reactive generative field for the transport hero.
+    pub(crate) field: Rc<RefCell<Field>>,
+    /// Optional focus session countdown in minutes (`None` = continuous).
+    pub(crate) session_minutes: Option<u32>,
+    pub(crate) session_started: Option<Instant>,
 }
 
 impl Soundscape {
@@ -65,9 +68,9 @@ impl Soundscape {
             palette: Palette::dark(),
             palette_override: None,
             tick: 0,
-            volume_slider: None,
-            layer_sliders: Vec::new(),
-            _slider_subs: Vec::new(),
+            field: Rc::new(RefCell::new(Field::new())),
+            session_minutes: None,
+            session_started: None,
         }
     }
 
@@ -116,6 +119,24 @@ impl Soundscape {
     pub(crate) fn toggle(&mut self, cx: &mut Context<Self>) {
         let playing = !self.control.playing();
         self.control.set_playing(playing);
+        if playing && self.session_minutes.is_some() && self.session_started.is_none() {
+            self.session_started = Some(Instant::now());
+        } else if !playing {
+            self.session_started = None;
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn set_energy(&mut self, energy: f32, cx: &mut Context<Self>) {
+        self.control.set_energy(energy.clamp(0., 1.));
+        cx.notify();
+    }
+
+    pub(crate) fn set_session_timer(&mut self, minutes: Option<u32>, cx: &mut Context<Self>) {
+        self.session_minutes = minutes;
+        self.session_started = minutes
+            .filter(|_| self.control.playing())
+            .map(|_| Instant::now());
         cx.notify();
     }
 
@@ -139,54 +160,6 @@ impl Soundscape {
         cx.notify();
     }
 
-    pub(crate) fn ensure_sliders(&mut self, cx: &mut Context<Self>) {
-        if self.volume_slider.is_none() {
-            let initial = self.prefs.volume.clamp(0., 1.);
-            let state = cx.new(|_| {
-                SliderState::new()
-                    .min(0.0)
-                    .max(1.0)
-                    .step(0.01)
-                    .default_value(initial)
-            });
-            let sub = cx.subscribe(&state, |view, _, event: &SliderEvent, cx| match event {
-                SliderEvent::Change(val) => {
-                    let v = val.start().clamp(0., 1.);
-                    view.control.set_volume(v);
-                    view.prefs.volume = v;
-                    cx.notify();
-                }
-                SliderEvent::Release(val) => {
-                    view.set_volume(val.start(), cx);
-                }
-            });
-            self.volume_slider = Some(state);
-            self._slider_subs.push(sub);
-        }
-        if self.layer_sliders.is_empty() {
-            for layer in LayerName::ALL {
-                let initial = self.control.layer(layer).clamp(0., 1.);
-                let state = cx.new(|_| {
-                    SliderState::new()
-                        .min(0.0)
-                        .max(1.0)
-                        .step(0.01)
-                        .default_value(initial)
-                });
-                let sub = cx.subscribe(
-                    &state,
-                    move |view, _, event: &SliderEvent, cx| match event {
-                        SliderEvent::Change(val) | SliderEvent::Release(val) => {
-                            view.set_layer(layer, val.start(), cx);
-                        }
-                    },
-                );
-                self.layer_sliders.push((layer, state));
-                self._slider_subs.push(sub);
-            }
-        }
-    }
-
     pub(crate) fn set_mixer(&mut self, mixer: bool, cx: &mut Context<Self>) {
         self.prefs.mixer = mixer;
         let _ = self.prefs.save();
@@ -200,7 +173,15 @@ impl Render for Soundscape {
             .palette_override
             .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
         self.palette = palette;
-        self.ensure_sliders(cx);
+        let playing = self.control.playing();
+        if playing {
+            if let (Some(minutes), Some(started)) = (self.session_minutes, self.session_started) {
+                if started.elapsed() >= Duration::from_secs(u64::from(minutes) * 60) {
+                    self.control.set_playing(false);
+                    self.session_started = None;
+                }
+            }
+        }
         let playing = self.control.playing();
         // The meter is the only thing here that moves, and it moves because the audio thread wrote a
         // new report. A frame is asked for while something sounds and not one otherwise, and not on
@@ -213,6 +194,9 @@ impl Render for Soundscape {
             }
         }
         let volume = self.prefs.volume;
+        let energy = self.control.energy();
+        let vol_entity = cx.entity();
+        let energy_entity = cx.entity();
 
         div()
             .id("soundscape")
@@ -226,13 +210,14 @@ impl Render for Soundscape {
             .text_color(rgb(palette.text))
             .overflow_y_scroll()
             .child(self.transport(palette, cx))
+            .child(self.session_timer(palette, cx))
             .child(self.presets(palette, cx))
             .child(
                 surface_card(palette)
                     .p_3()
                     .flex()
                     .flex_col()
-                    .gap_2()
+                    .gap_2p5()
                     .child(
                         div()
                             .flex()
@@ -252,9 +237,46 @@ impl Render for Soundscape {
                                 )),
                             ),
                     )
-                    .when_some(self.volume_slider.as_ref(), |el, slider| {
-                        el.child(Slider::new(slider).accessibility_label("Volume"))
-                    }),
+                    .child(
+                        Slider::new("soundscape-volume", f64::from(volume.clamp(0., 1.)))
+                            .range(0.0, 1.0)
+                            .step(0.01)
+                            .on_change(move |next, _, cx| {
+                                vol_entity.update(cx, |view, cx| {
+                                    view.set_volume(next as f32, cx);
+                                });
+                            }),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .pt_1()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(palette.muted))
+                                    .child("INTENSITY"),
+                            )
+                            .child(
+                                div().text_xs().child(mono_num(
+                                    format!("{:.0}%", energy * 100.),
+                                    palette.muted,
+                                )),
+                            ),
+                    )
+                    .child(
+                        Slider::new("soundscape-energy", f64::from(energy.clamp(0., 1.)))
+                            .range(0.0, 1.0)
+                            .step(0.01)
+                            .on_change(move |next, _, cx| {
+                                energy_entity.update(cx, |view, cx| {
+                                    view.set_energy(next as f32, cx);
+                                });
+                            }),
+                    ),
             )
             .child(self.mixer(palette, cx))
     }

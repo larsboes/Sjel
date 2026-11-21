@@ -1,7 +1,6 @@
 //! Inputs, mode-specific form sections, and background job log renderer.
 
 use crate::ely::forms::Input;
-use gpui_kit::component::input::Textarea;
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, FontWeight};
 use sjel_gpui_core::shell::MusicJob;
 
@@ -50,7 +49,7 @@ pub fn render_album_inputs(music: &Music, palette: Palette) -> AnyElement {
                 .text_color(rgb(palette.muted))
                 .child("Tracklist: one start time per line, followed by artist and title."),
         )
-        .child(Textarea::new(&music.tracklist).h(px(230.)))
+        .child(Input::new(&music.tracklist))
         .into_any_element()
 }
 

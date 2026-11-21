@@ -25,6 +25,7 @@
 //! - [`today`]: the phone's landing page — the day the Mac's copy answered, the tasks the replica
 //!   holds, and the projects those tasks belong to.
 
+pub mod a2ui;
 pub mod accounts;
 pub mod agent;
 pub mod area;
@@ -40,6 +41,7 @@ pub mod device;
 pub mod document_queue;
 pub mod environment;
 pub mod finance;
+pub mod home;
 pub mod inline;
 pub mod interior;
 pub mod inventory;

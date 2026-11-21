@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use gpui_kit::component::checkbox::Checkbox;
+use crate::ely::forms::Checkbox;
 use gpui_kit::component::input::{Backspace, Escape, MoveDown, MoveUp, Textarea};
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::prelude::*;
@@ -144,9 +144,8 @@ pub(crate) fn render_block(
             .into_any_element(),
         Kind::Todo(done) => {
             let editor_entity = cx.entity().downgrade();
-            Checkbox::new(("todo", index))
-                .checked(done)
-                .on_click(move |_, _, cx| {
+            Checkbox::new(("todo", index), done)
+                .on_change(move |_, _, cx| {
                     let _ = editor_entity.update(cx, |editor, cx| editor.toggle(index, cx));
                 })
                 .into_any_element()

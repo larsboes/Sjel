@@ -7,6 +7,7 @@ use sjel_gpui_core::shell::{GlobalTask, ProjectSummary};
 
 use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::charts::{BarChart, Series};
+use crate::ely::data_display::{Badge, Tone};
 use crate::ely::theme::ControlSize;
 use crate::primitives::{chart_card, section};
 use crate::theme::{tint, Density, Palette};
@@ -145,12 +146,7 @@ impl Projects {
                                     .text_color(rgb(palette.muted))
                                     .child(task.project.clone()),
                             )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.red))
-                                    .child(due_label),
-                            ),
+                            .child(Badge::new(due_label).tone(Tone::Danger)),
                     )
                     .child(
                         div()
@@ -228,12 +224,7 @@ impl Projects {
                             .items_center()
                             .gap_2()
                             .child(div().text_sm().truncate().child(task.title.clone()))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.amber))
-                                    .child(blocker),
-                            ),
+                            .child(Badge::new(blocker).tone(Tone::Warning)),
                     )
                     .child(
                         Button::new(
@@ -298,46 +289,49 @@ impl Projects {
             })
             .collect();
 
-        let project_rows: Vec<AnyElement> =
-            active_projects
-                .iter()
-                .take(6)
-                .enumerate()
-                .map(|(ix, project)| {
-                    let name = project.name.clone();
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .gap_2()
-                        .px_3()
-                        .py_2()
-                        .rounded(px(6.))
-                        .bg(rgba(palette.raised))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .flex()
-                                .items_center()
-                                .gap_2()
-                                .child(div().text_sm().truncate().child(project.name.clone()))
-                                .child(div().text_xs().text_color(rgb(palette.muted)).child(
-                                    format!("{} open · {} done", project.open, project.done),
-                                )),
-                        )
-                        .child(
-                            Button::new(SharedString::from(format!("review-proj-{ix}")), "Open")
-                                .size(ControlSize::Sm)
-                                .variant(ButtonVariant::Ghost)
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.review_mode = false;
-                                    view.open_project(name.clone(), cx);
-                                })),
-                        )
-                        .into_any_element()
-                })
-                .collect();
+        let project_rows: Vec<AnyElement> = active_projects
+            .iter()
+            .take(6)
+            .enumerate()
+            .map(|(ix, project)| {
+                let name = project.name.clone();
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_2()
+                    .px_3()
+                    .py_2()
+                    .rounded(px(6.))
+                    .bg(rgba(palette.raised))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(div().text_sm().truncate().child(project.name.clone()))
+                            .child(
+                                Badge::new(format!(
+                                    "{} open · {} done",
+                                    project.open, project.done
+                                ))
+                                .tone(Tone::Neutral),
+                            ),
+                    )
+                    .child(
+                        Button::new(SharedString::from(format!("review-proj-{ix}")), "Open")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.review_mode = false;
+                                view.open_project(name.clone(), cx);
+                            })),
+                    )
+                    .into_any_element()
+            })
+            .collect();
 
         let header = div()
             .flex()

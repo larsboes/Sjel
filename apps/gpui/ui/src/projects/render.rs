@@ -544,7 +544,7 @@ impl Projects {
                                                 .p_2()
                                                 .rounded(px(8.))
                                                 .bg(rgba(palette.raised))
-                                                .child(Input::new(&new_note).small()),
+                                                .child(Input::new(&new_note).size(ControlSize::Sm)),
                                         )
                                     })
                                     .child(notes_content)
@@ -585,6 +585,15 @@ impl Projects {
                 let mail_count = self.mail.value.as_ref().map(|m| m.len());
                 let links_count = self.links.value.as_ref().map(|l| l.len());
                 let next_due_label = next_due.map(str::to_string);
+                let (status_label, status_tone) = if blocked > 0 && blocked == open {
+                    ("Stalled", Tone::Danger)
+                } else if open == 0 && done > 0 {
+                    ("Complete", Tone::Success)
+                } else if open > 0 {
+                    ("Active", Tone::Accent)
+                } else {
+                    ("Planning", Tone::Neutral)
+                };
 
                 div()
                     .flex()
@@ -604,6 +613,11 @@ impl Projects {
                             .flex_wrap()
                             .items_center()
                             .gap_3()
+                            .child(
+                                crate::ely::data_display::Badge::new(status_label)
+                                    .tone(status_tone)
+                                    .dot(),
+                            )
                             .child(div().w(px(110.)).child(crate::primitives::progress_bar(
                                 ratio,
                                 palette.green,
@@ -621,6 +635,14 @@ impl Projects {
                                         "{blocked} blocked"
                                     ))
                                     .tone(Tone::Warning),
+                                )
+                            })
+                            .when_some(links_count.filter(|&n| n > 0), |el, count| {
+                                el.child(
+                                    crate::ely::data_display::Badge::new(format!(
+                                        "Inventory: {count} linked"
+                                    ))
+                                    .tone(Tone::Info),
                                 )
                             })
                             .when_some(next_due_label, |el, due| {
@@ -980,16 +1002,23 @@ impl Projects {
             .map(|list| list.iter().filter(|p| p.archived).count())
             .unwrap_or(0);
 
+        let is_mobile = self.density == Density::Mobile;
         let toolbar = div()
             .flex()
-            .items_center()
-            .justify_between()
-            .gap_3()
+            .when(is_mobile, |el| el.flex_col().items_stretch().gap_2())
+            .when(!is_mobile, |el| el.items_center().justify_between().gap_3())
             .mb_2()
-            .child(search_box(cols.search).child(Input::new(&search_input).small()))
+            .child(
+                search_box(cols.search)
+                    .id("projects-hub-search-box")
+                    .debug_selector(|| "projects-hub-search-box".into())
+                    .when(is_mobile, |el| el.w_full())
+                    .child(Input::new(&search_input).size(ControlSize::Sm)),
+            )
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
                     .gap_2()
                     .child({
@@ -1036,13 +1065,23 @@ impl Projects {
                             })),
                     )
                     .child(
-                        crate::ely::buttons::Button::new("new-project-btn", "+ New Project")
-                            .size(crate::ely::theme::ControlSize::Sm)
-                            .variant(crate::ely::buttons::ButtonVariant::Primary)
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.adding_project = !view.adding_project;
-                                cx.notify();
-                            })),
+                        div()
+                            .id("new-project-btn-host")
+                            .debug_selector(|| "new-project-btn-host".into())
+                            .child(
+                                crate::ely::buttons::Button::new(
+                                    "new-project-btn",
+                                    "+ New Project",
+                                )
+                                .size(crate::ely::theme::ControlSize::Sm)
+                                .variant(crate::ely::buttons::ButtonVariant::Primary)
+                                .on_click(cx.listener(
+                                    |view, _, _, cx| {
+                                        view.adding_project = !view.adding_project;
+                                        cx.notify();
+                                    },
+                                )),
+                            ),
                     ),
             );
 
@@ -1080,7 +1119,7 @@ impl Projects {
                         .p_2()
                         .rounded(px(8.))
                         .bg(rgba(palette.raised))
-                        .child(Input::new(&new_project).small()),
+                        .child(Input::new(&new_project).size(ControlSize::Sm)),
                 )
             })
             .when_some(self.blocked_band(palette, cx), |page, band| {

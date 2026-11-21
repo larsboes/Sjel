@@ -314,7 +314,7 @@ fn all_tasks_panel_opens_on_a_task_and_draws_beside_the_table(cx: &mut TestAppCo
         let panel = projects.task_panel.as_ref().expect("the panel opened");
         assert_eq!(panel.path, "P/Tasks/blocked.md");
         let context = panel.input("context").expect("a context field");
-        assert_eq!(context.read(cx).value().to_string(), "Werkstatt");
+        assert_eq!(context.read(cx).text(), "Werkstatt");
         let shown: Vec<&str> = projects
             .all_tasks
             .value
@@ -564,7 +564,7 @@ fn project_tasks_supports_board_mode_and_task_panel_inspector(cx: &mut TestAppCo
         let panel = projects.task_panel.as_ref().expect("task panel opened");
         assert_eq!(panel.path, "P/Tasks/T1.md");
         let context = panel.input("context").expect("context input present");
-        assert_eq!(context.read(cx).value().to_string(), "Terminal");
+        assert_eq!(context.read(cx).text(), "Terminal");
     });
 
     // Toggle to board mode
@@ -828,4 +828,51 @@ fn all_notes_split_pane_shows_list_and_editor_side_by_side(cx: &mut TestAppConte
     assert!(cx.debug_bounds("all-notes").is_some());
     let projects = slot.take().unwrap();
     projects.read_with(cx, |p, _| assert!(p.editor.is_some()));
+}
+
+#[gpui::test]
+fn mobile_projects_toolbar_keeps_search_wide_and_new_project_on_screen(cx: &mut TestAppContext) {
+    crate::test_support::init(cx);
+    let (_, cx) = cx.add_window_view(move |window, cx| {
+        let projects = cx.new(|cx| {
+            let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
+                .with_density(Density::Mobile);
+            projects.projects = Remote {
+                value: Some(vec![ProjectSummary {
+                    name: "Hearth".into(),
+                    archived: false,
+                    open: 2,
+                    done: 1,
+                    notes: 1,
+                }]),
+                ..Remote::default()
+            };
+            projects
+        });
+        struct MobileFrame(Entity<Projects>);
+        impl Render for MobileFrame {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div().w(px(375.)).h(px(667.)).child(self.0.clone())
+            }
+        }
+        let frame = cx.new(|_| MobileFrame(projects));
+        gpui_kit::component::Root::new(frame, window, cx)
+    });
+    cx.run_until_parked();
+    let search = cx
+        .debug_bounds("projects-hub-search-box")
+        .expect("search box rendered");
+    let new_project = cx
+        .debug_bounds("new-project-btn-host")
+        .expect("+ New Project button rendered");
+    assert!(
+        search.size.width >= px(300.),
+        "mobile search box keeps usable width: {:?}",
+        search.size.width
+    );
+    assert!(
+        new_project.right() <= px(375.),
+        "+ New Project stays inside the 375px screen: {:?}",
+        new_project.right()
+    );
 }

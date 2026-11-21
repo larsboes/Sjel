@@ -5,8 +5,6 @@
 
 use std::time::Duration;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{IconName, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, FontWeight, SharedString};
 use sjel_gpui_core::area::Area;
 
@@ -15,6 +13,10 @@ use crate::workspace::Workspace;
 use sjel_gpui_core::travel::{TravelRoute, TripSection};
 use sjel_gpui_ui::backup::BackupTab;
 use sjel_gpui_ui::calendar::View as CalendarView;
+use sjel_gpui_ui::ely::buttons::{Button, ButtonVariant, IconButton};
+use sjel_gpui_ui::ely::data_display::{Badge, Tone};
+use sjel_gpui_ui::ely::primitives::IconName;
+use sjel_gpui_ui::ely::theme::ControlSize;
 use sjel_gpui_ui::feed::Tab as FeedTab;
 use sjel_gpui_ui::finance::View as FinanceView;
 use sjel_gpui_ui::inventory::InventoryTab;
@@ -57,22 +59,13 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
         div()
             .flex_none()
             .mr_2()
-            .px_2()
-            .py_0p5()
-            .rounded_md()
-            .bg(rgb(palette.amber))
-            .text_xs()
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_color(rgb(0xffffff))
-            .child("DEV NODE")
+            .child(Badge::new("DEV NODE").tone(Tone::Warning))
     });
     let shell_recovery = view.health.error.as_ref().map(|_| {
-        Button::new("restart-shell")
-            .small()
-            .ghost()
-            .label("Restart shell")
+        Button::new("restart-shell", "Restart shell")
+            .size(ControlSize::Sm)
+            .variant(ButtonVariant::Ghost)
             .loading(view.busy.contains("sjel-status-recovery"))
-            .tooltip("Rebuild and restart the local Sjel shell with the current configuration")
             .on_click(cx.listener(|view, _, window, cx| view.restart_shell(window, cx)))
     });
     let area_title: AnyElement = if let Some(project_name) = (view.page == Page::Projects)
@@ -183,11 +176,9 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                                 format!("Customize · {}", mode.label())
                             };
                             el.child(
-                                Button::new("home-customize-toggle")
-                                    .ghost()
-                                    .small()
-                                    .label(label)
-                                    .tooltip("Choose Today mode and visible sections")
+                                Button::new("home-customize-toggle", label)
+                                    .variant(ButtonVariant::Ghost)
+                                    .size(ControlSize::Sm)
                                     .on_click(cx.listener(|view, _, _, cx| {
                                         view.home_customize_open = !view.home_customize_open;
                                         cx.notify();
@@ -195,32 +186,31 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                             )
                         })
                         .child(
-                            Button::new("header-scratchpad-toggle")
-                                .small()
-                                .when(scratch_open, |b| b.primary())
-                                .when(!scratch_open, |b| b.ghost())
-                                .label(scratch_label)
-                                .tooltip("Toggle 24-hour quick Scratchpad (⌘\\)")
+                            Button::new("header-scratchpad-toggle", scratch_label)
+                                .size(ControlSize::Sm)
+                                .variant(if scratch_open {
+                                    ButtonVariant::Primary
+                                } else {
+                                    ButtonVariant::Ghost
+                                })
                                 .on_click(cx.listener(|view, _, window, cx| {
                                     view.toggle_scratchpad(window, cx);
                                 })),
                         )
                         .child(
-                            Button::new("refresh")
-                                .ghost()
-                                .small()
-                                .icon(IconName::RotateCw)
-                                .loading(view.health.loading || view.agent.loading)
+                            IconButton::new("refresh", IconName::RotateCw)
+                                .variant(ButtonVariant::Ghost)
+                                .size(ControlSize::Sm)
+                                .disabled(view.health.loading || view.agent.loading)
                                 .tooltip("Refresh (⌘R)")
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.refresh_current_page(cx);
                                 })),
                         )
                         .child(
-                            Button::new("settings")
-                                .ghost()
-                                .small()
-                                .icon(IconName::Settings)
+                            IconButton::new("settings", IconName::Settings)
+                                .variant(ButtonVariant::Ghost)
+                                .size(ControlSize::Sm)
                                 .tooltip("Settings (⌘,)")
                                 .on_click(
                                     cx.listener(|view, _, _, cx| view.open_settings(None, cx)),
@@ -327,10 +317,9 @@ fn tab_strip(
                     },
                 ))
                 .child(
-                    Button::new("header-projects-registry")
-                        .small()
-                        .ghost()
-                        .label("Browse objects")
+                    Button::new("header-projects-registry", "Browse objects")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(move |_, _, cx| {
                             owner_browse.update(cx, |workspace, cx| {
                                 workspace.go(Page::Record, cx);
@@ -420,10 +409,9 @@ fn tab_strip(
                             )),
                     )
                     .child(
-                        Button::new("header-feed-quick-clip")
-                            .small()
-                            .ghost()
-                            .label("+ Quick Clip")
+                        Button::new("header-feed-quick-clip", "+ Quick Clip")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .on_click(move |_, window, cx| {
                                 owner_clip.update(cx, |view, cx| {
                                     view.ensure_feed(cx).update(cx, |feed, cx| {
@@ -477,16 +465,18 @@ fn tab_strip(
                 ))
                 .when(proposals_n > 0, |el| {
                     el.child(
-                        Button::new("header-calendar-proposals")
-                            .small()
-                            .ghost()
-                            .label(format!("Proposals ({proposals_n})"))
-                            .on_click(move |_, _, cx| {
-                                owner_prop.update(cx, |view, cx| {
-                                    view.ensure_calendar_page(cx)
-                                        .update(cx, |page, cx| page.toggle_proposals(cx));
-                                });
-                            }),
+                        Button::new(
+                            "header-calendar-proposals",
+                            format!("Proposals ({proposals_n})"),
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(move |_, _, cx| {
+                            owner_prop.update(cx, |view, cx| {
+                                view.ensure_calendar_page(cx)
+                                    .update(cx, |page, cx| page.toggle_proposals(cx));
+                            });
+                        }),
                     )
                 })
                 .into_any_element(),
@@ -555,10 +545,9 @@ fn tab_strip(
                 .gap_3()
                 .child(left)
                 .child(
-                    Button::new("header-travel-new-trip")
-                        .small()
-                        .ghost()
-                        .label("+ New trip")
+                    Button::new("header-travel-new-trip", "+ New trip")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(move |_, window, cx| {
                             owner_new.update(cx, |view, cx| {
                                 view.travel
@@ -779,10 +768,9 @@ fn tab_strip(
                         )),
                 )
                 .child(
-                    Button::new("header-finance-csv-import")
-                        .small()
-                        .ghost()
-                        .label("CSV Import…")
+                    Button::new("header-finance-csv-import", "CSV Import…")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(move |_, _, cx| {
                             owner_csv.update(cx, |view, cx| {
                                 view.ensure_finance_page(cx)

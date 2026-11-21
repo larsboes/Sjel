@@ -4,12 +4,12 @@ use std::rc::Rc;
 
 use crate::ely::data_display::Tone;
 use crate::ely::feedback::Toast;
+use crate::ely::forms::{Input, InputEvent, TextInput};
 use crate::ely::primitives::Severity;
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction};
+use crate::ely::theme::ControlSize;
 use crate::feedback::WindowToastExt;
-use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, Div, Entity, FocusHandle, Focusable,
     FontWeight, MouseButton, ScrollHandle, SharedString, Subscription, Window,
@@ -324,9 +324,9 @@ pub struct Projects {
     pub show_archived: bool,
     pub review_mode: bool,
     pub search_query: String,
-    pub(super) search_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) search_input: Option<(Entity<TextInput>, Subscription)>,
     pub notes_search_query: String,
-    pub(super) notes_search_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) notes_search_input: Option<(Entity<TextInput>, Subscription)>,
     /// The open project and its records. The records carry no content: the editor reads one.
     pub(super) project: Option<(String, Remote<Vec<ProjectRecord>>)>,
     pub(super) mail: Remote<Vec<ProjectMailProposal>>,
@@ -348,19 +348,19 @@ pub struct Projects {
     /// The note being read before its editor can open.
     pub(super) opening: Option<String>,
     /// The note whose title is being typed: its path, the title it had, the field and its events.
-    pub(super) title_edit: Option<(String, String, Entity<InputState>, Subscription)>,
+    pub(super) title_edit: Option<(String, String, Entity<TextInput>, Subscription)>,
     /// The note whose last read failed. The hub opens itself only once, so a failing read is not
     /// retried on every frame.
     pub(super) failed: Option<String>,
     /// The "New task" field under the task table.
-    pub(super) new_task: Option<(Entity<InputState>, Subscription)>,
+    pub(super) new_task: Option<(Entity<TextInput>, Subscription)>,
     /// The task whose due date is being typed (its path), and its field.
-    pub(super) due_edit: Option<(String, Entity<InputState>, Subscription)>,
+    pub(super) due_edit: Option<(String, Entity<TextInput>, Subscription)>,
     /// The "New project" field.
-    pub(super) new_project: Option<(Entity<InputState>, Subscription)>,
+    pub(super) new_project: Option<(Entity<TextInput>, Subscription)>,
     pub adding_project: bool,
     /// The "New note" field inside project view.
-    pub(super) new_note: Option<(Entity<InputState>, Subscription)>,
+    pub(super) new_note: Option<(Entity<TextInput>, Subscription)>,
     pub adding_note: bool,
     /// The writes the Mac refused, with its reasons. Their content is still here and still queued:
     /// the band these draw is the only place that says so.
@@ -370,7 +370,7 @@ pub struct Projects {
     pub selected_index: Option<usize>,
     pub selected_task_index: Option<usize>,
     pub selected_task_path: Option<String>,
-    pub(super) task_title_edit: Option<(String, String, Entity<InputState>, Subscription)>,
+    pub(super) task_title_edit: Option<(String, String, Entity<TextInput>, Subscription)>,
     pub show_charts: bool,
 }
 
@@ -475,7 +475,9 @@ impl Projects {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.task_title_edit.is_some() {
+        if self.title_edit.is_some() {
+            self.cancel_title(cx);
+        } else if self.task_title_edit.is_some() {
             self.cancel_task_title(cx);
         } else if self.task_panel.is_some() {
             self.task_panel = None;
@@ -1229,15 +1231,12 @@ impl Projects {
             if *editing == path {
                 let input = input.clone();
                 return div()
+                    .key_context("Input")
                     .w_full()
                     .max_w(px(560.))
                     .text_2xl()
                     .font_weight(FontWeight::SEMIBOLD)
-                    .capture_action(cx.listener(|view, _: &Escape, _, cx| {
-                        view.cancel_title(cx);
-                        cx.stop_propagation();
-                    }))
-                    .child(Input::new(&input).appearance(false))
+                    .child(Input::new(&input))
                     .into_any_element();
             }
         }
@@ -1301,16 +1300,17 @@ impl Projects {
             return;
         }
         let input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("Note title… (Press ↩ or Esc)");
-            state.set_value(title.clone(), window, cx);
+            let mut state = TextInput::new(window, cx).placeholder("Note title… (Press ↩ or Esc)");
+            state.set_text(title.clone(), cx);
             state
         });
         let subscription = cx.subscribe_in(&input, window, |view, _, event, _, cx| match event {
-            InputEvent::PressEnter { shift: false, .. } => view.commit_title(cx),
+            InputEvent::Submit => view.commit_title(cx),
             InputEvent::Blur => view.cancel_title(cx),
             _ => {}
         });
-        input.update(cx, |state, cx| state.focus(window, cx));
+        let focus = input.read(cx).focus_handle(cx);
+        window.focus(&focus, cx);
         self.title_edit = Some((path, title, input, subscription));
         cx.notify();
     }
@@ -1321,7 +1321,7 @@ impl Projects {
             return;
         };
         cx.notify();
-        let title = input.read(cx).value().trim().to_owned();
+        let title = input.read(cx).text().trim().to_owned();
         if title.is_empty() || title == was {
             return;
         }
@@ -1462,6 +1462,8 @@ impl Projects {
         if let Some(palette) = self.palette {
             editor.update(cx, |editor, cx| editor.set_palette(palette, cx));
         }
+        let density = self.density;
+        editor.update(cx, |editor, cx| editor.set_density(density, cx));
         editor.update(cx, |editor, cx| editor.focus(0, 0, window, cx));
         self.editor = Some(editor);
         cx.emit(ProjectsEvent::Editing(true));
@@ -1617,15 +1619,16 @@ impl Projects {
     ) {
         let due = due.unwrap_or_default();
         let input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("YYYY-MM-DD");
-            state.set_value(due, window, cx);
+            let mut state = TextInput::new(window, cx).placeholder("YYYY-MM-DD");
+            state.set_text(due, cx);
             state
         });
-        input.update(cx, |input, cx| input.focus(window, cx));
+        let focus = input.read(cx).focus_handle(cx);
+        window.focus(&focus, cx);
         let subscription = cx.subscribe_in(&input, window, |view, input, event, window, cx| {
             match event {
-                InputEvent::PressEnter { .. } => {
-                    let due = input.read(cx).value().trim().to_owned();
+                InputEvent::Submit => {
+                    let due = input.read(cx).text().trim().to_owned();
                     let Some((path, _, _)) = view.due_edit.take() else {
                         return;
                     };
@@ -1667,17 +1670,18 @@ impl Projects {
             return;
         }
         let input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("Task title… (Press ↩ or Esc)");
-            state.set_value(title.clone(), window, cx);
+            let mut state = TextInput::new(window, cx).placeholder("Task title… (Press ↩ or Esc)");
+            state.set_text(title.clone(), cx);
             state
         });
         let subscription =
             cx.subscribe_in(&input, window, |view, _, event, window, cx| match event {
-                InputEvent::PressEnter { shift: false, .. } => view.commit_task_title(window, cx),
+                InputEvent::Submit => view.commit_task_title(window, cx),
                 InputEvent::Blur => view.cancel_task_title(cx),
                 _ => {}
             });
-        input.update(cx, |state, cx| state.focus(window, cx));
+        let focus = input.read(cx).focus_handle(cx);
+        window.focus(&focus, cx);
         self.task_title_edit = Some((path, title, input, subscription));
         cx.notify();
     }
@@ -1687,7 +1691,7 @@ impl Projects {
             return;
         };
         cx.notify();
-        let title = input.read(cx).value().trim().to_owned();
+        let title = input.read(cx).text().trim().to_owned();
         if title.is_empty() || title == was {
             return;
         }
@@ -1827,27 +1831,23 @@ impl Projects {
         );
     }
 
-    fn new_task_field(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    fn new_task_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
         if let Some((input, _)) = &self.new_task {
             return input.clone();
         }
         let input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("New task… (!1-!3 priority, @today, @tomorrow)")
+            TextInput::new(window, cx).placeholder("New task… (!1-!3 priority, @today, @tomorrow)")
         });
         let subscription = cx.subscribe_in(&input, window, |view, input, event, window, cx| {
-            if let InputEvent::PressEnter { .. } = event {
-                let raw_title = input.read(cx).value().trim().to_owned();
+            if let InputEvent::Submit = event {
+                let raw_title = input.read(cx).text().trim().to_owned();
                 let Some(project) = view.project.as_ref().map(|(name, _)| name.clone()) else {
                     return;
                 };
                 if raw_title.is_empty() {
                     return;
                 }
-                input.update(cx, |input, cx| input.set_value("", window, cx));
+                input.update(cx, |input, cx| input.set_text(String::new(), cx));
                 view.create_task_from_text(project, raw_title, window, cx);
             }
         });
@@ -1859,14 +1859,14 @@ impl Projects {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.search_input {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search projects…"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Search projects…"));
         let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
-                view.search_query = input.read(cx).value().trim().to_lowercase();
+            if matches!(event, InputEvent::Changed) {
+                view.search_query = input.read(cx).text().trim().to_lowercase();
                 cx.notify();
             }
         });
@@ -1878,14 +1878,14 @@ impl Projects {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.notes_search_input {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search all notes…"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Search all notes…"));
         let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
-                view.notes_search_query = input.read(cx).value().trim().to_lowercase();
+            if matches!(event, InputEvent::Changed) {
+                view.notes_search_query = input.read(cx).text().trim().to_lowercase();
                 cx.notify();
             }
         });
@@ -1897,20 +1897,20 @@ impl Projects {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    ) -> Entity<TextInput> {
         if let Some((input, _)) = &self.new_project {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Project name… (Press ↩)"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Project name… (Press ↩)"));
         let subscription =
             cx.subscribe_in(
                 &input,
                 window,
                 |view, input, event, window, cx| match event {
-                    InputEvent::PressEnter { .. } => {
-                        let name = input.read(cx).value().trim().to_owned();
+                    InputEvent::Submit => {
+                        let name = input.read(cx).text().trim().to_owned();
                         if !name.is_empty() {
-                            input.update(cx, |input, cx| input.set_value("", window, cx));
+                            input.update(cx, |input, cx| input.set_text(String::new(), cx));
                             view.adding_project = false;
                             let repo = view.repo.clone();
                             data::write_repo(
@@ -1924,7 +1924,7 @@ impl Projects {
                             );
                         }
                     }
-                    InputEvent::Blur if input.read(cx).value().trim().is_empty() => {
+                    InputEvent::Blur if input.read(cx).text().trim().is_empty() => {
                         view.adding_project = false;
                         cx.notify();
                     }
@@ -1935,28 +1935,24 @@ impl Projects {
         input
     }
 
-    fn new_note_field(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
+    fn new_note_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
         if let Some((input, _)) = &self.new_note {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Note title… (Press ↩)"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Note title… (Press ↩)"));
         let subscription =
             cx.subscribe_in(
                 &input,
                 window,
                 |view, input, event, window, cx| match event {
-                    InputEvent::PressEnter { .. } => {
-                        let title = input.read(cx).value().trim().to_owned();
+                    InputEvent::Submit => {
+                        let title = input.read(cx).text().trim().to_owned();
                         let Some(project) = view.project.as_ref().map(|(name, _)| name.clone())
                         else {
                             return;
                         };
                         if !title.is_empty() {
-                            input.update(cx, |input, cx| input.set_value("", window, cx));
+                            input.update(cx, |input, cx| input.set_text(String::new(), cx));
                             view.adding_note = false;
                             let repo = view.repo.clone();
                             data::write_repo(
@@ -1973,7 +1969,7 @@ impl Projects {
                             );
                         }
                     }
-                    InputEvent::Blur if input.read(cx).value().trim().is_empty() => {
+                    InputEvent::Blur if input.read(cx).text().trim().is_empty() => {
                         view.adding_note = false;
                         cx.notify();
                     }

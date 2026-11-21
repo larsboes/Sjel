@@ -1,6 +1,11 @@
-use crate::ely::buttons::{Button, ButtonVariant};
-use crate::ely::forms::Input;
-use crate::ely::theme::ControlSize;
+use crate::ely::{
+    buttons::{Button, ButtonVariant},
+    data_display::{Badge, Tone},
+    feedback::InlineMessage,
+    forms::Input,
+    primitives::Severity,
+    theme::ControlSize,
+};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString, Window,
@@ -8,8 +13,8 @@ use gpui_kit::{
 use sjel_gpui_core::shell::{FeedContentDetail, FeedEntry};
 
 use crate::doc_view::render_markdown;
-use crate::primitives::{filter_pill, virtual_list};
-use crate::theme::{tint, Density, Palette};
+use crate::primitives::{filter_pill, key_bar, virtual_list};
+use crate::theme::{Density, Palette};
 
 use super::actions::{Back, Dismiss, Keep, OpenOriginal};
 use super::types::{Filter, Tab};
@@ -56,29 +61,30 @@ impl Feed {
             .flex_1()
             .min_h_0()
             .child(toolbar)
-            .child(muted(
-                "j/k move · s keep · d dismiss · u undo · o read",
+            .child(key_bar(
+                &[
+                    ("j/k", "move"),
+                    ("s", "keep"),
+                    ("d", "dismiss"),
+                    ("u", "undo"),
+                    ("o", "read"),
+                ],
                 palette,
             ));
         if self.rows.value.is_none() && self.rows.loading {
-            column = column.child(muted("Loading the feed…", palette));
+            column = column.child(InlineMessage::new(Severity::Info, "Loading the feed…"));
         }
         if let Some(error) = &self.rows.error {
-            column = column.child(
-                div()
-                    .text_sm()
-                    .text_color(rgb(palette.red))
-                    .child(error.to_string()),
-            );
+            column = column.child(InlineMessage::new(Severity::Danger, error.to_string()));
         }
         if self.reading_order.is_empty() && !self.rows.loading && self.rows.error.is_none() {
-            column = column.child(muted(
+            column = column.child(InlineMessage::new(
+                Severity::Info,
                 match self.filter {
                     Filter::New => "Nothing new. The inbox is clear.",
                     Filter::Kept => "Nothing kept in the last 30 days.",
                     Filter::Dismissed => "Nothing dismissed in the last 30 days.",
                 },
-                palette,
             ));
         }
         if !self.reading_order.is_empty() {
@@ -133,22 +139,14 @@ impl Feed {
             .to_owned();
         let score = entry.score();
         let score_badge = (score > 0.).then(|| {
-            let color = if score >= 0.8 {
-                palette.green
+            let tone = if score >= 0.8 {
+                Tone::Success
             } else if score >= 0.5 {
-                palette.amber
+                Tone::Warning
             } else {
-                palette.muted
+                Tone::Neutral
             };
-            div()
-                .px_1p5()
-                .py(px(0.5))
-                .rounded(px(3.))
-                .bg(rgba(tint(color, 0x18)))
-                .text_xs()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(rgb(color))
-                .child(format!("{:.0}%", score * 100.))
+            Badge::new(format!("{:.0}%", score * 100.)).tone(tone)
         });
         let keep_id = entry.id.clone();
         let dismiss_id = entry.id.clone();
@@ -164,38 +162,22 @@ impl Feed {
                         .group_hover(group_hover_name, |s| s.opacity(1.))
                 })
                 .child(
-                    div()
-                        .id(("feed-quick-keep", ix))
-                        .px_2()
-                        .py(px(1.))
-                        .rounded(px(4.))
-                        .bg(rgba(tint(palette.green, 0x18)))
-                        .hover(move |style| style.bg(rgba(tint(palette.green, 0x33))))
-                        .text_xs()
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(rgb(palette.green))
-                        .cursor_pointer()
+                    Button::new(("feed-quick-keep", ix), "Keep")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Secondary)
                         .on_click(cx.listener(move |view, _, _, cx| {
+                            cx.stop_propagation();
                             view.decide(keep_id.clone(), "keeper", cx);
-                        }))
-                        .child("Keep"),
+                        })),
                 )
                 .child(
-                    div()
-                        .id(("feed-quick-dismiss", ix))
-                        .px_2()
-                        .py(px(1.))
-                        .rounded(px(4.))
-                        .bg(rgba(tint(palette.red, 0x18)))
-                        .hover(move |style| style.bg(rgba(tint(palette.red, 0x33))))
-                        .text_xs()
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(rgb(palette.red))
-                        .cursor_pointer()
+                    Button::new(("feed-quick-dismiss", ix), "Dismiss")
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(move |view, _, _, cx| {
+                            cx.stop_propagation();
                             view.decide(dismiss_id.clone(), "dismissed", cx);
-                        }))
-                        .child("Dismiss"),
+                        })),
                 )
         });
         let row = div()

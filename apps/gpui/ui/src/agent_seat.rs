@@ -5,6 +5,7 @@
 //! [`Host`], follows its stream, and sends the owner's prompts, guidance and decisions. The shell
 //! owns the text field and calls [`AgentSeat::submit`].
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures::StreamExt;
@@ -12,10 +13,22 @@ use gpui::{
     div, prelude::*, px, rgb, rgba, AnyElement, ClickEvent, Context, EventEmitter, FontWeight,
     MouseButton, MouseDownEvent, ScrollHandle, SharedString, Window,
 };
+use sjel_gpui_core::a2ui::{
+    A2uiClientState, A2uiDocument, A2uiProposalIntent, A2uiValidationError, DataClass,
+    SavedA2uiView, ValidatedA2uiView,
+};
 use sjel_gpui_core::agent::Event;
-pub use sjel_gpui_core::agent::{tool_summary, AgentRun, Host, Pending, Row, Session, Turn};
+pub use sjel_gpui_core::agent::{
+    derive_follow_intent, tool_summary, AgentFollowIntent, AgentRun, Host, Pending, Row, Session,
+    Turn,
+};
 use sjel_gpui_core::shell;
 
+use crate::ely::{
+    buttons::{Button, ButtonVariant},
+    data_display::{Badge, Tone},
+    theme::ControlSize,
+};
 use crate::theme::{tint, Palette, ThemeContext};
 
 /// Reconnects a dropped stream this many times before the panel says so.
@@ -27,6 +40,10 @@ pub enum AgentSeatEvent {
     Started,
     /// The owner asked for a fresh session; the shell focuses its text field.
     NewSession,
+    /// The step stream or operator triggered a read-only workspace follow action.
+    Follow(AgentFollowIntent),
+    /// The operator pinned a validated saved view to Home/Today.
+    PinToHome(SavedA2uiView),
 }
 
 pub struct AgentSeat {
@@ -73,12 +90,113 @@ impl AgentSeat {
 
     pub fn new_session(&mut self, cx: &mut Context<Self>) {
         let sessions = std::mem::take(&mut self.run.sessions);
+        let saved_views = std::mem::take(&mut self.run.saved_views);
         let draft_tier = self.run.draft_tier;
         self.run.clear();
         self.run.sessions = sessions;
+        self.run.saved_views = saved_views;
         self.run.draft_tier = draft_tier;
         cx.emit(AgentSeatEvent::NewSession);
         self.refresh_sessions(cx);
+        cx.notify();
+    }
+
+    /// Validates and mounts a live A2UI view document in the agent panel without executing model
+    /// code.
+    pub fn mount_view_document(
+        &mut self,
+        raw_json: &str,
+        max_admitted_class: DataClass,
+        cx: &mut Context<Self>,
+    ) -> Result<ValidatedA2uiView, A2uiValidationError> {
+        let res = self.run.mount_view_json(raw_json, max_admitted_class);
+        if let Err(err) = &res {
+            self.run.error = Some(format!("View refused: {err}"));
+        }
+        self.scroll.scroll_to_bottom();
+        cx.notify();
+        res
+    }
+
+    /// Saves a validated view document so it can be reloaded without a model call.
+    pub fn save_view_document(
+        &mut self,
+        saved_id: impl Into<String>,
+        document: A2uiDocument,
+        cx: &mut Context<Self>,
+    ) -> Result<(), A2uiValidationError> {
+        self.run.save_view(saved_id, document)?;
+        cx.notify();
+        Ok(())
+    }
+
+    /// Emits `AgentSeatEvent::PinToHome` for a saved view matching `surface_id`.
+    pub fn pin_live_view_to_home(&mut self, surface_id: &str, cx: &mut Context<Self>) -> bool {
+        let Some(saved) = self
+            .run
+            .saved_views
+            .iter()
+            .find(|v| v.document.surface_id == surface_id || v.saved_id == surface_id)
+            .cloned()
+        else {
+            return false;
+        };
+        cx.emit(AgentSeatEvent::PinToHome(saved));
+        true
+    }
+
+    /// Reloads a saved view document without a model call, re-running schema, route, and
+    /// data-class validation.
+    pub fn reload_saved_view(
+        &mut self,
+        saved_id: &str,
+        max_admitted_class: DataClass,
+        cx: &mut Context<Self>,
+    ) -> Result<ValidatedA2uiView, A2uiValidationError> {
+        let res = self.run.reload_saved_view(saved_id, max_admitted_class);
+        if let Err(err) = &res {
+            self.run.error = Some(format!("Saved view refused: {err}"));
+        }
+        self.scroll.scroll_to_bottom();
+        cx.notify();
+        res
+    }
+
+    /// Queues an owner-mode proposal from a button or form inside a mounted live view.
+    pub fn submit_view_proposal(
+        &mut self,
+        surface_id: &str,
+        node_id: &str,
+        cx: &mut Context<Self>,
+    ) -> Result<A2uiProposalIntent, A2uiValidationError> {
+        let res = self.run.submit_view_proposal(surface_id, node_id);
+        match &res {
+            Ok(intent) => {
+                let follow = AgentFollowIntent::FocusProposal {
+                    surface_id: intent.surface_id.clone(),
+                    node_id: intent.node_id.clone(),
+                    proposal_action: intent.intent.clone(),
+                };
+                self.run.latest_follow_intent = Some(follow.clone());
+                if self.run.follow_steps {
+                    cx.emit(AgentSeatEvent::Follow(follow));
+                }
+            }
+            Err(err) => {
+                self.run.error = Some(format!("Proposal refused: {err}"));
+            }
+        }
+        cx.notify();
+        res
+    }
+
+    pub fn set_follow_steps(&mut self, follow: bool, cx: &mut Context<Self>) {
+        self.run.follow_steps = follow;
+        if follow {
+            if let Some(intent) = self.run.latest_follow_intent.clone() {
+                cx.emit(AgentSeatEvent::Follow(intent));
+            }
+        }
         cx.notify();
     }
 
@@ -636,12 +754,14 @@ impl Render for AgentSeat {
                     .child(div().text_sm().truncate().child(label))
                     .child(div().text_xs().text_color(rgb(palette.muted)).child(detail))
             }));
+        let seat_entity = cx.entity();
+        let view_state = self.run.view_state.clone();
         let rows: Vec<AnyElement> = self
             .run
             .rows
             .iter()
             .cloned()
-            .map(|row| transcript_row(row, palette))
+            .map(|row| transcript_row(row, &view_state, seat_entity.clone(), palette))
             .collect();
         let empty = rows.is_empty() && self.run.pending.is_none();
         let card = self
@@ -694,14 +814,60 @@ impl Render for AgentSeat {
             .child(shelf)
             .child(
                 div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
                     .px_4()
                     .py(px(6.))
                     .border_b_1()
                     .border_color(rgba(palette.border))
                     .text_xs()
                     .text_color(rgb(palette.muted))
-                    .child(self.tier_header(palette, cx)),
+                    .child(div().flex_1().child(self.tier_header(palette, cx)))
+                    .child(
+                        Button::new(
+                            "agent-follow-toggle",
+                            if self.run.follow_steps {
+                                "Follow: On"
+                            } else {
+                                "Follow: Off"
+                            },
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(if self.run.follow_steps {
+                            ButtonVariant::Secondary
+                        } else {
+                            ButtonVariant::Ghost
+                        })
+                        .on_click(cx.listener(|seat, _, _, cx| {
+                            let next = !seat.run.follow_steps;
+                            seat.set_follow_steps(next, cx);
+                        })),
+                    ),
             )
+            .when_some(self.run.latest_follow_intent.clone(), |seat, intent| {
+                let label = intent.summary_label();
+                seat.child(
+                    div()
+                        .px_4()
+                        .py_1p5()
+                        .border_b_1()
+                        .border_color(rgba(palette.border))
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap_2()
+                        .child(Badge::new(label).tone(Tone::Accent))
+                        .child(
+                            Button::new("agent-follow-open-now", "Open in column")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Ghost)
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    cx.emit(AgentSeatEvent::Follow(intent.clone()));
+                                })),
+                        ),
+                )
+            })
             .child(transcript)
             .children(card)
             .when_some(self.run.error.clone(), |seat, error| {
@@ -748,8 +914,13 @@ fn first_lines(text: &str, count: usize) -> String {
     shown
 }
 
-/// One transcript row. No listeners, so it can be built while the seat is borrowed.
-fn transcript_row(row: Row, palette: Palette) -> AnyElement {
+/// One transcript row.
+fn transcript_row(
+    row: Row,
+    view_state: &A2uiClientState,
+    seat_entity: gpui::Entity<AgentSeat>,
+    palette: Palette,
+) -> AnyElement {
     match row {
         Row::Prompt(text) => div()
             .px_4()
@@ -759,6 +930,43 @@ fn transcript_row(row: Row, palette: Palette) -> AnyElement {
             .child(text)
             .into_any_element(),
         Row::Answer(text) => div().px_4().py_1().text_sm().child(text).into_any_element(),
+        Row::LiveView(view) => {
+            let surface_id = view.surface_id.clone();
+            let seat = seat_entity.clone();
+            let on_propose: crate::live_view::ProposeHandler = Arc::new(move |s_id, n_id, cx| {
+                let s_id = s_id.to_owned();
+                let n_id = n_id.to_owned();
+                seat.update(cx, |seat, cx| {
+                    let _ = seat.submit_view_proposal(&s_id, &n_id, cx);
+                });
+            });
+            let pin_seat = seat_entity.clone();
+            let pin_id = surface_id.clone();
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(crate::live_view::render_live_view(
+                    &view, view_state, on_propose, palette,
+                ))
+                .child(
+                    div().px_3().flex().justify_end().child(
+                        Button::new(
+                            SharedString::from(format!("agent-pin-home-{surface_id}")),
+                            "Pin to Home",
+                        )
+                        .size(ControlSize::Sm)
+                        .variant(ButtonVariant::Ghost)
+                        .on_click(move |_, _, cx| {
+                            let id = pin_id.clone();
+                            pin_seat.update(cx, |seat, cx| {
+                                seat.pin_live_view_to_home(&id, cx);
+                            });
+                        }),
+                    ),
+                )
+                .into_any_element()
+        }
         Row::Tool {
             name,
             arguments,
@@ -938,5 +1146,51 @@ mod tests {
             assert_eq!(seat.run.draft_tier, "sjel");
             assert!(seat.run.error.is_none());
         });
+    }
+
+    #[gpui::test]
+    fn live_and_saved_a2ui_views_mount_reload_and_queue_owner_mode_proposals(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let doc = sjel_gpui_core::a2ui::synthetic_project_triage_document();
+        let (seat, cx) = crate::test_support::mount_root(
+            cx,
+            Some(gpui::size(gpui::px(420.), gpui::px(760.))),
+            move |_, _| {
+                let mut seat = AgentSeat::new(
+                    Some(Host::Shell(std::sync::Arc::new(
+                        sjel_gpui_core::shell::Shell::new("http://127.0.0.1:9")
+                            .expect("loopback shell"),
+                    ))),
+                    false,
+                    "Offline",
+                );
+                seat.run
+                    .save_view("triage-saved", doc.clone())
+                    .expect("saves synthetic view");
+                seat
+            },
+        );
+
+        // Reload saved view without a model call and verify its live surface renders.
+        seat.update(cx, |seat, cx| {
+            seat.reload_saved_view("triage-saved", DataClass::C2, cx)
+                .expect("reloads saved view");
+            seat.run
+                .view_state
+                .client_write("/draft/task_title", "Verify A2UI live view")
+                .expect("writes draft");
+            let proposal = seat
+                .submit_view_proposal("project-triage-live", "btn-propose", cx)
+                .expect("queues proposal");
+            assert_eq!(proposal.intent, "proposal:create_task");
+            assert!(proposal.owner_mode_only);
+        });
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("agent-live-view-project-triage-live")
+                .is_some(),
+            "validated live view surface must mount in the agent panel"
+        );
     }
 }

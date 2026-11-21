@@ -176,6 +176,20 @@ impl PhoneAgent {
                 };
                 caption(palette, format!("{name}: {decision}{scope}"))
             }
+            Row::LiveView(view) => column()
+                .p_3()
+                .rounded_md()
+                .border_1()
+                .border_color(rgba(palette.border))
+                .child(title(view.title.clone()))
+                .child(caption(
+                    palette,
+                    format!(
+                        "{} · {}",
+                        view.data_class.as_str(),
+                        view.read_routes.join(", ")
+                    ),
+                )),
             Row::Notice(message) => caption(palette, message.clone()),
         }
     }

@@ -20,10 +20,12 @@ use crate::{
     doc_view::text_view_style,
     ely::{
         buttons::{Button, ButtonVariant},
-        feedback::EmptyState,
-        primitives::IconName,
+        data_display::{Badge, Tone},
+        feedback::{EmptyState, InlineMessage},
+        primitives::{IconName, Severity},
         theme::ControlSize,
     },
+    mail::adapter::{AdaptedMailProposal, AdaptedMailReader},
     primitives::sub_tabs,
     theme::{Palette, ThemeContext},
 };
@@ -209,6 +211,8 @@ impl PhoneMail {
                         range
                             .map(|index| {
                                 let row = &visible[index];
+                                let adapted =
+                                    AdaptedMailProposal::from_proposal(row, &[], None, None);
                                 let summary = model_summary(row)
                                     .map(|(label, _)| label)
                                     .or_else(|| row.snippet.clone());
@@ -225,9 +229,27 @@ impl PhoneMail {
                                     .px_2()
                                     .child(
                                         div()
-                                            .truncate()
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .child(subject(row)),
+                                            .flex()
+                                            .items_center()
+                                            .justify_between()
+                                            .gap_2()
+                                            .child(
+                                                div()
+                                                    .flex_1()
+                                                    .min_w_0()
+                                                    .truncate()
+                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .child(subject(row)),
+                                            )
+                                            .child(Badge::new(adapted.stream_label).tone(
+                                                if adapted.sync_needs_attention {
+                                                    Tone::Danger
+                                                } else if adapted.waiting {
+                                                    Tone::Warning
+                                                } else {
+                                                    Tone::Neutral
+                                                },
+                                            )),
                                     )
                                     .child(caption(palette, row_subtitle(row)).truncate())
                                     .when_some(summary, |card, line| {
@@ -273,29 +295,11 @@ impl PhoneMail {
         cx: &Context<Self>,
     ) -> Div {
         let palette = theme.palette;
-        let subject = subject(row);
-        let snippet = row
-            .snippet
-            .as_deref()
-            .filter(|text| !text.trim().is_empty())
-            .unwrap_or("No preview text stored for this thread.");
-        let body = thread
-            .detail
-            .as_ref()
-            .and_then(|detail| {
-                detail
-                    .content
-                    .as_deref()
-                    .filter(|text| !text.trim().is_empty())
-                    .or_else(|| {
-                        detail
-                            .digest
-                            .as_ref()
-                            .and_then(|digest| digest.text.as_deref())
-                            .filter(|text| !text.trim().is_empty())
-                    })
-            })
-            .unwrap_or(snippet);
+        let adapted_proposal = AdaptedMailProposal::from_proposal(row, &[], None, Some(&thread.id));
+        let adapted_reader =
+            AdaptedMailReader::from_proposal_and_detail(row, thread.detail.as_ref());
+        let subject = adapted_reader.subject;
+        let body = adapted_reader.safe_body;
         let waiting = if row.waiting {
             ("Clear waiting", MailAction::ClearWaiting)
         } else {
@@ -475,16 +479,31 @@ impl PhoneMail {
                             )
                             .child(
                                 div()
+                                    .flex()
+                                    .flex_wrap()
+                                    .items_center()
+                                    .gap_1p5()
+                                    .child(
+                                        Badge::new(adapted_proposal.stream_label)
+                                            .tone(Tone::Accent),
+                                    )
+                                    .child(Badge::new(adapted_proposal.status).tone(Tone::Neutral))
+                                    .when(adapted_proposal.waiting, |badges| {
+                                        badges.child(Badge::new("Waiting").tone(Tone::Warning))
+                                    }),
+                            )
+                            .child(
+                                div()
                                     .text_xl()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child(subject),
                             )
                             .child(caption(palette, row_subtitle(row)))
                             .when_some(thread.error.as_ref(), |body, error| {
-                                body.child(caption(palette, error.clone()))
+                                body.child(InlineMessage::new(Severity::Danger, error.clone()))
                             })
                             .child(
-                                TextView::markdown("phone-mail-body", body.to_owned())
+                                TextView::markdown("phone-mail-body", body)
                                     .style(text_view_style(palette, theme.density))
                                     .text_color(rgb(palette.text))
                                     .selectable(true)

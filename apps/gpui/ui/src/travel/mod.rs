@@ -893,7 +893,9 @@ impl Travel {
         let pending: Vec<(String, String)> = plan
             .places()
             .filter(|place| {
-                refresh || (place.coordinate().is_none() && self.coords.get(place).is_none())
+                !travel::places::is_compound_place(place)
+                    && (refresh
+                        || (place.coordinate().is_none() && self.coords.get(place).is_none()))
             })
             .filter_map(|place| {
                 let key = travel::places::key(place);

@@ -7,10 +7,12 @@ pub mod cards;
 pub mod constants;
 pub mod inspector;
 
+use crate::ely::feedback::InlineMessage;
+use crate::ely::primitives::Severity;
 use gpui_kit::{div, prelude::*, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::primitives::{card, note, placeholder, section};
+use crate::primitives::{note, placeholder, section};
 use crate::theme::ThemeContext;
 use sjel_gpui_core::self_model::{isolated_units, SelfModelResponse, SelfUnit};
 
@@ -108,14 +110,7 @@ impl gpui::Render for SelfPage {
 
         // Notices
         if let Some(notice) = &self.notice {
-            panels.push(card(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.green))
-                    .child(notice.clone())
-                    .into_any_element(),
-                palette,
-            ));
+            panels.push(InlineMessage::new(Severity::Success, notice.clone()).into_any_element());
         }
 
         // Stats Card

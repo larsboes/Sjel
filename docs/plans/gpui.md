@@ -11,7 +11,7 @@ boundaries. The [application README](../../apps/gpui/README.md) owns current int
 ## Priority 1 contracts and controls
 
 - [Make note rename and saves lossless](../tasks/gpui-note-rename.md).
-- [Accept migrated desktop controls](../tasks/gpui-ely-acceptance.md).
+- [Accept migrated desktop controls](../tasks/gpui-ely-acceptance.md) ([Native UI/UX overhaul and Ely component consolidation](gpui-ui-ux-overhaul.md)).
 - [Accept native table accessibility and editing](../tasks/gpui-table-acceptance.md).
 
 

@@ -9,12 +9,14 @@ pub use types::*;
 use std::collections::HashMap;
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::feedback::InlineMessage;
 use crate::ely::forms::{Input, InputEvent, TextInput};
+use crate::ely::primitives::Severity;
 use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{
-    div, point, prelude::*, px, rgb, rgba, Context, Entity, FontWeight, IntoElement, Render,
-    ScrollHandle, SharedString, Subscription, Window,
+    div, point, prelude::*, px, Context, Entity, FontWeight, IntoElement, Render, ScrollHandle,
+    SharedString, Subscription, Window,
 };
 use sjel_gpui_core::scouting::{
     can_promote_to_calendar, CalendarCandidate, CalendarCandidateVerdict, DiscoverResponse,
@@ -23,6 +25,7 @@ use sjel_gpui_core::scouting::{
 use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::data::Repo;
+use crate::primitives::filter_pill;
 use crate::theme::Palette;
 
 pub struct ScoutingPage {
@@ -427,18 +430,10 @@ impl Render for ScoutingPage {
             content = content.child(form);
         }
         if let Some(error) = error {
-            content = content.child(
-                div()
-                    .p_3()
-                    .rounded(px(6.))
-                    .bg(rgba(palette.surface))
-                    .text_sm()
-                    .text_color(rgb(palette.red))
-                    .child(error),
-            );
+            content = content.child(InlineMessage::new(Severity::Danger, error));
         }
         if let Some(notice) = notice {
-            content = content.child(muted(notice, palette));
+            content = content.child(InlineMessage::new(Severity::Info, notice));
         }
         if let Some(scan) = scan {
             content = content.child(muted(
@@ -453,21 +448,17 @@ impl Render for ScoutingPage {
             div().flex().flex_wrap().items_center().gap_2(),
             |row, filter| {
                 let active = self.status_filter == filter;
-                row.child(
-                    Button::new(
-                        SharedString::from(format!("scout-filter-{:?}", filter)),
-                        format!("{} · {}", filter.label(), self.count(filter)),
-                    )
-                    .size(ControlSize::Sm)
-                    .when(active, |button| button.variant(ButtonVariant::Primary))
-                    .when(!active, |button| button.variant(ButtonVariant::Ghost))
-                    .on_click(cx.listener(move |page, _, _, cx| {
+                row.child(filter_pill(
+                    filter.label(),
+                    self.count(filter),
+                    active,
+                    cx.listener(move |page, _, _, cx| {
                         page.status_filter = filter;
                         page.shown = PAGE_SIZE;
                         page.scroll.set_offset(point(px(0.), px(0.)));
                         cx.notify();
-                    })),
-                )
+                    }),
+                ))
             },
         );
         content = content.child(

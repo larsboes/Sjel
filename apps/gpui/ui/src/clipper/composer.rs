@@ -2,7 +2,6 @@
 use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::forms::{Input, TextInput};
 use crate::ely::theme::ControlSize;
-use gpui_kit::component::input::{Textarea, TextareaState};
 use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context, Entity, FontWeight, Window};
 use sjel_gpui_core::clipper::{self, markdown_to_turns, turns_to_markdown, ClipTurn};
 
@@ -14,10 +13,10 @@ use super::types::read_rich_clipboard;
 use super::Clips;
 
 pub(super) struct TurnState {
-    pub(super) prompt: Entity<TextareaState>,
-    pub(super) thoughts: Entity<TextareaState>,
+    pub(super) prompt: Entity<TextInput>,
+    pub(super) thoughts: Entity<TextInput>,
     pub(super) show_thoughts: bool,
-    pub(super) response: Entity<TextareaState>,
+    pub(super) response: Entity<TextInput>,
 }
 
 pub(super) struct ComposerState {
@@ -61,21 +60,21 @@ impl Clips {
         let mut turn_states = Vec::new();
         for turn in turns {
             let prompt = cx.new(|cx| {
-                let mut s = TextareaState::new(window, cx).auto_grow(2, 8);
-                s.set_value(turn.prompt, window, cx);
+                let mut s = TextInput::new(window, cx).multi_line(2, 8);
+                s.set_text(turn.prompt, cx);
                 s
             });
             let thoughts = cx.new(|cx| {
-                let mut s = TextareaState::new(window, cx).auto_grow(2, 6);
+                let mut s = TextInput::new(window, cx).multi_line(2, 6);
                 if let Some(t) = turn.thoughts.as_ref() {
-                    s.set_value(t.clone(), window, cx);
+                    s.set_text(t.clone(), cx);
                 }
                 s
             });
             let show_thoughts = turn.thoughts.is_some();
             let response = cx.new(|cx| {
-                let mut s = TextareaState::new(window, cx).auto_grow(4, 18);
-                s.set_value(turn.response, window, cx);
+                let mut s = TextInput::new(window, cx).multi_line(4, 18);
+                s.set_text(turn.response, cx);
                 s
             });
             turn_states.push(TurnState {
@@ -87,10 +86,10 @@ impl Clips {
         }
         if turn_states.is_empty() {
             turn_states.push(TurnState {
-                prompt: cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8)),
-                thoughts: cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 6)),
+                prompt: cx.new(|cx| TextInput::new(window, cx).multi_line(2, 8)),
+                thoughts: cx.new(|cx| TextInput::new(window, cx).multi_line(2, 6)),
                 show_thoughts: false,
-                response: cx.new(|cx| TextareaState::new(window, cx).auto_grow(4, 18)),
+                response: cx.new(|cx| TextInput::new(window, cx).multi_line(4, 18)),
             });
         }
         self.composer = Some(ComposerState {
@@ -106,10 +105,10 @@ impl Clips {
     pub(super) fn add_turn(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(composer) = &mut self.composer {
             composer.turns.push(TurnState {
-                prompt: cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8)),
-                thoughts: cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 6)),
+                prompt: cx.new(|cx| TextInput::new(window, cx).multi_line(2, 8)),
+                thoughts: cx.new(|cx| TextInput::new(window, cx).multi_line(2, 6)),
                 show_thoughts: false,
-                response: cx.new(|cx| TextareaState::new(window, cx).auto_grow(4, 18)),
+                response: cx.new(|cx| TextInput::new(window, cx).multi_line(4, 18)),
             });
             cx.notify();
         }
@@ -141,14 +140,13 @@ impl Clips {
     pub(super) fn paste_into_prompt(
         &mut self,
         idx: usize,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if let Some((content, _)) = read_rich_clipboard() {
             if let Some(composer) = &mut self.composer {
                 if let Some(turn) = composer.turns.get(idx) {
-                    turn.prompt
-                        .update(cx, |t, cx| t.set_value(content, window, cx));
+                    turn.prompt.update(cx, |t, cx| t.set_text(content, cx));
                     composer.status = Some((true, format!("Pasted prompt into Turn {}.", idx + 1)));
                     cx.notify();
                 }
@@ -162,15 +160,14 @@ impl Clips {
     pub(super) fn paste_into_thoughts(
         &mut self,
         idx: usize,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if let Some((content, _)) = read_rich_clipboard() {
             if let Some(composer) = &mut self.composer {
                 if let Some(turn) = composer.turns.get_mut(idx) {
                     turn.show_thoughts = true;
-                    turn.thoughts
-                        .update(cx, |t, cx| t.set_value(content, window, cx));
+                    turn.thoughts.update(cx, |t, cx| t.set_text(content, cx));
                     composer.status =
                         Some((true, format!("Pasted thoughts into Turn {}.", idx + 1)));
                     cx.notify();
@@ -194,14 +191,13 @@ impl Clips {
     pub(super) fn paste_rich_turn(
         &mut self,
         idx: usize,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if let Some((content, is_html)) = read_rich_clipboard() {
             if let Some(composer) = &mut self.composer {
                 if let Some(turn) = composer.turns.get(idx) {
-                    turn.response
-                        .update(cx, |t, cx| t.set_value(content, window, cx));
+                    turn.response.update(cx, |t, cx| t.set_text(content, cx));
                     composer.status = Some((
                         true,
                         if is_html {
@@ -277,12 +273,12 @@ impl Clips {
 
         let mut turns = Vec::new();
         for (i, turn) in composer.turns.iter().enumerate() {
-            let t_val = turn.thoughts.read(cx).value().trim().to_string();
+            let t_val = turn.thoughts.read(cx).text().trim().to_string();
             turns.push(ClipTurn {
                 index: i + 1,
-                prompt: turn.prompt.read(cx).value().to_string(),
+                prompt: turn.prompt.read(cx).text().to_string(),
                 thoughts: if t_val.is_empty() { None } else { Some(t_val) },
-                response: turn.response.read(cx).value().to_string(),
+                response: turn.response.read(cx).text().to_string(),
             });
         }
         composer.saving = true;
@@ -351,7 +347,7 @@ impl Clips {
             let thoughts_entity = turn.thoughts.clone();
             let show_thoughts = turn.show_thoughts;
             let response_entity = turn.response.clone();
-            let response_text = response_entity.read(cx).value().to_string();
+            let response_text = response_entity.read(cx).text().to_string();
 
             let mut turn_nav = div().flex().items_center().gap_1();
             if i > 0 {
@@ -435,7 +431,7 @@ impl Clips {
                                         })),
                                 ),
                         )
-                        .child(Textarea::new(&prompt_entity)),
+                        .child(Input::new(&prompt_entity)),
                 )
                 // Thoughts section
                 .child(
@@ -474,7 +470,7 @@ impl Clips {
                                         }))
                                 })),
                         )
-                        .children(show_thoughts.then(|| Textarea::new(&thoughts_entity))),
+                        .children(show_thoughts.then(|| Input::new(&thoughts_entity))),
                 )
                 // Response section
                 .child(
@@ -508,7 +504,7 @@ impl Clips {
                                     )),
                                 ),
                         )
-                        .child(Textarea::new(&response_entity)),
+                        .child(Input::new(&response_entity)),
                 )
                 .child(render_citation_audit(&response_text, palette));
 

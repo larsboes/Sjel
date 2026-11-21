@@ -22,6 +22,7 @@ use sjel_gpui_core::soundscape::{
 
 use crate::data::{self, Busy};
 use crate::ely::buttons::{Button, ButtonVariant, ToggleGroup, ToggleItem};
+use crate::ely::data_display::{Badge, Tone};
 use crate::ely::feedback::Toast;
 use crate::ely::forms::Switch;
 use crate::ely::motion::ProgressBar;
@@ -61,7 +62,7 @@ const WRITE_DEBOUNCE: Duration = Duration::from_millis(180);
 /// at 60 Hz and 120 Hz, and short enough that the slide does not become something to wait for.
 const SLIDE_TAU: f32 = 0.06;
 /// The least height the drawn field keeps, enough for the preset label and the playback line.
-const FIELD_HEIGHT: f32 = 190.;
+const FIELD_HEIGHT: f32 = 220.;
 const CONTEXT_POLL: Duration = Duration::from_secs(60);
 
 /// The six presets the conductor knows, in its own order.
@@ -719,16 +720,42 @@ impl Render for SoundscapeSlideover {
         }
 
         let field_height = FIELD_HEIGHT + (self.width - WIDTH).max(0.) * 0.2;
+        let context_label = self.listening_context.reason;
         let field = div()
+            .relative()
             .h(px(field_height))
             .flex_none()
             .rounded(px(10.))
             .overflow_hidden()
-            .when(!playing, |field| field.opacity(0.62))
-            .child(viz::frame(viz::canvas(
-                self.field.clone(),
-                self.audio.visual.clone(),
-            )));
+            .border_1()
+            .border_color(rgb(palette.border))
+            .child(
+                div()
+                    .size_full()
+                    .when(!playing, |field| field.opacity(0.62))
+                    .child(viz::frame(viz::canvas(
+                        self.field.clone(),
+                        self.audio.visual.clone(),
+                    ))),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top_2p5()
+                    .left_2p5()
+                    .right_2p5()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_1p5()
+                    .child(
+                        Badge::new(if playing { "Live" } else { "Paused" })
+                            .tone(if playing { Tone::Accent } else { Tone::Neutral })
+                            .dot(),
+                    )
+                    .child(Badge::new(preset.label()).tone(Tone::Neutral))
+                    .child(Badge::new(context_label).tone(Tone::Neutral)),
+            );
 
         div()
             .on_children_prepainted({
@@ -1015,11 +1042,12 @@ impl SoundscapeSlideover {
             ));
         strip = strip.child(now_playing);
 
+        let mode_label = |mode: Preset| format!("{} · {}", mode.label(), super::preset_mood(mode));
         let modes = [Preset::Focus, Preset::Relax, Preset::Sleep]
             .into_iter()
             .fold(
                 ToggleGroup::new("soundscape-modes").selected([preset.key()]),
-                |control, mode| control.item(ToggleItem::new(mode.key()).label(mode.label())),
+                |control, mode| control.item(ToggleItem::new(mode.key()).label(mode_label(mode))),
             );
         strip = strip.child(
             div()

@@ -1,6 +1,7 @@
 //! Table of recent ingest runs and status badges.
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::data_display::{Badge, Tone};
 use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 use sjel_gpui_core::media::{run_label, MediaIngestRun};
@@ -99,36 +100,26 @@ pub fn render_ingest_runs_table(
                             .child(format!("{} dup", run.duplicates)),
                     )
                     .child(div().w(px(80.0)).child(if run.refused > 0 {
-                        div()
-                            .px(px(6.0))
-                            .py(px(2.0))
-                            .rounded(px(4.0))
-                            .bg(rgb(palette.amber))
-                            .text_size(px(10.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(rgb(0xffffff))
-                            .child(format!("{} refused", run.refused))
+                        Badge::new(format!("{} refused", run.refused))
+                            .tone(Tone::Warning)
+                            .into_any_element()
                     } else {
                         div()
                             .text_size(px(11.0))
                             .text_color(rgb(palette.muted))
                             .child("0 refused")
+                            .into_any_element()
                     }))
                     .child(div().w(px(70.0)).child(if run.failed > 0 {
-                        div()
-                            .px(px(6.0))
-                            .py(px(2.0))
-                            .rounded(px(4.0))
-                            .bg(rgb(palette.red))
-                            .text_size(px(10.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(rgb(0xffffff))
-                            .child(format!("{} failed", run.failed))
+                        Badge::new(format!("{} failed", run.failed))
+                            .tone(Tone::Danger)
+                            .into_any_element()
                     } else {
                         div()
                             .text_size(px(11.0))
                             .text_color(rgb(palette.muted))
                             .child("0 failed")
+                            .into_any_element()
                     }))
                     .child(
                         div()

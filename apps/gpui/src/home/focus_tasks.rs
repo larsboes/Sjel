@@ -1,12 +1,13 @@
-use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context};
 
 use crate::route::Page;
 use crate::selection::Item;
 use crate::workspace::Workspace;
 use sjel_gpui_core::context::TimelineKind;
+use sjel_gpui_ui::ely::data_display::{Badge, Tone};
+use sjel_gpui_ui::ely::forms::Checkbox;
 use sjel_gpui_ui::primitives::{due_badge, list, note, placeholder, priority_pill, row, section};
-use sjel_gpui_ui::theme::{tint, Palette};
+use sjel_gpui_ui::theme::Palette;
 
 pub fn focus_tasks(
     view: &Workspace,
@@ -41,17 +42,19 @@ pub fn focus_tasks(
                     let due = task.due.clone().filter(|d| !d.is_empty());
                     let priority = task.priority.clamp(1, 3);
                     let marked = selected == Some(Item::FocusTask(task_id.clone()));
+                    let toggle_entity = cx.entity();
                     view.selection
                         .mark(row(), marked, palette)
-                        .child(
-                            div().w(px(20.)).child(
-                                Checkbox::new(("home-task-done", index))
-                                    .checked(task.done)
-                                    .on_click(cx.listener(move |view, done: &bool, window, cx| {
-                                        view.toggle_task(task_toggle_id.clone(), *done, window, cx);
-                                    })),
+                        .child(div().w(px(20.)).child(
+                            Checkbox::new(("home-task-done", index), task.done).on_change(
+                                move |done, window, cx| {
+                                    let id = task_toggle_id.clone();
+                                    toggle_entity.update(cx, |view, cx| {
+                                        view.toggle_task(id, done, window, cx);
+                                    });
+                                },
                             ),
-                        )
+                        ))
                         .child(
                             div()
                                 .id(("home-task-title", index))
@@ -107,13 +110,7 @@ pub fn focus_tasks(
                             row.child(
                                 div()
                                     .flex_none()
-                                    .px(px(6.))
-                                    .py(px(1.5))
-                                    .rounded(px(6.))
-                                    .bg(rgba(tint(palette.accent, 0x24)))
-                                    .text_color(rgb(palette.accent))
-                                    .text_xs()
-                                    .child("Space"),
+                                    .child(Badge::new("Space").tone(Tone::Accent)),
                             )
                         })
                         .into_any_element()

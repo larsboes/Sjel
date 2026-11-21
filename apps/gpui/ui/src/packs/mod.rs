@@ -12,19 +12,23 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::ely::buttons::{Button, ButtonVariant};
+use crate::ely::feedback::InlineMessage;
+use crate::ely::primitives::Severity;
 use crate::ely::theme::ControlSize;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::prelude::*;
 use gpui_kit::{div, px, rgb, AnyElement, Context, IntoElement, ScrollHandle, Window};
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::primitives::{card, note, placeholder, section};
+use crate::primitives::{note, placeholder, section};
 use crate::theme::ThemeContext;
-use sjel_gpui_core::packs::{all_packs, matrix_rows, PacksView};
+use sjel_gpui_core::packs::{
+    all_packs, installed_harnesses, matrix_rows, row_needs_attention, status_of, PacksView,
+};
 
 pub(crate) use cards::{render_harness_cards, render_orphan_cards, render_strays_section};
 pub(crate) use matrix::render_matrix_table;
-pub(crate) use types::Derived;
+pub(crate) use types::{Derived, ResolvedMatrixCell, ResolvedMatrixRow};
 
 pub struct PacksPage {
     pub(crate) repo: Repo,
@@ -86,9 +90,37 @@ impl PacksPage {
         }
         let rows = matrix_rows(view);
         let pack_names = all_packs(&rows);
+        let shown = installed_harnesses(view);
+        let resolved_rows = rows
+            .iter()
+            .map(|r| {
+                let cells = shown
+                    .iter()
+                    .map(|h| ResolvedMatrixCell {
+                        harness_id: h.id.clone(),
+                        write_supported: h.write_supported,
+                        status: status_of(h, &r.pack, &r.skill).to_owned(),
+                        button_id: gpui_kit::SharedString::from(format!(
+                            "cell-{}-{}-{}",
+                            h.id, r.pack, r.skill
+                        )),
+                    })
+                    .collect();
+                ResolvedMatrixRow {
+                    row_id: gpui_kit::SharedString::from(format!(
+                        "matrix-row-{}-{}",
+                        r.pack, r.skill
+                    )),
+                    pack: r.pack.clone(),
+                    skill: r.skill.clone(),
+                    needs_attention: row_needs_attention(view, r),
+                    cells,
+                }
+            })
+            .collect();
         self.derived = Some(Derived {
             loaded_at,
-            rows,
+            resolved_rows,
             pack_names,
         });
     }
@@ -213,24 +245,10 @@ impl gpui::Render for PacksPage {
 
         // Notices or errors
         if let Some(notice) = &self.notice {
-            panels.push(card(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.green))
-                    .child(notice.clone())
-                    .into_any_element(),
-                palette,
-            ));
+            panels.push(InlineMessage::new(Severity::Success, notice.clone()).into_any_element());
         }
         if let Some(err) = &self.write_error {
-            panels.push(card(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.red))
-                    .child(err.clone())
-                    .into_any_element(),
-                palette,
-            ));
+            panels.push(InlineMessage::new(Severity::Danger, err.clone()).into_any_element());
         }
 
         // Orphaned alerts
@@ -276,8 +294,14 @@ impl gpui::Render for PacksPage {
             )
             .child(filter_button);
 
-        let matrix =
-            render_matrix_table(self, view, &derived.rows, &self.matrix_scroll, palette, cx);
+        let matrix = render_matrix_table(
+            self,
+            view,
+            &derived.resolved_rows,
+            &self.matrix_scroll,
+            palette,
+            cx,
+        );
         panels.push(
             div()
                 .flex()
@@ -360,5 +384,86 @@ mod tests {
         let page = PacksPage::new(repo);
         let packs = vec!["coding".to_string(), "deliberation".to_string()];
         assert_eq!(page.pick_pack("claude", &packs), "coding");
+    }
+
+    #[gpui::test]
+    fn packs_matrix_frame_cost_stays_within_budget(cx: &mut gpui::TestAppContext) {
+        use sjel_gpui_core::packs::{HarnessView, PackUnitView};
+        use std::time::Instant;
+
+        crate::test_support::init(cx);
+        let harnesses: Vec<HarnessView> = ["claude", "pi", "codex", "opencode"]
+            .into_iter()
+            .map(|id| {
+                let units = (0..64)
+                    .map(|idx| PackUnitView {
+                        pack: format!("pack-{}", idx / 8),
+                        skill: format!("skill-{idx:02}"),
+                        status: match idx % 4 {
+                            0 => "current",
+                            1 => "drifted",
+                            2 => "outdated",
+                            _ => "not_installed",
+                        }
+                        .into(),
+                        ..Default::default()
+                    })
+                    .collect();
+                HarnessView {
+                    id: id.into(),
+                    label: id.to_uppercase(),
+                    installed: true,
+                    write_supported: true,
+                    units,
+                    ..Default::default()
+                }
+            })
+            .collect();
+
+        let (page, cx) = crate::test_support::mount_root(cx, None, |_, _| {
+            let mut page =
+                PacksPage::new(Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)));
+            page.packs.value = Some(Arc::new(PacksView {
+                harnesses,
+                ..Default::default()
+            }));
+            page
+        });
+        cx.run_until_parked();
+
+        let mut samples_us = Vec::with_capacity(40);
+        let palette = crate::theme::Palette::dark();
+        for frame in 0..40 {
+            cx.update(|_window, cx| {
+                page.update(cx, |page, cx| {
+                    if frame % 5 == 0 {
+                        page.only_attention = !page.only_attention;
+                    }
+                    page.settle_derived();
+                    let start = Instant::now();
+                    let view = page.packs.value.as_ref().expect("packs loaded");
+                    let derived = page.derived.as_ref().expect("derived settled");
+                    let _el = render_matrix_table(
+                        page,
+                        view,
+                        &derived.resolved_rows,
+                        &page.matrix_scroll,
+                        palette,
+                        cx,
+                    );
+                    samples_us.push(start.elapsed().as_micros() as u64);
+                });
+            });
+        }
+        samples_us.sort_unstable();
+        let p50_ms = samples_us[samples_us.len() / 2] as f64 / 1000.0;
+        let p95_ms = samples_us[(samples_us.len() * 95) / 100] as f64 / 1000.0;
+        let max_ms = *samples_us.last().unwrap_or(&0) as f64 / 1000.0;
+        let over_budget = samples_us.iter().filter(|&&us| us > 8_300).count();
+
+        assert!(
+            p50_ms < 8.3 && p95_ms < 8.3,
+            "Packs matrix frame cost (p50={p50_ms:.2} ms, p95={p95_ms:.2} ms, max={max_ms:.2} ms, over_budget={over_budget}/40) exceeded 8.3 ms budget"
+        );
     }
 }

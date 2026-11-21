@@ -2,12 +2,12 @@
 
 use std::rc::Rc;
 
+use crate::ely::buttons::{Button, ButtonVariant};
 use crate::ely::data_display::Tone;
 use crate::ely::layout::Sheet;
 use crate::ely::primitives::Place;
 use crate::ely::tables::{Cell, Column, DataTable, Row, RowAction};
-use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
+use crate::ely::theme::ControlSize;
 use gpui_kit::{div, prelude::*, px, rems, rgb, rgba, AnyElement, Context, FontWeight};
 
 use crate::data::Remote;
@@ -228,9 +228,8 @@ impl Projects {
                         .child(format!("Could not load mail proposals: {error}")),
                 )
                 .child(
-                    Button::new("project-mail-retry")
-                        .small()
-                        .label("Retry")
+                    Button::new("project-mail-retry", "Retry")
+                        .size(ControlSize::Sm)
                         .on_click(cx.listener(|view, _, _, cx| view.load_project_mail(false, cx))),
                 );
         }
@@ -270,9 +269,8 @@ impl Projects {
                 ));
             if let Some(url) = proposal.gmail_url() {
                 detail = detail.child(
-                    Button::new("project-mail-source")
-                        .small()
-                        .label("Open source in Gmail")
+                    Button::new("project-mail-source", "Open source in Gmail")
+                        .size(ControlSize::Sm)
                         .on_click(move |_, _, cx| cx.open_url(&url)),
                 );
             }
@@ -288,13 +286,15 @@ impl Projects {
                 for record in rows {
                     let path = record.path.clone();
                     target_list = target_list.child(
-                        Button::new(format!("mail-target-{path}"))
-                            .small()
-                            .label(format!("{} · {}", record.title, record.path))
-                            .disabled(self.mail_busy || self.mail_target_loading)
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.select_mail_target(path.clone(), cx)
-                            })),
+                        Button::new(
+                            format!("mail-target-{path}"),
+                            format!("{} · {}", record.title, record.path),
+                        )
+                        .size(ControlSize::Sm)
+                        .disabled(self.mail_busy || self.mail_target_loading)
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.select_mail_target(path.clone(), cx)
+                        })),
                     );
                 }
                 if rows.is_empty() {
@@ -324,16 +324,14 @@ impl Projects {
                             .child(target.content.clone()),
                     )
                     .child(
-                        Button::new("project-mail-approve")
-                            .small()
-                            .primary()
-                            .label("Confirm approval and append evidence")
-                            .disabled(
-                                self.mail_busy || self.mail.loading || self.mail.error.is_some(),
-                            )
-                            .on_click(
-                                cx.listener(|view, _, _, cx| view.decide_project_mail(true, cx)),
-                            ),
+                        Button::new(
+                            "project-mail-approve",
+                            "Confirm approval and append evidence",
+                        )
+                        .size(ControlSize::Sm)
+                        .primary()
+                        .disabled(self.mail_busy || self.mail.loading || self.mail.error.is_some())
+                        .on_click(cx.listener(|view, _, _, cx| view.decide_project_mail(true, cx))),
                     );
             }
             detail = detail.child(
@@ -342,9 +340,8 @@ impl Projects {
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("project-mail-reject")
-                            .small()
-                            .label("Reject proposal")
+                        Button::new("project-mail-reject", "Reject proposal")
+                            .size(ControlSize::Sm)
                             .disabled(
                                 self.mail_busy || self.mail.loading || self.mail.error.is_some(),
                             )
@@ -353,10 +350,9 @@ impl Projects {
                             ),
                     )
                     .child(
-                        Button::new("project-mail-close")
-                            .small()
-                            .ghost()
-                            .label("Close review")
+                        Button::new("project-mail-close", "Close review")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Ghost)
                             .disabled(self.mail_busy || self.mail_target_loading)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.mail_selected = None;
@@ -462,9 +458,8 @@ impl Projects {
             body = body.child(table);
             if self.mail_more {
                 body = body.child(
-                    Button::new("project-mail-more")
-                        .small()
-                        .label("Load older proposals")
+                    Button::new("project-mail-more", "Load older proposals")
+                        .size(ControlSize::Sm)
                         .disabled(self.mail.loading || self.mail_busy)
                         .on_click(cx.listener(|view, _, _, cx| view.load_project_mail(true, cx))),
                 );

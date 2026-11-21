@@ -1274,6 +1274,21 @@ impl Workspace {
                 self.right_panel.open_on(Seat::Agent);
                 cx.notify();
             }
+            FinderEvent::Follow(intent) => match intent {
+                sjel_gpui_core::agent::AgentFollowIntent::OpenTarget(target) => {
+                    self.open_target(target.clone(), window, cx);
+                }
+                sjel_gpui_core::agent::AgentFollowIntent::FocusProposal { .. } => {
+                    self.right_panel.open_on(Seat::Agent);
+                    cx.notify();
+                }
+                sjel_gpui_core::agent::AgentFollowIntent::FinderSearch(_) => {}
+            },
+            FinderEvent::PinToHome(saved) => {
+                self.home_prefs.pin_view(saved.clone());
+                let _ = self.home_prefs.save();
+                cx.notify();
+            }
             FinderEvent::Closed => {
                 self.refocus = true;
                 cx.notify();

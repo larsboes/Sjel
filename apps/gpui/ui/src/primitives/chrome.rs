@@ -1,9 +1,13 @@
 //! Sub-tabs, keyboard shortcut bars, tabular numeric cells, and sort/column-width helpers.
 
-use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, App, Pixels, SharedString, Window};
+use gpui_kit::{div, prelude::*, rgb, AnyElement, App, Pixels, SharedString, Window};
 
-use super::tokens::RADIUS_SM;
-use crate::ely::{forms::Choice, navigation::Tabs};
+use super::tokens::FONT_MONO_TABULAR;
+use crate::ely::{
+    forms::Choice,
+    navigation::Tabs,
+    typography::{tabular, KeyBar, ShortcutHint},
+};
 use crate::theme::Palette;
 
 /// Standardised sub-tab strip with optional counts.
@@ -117,51 +121,28 @@ pub fn cycle_column_width(
 
 /// Right-aligned monospace tabular numeric cell for amounts, counts, and timestamps.
 pub fn tabular_cell(value: impl Into<SharedString>, width: Pixels, color: u32) -> AnyElement {
-    div()
-        .w(width)
-        .flex_none()
-        .text_right()
-        .font_family(".AppleSystemUIFontMonospaced")
-        .text_xs()
-        .text_color(rgb(color))
-        .truncate()
-        .child(value.into())
-        .into_any_element()
+    tabular(
+        div()
+            .w(width)
+            .flex_none()
+            .text_right()
+            .font_family(FONT_MONO_TABULAR)
+            .text_xs()
+            .text_color(rgb(color))
+            .truncate()
+            .child(value.into()),
+    )
+    .into_any_element()
 }
 
 /// Single keyboard shortcut hint (`[key] action`) for footer bars.
-pub fn shortcut_hint(key: &'static str, action: &'static str, palette: Palette) -> AnyElement {
-    div()
-        .flex()
-        .items_center()
-        .gap_1()
-        .child(
-            div()
-                .px_1p5()
-                .py(px(1.))
-                .rounded(RADIUS_SM)
-                .bg(rgba(palette.raised))
-                .border_1()
-                .border_color(rgba(palette.border))
-                .font_family(".AppleSystemUIFontMonospaced")
-                .text_xs()
-                .text_color(rgb(palette.text))
-                .child(key),
-        )
-        .child(div().text_xs().text_color(rgb(palette.muted)).child(action))
-        .into_any_element()
+pub fn shortcut_hint(key: &'static str, action: &'static str, _palette: Palette) -> AnyElement {
+    ShortcutHint::new(key, action).into_any_element()
 }
 
 /// Footer bar of keyboard shortcut hints.
-pub fn key_bar(hints: &[(&'static str, &'static str)], palette: Palette) -> AnyElement {
-    div()
-        .flex()
-        .flex_wrap()
-        .items_center()
-        .gap_3()
-        .pt_2()
-        .text_xs()
-        .text_color(rgb(palette.muted))
-        .children(hints.iter().map(|(k, a)| shortcut_hint(k, a, palette)))
+pub fn key_bar(hints: &[(&'static str, &'static str)], _palette: Palette) -> AnyElement {
+    KeyBar::new()
+        .hints(hints.iter().copied())
         .into_any_element()
 }

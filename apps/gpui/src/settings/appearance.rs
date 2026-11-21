@@ -1,7 +1,7 @@
 //! Appearance settings: Theme mode, accent colors, liquid glass, opacities, and terminal styling.
 
-use gpui_kit::component::switch::Switch;
 use gpui_kit::{AnyElement, Context, SharedString};
+use sjel_gpui_ui::ely::forms::Switch;
 use sjel_gpui_ui::theme::Palette;
 use sjel_gpui_ui::theme::{
     AppearanceSettings, BackgroundTone, GlassStyle, TerminalFont, ThemeMode, WindowOpacity,
@@ -106,27 +106,35 @@ pub(super) fn appearance(
             ..settings
         },
     );
-    let glass = Switch::new("liquid-glass")
-        .checked(settings.glass == GlassStyle::LiquidGlass)
-        .on_click(cx.listener(move |view, on: &bool, _, cx| {
-            let glass = if *on {
+    let glass_owner = cx.entity();
+    let glass = Switch::new("liquid-glass", settings.glass == GlassStyle::LiquidGlass).on_change(
+        move |on, _, cx| {
+            let glass = if on {
                 GlassStyle::LiquidGlass
             } else {
                 GlassStyle::Flat
             };
-            view.set_appearance(AppearanceSettings { glass, ..settings }, cx);
-        }));
-    let soundscape_mini_player = Switch::new("soundscape-mini-player-setting")
-        .checked(settings.soundscape_mini_player)
-        .on_click(cx.listener(|view, on: &bool, _, cx| {
+            glass_owner.update(cx, |view, cx| {
+                view.set_appearance(AppearanceSettings { glass, ..settings }, cx);
+            });
+        },
+    );
+    let mini_owner = cx.entity();
+    let soundscape_mini_player = Switch::new(
+        "soundscape-mini-player-setting",
+        settings.soundscape_mini_player,
+    )
+    .on_change(move |on, _, cx| {
+        mini_owner.update(cx, |view, cx| {
             view.set_appearance(
                 AppearanceSettings {
-                    soundscape_mini_player: *on,
+                    soundscape_mini_player: on,
                     ..view.appearance_settings
                 },
                 cx,
             );
-        }));
+        });
+    });
     vec![
         group(
             "THEME",

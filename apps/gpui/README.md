@@ -245,7 +245,7 @@ dependency resolution.
 |---|---|
 | `.` | The Mac app |
 | `core/` | What both apps share: the destinations, the shell client, a paired device's client, the offline replica and the two-way sync. No GPUI types. |
-| `ui/` | Shared theme tokens, GPUI pages, and the Mac's NSH comparison views. |
+| `ui/` | Shared theme tokens and GPUI pages for desktop and phone. |
 | `ios/` | Phone event coordinator, pairing, sync and notifications in `src/`; UIKit host in `host/`. |
 
 On iOS, UIKit owns the window, safe areas, and scene lifecycle. `ios/src/gpui_host.rs` mounts

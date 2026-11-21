@@ -26,7 +26,7 @@ Every chart in this plan uses data Sjel already stores (statuses, due dates, pri
 1. **Blocker-chain and Unblockers view:** Surface `blocked_by` relationships with an **Unblockers** filter/sort and visual highlighting in `task_panel.rs` so completing a root task highlights the downstream tasks it unlocks.
 2. **Keyboard-first triage mode:** Support `J`/`K` row navigation with single-key triage actions (status, priority, due date shortcuts for today/next week, project assignment) in `AllTasks`, keeping rare or destructive edits in the side panel.
 3. **Dimmed inactive rows and stale indicator:** Keep done and cancelled tasks dimmed in place when toggled visible, and show a subtle age chip on tasks stuck in `in_progress` or `blocked`.
-4. **Pinned Next Action promotion:** Allow pinning 1–3 tasks per project as *Next* so `Hubs` and `Today` (`nsh_today.rs`) surface the immediate next step without opening the full project.
+4. **Pinned Next Action promotion:** Allow pinning 1–3 tasks per project as *Next* so `Hubs` and `Today` (`phone_today.rs`) surface the immediate next step without opening the full project.
 
 ## 4. Notes Capture, Structure, and Linking
 

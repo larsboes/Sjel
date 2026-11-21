@@ -318,20 +318,6 @@ mod tests {
 
     pub(crate) static TEST_STATE: Mutex<()> = Mutex::new(());
 
-    #[cfg(all(feature = "nsh", not(target_os = "ios")))]
-    fn record(path: &str, kind: &str, title: &str, done: bool) -> ProjectRecord {
-        ProjectRecord {
-            project: String::new(),
-            path: path.to_owned(),
-            kind: kind.to_owned(),
-            title: title.to_owned(),
-            content: String::new(),
-            done,
-            due: None,
-            priority: 1,
-        }
-    }
-
     fn reset(day: NaiveDate) {
         *state() = State {
             frozen: Some(day),
@@ -385,42 +371,5 @@ mod tests {
         let view = snapshot_of(&state).view.expect("a view");
         assert_eq!(view.entries[0].spot, Spot::Next);
         assert!(!view.entries.iter().any(|row| row.spot == Spot::Now));
-    }
-
-    #[cfg(all(feature = "nsh", not(target_os = "ios")))]
-    #[test]
-    fn the_screen_lists_tasks_and_reports_presses_to_the_host() {
-        use nsh_core::element::Root;
-        use nsh_engine::EngineConfig;
-        use nsh_testing::Headless;
-
-        let _guard = TEST_STATE.lock().unwrap();
-        reset(NaiveDate::from_ymd_opt(2026, 10, 24).unwrap());
-        let seen = Arc::new(Mutex::new(Vec::new()));
-        let sink = seen.clone();
-        set_host(move |event| sink.lock().unwrap().push(event));
-        set_records(vec![
-            record(
-                "Life/tasks/a.md",
-                "task",
-                "Paper aus der Bachelorarbeit",
-                false,
-            ),
-            record("Life/tasks/b.md", "task", "Buy 8TB drive", false),
-        ]);
-        let mut app = Headless::start(EngineConfig {
-            ui_sets: vec![nsh_base::registry()],
-            ..EngineConfig::new(Root::of::<crate::nsh_today::TodayScreen>())
-        })
-        .expect("the Today screen starts");
-        app.wait_for("text:Saturday, 24 October").unwrap();
-        app.wait_for("text:Buy 8TB drive").unwrap();
-        app.wait_for("text:Nothing on the calendar today.").unwrap();
-        app.press("text:People & Places").unwrap();
-        app.press("text:Refresh").unwrap();
-        set_note(Some("Copy is a day old.".to_owned()));
-        app.wait_for("text:Copy is a day old.").unwrap();
-        let events = seen.lock().unwrap().clone();
-        assert_eq!(events, vec![TodayEvent::People, TodayEvent::Refresh]);
     }
 }

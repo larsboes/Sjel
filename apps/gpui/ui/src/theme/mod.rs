@@ -5,14 +5,14 @@
 pub mod density;
 #[cfg(feature = "gpui")]
 pub mod ely;
-pub mod nsh;
 pub mod palette;
+mod phone;
 pub mod settings;
 pub mod terminal;
 
 pub use density::*;
-pub use nsh::{forced_dark, nsh_background, nsh_terminal_background, nsh_theme_overrides};
 pub use palette::*;
+pub use phone::{forced_dark, phone_background};
 pub use settings::*;
 pub use terminal::*;
 

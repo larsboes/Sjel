@@ -40,11 +40,6 @@ mod phone_system;
 mod projects;
 mod runtime;
 mod settings;
-#[cfg(not(target_os = "ios"))]
-use sjel_gpui_ui::nsh_documents::{
-    nsh_page as current_page, set_nsh_page as open_page, NshPage as PhonePage,
-};
-#[cfg(target_os = "ios")]
 use sjel_gpui_ui::phone_navigation::{open as open_page, page as current_page, Page as PhonePage};
 
 use host::*;
@@ -148,6 +143,7 @@ enum Event {
     Calendar(CalendarEvent),
     Map(sjel_gpui_ui::nsh_map::MapEvent),
     Interior(sjel_gpui_ui::nsh_interior::InteriorEvent),
+    #[cfg(target_os = "ios")]
     Retry,
     Zoom(i32),
     /// A press on the Settings screen (`sjel_gpui_ui::phone_settings`).
@@ -228,8 +224,6 @@ pub fn start() {
         phone_calendar::set_host(|event| announce(Event::Calendar(event)));
         phone_calendar::open_day(launch_day());
         sjel_gpui_ui::nsh_map::set_host(|event| announce(Event::Map(event)));
-        #[cfg(not(target_os = "ios"))]
-        sjel_gpui_ui::nsh_projects::set_retry(|| announce(Event::Retry));
         sjel_gpui_ui::nsh_interior::set_host(|event| announce(Event::Interior(event)));
         sjel_gpui_ui::nsh_terminal::set_unlock(unlock);
         sjel_gpui_ui::nsh_terminal::set_zoom(|steps| announce(Event::Zoom(steps)));
@@ -319,7 +313,7 @@ impl AppState {
         #[cfg(target_os = "ios")]
         projects::set_sync(pending, self.synced.as_deref());
         #[cfg(not(target_os = "ios"))]
-        sjel_gpui_ui::nsh_projects::set_sync(pending, self.synced.as_deref());
+        let _ = pending;
         let mut reminders = Vec::new();
         match notify::disabled_reason() {
             Some(reason) => reminders.push(reason.to_owned()),

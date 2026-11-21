@@ -19,9 +19,8 @@ GPUI. Capability writes, stale-revision
 refusal, undo, proposals, sync status and cross-capability routing remain Sjel-owned.
 Current fork and renderer decisions live in [UI-stack research](../../research/ui-stack.md).
 Keep the host and Ely on the same GPUI Kit and engine versions. Match `gpui-pre-leaks` to Kit's
-`gpui-pre` version, and check the Mac NSH trial when GPUI Fast changes. The Mac trial shares the
-host's GPUI Fast instance. The phone uses the corresponding `gpui-pre` engine with the
-GPUI Mobile backend.
+`gpui-pre` version. The desktop uses GPUI Fast by default; the phone uses the corresponding
+`gpui-pre` engine with the GPUI Mobile backend.
 
 Phone Documents/Mail are online-first over signed device requests. Only selected offline
 documents and opened mail are retained with complete Data Protection. Offline actions queue

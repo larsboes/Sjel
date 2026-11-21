@@ -12,18 +12,11 @@ impl AppState {
                 sjel_gpui_ui::phone_capture::set_store(Some(store));
                 phone_today::set_store(Some(repo.clone()));
                 phone_calendar::set_store(Some(repo.clone()));
-                #[cfg(not(target_os = "ios"))]
-                sjel_gpui_ui::nsh_projects::set_repo(repo.clone());
                 self.repo = Some(repo);
             }
         }
         #[cfg(target_os = "ios")]
         crate::projects::set_board(self.repo.clone(), board.blocked().to_vec());
-        #[cfg(not(target_os = "ios"))]
-        {
-            sjel_gpui_ui::nsh_projects::set_blocked(board.blocked().to_vec());
-            sjel_gpui_ui::nsh_projects::load();
-        }
         sjel_gpui_ui::phone_capture::load();
         phone_today::set_records(board.records().to_vec());
         phone_today::set_travel(board.pending(), self.client.is_some());
@@ -235,6 +228,7 @@ impl AppState {
                     Err(error) => format!("Nothing moved: {error}"),
                 });
             }
+            #[cfg(target_os = "ios")]
             Event::Retry => {
                 if self.client.is_some() {
                     self.maybe_sync();

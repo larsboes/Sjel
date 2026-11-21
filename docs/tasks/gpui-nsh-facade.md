@@ -1,10 +1,11 @@
 ---
 id: "gpui-nsh-facade"
 title: "Isolate NSH behind an app-owned facade"
-state: "backlog"
+state: "cancelled"
 area: "gpui"
 kind: "maintenance"
 priority: 1
+reason: "The Mac NSH trial and renderer dependency are removed. Shared GPUI phone acceptance owns live regression checks."
 spec: "docs/architecture/native-ui-boundaries.md"
 ---
 

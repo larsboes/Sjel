@@ -11,6 +11,8 @@ crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 sjel-gpui-core.workspace = true
+sjel-gpui-ui = { workspace = true, default-features = false, features = ["gpui"] }
+gpui-kit = { workspace = true, features = ["assets"] }
 device-auth = { path = "../../../crates/device-auth" }
 health-api = { path = "../../../crates/health-api" }
 # `SJEL_DAY` names the calendar day a screenshot opens on (src/lib.rs, `launch_day`).
@@ -20,17 +22,8 @@ serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["time"] }
 
-[target.'cfg(not(target_os = "ios"))'.dependencies]
-sjel-gpui-ui = { workspace = true, default-features = false, features = ["nsh"] }
-
 [target.'cfg(target_os = "ios")'.dependencies]
-gpui-kit = { workspace = true, features = ["assets"] }
 gpui-mobile = { package = "gpui-pre-mobile", git = "https://github.com/larsboes/gpui-mobile", rev = "98f6466", default-features = false, features = ["camera", "video_player"] }
-
-[target.'cfg(target_os = "ios")'.dependencies.sjel-gpui-ui]
-workspace = true
-default-features = false
-features = ["gpui"]
 
 [target.'cfg(target_os = "ios")'.dependencies.objc2]
 version = "0.6.5"

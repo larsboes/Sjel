@@ -78,3 +78,5 @@ Swift continues to provide the system integrations.
 - Signed development build 2330 archived successfully. Its signature, package integrity, and
   URL scheme were verified. USB installation and a separate device lookup confirmed build 2330.
   CoreDevice timed out when asked to launch it. XCTest interaction checks remain open.
+- The desktop NSH trial and shared renderer dependency are removed. The native workspace tests
+  and `aarch64-apple-ios` Rust check pass. The iPhone app was not rebuilt or installed for this cleanup.

@@ -20,8 +20,6 @@ mod header;
 mod home;
 #[cfg(target_os = "macos")]
 mod macos_glass;
-#[cfg(feature = "nsh-trial")]
-mod nsh_trial;
 mod permissions;
 #[cfg(target_os = "macos")]
 mod roomplan;
@@ -166,13 +164,6 @@ fn main() {
             open_link(&url, cx);
         }
         script::run_from_env(cx);
-        #[cfg(feature = "nsh-trial")]
-        if matches!(
-            std::env::var("SJEL_NSH_TRIAL").as_deref(),
-            Ok("1" | "documents" | "mail")
-        ) {
-            nsh_trial::open(cx);
-        }
         // `SJEL_GPUI_SOUNDSCAPE=1`: open the player at launch, so a test or a screenshot finds it
         // without a click. `SJEL_GPUI_SOUNDSCAPE=play` also starts it, and starts it *through the
         // conductor* -- the instructor of state is not this window, so a local `set_playing` here

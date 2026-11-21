@@ -121,7 +121,6 @@ impl Screen {
     }
 
     /// Every line the parser still holds, history included.
-    #[cfg_attr(not(feature = "nsh"), allow(dead_code))]
     pub(crate) fn select_all(&mut self) {
         let top = GridPoint::new(Line(-(self.term.grid().history_size() as i32)), Column(0));
         let bottom = GridPoint::new(Line(self.size.rows as i32 - 1), Column(self.size.cols - 1));
@@ -142,7 +141,6 @@ impl Screen {
         }
     }
 
-    #[cfg_attr(not(feature = "nsh"), allow(dead_code))]
     pub(crate) fn clear_selection(&mut self) {
         self.term.selection = None;
     }
@@ -153,7 +151,6 @@ impl Screen {
             .filter(|text| !text.is_empty())
     }
 
-    #[cfg_attr(not(feature = "nsh"), allow(dead_code))]
     pub(crate) fn bracketed_paste(&self) -> bool {
         self.term.mode().contains(TermMode::BRACKETED_PASTE)
     }

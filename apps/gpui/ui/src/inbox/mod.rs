@@ -1,5 +1,5 @@
 //! Inbox on the Mac: the triage page (`triage`). The phone's capture screen is NSH
-//! (`crate::nsh_capture`).
+//! (`crate::phone_capture`).
 
 pub mod capture;
 pub mod triage;

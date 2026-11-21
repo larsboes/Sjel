@@ -966,10 +966,10 @@ revisit = "Decide if NSH stops shipping or loses its UIKit backend."
 
 [nsh]
 url = "https://github.com/longbridge/nsh"
-verdict = "adopt"
+verdict = "reject"
 license = "Apache-2.0"
-summary = "Rust UI framework that renders with each platform's own views; the phone's renderer"
-why = "UIKit renders the phone app and the GPUI backend embeds the same screens in the Mac trial. The native workspace pins the NSH commit that removes the conflicting IntoElement implementations for GPUI Fast 0.1.16 and later. Evidence and platform boundaries are in research/ui-stack.md."
+summary = "Native renderer evaluated for desktop and phone"
+why = "The phone and desktop use shared GPUI and Ely. Neither builds NSH, and the desktop comparison target is removed. The evaluation remains in research/ui-stack.md."
 
 
 [ely-gpui-component]

@@ -18,7 +18,7 @@ unsafe extern "C" {
 }
 
 pub(crate) fn apply_appearance(settings: &sjel_gpui_ui::AppearanceSettings) {
-    use sjel_gpui_ui::theme::{forced_dark, nsh_background};
+    use sjel_gpui_ui::theme::{forced_dark, phone_background};
     let mut current = APPEARANCE.lock().expect("appearance lock");
     if current.as_ref() == Some(settings) {
         return;
@@ -35,8 +35,8 @@ pub(crate) fn apply_appearance(settings: &sjel_gpui_ui::AppearanceSettings) {
     unsafe {
         sjel_ios_phone_cover(
             style,
-            nsh_background(settings, false),
-            nsh_background(settings, true),
+            phone_background(settings, false),
+            phone_background(settings, true),
         )
     };
 }

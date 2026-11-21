@@ -9,12 +9,13 @@ use gpui::{
 
 use super::{
     emit, feed, fit, load_tiles, publish, resize, select, state, travel, zoom, Fingers, MapEvent,
-    PlaceCategory, Snapshot, TravelRoute, TripSection,
+    PlaceCategory, Snapshot, TravelRoute,
 };
 use crate::{
     ely::buttons::{Button, ButtonVariant},
     theme::ThemeContext,
 };
+use sjel_gpui_core::travel::TripSection;
 
 pub fn pinch(delta: f64, point: (f32, f32)) {
     if !delta.is_finite() || delta == 0. {

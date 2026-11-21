@@ -6,8 +6,8 @@ use gpui::{
 };
 
 use super::{
-    connections, download, feed, load, nsh_map, open, resolve, search, suggest, travel, Plan,
-    PlanExt, Query, Rank, Snapshot, Sort, Station, TravelRoute, TripRead, TripSection,
+    download, feed, load, nsh_map, open, resolve, search, suggest, travel, Plan, PlanExt, Query,
+    Snapshot, Station, TravelRoute, TripRead, TripSection,
 };
 use crate::{
     ely::{
@@ -18,6 +18,7 @@ use crate::{
     phone_calendar,
     phone_navigation::{self, Page},
 };
+use sjel_gpui_core::travel::connections::{self, Rank, Sort};
 
 pub struct PhoneTravel {
     snapshot: Snapshot,

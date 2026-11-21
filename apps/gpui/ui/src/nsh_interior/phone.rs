@@ -1,12 +1,14 @@
 //! Room scan review, placements and layout planning in the phone GPUI window.
 
+use std::collections::BTreeSet;
+
 use gpui::{
     canvas, div, fill, point, prelude::*, px, rgb, size, Bounds, Context, Div, Entity, Focusable,
     FontWeight, PathBuilder, SharedString, Subscription, Task, Window,
 };
 
 use super::{
-    emit, feed, load, perform, plan, publish, state, Action, BTreeSet, InteriorEvent, PlanningKind,
+    emit, feed, load, perform, plan, publish, state, Action, InteriorEvent, PlanningKind,
     RoomPlanDecision, RoomPlanDraft, RoomPlanSavedLayoutItem, Snapshot,
 };
 use crate::{

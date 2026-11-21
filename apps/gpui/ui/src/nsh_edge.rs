@@ -1,19 +1,7 @@
 //! Panel selection, audio lifecycle, and activity status.
-#[cfg(not(target_os = "ios"))]
-use crate::nsh_documents::nsh_page;
-#[cfg(not(target_os = "ios"))]
-use crate::nsh_documents::{set_nsh_page, NshPage};
-#[cfg(not(target_os = "ios"))]
-use crate::nsh_ui::{action, caption, heading, snapshot};
-#[cfg(target_os = "ios")]
-use crate::phone_navigation::page as nsh_page;
-#[cfg(target_os = "ios")]
-use crate::phone_navigation::{open as set_nsh_page, Page as NshPage};
+use crate::phone_navigation::{open as set_nsh_page, page as nsh_page, Page as NshPage};
 use std::sync::{Mutex, OnceLock};
 use tokio::sync::watch;
-
-#[cfg(not(target_os = "ios"))]
-use nsh_core::prelude::*;
 
 #[cfg(target_os = "ios")]
 mod phone;
@@ -157,77 +145,3 @@ pub fn set_activity(activity: Activity) {
     state.activity = activity;
     feed().tx.send_replace(state.clone());
 }
-#[cfg(not(target_os = "ios"))]
-mod legacy {
-    use super::*;
-    /// The shared side panel, with native text controls on every seat.
-    #[component]
-    pub fn EdgeScreen() -> impl IntoElement {
-        let snap = snapshot(&feed().tx);
-        let seat = computed(move || snap.with(|s| s.seat));
-        let mut tabs = view().flex_row().flex_wrap();
-        for value in Seat::ALL {
-            tabs = tabs.child(action(value.label(), move || open(value)));
-        }
-        view()
-        .flex_1()
-        .child(
-            view()
-                .flex_row()
-                .child(tabs.flex_1())
-                .child(action("Close panel", close)),
-        )
-        .child(view().flex_1().child(dynamic(move || {
-            match seat.get() {
-                #[cfg(target_os = "ios")]
-                Seat::Scratchpad => native(PHONE_SCRATCHPAD_COMPONENT).flex_1().into_element(),
-                #[cfg(not(target_os = "ios"))]
-                Seat::Scratchpad => scroll()
-                    .flex_1()
-                    .px_4()
-                    .child(
-                        view()
-                            .gap_2()
-                            .child(heading("Daily Scratchpad"))
-                            .child(caption(
-                                "Quick thoughts, links and tasks live here for 24h before sorting into Sjel.",
-                            )),
-                    )
-                    .into_element(),
-                #[cfg(target_os = "ios")]
-                Seat::Agent => native(PHONE_AGENT_COMPONENT).flex_1().into_element(),
-                #[cfg(not(target_os = "ios"))]
-                Seat::Agent => crate::nsh_agent::agent_screen().into_element(),
-                Seat::Terminal => crate::nsh_terminal::terminal_screen().into_element(),
-                #[cfg(target_os = "ios")]
-                Seat::Soundscape => native(PHONE_SOUNDSCAPE_COMPONENT).flex_1().into_element(),
-                #[cfg(not(target_os = "ios"))]
-                Seat::Soundscape => crate::nsh_soundscape::soundscape_screen().into_element(),
-                #[cfg(target_os = "ios")]
-                Seat::Activity => native(PHONE_ACTIVITY_COMPONENT).flex_1().into_element(),
-                #[cfg(not(target_os = "ios"))]
-                Seat::Activity => scroll()
-                    .flex_1()
-                    .px_4()
-                    .child(dynamic(move || {
-                        let activity = snap.with(|s| s.activity.clone());
-                        let mut out = view()
-                            .gap_2()
-                            .child(heading("Activity"))
-                            .child(heading("With the Mac"));
-                        for line in activity.connection {
-                            out = out.child(caption(line));
-                        }
-                        out = out.child(heading("Reminders"));
-                        for line in activity.reminders {
-                            out = out.child(caption(line));
-                        }
-                        out
-                    }))
-                    .into_element(),
-            }
-        })))
-    }
-}
-#[cfg(not(target_os = "ios"))]
-pub use legacy::edge_screen;

@@ -11,7 +11,6 @@ boundaries. The [application README](../../apps/gpui/README.md) owns current int
 ## Priority 1 contracts and controls
 
 - [Make note rename and saves lossless](../tasks/gpui-note-rename.md).
-- [Isolate NSH behind an app-owned facade](../tasks/gpui-nsh-facade.md).
 - [Accept migrated desktop controls](../tasks/gpui-ely-acceptance.md).
 - [Accept native table accessibility and editing](../tasks/gpui-table-acceptance.md).
 

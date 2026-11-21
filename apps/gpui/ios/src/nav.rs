@@ -54,11 +54,7 @@ impl AppState {
                 phone_today::load();
                 PhonePage::Today
             }
-            Tab::Projects => {
-                #[cfg(not(target_os = "ios"))]
-                sjel_gpui_ui::nsh_projects::load();
-                PhonePage::Projects
-            }
+            Tab::Projects => PhonePage::Projects,
             Tab::Calendar => {
                 phone_calendar::load();
                 PhonePage::Calendar
@@ -122,9 +118,9 @@ impl AppState {
             TodayEvent::OpenProject(name) => {
                 #[cfg(target_os = "ios")]
                 crate::projects::open_project(name);
-                self.select_tab(Tab::Projects);
                 #[cfg(not(target_os = "ios"))]
-                sjel_gpui_ui::nsh_projects::open_project(Some(name));
+                let _ = name;
+                self.select_tab(Tab::Projects);
             }
             TodayEvent::Settings => self.select_tab(Tab::Settings),
             TodayEvent::Soundscape => nsh_edge::open(Seat::Soundscape),

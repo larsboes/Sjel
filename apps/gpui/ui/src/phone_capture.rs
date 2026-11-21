@@ -232,27 +232,4 @@ mod tests {
         );
         assert_eq!(preview_label("", None), "Stays in the inbox");
     }
-
-    #[cfg(all(feature = "nsh", not(target_os = "ios")))]
-    #[test]
-    fn the_screen_lists_captures_and_asks_for_a_store_to_keep_one() {
-        use nsh_core::element::Root;
-        use nsh_engine::EngineConfig;
-        use nsh_testing::Headless;
-
-        update(|snap| {
-            snap.captures = vec![capture("a", "Rain jacket", None, None)];
-            snap.refusals.clear();
-        });
-        let mut app = Headless::start(EngineConfig {
-            ui_sets: vec![nsh_base::registry()],
-            ..EngineConfig::new(Root::of::<crate::nsh_capture::CaptureScreen>())
-        })
-        .expect("the Capture screen starts");
-        app.wait_for("text:Rain jacket").unwrap();
-        app.wait_for("text:1 waiting for the Mac").unwrap();
-        app.press("text:Keep").unwrap();
-        app.wait_for("text:Type what you want to keep, or paste a link.")
-            .unwrap();
-    }
 }

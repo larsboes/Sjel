@@ -377,35 +377,4 @@ mod tests {
         );
         assert_eq!(second_line(&snap.people[0]), "Engineer · Acme");
     }
-
-    #[cfg(all(feature = "nsh", not(target_os = "ios")))]
-    #[test]
-    fn the_screen_lists_people_and_opens_a_card() {
-        use nsh_core::element::Root;
-        use nsh_engine::EngineConfig;
-        use nsh_testing::Headless;
-
-        update(|snap| {
-            *snap = Snapshot {
-                source: "Copy from 2026-11-09 · read-only".to_owned(),
-                people: vec![person("p1", "Ada Lovelace")],
-                places: vec![place("a", "Bar Raval", "bar")],
-                loaded: true,
-                has_copy: true,
-                ..Default::default()
-            };
-        });
-        let mut app = Headless::start(EngineConfig {
-            ui_sets: vec![nsh_base::registry()],
-            ..EngineConfig::new(Root::of::<crate::nsh_people::PeopleScreen>())
-        })
-        .expect("the People screen starts");
-        app.wait_for("text:Ada Lovelace").unwrap();
-        app.press("text:Ada Lovelace").unwrap();
-        app.wait_for("text:‹ All people").unwrap();
-        app.wait_for("text:NO PLACES LINKED").unwrap();
-        app.press("text:‹ All people").unwrap();
-        app.press("text:Places 1").unwrap();
-        app.wait_for("text:Bar Raval").unwrap();
-    }
 }

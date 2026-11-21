@@ -62,67 +62,59 @@ pub mod media;
 pub mod music;
 #[cfg(feature = "gpui")]
 pub mod nav;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod nsh_agent;
-#[cfg(all(feature = "nsh", not(target_os = "ios")))]
-pub mod nsh_calendar;
-#[cfg(all(feature = "nsh", not(target_os = "ios")))]
-pub mod nsh_capture;
-#[cfg(feature = "nsh")]
-pub mod nsh_documents;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod nsh_edge;
-#[cfg(all(feature = "nsh", not(target_os = "ios")))]
-pub mod nsh_finance;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod nsh_interior;
-#[cfg(all(feature = "nsh", not(target_os = "ios")))]
-pub mod nsh_inventory;
-#[cfg(all(feature = "nsh", not(target_os = "ios")))]
-pub mod nsh_mail;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod nsh_map;
-#[cfg(all(feature = "nsh", not(target_os = "ios")))]
-pub mod nsh_people;
-#[cfg(all(feature = "nsh", not(target_os = "ios")))]
-pub mod nsh_projects;
-#[cfg(all(feature = "nsh", not(target_os = "ios")))]
-mod nsh_registry;
-#[cfg(all(feature = "nsh", not(target_os = "ios")))]
-pub mod nsh_settings;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod nsh_soundscape;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod nsh_terminal;
-#[cfg(all(feature = "nsh", not(target_os = "ios")))]
-pub mod nsh_today;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod nsh_travel;
-#[cfg(feature = "nsh")]
-mod nsh_ui;
 #[cfg(feature = "gpui")]
 pub mod packs;
 #[cfg(feature = "gpui")]
 pub mod pdf_kit;
 #[cfg(feature = "gpui")]
 pub mod people;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod phone_calendar;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod phone_capture;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod phone_finance;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod phone_inventory;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod phone_mail;
-#[cfg(all(feature = "gpui", target_os = "ios"))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod phone_navigation;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod phone_people;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod phone_settings;
-#[cfg(any(feature = "nsh", all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub mod phone_today;
 #[cfg(feature = "gpui")]
 pub mod posts;
@@ -156,7 +148,8 @@ pub mod systems;
 pub mod tasks;
 #[cfg(feature = "gpui")]
 pub mod terminal;
-#[cfg(any(feature = "nsh", test, all(feature = "gpui", target_os = "ios")))]
+#[cfg(feature = "gpui")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 mod terminal_screen;
 #[cfg(all(feature = "gpui", any(test, feature = "test-support")))]
 pub mod test_support;

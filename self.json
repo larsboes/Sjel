@@ -3942,7 +3942,7 @@
     },
     {
       "name": "nsh",
-      "verdict": "adopt"
+      "verdict": "reject"
     },
     {
       "name": "nvidia-skills",

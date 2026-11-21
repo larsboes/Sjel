@@ -1,11 +1,5 @@
 //! Native soundscape controls over the same audio-thread atomics as the desktop drawer.
-#[cfg(not(target_os = "ios"))]
-use crate::nsh_ui::{action, caption, heading, snapshot};
 use crate::theme::SoundscapePrefs;
-#[cfg(not(target_os = "ios"))]
-use nsh_core::prelude::*;
-#[cfg(not(target_os = "ios"))]
-use sjel_gpui_core::soundscape::LayerName;
 
 #[cfg(target_os = "ios")]
 mod phone;
@@ -137,137 +131,13 @@ pub fn pause() {
     s.control.set_playing(false);
     publish(&mut s);
 }
-#[cfg(not(target_os = "ios"))]
-fn knob(
-    label: &'static str,
-    read: impl Fn(&Control) -> f32 + 'static,
-    write: impl Fn(&Control, f32) + 'static,
-) -> impl IntoElement {
-    let snap = snapshot(&feed().tx);
-    view().gap_1().child(caption(label)).child(
-        nsh_base::slider()
-            .value(move || {
-                snap.with(|_| ());
-                Some(nsh_base::SliderValue::Single(f64::from(read(
-                    &state().control,
-                ))))
-            })
-            .min(0.)
-            .max(1.)
-            .step(0.01)
-            .h(px(44.))
-            .track_class(Some("h-2 w-full rounded-full bg-muted".into()))
-            .range_class(Some("rounded-full bg-primary".into()))
-            .thumb_class(Some("size-5 rounded-full bg-primary".into()))
-            .on_change(move |value: &nsh_base::SliderValue| {
-                let mut s = state();
-                write(&s.control, value.start() as f32);
-                if label == "Volume" {
-                    s.prefs.volume = value.start() as f32;
-                }
-                publish(&mut s);
-            })
-            .on_change_end(|_: &nsh_base::SliderValue| save()),
-    )
-}
-/// Local playback, six presets, volume, mixer layers and a real analyser meter.
-#[cfg(not(target_os = "ios"))]
-#[component]
-pub fn SoundscapeScreen() -> impl IntoElement {
-    let snap = snapshot(&feed().tx);
-    let mixer = computed(move || snap.with(|s| s.mixer));
-    let active_preset = signal(state().prefs.preset.clone());
-    let presets = dynamic(move || {
-        let current = active_preset.get();
-        let mut row = view().flex_row().flex_wrap().gap_1p5();
-        for preset in Preset::ALL {
-            let is_active = current.eq_ignore_ascii_case(preset.key());
-            row = row.child(crate::nsh_ui::pill_tab(
-                preset.key(),
-                is_active,
-                move || {
-                    {
-                        let mut s = state();
-                        s.control.set_preset(preset);
-                        s.prefs.preset = preset.key().into();
-                        publish(&mut s);
-                    }
-                    active_preset.set(preset.key().into());
-                    save();
-                },
-            ));
-        }
-        row.into_element()
-    });
-    scroll().flex_1().child(
-        view()
-            .px_4()
-            .gap_2()
-            .child(heading("Soundscape"))
-            .child(action("Play / pause", || {
-                let mut s = state();
-                if s.snap.error.is_none() && !s.snap.device.is_empty() {
-                    s.control.set_playing(!s.control.playing());
-                    publish(&mut s);
-                }
-            }))
-            .child(
-                text(move || {
-                    snap.with(|s| {
-                        s.error
-                            .clone()
-                            .unwrap_or_else(|| format!("{} · {}", s.report, s.device))
-                    })
-                })
-                .text_sm(),
-            )
-            .child(presets)
-            .child(knob("Volume", Control::volume, Control::set_volume))
-            .child(
-                canvas(move || {
-                    let current = snap.get();
-                    let mut p = Painter::new().fill_color(color(nsh_base::theme().primary));
-                    if current.playing {
-                        for (index, band) in current.bands.iter().enumerate() {
-                            let height = band.clamp(0., 1.) * 40.;
-                            p = p.fill_rect(index as f32 * 8., 40. - height, 6., height.max(1.));
-                        }
-                    }
-                    p
-                })
-                .h(px(40.)),
-            )
-            .child(action("Show / hide mixer", || {
-                {
-                    let mut s = state();
-                    s.prefs.mixer = !s.prefs.mixer;
-                    publish(&mut s);
-                }
-                save();
-            }))
-            .child(dynamic(move || {
-                mixer.get().then(|| {
-                    let mut out = view();
-                    for layer in LayerName::ALL {
-                        out = out.child(knob(
-                            layer.label(),
-                            move |c| c.layer(layer),
-                            move |c, v| c.set_layer(layer, v),
-                        ));
-                    }
-                    out
-                })
-            })),
-    )
-}
 
-#[cfg(all(test, not(target_os = "ios")))]
+#[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn opening_and_switching_seats_does_not_start_audio_and_closing_pauses() {
-        use nsh_engine::EngineConfig;
-        use nsh_testing::Headless;
+    fn opening_does_not_start_audio_and_closing_pauses() {
         let control = Arc::new(Control::new());
         set_parts(
             control.clone(),
@@ -277,18 +147,10 @@ mod tests {
         set_device(Ok("Synthetic audio device".into()));
         show(true);
         assert!(!control.playing());
-        let mut app = Headless::start(EngineConfig {
-            ui_sets: vec![nsh_base::registry()],
-            ..EngineConfig::new(nsh_core::element::Root::of::<SoundscapeScreen>())
-        })
-        .unwrap();
-        app.wait_for("text:Soundscape").unwrap();
-        app.press("text:Play / pause").unwrap();
-        assert!(control.playing());
+        control.set_playing(true);
         show(false);
         assert!(control.playing(), "switching seats keeps playback");
         pause();
         assert!(!control.playing(), "closing the panel pauses playback");
-        show(false);
     }
 }

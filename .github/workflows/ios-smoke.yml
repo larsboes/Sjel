@@ -7,16 +7,18 @@ on:
     paths:
       - .github/workflows/ios-smoke.yml
       - apps/gpui/ios/**
-      - apps/gpui/ui/src/nsh_documents.rs
-      - apps/gpui/ui/src/nsh_mail.rs
+      - apps/gpui/ui/src/documents/**
+      - apps/gpui/ui/src/phone_mail.rs
+      - apps/gpui/ui/src/phone_mail/**
       - apps/gpui/Cargo.toml
       - apps/gpui/Cargo.lock
   pull_request:
     paths:
       - .github/workflows/ios-smoke.yml
       - apps/gpui/ios/**
-      - apps/gpui/ui/src/nsh_documents.rs
-      - apps/gpui/ui/src/nsh_mail.rs
+      - apps/gpui/ui/src/documents/**
+      - apps/gpui/ui/src/phone_mail.rs
+      - apps/gpui/ui/src/phone_mail/**
       - apps/gpui/Cargo.toml
       - apps/gpui/Cargo.lock
 

@@ -367,10 +367,3 @@ pub(crate) fn nudge(entry: &CalendarEntry, minutes: i64, resize: bool) -> Result
 pub(crate) fn subscribe() -> watch::Receiver<Snapshot> {
     feed().tx.subscribe()
 }
-
-#[cfg(all(test, feature = "nsh", not(target_os = "ios")))]
-pub(crate) fn test_snapshot(update: impl FnOnce(&mut Snapshot)) {
-    let mut state = state();
-    update(&mut state.snap);
-    publish(&mut state);
-}

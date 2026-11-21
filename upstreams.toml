@@ -934,7 +934,7 @@ url = "https://github.com/zed-industries/zed/tree/main/crates/gpui"
 verdict = "adopt"
 license = "Apache-2.0"
 summary = "Zed's GPU-rendered Rust UI framework; the base of Sjel's Mac app"
-why = "Adopted when the dashboard retired and GPUI became the one app (PLAN.md decisions, 2026-10-22). The base is the weekly `gpui-pre` snapshot of upstream Zed that gpui-kit depends on, not the crates.io release and not gpui-ce. gpui-kit, gpui-pre and gpui-fast move together by hand (docs/plans/gpui.md section 6). The phone left GPUI in b59879d0."
+why = "Adopted when the dashboard retired and GPUI became the one app (PLAN.md decisions, 2026-10-22). The base is the weekly `gpui-pre` snapshot of upstream Zed that gpui-kit depends on, not the crates.io release and not gpui-ce. gpui-kit, gpui-pre and gpui-fast move together by hand (docs/plans/gpui.md section 6). The phone runs the same views through the `gpui-mobile` fork."
 [gpui-kit]
 url = "https://github.com/longbridge/gpui-kit"
 verdict = "adopt"
@@ -960,9 +960,9 @@ why = "The maintained fork supplies the iOS platform for GPUI views within the r
 url = "https://github.com/zed-industries/zed/tree/main/crates/gpui_ios"
 verdict = "watch"
 license = "Apache-2.0"
-summary = "Zed's own iOS platform for GPUI, published as gpui-pre-ios; the fallback if NSH stops shipping"
+summary = "Zed's own iOS platform for GPUI, published as gpui-pre-ios; the fallback if the gpui-mobile fork stops tracking GPUI"
 why = "Maintained in the Zed repository with native UIKit text input, and published at 0.3.11 since 2026-10-19. It owns UIApplication and the scene delegate, so Sjel's Swift host would invert: Rust starts the app and calls RoomPlan, audio and pairing through FFI."
-revisit = "Decide if NSH stops shipping or loses its UIKit backend."
+revisit = "Decide if gpui-mobile falls behind the gpui-pre snapshot that GPUI Kit pins."
 
 [nsh]
 url = "https://github.com/longbridge/nsh"

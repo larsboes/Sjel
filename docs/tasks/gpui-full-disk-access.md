@@ -21,15 +21,19 @@ fallback. Only macOS grants access. The UI apps are not granted Full Disk Access
   with the Sjel icon. Confirm **Show in Finder** reveals the bundle from
   `sjel fda-launcher app-path`. With no bundle installed, Desktop shows the install command.
 - Open **macOS Permissions…** from the menu-bar app and confirm it opens the same Desktop section.
-- Enable only the new **Sjel** entry. Run `sjel fda-launcher migrate` from a logged-in desktop
-  session. Confirm it proves protected-folder access under launchd and switches the existing
-  storage-history job, then remove the obsolete helper row. Leave other grants and job routing
-  unchanged.
+- Enable the new **Sjel** entry without changing other grants. Run `sjel fda-launcher migrate`
+  from a logged-in desktop session. Confirm it proves protected-folder access under launchd
+  and switches the existing storage-history job before removing the obsolete helper row.
 
 ## Evidence
 
 The helper lifecycle, nine distribution tests, five Desktop settings and permissions tests,
-and 23 menu-bar tests pass. The installed background bundle passes strict signature
-verification, contains the menu-bar icon, and leaves the previous executable selected for
-persistence. The menu shortcut, System Settings drop, displayed icon and name, and real
-launchd permission probe require live acceptance.
+and 23 menu-bar tests pass. The installed background bundle passes strict signature verification.
+System Settings shows the enabled entry as **Sjel.app** with the Sjel icon. The live launchd
+probe passed. Both the installed and loaded storage-history job point to the bundle executable,
+and persistence selects it for future installs.
+
+On macOS 27.2.1, System Settings did not recognize a drag from Desktop. The **+** picker works.
+The headless test checks drag initiation inside Desktop, not delivery to System Settings.
+A Finder drag of the same bundle would distinguish a Desktop-specific failure from a rejection
+of the bundle or drop target. The menu shortcut still needs a live check.

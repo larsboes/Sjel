@@ -134,7 +134,7 @@ pub const ARCHIVE: &str = "archiv";
 
 /// Take a layout out of the list without losing it. Its header can be the only place an argument
 /// for rejecting a piece is written, so nothing is deleted: `archiv/` has no `.toml` ending and
-/// drops out of `Model::layout_names`, and the file stays in the overlay's git.
+/// drops out of `Model::layout_names`, and the file stays on disk under the data root.
 pub fn archive_layout(model: &Model, id: &str) -> Result<String, ModelError> {
     check_id(id)?;
     let from = model.layouts_dir().join(format!("{id}.toml"));

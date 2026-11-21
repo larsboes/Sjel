@@ -24,8 +24,8 @@ pub enum ModelError {
     },
     #[error("{path}: {detail}")]
     Config { path: PathBuf, detail: String },
-    #[error("SJEL_PERSONAL_ROOT is not set; without an overlay there is no flat data")]
-    NoOverlay,
+    #[error("interior data: {0}")]
+    DataRoot(#[from] sjel_config::DataRootError),
     #[error("{0}")]
     Missing(String),
     #[error("inventory not readable: {0}")]
@@ -43,10 +43,11 @@ fn read_toml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, ModelErro
     })
 }
 
-/// `<overlay>/data/interior`. No fallback into the repository: planning against invented sizes is
-/// worse than none.
+/// `data/interior` under `SJEL_DATA_ROOT_INTERIOR` when set, else under the overlay. No fallback
+/// into the repository or from an unavailable data root: planning against invented sizes is worse
+/// than none.
 pub fn data_dir() -> Result<PathBuf, ModelError> {
-    sjel_config::overlay_data_dir("interior").ok_or(ModelError::NoOverlay)
+    Ok(sjel_config::owner_data_dir("interior")?)
 }
 
 /// Private, human-facing interior assets such as photos and RoomPlan captures.

@@ -203,7 +203,24 @@ for x in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do EXCLUDE_ARGS+=(--exclude "$x"); don
 # Same per-machine override seam as [capability.<name>] port in tools/service-runner.sh.
 SRC_ROOT="$SJEL_PERSONAL_ROOT"
 SRC_ROOT_DECL="$(toml_get_in "capability.$CAP" backup_source_root "$SJEL_MACHINE_TOML")"
-if [ -n "$SOURCE_FLAG" ]; then SRC_ROOT_DECL="$SOURCE_FLAG"; fi
+SRC_ROOT_NAME="[capability.$CAP] backup_source_root"
+# An owner moved out of the overlay names its root once, as SJEL_DATA_ROOT_<OWNER>, the key
+# sjel_config::owner_data_dir reads: the environment first, then deployment.env.
+DATA_ROOT_KEY="SJEL_DATA_ROOT_$(printf '%s' "$CAP" | tr '[:lower:]-' '[:upper:]_')"
+DATA_ROOT_DECL="${!DATA_ROOT_KEY:-}"
+if [ -z "$DATA_ROOT_DECL" ] && [ -f "$SJEL_PERSONAL_ROOT/config/deployment.env" ]; then
+  DATA_ROOT_DECL="$(sed -n "s/^$DATA_ROOT_KEY=//p" "$SJEL_PERSONAL_ROOT/config/deployment.env" | head -1)"
+  DATA_ROOT_DECL="$(printf '%s' "$DATA_ROOT_DECL" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+fi
+if [ -n "$DATA_ROOT_DECL" ]; then
+  if [ -n "$SRC_ROOT_DECL" ] && [ "$SRC_ROOT_DECL" != "$DATA_ROOT_DECL" ]; then
+    echo "backup.sh: [capability.$CAP] backup_source_root and $DATA_ROOT_KEY disagree; remove backup_source_root" >&2
+    exit 1
+  fi
+  SRC_ROOT_DECL="$DATA_ROOT_DECL"
+  SRC_ROOT_NAME="$DATA_ROOT_KEY"
+fi
+if [ -n "$SOURCE_FLAG" ]; then SRC_ROOT_DECL="$SOURCE_FLAG"; SRC_ROOT_NAME="--source-root"; fi
 if [ "$CAP" = archive ] && [ -z "$SRC_ROOT_DECL" ]; then
   echo "backup.sh: [capability.archive] backup_source_root is required" >&2
   exit 1
@@ -212,13 +229,13 @@ if [ -n "$SRC_ROOT_DECL" ]; then
   case "$SRC_ROOT_DECL" in "~/"*) SRC_ROOT_DECL="$HOME/${SRC_ROOT_DECL#\~/}" ;; esac
   case "$SRC_ROOT_DECL" in
     /*) ;;
-    *) echo "backup.sh: [capability.$CAP] backup_source_root must be absolute or ~-relative: $SRC_ROOT_DECL" >&2; exit 1 ;;
+    *) echo "backup.sh: $SRC_ROOT_NAME must be absolute or ~-relative: $SRC_ROOT_DECL" >&2; exit 1 ;;
   esac
   # Checked here rather than at first use. A root that does not exist yields a staging tree of
   # empty directories and an archive that is valid and useless — the failure this whole file is
   # written against.
   [ -d "$SRC_ROOT_DECL" ] || {
-    echo "backup.sh: [capability.$CAP] backup_source_root is not a directory: $SRC_ROOT_DECL" >&2; exit 1; }
+    echo "backup.sh: $SRC_ROOT_NAME is not a directory: $SRC_ROOT_DECL" >&2; exit 1; }
   SRC_ROOT="$SRC_ROOT_DECL"
 fi
 

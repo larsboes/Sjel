@@ -238,7 +238,7 @@ Configuration has one owner per concern (see [docs/capabilities/manifest.md](../
 | `toolchain.toml` | Host executables Sjel commands assume, with requiredness, scope and install hints |
 | `systems.toml` | Systems, services and projects that have a role in the setup |
 | `<overlay>/config/machine.toml` | OS, container runtime, enabled capabilities and state mounts for this machine. An overlay owning several machines uses `<overlay>/config/machines/<name>.toml` instead, selected by `sjel.local.toml` or the hostname |
-| `<overlay>/config/deployment.env` | facts true of the whole deployment rather than one machine or one capability — the home timezone, and `SJEL_INBOUND_TOKEN_FILE`, the reference to the shared secret every capability server authenticates inbound requests against ([server contract](../../crates/sjel-server/README.md)). Declared once because several capabilities need it and independent copies drift silently (`schemas/deployment.env.example`) |
+| `<overlay>/config/deployment.env` | facts true of the whole deployment rather than one machine or one capability — the home timezone, and `SJEL_INBOUND_TOKEN_FILE`, the reference to the shared secret every capability server authenticates inbound requests against ([server contract](../../crates/sjel-server/README.md)). It also holds the `SJEL_DATA_ROOT_<OWNER>` roots that move one owner's data out of the overlay. Declared once because several capabilities need it and independent copies drift silently (`schemas/deployment.env.example`) |
 
 `tools/lib/toml.sh` is the parser for single-line scalar and array fields. More complex TOML goes
 through the shared Bun parser; no caller grows another partial parser or duplicates manifest data.

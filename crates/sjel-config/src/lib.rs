@@ -50,6 +50,74 @@ pub fn overlay_data_dir(capability: &str) -> Option<PathBuf> {
     overlay_root().map(|r| r.join("data").join(capability))
 }
 
+/// The setting that moves one owner's data out of the overlay: `SJEL_DATA_ROOT_<OWNER>`, with the
+/// owner name in upper case and `-` as `_`. `tools/backup.sh` reads the same name.
+pub fn data_root_key(owner: &str) -> String {
+    format!(
+        "SJEL_DATA_ROOT_{}",
+        owner.to_ascii_uppercase().replace('-', "_")
+    )
+}
+
+/// Why an owner's configured data root cannot be used.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataRootError {
+    /// No overlay and no data root: there is no place to read from.
+    NoOverlay,
+    /// The data root is set but is not an absolute or `~/` path.
+    NotAbsolute { key: String, value: String },
+    /// The data root is set but is not a directory, for example an unmounted volume.
+    Unavailable { key: String, path: PathBuf },
+}
+
+impl std::fmt::Display for DataRootError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoOverlay => write!(f, "SJEL_PERSONAL_ROOT is not set and no data root is set"),
+            Self::NotAbsolute { key, value } => {
+                write!(f, "{key} must be an absolute or ~/ path, but is {value:?}")
+            }
+            Self::Unavailable { key, path } => write!(
+                f,
+                "{key} is {}, which is not a directory. Mount it or remove the setting; \
+                 the overlay copy is not used while it is set",
+                path.display()
+            ),
+        }
+    }
+}
+
+impl std::error::Error for DataRootError {}
+
+/// `<root>/data/<owner>` when the owner's data root is set, else `<overlay>/data/<owner>`.
+///
+/// The environment wins over `<overlay>/config/deployment.env`. A set root that is not a directory
+/// is an error and never falls back to the overlay, so an unmounted volume cannot silently serve
+/// or receive stale overlay files. The `data/<owner>` suffix is the same under both roots, so
+/// backup member names do not change when an owner moves.
+pub fn owner_data_dir(owner: &str) -> Result<PathBuf, DataRootError> {
+    let key = data_root_key(owner);
+    let configured = crate::env_var(&key)
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            let body = std::fs::read_to_string(overlay_config("deployment.env")?).ok()?;
+            deployment_value(&body, &key)
+        });
+    let Some(value) = configured else {
+        return overlay_data_dir(owner).ok_or(DataRootError::NoOverlay);
+    };
+    let value = value.trim().to_string();
+    let root = expand_tilde(&value);
+    if !root.is_absolute() {
+        return Err(DataRootError::NotAbsolute { key, value });
+    }
+    if !root.is_dir() {
+        return Err(DataRootError::Unavailable { key, path: root });
+    }
+    Ok(root.join("data").join(owner))
+}
+
 /// Where the one shared SQLite file lives (PRD Q45, 2026-08-27).
 ///
 /// `SJEL_DB_PATH` > `<overlay>/data/sjel/sjel.db` > a scratch file. Resolved the
@@ -251,6 +319,47 @@ mod tests {
             "no overlay must not resolve to a plausible location, got {}",
             scratch.display()
         );
+    }
+
+    #[test]
+    fn an_owner_data_root_replaces_the_overlay_and_never_falls_back() {
+        let _env = env_lock();
+        let base = std::env::temp_dir().join(format!("sjel-config-root-{}", std::process::id()));
+        let overlay = base.join("overlay");
+        let external = base.join("external");
+        std::fs::create_dir_all(overlay.join("config")).unwrap();
+        std::fs::create_dir_all(&external).unwrap();
+        let _o = EnvGuard::set("SJEL_PERSONAL_ROOT", overlay.to_str().unwrap());
+        let _k = EnvGuard::take("SJEL_DATA_ROOT_TEST_OWNER");
+        assert_eq!(data_root_key("test-owner"), "SJEL_DATA_ROOT_TEST_OWNER");
+
+        assert_eq!(
+            owner_data_dir("test-owner").unwrap(),
+            overlay.join("data/test-owner")
+        );
+
+        let deployment = format!("SJEL_DATA_ROOT_TEST_OWNER={}\n", external.display());
+        std::fs::write(overlay.join("config/deployment.env"), deployment).unwrap();
+        assert_eq!(
+            owner_data_dir("test-owner").unwrap(),
+            external.join("data/test-owner")
+        );
+
+        let _missing = EnvGuard::set(
+            "SJEL_DATA_ROOT_TEST_OWNER",
+            base.join("unmounted").to_str().unwrap(),
+        );
+        assert!(matches!(
+            owner_data_dir("test-owner"),
+            Err(DataRootError::Unavailable { .. })
+        ));
+
+        let _relative = EnvGuard::set("SJEL_DATA_ROOT_TEST_OWNER", "relative/root");
+        assert!(matches!(
+            owner_data_dir("test-owner"),
+            Err(DataRootError::NotAbsolute { .. })
+        ));
+        let _ = std::fs::remove_dir_all(base);
     }
 
     #[test]

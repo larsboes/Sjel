@@ -550,6 +550,63 @@ reset_run
 [ "$(tar -xOzf "$SCRATCH/archive-stream.tar.gz" ./archive/note.md)" = 'ALTERNATE' ] \
   || fail "archive stream did not contain the overridden source"
 
+# --- an owner moved out of the overlay: SJEL_DATA_ROOT_<OWNER> is the source root ------------
+# The same key sjel_config::owner_data_dir reads. An unavailable root fails, and the overlay
+# copy is never archived in its place.
+unset SJEL_DATA_ROOT_INTERIOR
+mkdir -p "$FIXTURE/capabilities/interior" "$OVERLAY/data/interior/flats/stale" "$SCRATCH/remote/interior"
+cat > "$FIXTURE/capabilities/interior/service.toml" <<'MANIFEST'
+kind = "data"
+name = "interior"
+backup_paths = ["data/interior"]
+backup_target = "synthetic-target"
+backup_retain = "2"
+MANIFEST
+printf 'STALE OVERLAY\n' > "$OVERLAY/data/interior/flats/stale/room.toml"
+printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = ["interior"]\n' \
+  > "$OVERLAY/config/machine.toml"
+deployment_before="$(cat "$OVERLAY/config/deployment.env" 2>/dev/null || true)"
+printf '%s\nSJEL_DATA_ROOT_INTERIOR=%s\n' "$deployment_before" "$SCRATCH/unmounted-data" \
+  > "$OVERLAY/config/deployment.env"
+reset_run
+expect_fail_with "an unavailable data root fails" "SJEL_DATA_ROOT_INTERIOR is not a directory" \
+  "$BACKUP" interior
+[ -z "$(find "$SCRATCH/remote/interior" -mindepth 1 -print -quit)" ] \
+  || fail "an unavailable data root shipped an archive"
+external="$SCRATCH/external-data"
+mkdir -p "$external/data/interior/flats/home/layouts"
+printf 'EXTERNAL ROOM\n' > "$external/data/interior/flats/home/room.toml"
+printf 'layout\n' > "$external/data/interior/flats/home/layouts/a.toml"
+chmod 600 "$external/data/interior/flats/home/room.toml"
+chmod 640 "$external/data/interior/flats/home/layouts/a.toml"
+printf '%s\nSJEL_DATA_ROOT_INTERIOR=%s\n' "$deployment_before" "$external" \
+  > "$OVERLAY/config/deployment.env"
+printf '\n[capability.interior]\nbackup_source_root = "%s"\n' "$SCRATCH/alternate-source" \
+  >> "$OVERLAY/config/machine.toml"
+reset_run
+expect_fail_with "a disagreeing backup_source_root fails" "disagree" "$BACKUP" interior
+printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = ["interior"]\n' \
+  > "$OVERLAY/config/machine.toml"
+reset_run
+export MOCK_TIMESTAMP=20260106T010101Z
+expect_pass "the data root is the source root" "$BACKUP" interior
+interior_file="$(find "$SCRATCH/remote/interior" -name 'interior-*.tar.gz' | head -1)"
+[ -n "$interior_file" ] || fail "the data-root backup wrote no archive"
+tar -tzf "$interior_file" | grep -q 'flats/stale' && fail "the overlay copy was archived"
+expect_pass "the data-root archive restores in isolation" env \
+  SJEL_RESTORE_MANIFEST="$FIXTURE/capabilities/interior/service.toml" \
+  "$ROOT/tools/restore.sh" interior "$interior_file" --destination "$SCRATCH/restored-interior"
+tree_listing() {
+  (cd "$1" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do
+    printf '%s %s %s\n' "$f" "$(file_sha256 "$f")" "$(stat -c %a "$f" 2>/dev/null || stat -f %Lp "$f")"
+  done)
+}
+restored_tree="$(find "$SCRATCH/restored-interior" -type d -path '*/data/interior' | head -1)"
+[ -n "$restored_tree" ] || fail "the restore has no data/interior tree"
+[ "$(tree_listing "$restored_tree")" = "$(tree_listing "$external/data/interior")" ] \
+  || fail "restored bytes or modes differ from the data root"
+printf '%s\n' "$deployment_before" > "$OVERLAY/config/deployment.env"
+
 # --- backup_sqlite_online: the copy taken while every reader still has the file open -------
 # services/store's contract (PRD Q45). The two properties that separate it from the cold
 # one above are asserted directly, because getting either wrong is silent: it must NOT stop

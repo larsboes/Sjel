@@ -1,7 +1,7 @@
 ---
 id: soundscape-context
 title: "Shape Soundscape sessions around listening intent"
-state: verify
+state: "done"
 area: product
 kind: feature
 priority: 3
@@ -12,6 +12,7 @@ evidence:
   - "Nine Mac drawer tests pass, including pointer reveal from the dark Bedside player."
   - "Appearance settings preserve the mini player preference across serialization and show it by default for existing settings."
   - "The Mac workspace keyboard test closes the drawer from the page and preserves page selection until the next Escape."
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Shape Soundscape sessions around listening intent

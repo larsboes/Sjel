@@ -1,11 +1,13 @@
 ---
 id: storage-projects-wal
 title: "Move Projects onto its own Turso WAL file"
-state: verify
+state: "done"
 area: storage
 kind: maintenance
 priority: 2
 spec: docs/plans/storage.md
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Move Projects onto its own Turso WAL file

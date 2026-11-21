@@ -1,12 +1,14 @@
 ---
 id: "gpui-calendar-phone"
 title: "Accept native phone Calendar gestures"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "maintenance"
 priority: 4
 depends_on: ["gpui-calendar-mac"]
 spec: "docs/architecture/native-ui-boundaries.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept native phone Calendar gestures

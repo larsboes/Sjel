@@ -1,13 +1,15 @@
 ---
 id: "gpui-documents-decisions"
 title: "Complete reviewable document decisions"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "feature"
 priority: 2
 depends_on: ["gpui-documents-mac"]
 spec: "docs/architecture/native-ui-boundaries.md"
 issue: "https://github.com/larsboes/Sjel/issues/246"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Complete reviewable document decisions

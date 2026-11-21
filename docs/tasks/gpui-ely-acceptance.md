@@ -1,11 +1,13 @@
 ---
 id: "gpui-ely-acceptance"
 title: "Accept migrated desktop controls"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "maintenance"
 priority: 1
 spec: "docs/architecture/native-ui-boundaries.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept migrated desktop controls

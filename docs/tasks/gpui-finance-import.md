@@ -1,11 +1,13 @@
 ---
 id: "gpui-finance-import"
 title: "Accept Finance import and review"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "maintenance"
 priority: 2
 spec: "docs/architecture/native-ui-boundaries.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept Finance import and review

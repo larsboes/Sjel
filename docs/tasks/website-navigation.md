@@ -1,11 +1,13 @@
 ---
 id: "website-navigation"
 title: "Accept website navigation"
-state: "verify"
+state: "done"
 area: "website"
 kind: "maintenance"
 priority: 3
 spec: "docs/plans/website.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept website navigation

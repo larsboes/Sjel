@@ -1,11 +1,13 @@
 ---
 id: tool-profile-reclaim
 title: "Reclaim one build profile"
-state: verify
+state: "done"
 area: tooling
 kind: maintenance
 priority: 1
 spec: docs/plans/tooling.md
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Reclaim one build profile

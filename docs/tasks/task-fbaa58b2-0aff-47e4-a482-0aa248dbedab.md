@@ -1,11 +1,13 @@
 ---
 id: task-fbaa58b2-0aff-47e4-a482-0aa248dbedab
 title: "Sync HealthKit from the iOS app"
-state: verify
+state: "done"
 area: data
 kind: feature
 priority: 3
 depends_on: [task-c30b5f1e-8a96-4643-b3a4-f6c54dc93c7e]
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Sync HealthKit from the iOS app

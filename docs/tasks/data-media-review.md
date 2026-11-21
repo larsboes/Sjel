@@ -1,11 +1,13 @@
 ---
 id: "data-media-review"
 title: "Accept content-aware Media review"
-state: "verify"
+state: "done"
 area: "data"
 kind: "maintenance"
 priority: 2
 spec: "docs/architecture/data-intake.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept content-aware Media review

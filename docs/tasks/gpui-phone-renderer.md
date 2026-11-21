@@ -1,11 +1,13 @@
 ---
 id: "gpui-phone-renderer"
 title: "Move the phone UI to GPUI"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "maintenance"
 priority: 4
 spec: "docs/architecture/native-ui-boundaries.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Move the phone UI to GPUI

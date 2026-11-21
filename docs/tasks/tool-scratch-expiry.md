@@ -1,11 +1,13 @@
 ---
 id: tool-scratch-expiry
 title: "Observe scratch retention recovery"
-state: verify
+state: "done"
 area: tooling
 kind: maintenance
 priority: 3
 spec: docs/plans/tooling.md
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Observe scratch retention recovery

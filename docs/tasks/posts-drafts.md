@@ -1,11 +1,13 @@
 ---
 id: posts-drafts
 title: "Create post draft folders"
-state: verify
+state: "done"
 area: posts
 kind: feature
 priority: 3
 spec: docs/plans/posts.md
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Create post draft folders

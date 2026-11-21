@@ -1,11 +1,13 @@
 ---
 id: "finance-ideas-acceptance"
 title: "Accept the Ideas view"
-state: "verify"
+state: "done"
 area: "finance"
 kind: "maintenance"
 priority: 2
 spec: "docs/plans/finance.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept the Ideas view

@@ -1,11 +1,13 @@
 ---
 id: containment-panel
 title: "Accept the installed harness panel"
-state: verify
+state: "done"
 area: containment
 kind: investigation
 priority: 3
 spec: docs/plans/containment.md
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept the installed harness panel

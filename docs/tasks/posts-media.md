@@ -2,11 +2,13 @@
 id: posts-media
 depends_on: ["posts-drafts"]
 title: "Export ordered post photos"
-state: verify
+state: "done"
 area: posts
 kind: feature
 priority: 3
 spec: docs/plans/posts.md
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Export ordered post photos

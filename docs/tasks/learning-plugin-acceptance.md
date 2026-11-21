@@ -1,11 +1,13 @@
 ---
 id: "learning-plugin-acceptance"
 title: "Accept live Learn sessions"
-state: "verify"
+state: "done"
 area: "learning"
 kind: "maintenance"
 priority: 3
 spec: "docs/plans/learning.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Accept live Learn sessions

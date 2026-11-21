@@ -1,12 +1,14 @@
 ---
 id: task-ce2fbbcd-b2ff-4c15-8aa9-25bf8debceef
 title: "Redesign People around the network"
-state: verify
+state: "done"
 area: gpui
 kind: feature
 priority: 2
 depends_on: ["task-411e5df2-1cde-4271-9a94-54903cbaa90a"]
 spec: docs/architecture/native-ui-boundaries.md
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Redesign People around the network

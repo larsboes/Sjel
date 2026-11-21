@@ -1,11 +1,13 @@
 ---
 id: "gpui-editor-preview"
 title: "Review the single-block preview prototype"
-state: "verify"
+state: "done"
 area: "gpui"
 kind: "maintenance"
 priority: 2
 spec: "docs/architecture/native-ui-boundaries.md"
+evidence:
+  - "Live acceptance confirmed by the maintainer on 2026-11-21."
 ---
 
 # Review the single-block preview prototype

@@ -2,11 +2,11 @@
 
 use chrono::Duration;
 use gpui::{
-    div, prelude::*, rgb, rgba, Context, Div, Entity, Focusable, FontWeight, SharedString,
+    div, prelude::*, px, rgb, rgba, Context, Div, Entity, Focusable, FontWeight, SharedString,
     Subscription, Task, Window,
 };
 use sjel_gpui_core::{
-    calendar::{self, timeline, Draft},
+    calendar::{self, kind_color, kind_label, timeline, Draft},
     shell::CalendarEntry,
 };
 
@@ -18,11 +18,13 @@ use crate::{
             jiff::{tz::TimeZone, Timestamp},
             CalendarDayView, FreeInterval,
         },
+        data_display::{Badge, Tone},
         forms::{Input, InputEvent, TextInput},
         theme::ControlSize,
     },
     phone_calendar::{self as data, CalendarEvent, Origin, Snapshot},
-    theme::{Palette, ThemeContext},
+    primitives::{mono_num, sub_tabs, surface_card},
+    theme::{tint, Palette, ThemeContext},
 };
 
 pub struct PhoneCalendar {
@@ -186,85 +188,193 @@ impl PhoneCalendar {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .gap_2()
             .when(
                 entries.is_empty() && (self.snapshot.loaded || self.snapshot.loading),
-                |list| list.child(caption(palette, empty)),
+                |list| {
+                    list.child(
+                        surface_card(palette)
+                            .p_4()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .child(caption(palette, empty))
+                            .when(self.writable() && !self.snapshot.loading, |card| {
+                                card.child(
+                                    Button::new("calendar-empty-new", "+ New entry")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Secondary)
+                                        .disabled(self.snapshot.saving)
+                                        .on_click(cx.listener(|view, _, _, cx| {
+                                            view.open_draft(540, 600, cx)
+                                        })),
+                                )
+                            }),
+                    )
+                },
             )
             .children(entries.into_iter().map(|entry| {
                 let id = entry.id.clone();
-                let place = entry
+                let color = kind_color(&entry.kind);
+                let kind_str = kind_label(&entry.kind).to_owned();
+                let time_str = calendar::time_label(entry, day);
+                let is_comms = matches!(entry.source.as_str(), "comms" | "mail" | "feed");
+                let is_trips = entry.source == "trips";
+                let tentative = entry.commitment == "tentative" || entry.commitment == "possible";
+                let location = entry
                     .location
                     .as_deref()
                     .filter(|place| !place.is_empty())
-                    .unwrap_or_else(|| calendar::kind_label(&entry.kind));
+                    .map(str::to_owned);
+
                 div()
                     .id(SharedString::from(id.clone()))
                     .flex()
                     .flex_col()
-                    .gap_1()
+                    .gap_1p5()
                     .p_3()
-                    .border_b_1()
+                    .rounded(px(12.))
+                    .border_1()
                     .border_color(rgba(palette.border))
+                    .bg(rgba(tint(color, 0x10)))
+                    .cursor_pointer()
                     .child(
                         div()
-                            .font_weight(FontWeight::MEDIUM)
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1p5()
+                                    .child(
+                                        div()
+                                            .w(px(6.))
+                                            .h(px(6.))
+                                            .flex_none()
+                                            .rounded_full()
+                                            .bg(rgb(color)),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(rgb(color))
+                                            .child(kind_str),
+                                    )
+                                    .when(tentative, |row| {
+                                        row.child(
+                                            Badge::new(entry.commitment.clone())
+                                                .tone(Tone::Neutral),
+                                        )
+                                    }),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .when(is_comms, |row| {
+                                        row.child(Badge::new("Mail").tone(Tone::Accent))
+                                    })
+                                    .when(is_trips, |row| {
+                                        row.child(Badge::new("Travel").tone(Tone::Accent))
+                                    })
+                                    .child(mono_num(time_str, palette.muted).text_xs()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_base()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(palette.text))
                             .child(entry.title.clone()),
                     )
-                    .child(caption(
-                        palette,
-                        format!(
-                            "{} · {place} · {}",
-                            calendar::time_label(entry, day),
-                            entry.commitment
-                        ),
-                    ))
+                    .when_some(location, |card, loc| {
+                        card.child(div().text_xs().text_color(rgb(palette.muted)).child(loc))
+                    })
                     .on_click(cx.listener(move |view, _, _, cx| view.select(&id, cx)))
             }))
     }
 
     fn detail(&self, entry: &CalendarEntry, palette: Palette, cx: &Context<Self>) -> Div {
         let id = entry.id.clone();
-        let mut card = column()
+        let color = kind_color(&entry.kind);
+        let mut card = surface_card(palette)
+            .p_4()
+            .flex()
+            .flex_col()
+            .gap_3()
             .child(
                 div()
                     .flex()
-                    .justify_between()
                     .items_center()
+                    .justify_between()
                     .gap_2()
                     .child(
                         div()
-                            .text_lg()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(entry.title.clone()),
+                            .flex()
+                            .items_center()
+                            .gap_1p5()
+                            .child(div().w(px(7.)).h(px(7.)).rounded_full().bg(rgb(color)))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(rgb(color))
+                                    .child(kind_label(&entry.kind).to_owned()),
+                            )
+                            .child(Badge::new(entry.commitment.clone()).tone(Tone::Neutral)),
                     )
                     .child(
                         control("close-entry", "Close", false)
                             .on_click(cx.listener(|view, _, _, cx| view.close_editor(cx))),
                     ),
             )
-            .child(caption(
-                palette,
-                format!(
-                    "{} · {} · {}",
-                    calendar::time_label(entry, self.snapshot.day),
-                    calendar::kind_label(&entry.kind),
-                    entry.commitment
+            .child(
+                div()
+                    .text_lg()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(rgb(palette.text))
+                    .child(entry.title.clone()),
+            )
+            .child(
+                div().flex().items_center().gap_2().child(
+                    mono_num(
+                        calendar::time_label(entry, self.snapshot.day),
+                        palette.muted,
+                    )
+                    .text_sm(),
                 ),
-            ))
-            .children(
-                [&entry.location, &entry.notes]
-                    .into_iter()
-                    .filter_map(|value| value.as_ref())
-                    .filter(|value| !value.is_empty())
-                    .cloned()
-                    .map(|value| div().child(value)),
+            )
+            .when_some(
+                entry.location.clone().filter(|value| !value.is_empty()),
+                |card, loc| card.child(div().text_sm().text_color(rgb(palette.muted)).child(loc)),
+            )
+            .when_some(
+                entry.notes.clone().filter(|value| !value.is_empty()),
+                |card, notes| {
+                    card.child(
+                        div()
+                            .p_2p5()
+                            .rounded(px(8.))
+                            .bg(rgba(palette.raised))
+                            .text_sm()
+                            .text_color(rgb(palette.muted))
+                            .child(notes),
+                    )
+                },
             );
         if !self.writable() {
             return card.child(caption(palette, "Read-only · Mac copy"));
         }
         if !entry.all_day {
             card = card.child(
-                div().flex().flex_wrap().gap_1().children(
+                div().flex().flex_wrap().gap_1p5().children(
                     [
                         ("−15 min", -15, false),
                         ("+15 min", 15, false),
@@ -273,7 +383,9 @@ impl PhoneCalendar {
                     ]
                     .map(|(label, minutes, resize)| {
                         let entry = entry.clone();
-                        control(label, label, false)
+                        Button::new(label, label)
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Secondary)
                             .disabled(self.snapshot.saving)
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 view.error = data::nudge(&entry, minutes, resize).err();
@@ -291,7 +403,9 @@ impl PhoneCalendar {
         {
             let (before, after) = (before.clone(), after.clone());
             card = card.child(
-                control("undo-time", "Undo time change", false)
+                Button::new("undo-time", "Undo time change")
+                    .size(ControlSize::Sm)
+                    .variant(ButtonVariant::Secondary)
                     .disabled(self.snapshot.saving)
                     .on_click(move |_, _, _| {
                         data::change_time(after.clone(), before.clone(), true)
@@ -303,6 +417,9 @@ impl PhoneCalendar {
                 div()
                     .flex()
                     .gap_2()
+                    .pt_2()
+                    .border_t_1()
+                    .border_color(rgba(palette.border))
                     .child(
                         control("delete-entry", "Delete", true)
                             .disabled(self.snapshot.saving)
@@ -311,71 +428,107 @@ impl PhoneCalendar {
                                 view.close_editor(cx);
                             })),
                     )
-                    .child(control("keep-entry", "Keep", false).on_click(cx.listener(
-                        |view, _, _, cx| {
-                            view.delete = false;
-                            cx.notify();
-                        },
-                    ))),
+                    .child(
+                        Button::new("keep-entry", "Keep")
+                            .size(ControlSize::Md)
+                            .variant(ButtonVariant::Secondary)
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.delete = false;
+                                cx.notify();
+                            })),
+                    ),
             )
         } else {
             card.child(
-                control("confirm-delete", "Delete…", false)
-                    .disabled(self.snapshot.saving)
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.delete = true;
-                        cx.notify();
-                    })),
+                div()
+                    .pt_2()
+                    .border_t_1()
+                    .border_color(rgba(palette.border))
+                    .child(
+                        Button::new("confirm-delete", "Delete…")
+                            .size(ControlSize::Sm)
+                            .variant(ButtonVariant::Outline)
+                            .disabled(self.snapshot.saving)
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.delete = true;
+                                cx.notify();
+                            })),
+                    ),
             )
         }
     }
 
     fn form(&self, draft: &Draft, palette: Palette, cx: &Context<Self>) -> Div {
         let all_day = draft.all_day;
-        column()
+        surface_card(palette)
+            .p_4()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(
+                div()
+                    .text_lg()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(rgb(palette.text))
+                    .child("New entry"),
+            )
             .child(Input::new(&self.title))
             .child(
                 div()
                     .flex()
                     .flex_wrap()
                     .items_center()
-                    .gap_1()
+                    .gap_1p5()
                     .children(
                         [(false, "Timed"), (true, "All day")].map(|(all_day, label)| {
-                            control(label, label, draft.all_day == all_day).on_click(cx.listener(
-                                move |view, _, _, cx| {
+                            Button::new(label, label)
+                                .size(ControlSize::Sm)
+                                .variant(if draft.all_day == all_day {
+                                    ButtonVariant::Primary
+                                } else {
+                                    ButtonVariant::Secondary
+                                })
+                                .on_click(cx.listener(move |view, _, _, cx| {
                                     if let Some(draft) = &mut view.draft {
                                         draft.all_day = all_day;
                                         cx.notify();
                                     }
-                                },
-                            ))
+                                }))
                         }),
                     )
                     .when(!all_day, |row| {
-                        row.child(caption(palette, format!("{}–{}", draft.start, draft.end)))
+                        row.child(
+                            mono_num(format!("{}–{}", draft.start, draft.end), palette.muted)
+                                .text_sm(),
+                        )
                     }),
             )
             .child(
                 div()
                     .flex()
                     .flex_wrap()
-                    .gap_1()
+                    .gap_1p5()
                     .children(calendar::COMMITMENTS.iter().map(|&(key, label)| {
-                        control(key, label, draft.commitment == key).on_click(cx.listener(
-                            move |view, _, _, cx| {
+                        Button::new(key, label)
+                            .size(ControlSize::Sm)
+                            .variant(if draft.commitment == key {
+                                ButtonVariant::Primary
+                            } else {
+                                ButtonVariant::Secondary
+                            })
+                            .on_click(cx.listener(move |view, _, _, cx| {
                                 if let Some(draft) = &mut view.draft {
                                     draft.commitment = key.to_owned();
                                     cx.notify();
                                 }
-                            },
-                        ))
+                            }))
                     })),
             )
             .child(
                 div()
                     .flex()
                     .gap_2()
+                    .pt_1()
                     .child(
                         control("save-calendar-entry", "Save", true)
                             .disabled(self.snapshot.saving || !self.writable())
@@ -494,6 +647,7 @@ impl PhoneCalendar {
 impl Render for PhoneCalendar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = ThemeContext::of(window, cx).palette;
+        let is_today = self.snapshot.day == data::today();
         let selected = self
             .selected
             .as_deref()
@@ -516,14 +670,35 @@ impl Render for PhoneCalendar {
                 .child(self.detail(entry, palette, cx))
                 .into_any_element()
         } else if self.grid {
-            self.grid(&gaps, palette, cx).into_any_element()
+            surface_card(palette)
+                .flex_1()
+                .min_h_0()
+                .p_2()
+                .flex()
+                .flex_col()
+                .child(self.grid(&gaps, palette, cx))
+                .into_any_element()
         } else {
             self.list(palette, cx).into_any_element()
         };
+        let mode_tabs = {
+            let on_select = cx.listener(|view, idx: &usize, window, cx| {
+                window.blur(cx);
+                view.close_editor(cx);
+                view.grid = *idx == 1;
+                cx.notify();
+            });
+            sub_tabs(
+                "phone-calendar-mode",
+                vec![("Agenda", None, !self.grid), ("Timeline", None, self.grid)],
+                move |idx, window, cx| on_select(&idx, window, cx),
+            )
+        };
         column()
             .size_full()
+            .gap_2p5()
             .p_3()
-            .bg(rgba(palette.surface))
+            .bg(rgba(palette.window_tint))
             .text_color(rgb(palette.text))
             .child(
                 div()
@@ -533,62 +708,92 @@ impl Render for PhoneCalendar {
                     .gap_2()
                     .child(
                         div()
-                            .text_xl()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(self.snapshot.day.format("%A, %-d %B").to_string()),
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .min_w_0()
+                            .child(
+                                div()
+                                    .text_xl()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .truncate()
+                                    .child(self.snapshot.day.format("%A, %-d %B").to_string()),
+                            )
+                            .when(is_today, |row| {
+                                row.child(Badge::new("Today").tone(Tone::Accent))
+                            }),
                     )
-                    .child(
-                        control("calendar-today", "Today", false)
-                            .on_click(|_, _, _| data::open_day(data::today())),
-                    ),
+                    .when(!is_today, |row| {
+                        row.child(
+                            Button::new("calendar-today", "Today")
+                                .size(ControlSize::Sm)
+                                .variant(ButtonVariant::Secondary)
+                                .on_click(|_, _, _| data::open_day(data::today())),
+                        )
+                    }),
             )
             .when_some(self.snapshot.source.clone(), |screen, line| {
                 let color = if self.snapshot.sync_error {
                     palette.red
+                } else if self.snapshot.origin == Origin::Store {
+                    palette.green
                 } else {
                     palette.muted
                 };
-                screen.child(div().text_sm().text_color(rgb(color)).child(line))
+                screen.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1p5()
+                        .child(div().w(px(6.)).h(px(6.)).rounded_full().bg(rgb(color)))
+                        .child(div().text_xs().text_color(rgb(palette.muted)).child(line)),
+                )
             })
-            .child(self.week(palette, cx))
+            .child(surface_card(palette).p_2().child(self.week(palette, cx)))
             .child(
                 div()
                     .flex()
                     .flex_wrap()
-                    .gap_1()
+                    .items_center()
+                    .justify_between()
+                    .gap_1p5()
+                    .child(mode_tabs)
                     .child(
-                        control(
-                            "calendar-grid-toggle",
-                            if self.grid { "List" } else { "Grid" },
-                            self.grid,
-                        )
-                        .on_click(cx.listener(|view, _, window, cx| {
-                            window.blur(cx);
-                            view.close_editor(cx);
-                            view.grid = !view.grid;
-                        })),
-                    )
-                    .child(
-                        control("calendar-availability", "Free time", self.free).on_click(
-                            cx.listener(|view, _, _, cx| {
-                                view.free = !view.free;
-                                cx.notify();
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                Button::new("calendar-availability", "Free time")
+                                    .size(ControlSize::Sm)
+                                    .variant(if self.free {
+                                        ButtonVariant::Primary
+                                    } else {
+                                        ButtonVariant::Secondary
+                                    })
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.free = !view.free;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("calendar-refresh", "Refresh")
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Ghost)
+                                    .on_click(|_, _, _| data::emit(CalendarEvent::Refresh)),
+                            )
+                            .when(self.writable(), |bar| {
+                                bar.child(
+                                    Button::new("calendar-new", "+ New")
+                                        .size(ControlSize::Sm)
+                                        .variant(ButtonVariant::Primary)
+                                        .disabled(self.snapshot.saving)
+                                        .on_click(cx.listener(|view, _, _, cx| {
+                                            view.open_draft(540, 600, cx)
+                                        })),
+                                )
                             }),
-                        ),
-                    )
-                    .child(
-                        control("calendar-refresh", "Refresh", false)
-                            .on_click(|_, _, _| data::emit(CalendarEvent::Refresh)),
-                    )
-                    .when(self.writable(), |bar| {
-                        bar.child(
-                            control("calendar-new", "+ New", true)
-                                .disabled(self.snapshot.saving)
-                                .on_click(
-                                    cx.listener(|view, _, _, cx| view.open_draft(540, 600, cx)),
-                                ),
-                        )
-                    }),
+                    ),
             )
             .when(
                 self.free
@@ -599,28 +804,38 @@ impl Render for PhoneCalendar {
                     && selected.is_none(),
                 |screen| {
                     if gaps.is_empty() {
-                        return screen
-                            .child(caption(palette, "No free time between 08:00 and 20:00."));
+                        return screen.child(
+                            surface_card(palette)
+                                .p_3()
+                                .child(caption(palette, "No free time between 08:00 and 20:00.")),
+                        );
                     }
                     if self.grid {
                         return screen;
                     }
-                    screen.child(div().flex().flex_wrap().gap_1().children(gaps.iter().map(
-                        |gap| {
-                            let (start, end) = (gap.start, gap.end);
-                            control(
-                                format!("free-{start}"),
-                                format!("{}–{} free", clock(start), clock(end)),
-                                false,
-                            )
-                            .disabled(!self.writable() || self.snapshot.saving)
-                            .on_click(cx.listener(
-                                move |view, _, _, cx| {
-                                    view.open_draft(start, end.min(start + 60), cx)
-                                },
-                            ))
-                        },
-                    )))
+                    screen.child(
+                        surface_card(palette).p_2p5().child(
+                            div()
+                                .flex()
+                                .flex_wrap()
+                                .gap_1()
+                                .children(gaps.iter().map(|gap| {
+                                    let (start, end) = (gap.start, gap.end);
+                                    Button::new(
+                                        format!("free-{start}"),
+                                        format!("{}–{} free", clock(start), clock(end)),
+                                    )
+                                    .size(ControlSize::Sm)
+                                    .variant(ButtonVariant::Secondary)
+                                    .disabled(!self.writable() || self.snapshot.saving)
+                                    .on_click(cx.listener(
+                                        move |view, _, _, cx| {
+                                            view.open_draft(start, end.min(start + 60), cx)
+                                        },
+                                    ))
+                                })),
+                        ),
+                    )
                 },
             )
             .when_some(

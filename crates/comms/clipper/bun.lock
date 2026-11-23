@@ -13,8 +13,8 @@
         "@lezer/highlight": "^1.2.3",
         "@types/safari-extension": "^0.0.33",
         "dayjs": "^1.11.13",
-        "defuddle": "0.19.11",
-        "dompurify": "^3.4.18",
+        "defuddle": "0.19.13",
+        "dompurify": "^3.5.0",
         "highlight.js": "11.12.0",
         "knap": "^0.6.0",
         "linkedom": "0.18.15",
@@ -393,7 +393,7 @@
 
     "decimal.js": ["decimal.js@10.6.0", "", {}, "sha512-YpgQiITW3JXGntzdUmyUR1V812Hn8T1YVXhCu+wO3OpS4eU9l4YdD3qjyiKdV6mvV29zapkMeD390UVEf2lkUg=="],
 
-    "defuddle": ["defuddle@0.19.11", "", { "dependencies": { "commander": "^12.1.0", "mathml-to-latex": "^1.8.0" }, "optionalDependencies": { "linkedom": "^0.18.12", "temml": "^0.13.3", "turndown": "^7.2.0" }, "bin": { "defuddle": "dist/cli.js" } }, "sha512-+o3W1yvYbKmXXMqr9cBoQqzVG9BOP2oAYt6nTA+xLtzUGjRg/iCOGbr+lEV5DzExh7cfDpSHPfqtZ403r/u77A=="],
+    "defuddle": ["defuddle@0.19.13", "", { "dependencies": { "commander": "^12.1.0", "mathml-to-latex": "^1.8.0" }, "optionalDependencies": { "linkedom": "^0.18.12", "temml": "^0.13.3", "turndown": "^7.2.0" }, "bin": { "defuddle": "dist/cli.js" } }, "sha512-BMrCxWUmHge6o8ZBKRDTFxXNSfGDiWiV2rzJLh9vVMJnDExzCvLzaSrSH1mwa/sZZtCBa3Z+jccCXNblj3qnCg=="],
 
     "detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
 
@@ -405,7 +405,7 @@
 
     "domhandler": ["domhandler@6.0.1", "", { "dependencies": { "domelementtype": "^3.0.0" } }, "sha512-gYzvtM72ZtxQO0T048kd6HWSbbGCNOUwcnfQ01cqIJ4X2IYKFFHZ5mKvrQETcFXxsRObZulDaKmy//R7TPtsBg=="],
 
-    "dompurify": ["dompurify@3.4.18", "", { "optionalDependencies": { "@types/trusted-types": "^2.0.7" } }, "sha512-ofe3wI/uNm68HInABYFJYqQxRw1EaKAjNdrFVKqjUY+UZurvNd2L/HuQe097s/4RivWiZyP6tT7aoT8atjfhwg=="],
+    "dompurify": ["dompurify@3.5.0", "", { "optionalDependencies": { "@types/trusted-types": "^2.0.7" } }, "sha512-LYC0ZkE8P1V42JsRYTwMdme/2ET8SpOc5AA2eOFjP/IadvRd2fwiT4TVz5vkfy0XUx12aS2UaRkTnfVPNOv9vw=="],
 
     "domutils": ["domutils@4.0.2", "", { "dependencies": { "dom-serializer": "^3.0.0", "domelementtype": "^3.0.0", "domhandler": "^6.0.0" } }, "sha512-qI4JLRKnSzqFqr7hAlS5xQDusBCjKSEG4t4+7aNrIQMHBcsC2TGEhuyABJdYkgSewL57PNLYEiibY2iPKhKpaA=="],
 

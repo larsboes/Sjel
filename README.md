@@ -8,6 +8,8 @@
 
 <h1 align="center">Sjel</h1>
 
+<p align="center"><b>Archived (2026-11-23).</b> Sjel is no longer developed or maintained. The code stays here for reference.</p>
+
 <p align="center"><b>A private layer under the tools you already use. It connects the areas of your life and keeps them on your own machines.</b></p>
 
 <p align="center">

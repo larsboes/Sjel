@@ -49,9 +49,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.7",
-    "@earendil-works/pi-ai": "1.5.2",
-    "@earendil-works/pi-coding-agent": "1.5.2",
-    "@earendil-works/pi-tui": "1.5.2",
+    "@earendil-works/pi-ai": "1.6.0",
+    "@earendil-works/pi-coding-agent": "1.6.0",
+    "@earendil-works/pi-tui": "1.6.0",
     "@socketsecurity/bun-security-scanner": "^1.1.2",
     "@types/node": "^25.9.9",
     "@vitest/coverage-istanbul": "^4.1.11",

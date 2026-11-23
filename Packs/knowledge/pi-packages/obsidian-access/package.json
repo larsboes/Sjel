@@ -14,9 +14,9 @@
     "yaml": "2.9.1"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "1.5.2",
+    "@earendil-works/pi-coding-agent": "1.6.0",
     "@socketsecurity/bun-security-scanner": "^1.1.2",
-    "@types/bun": "1.4.4",
+    "@types/bun": "1.4.5",
     "typebox": "1.4.7",
     "typescript": "7.0.2"
   },
